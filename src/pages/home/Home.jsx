@@ -28,7 +28,7 @@ const Home = () => {
           </p>
           <a
             id="sign-up-button"
-            class="sign-up-button"
+            class="sign-up-button btn lg"
             href="https://www.meetup.com/mid-peninsula-running-club/"
             target="_blank"
             rel="noopener noreferrer"
