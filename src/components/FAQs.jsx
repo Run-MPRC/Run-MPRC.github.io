@@ -3,6 +3,8 @@ import { FaQuestion } from "react-icons/fa";
 import { faqs } from "../data";
 import FAQ from "./FAQ";
 import SectionHead from "./SectionHead";
+
+// TODO: REMOVE
 const FAQs = () => {
 	return (
 		<section className="faqs">

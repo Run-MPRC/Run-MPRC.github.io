@@ -8,6 +8,7 @@ import {
 } from "react-icons/io";
 import { testimonials } from "../data";
 
+// TODO: REMOVE
 const Testimonial = () => {
 	const [index, setIndex] = useState(0);
 	const { name, quote, job, avatar } = testimonials[index];
