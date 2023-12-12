@@ -18,7 +18,7 @@ import {
 const Home = () => {
   return (
     <>
-      <div id="hero-section" class="hero-section main__header">
+      <div id="home hero-section" class="home hero-section main__header">
         <div id="hero-content" class="hero-content">
           <h1 id="hero-text-1" class="hero-text">
             {HOME_HERO_TEXT_1}
