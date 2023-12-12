@@ -5,6 +5,7 @@ import { GiCutDiamond } from "react-icons/gi";
 import { values } from "../data";
 import Card from "../UI/Card";
 
+// TODO: REMOVE
 const Values = () => {
 	return (
 		<section className="values">

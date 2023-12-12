@@ -6,6 +6,7 @@ import Card from "../UI/Card";
 import { Link } from "react-router-dom";
 import { AiFillCaretRight } from "react-icons/ai";
 
+// TODO: REMOVE
 const Program = () => {
 	return (
 		<section className="programs">
