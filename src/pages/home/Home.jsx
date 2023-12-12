@@ -5,6 +5,7 @@ import Program from "../../components/Program";
 import Values from "../../components/Values";
 import FAQs from "../../components/FAQs";
 import Testimonial from "../../components/Testimonial";
+import Activities from "../activities/Activities";
 // import Footer from "../../components/Footer";
 import {
   HOME_WELCOME_MESSAGE_1,
@@ -48,7 +49,7 @@ const Home = () => {
           {HOME_WELCOME_MESSAGE_3}
         </p>
       </div>
-      {/* <MainHeader /> */}
+      <Activities />
       {/* <Program />
 			<Values />
 			<FAQs />
