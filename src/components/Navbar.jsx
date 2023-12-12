@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import React from "react";
-import Logo from "../images/logo.png";
+// import Logo from "../images/logo.png";
 import { links } from "../data";
 import { FaBars } from "react-icons/fa";
 import { MdOutlineClose } from "react-icons/md";
 import "./navbar.css";
+import Logo from "../images/navbar/mprc_logo.png";
 
 const Navbar = () => {
 	const [isNavShowing, setIsNavShowing] = useState(false);

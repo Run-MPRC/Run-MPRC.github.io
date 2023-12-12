@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import Image from "../images/main_header.png";
 
+// TODO: REMOVE
 const MainHeader = () => {
 	return (
 		<header className="main__header">
