@@ -1,4 +1,4 @@
 [[redirects]]
-  from = "/activities"
-  to = "/activities"
+  from = "/*"
+  to = "index.html"
   status = 200
