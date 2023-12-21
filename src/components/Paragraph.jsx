@@ -1,7 +1,7 @@
 import React from "react";
 
-const Paragraph = ({ text }) => {
-    return (<p className="my-2">{text}</p>);
-  };
-  
-  export default Paragraph;
+const Paragraph = ({children}) => {
+    return (<p className="my-2">{children}</p>);
+};
+
+export default Paragraph;
