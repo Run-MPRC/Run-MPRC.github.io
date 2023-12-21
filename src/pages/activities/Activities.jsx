@@ -48,6 +48,7 @@ const Activities = () => {
             <Paragraph>"We love to eat just as much as we love to run (or more). After most Saturday runs, we organize a
                 group of folks that would like to hang out in a restaurant in the community.</Paragraph>
             <ImageCarousel images={brunchImages}/>
+            
             <Subheader title="Run Club Social"/>
             <Paragraph>Celebrate the end of each month with our Run Club Socials! These gatherings are a fantastic way
                 to connect with other members over homemade goodies, fruits, and refreshing beverages, provided by the
