@@ -1,7 +1,7 @@
 .trainers__container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2rem;
 }
 
 .card.trainer {
@@ -45,16 +45,20 @@
 /* MEDIA QUERIES (medium sxreen) */
 @media screen and (max-width: 1024px) {
   .trainers__container {
-    grid-template-columns: 1fr 1fr;
-    gap: 2.5rem;
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 /* MEDIA QUERIES (small sxreen) */
 @media screen and (max-width: 600px) {
   .trainers__container {
+    grid-template-columns: repeat(2, 2fr);
+  }
+}
+
+@media screen and (max-width: 400px) {
+  .trainers__container {
     grid-template-columns: 1fr;
-    gap: 2rem;
   }
 
   .card.trainer {
