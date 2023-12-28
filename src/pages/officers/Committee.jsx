@@ -5,7 +5,7 @@ import Officer from "../../components/Officer";
 import "./committee.css";
 import {COMMITTEE_INTRO, COMMITTEE_TITLE} from "../../text/Committee";
 
-const OfficerDefault = require("../../images/committee/committee_default_img.png");
+const OfficerDefault = require("../../images/committee/committee_default_portrait.png");
 const Officer1 = require("../../images/committee/trainer1.jpg");
 const Officer2 = require("../../images/committee/dave.png");
 const Officer3 = require("../../images/committee/trainer3.jpg");
