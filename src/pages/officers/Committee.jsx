@@ -1,7 +1,6 @@
 import React from "react";
 import Header from "../../components/Header";
 import HeaderImage from "../../images/committee/header_bg_5.jpg";
-// import {officers} from "../../data";
 import Officer from "../../components/Officer";
 import "./committee.css";
 import {COMMITTEE_INTRO, COMMITTEE_TITLE} from "../../text/Committee";
