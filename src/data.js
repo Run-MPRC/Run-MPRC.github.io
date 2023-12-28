@@ -191,32 +191,3 @@ export const plans = [{
     available: true
   }, {feature: "Eleventh Feature", available: true},],
 },];
-
-const Officer1 = require("./images/committee/trainer1.jpg");
-const Officer2 = require("./images/committee/dave.png");
-const Officer3 = require("./images/committee/trainer3.jpg");
-const Officer4 = require("./images/committee/trainer4.jpg");
-const Officer5 = require("./images/committee/trainer5.jpg");
-const Officer6 = require("./images/committee/debbie.png");
-const Officer7 = require("./images/committee/patti.jpg")
-
-export const officers = [{
-  id: 1, image: Officer1, name: "Frances Schulze", job: "President", /* socials: [
-      "https://instagram.com/",
-      "https://twitter.com/",
-      "https://facebook.com/",
-      "https://linkedin.com/",
-    ],*/
-}, {
-  id: 2, image: Officer2, name: "David Liu", job: "Vice President",
-}, {
-  id: 3, image: Officer3, name: "Ted Levine", job: "Treasurer",
-}, {
-  id: 4, image: Officer4, name: "Kat Mar", job: "Secretary",
-}, {
-  id: 5, image: Officer5, name: "Frank Markowitz", job: "Newsletter Editor",
-}, {
-  id: 6, image: Officer6, name: "Debbie Mar", job: "Social Director",
-}, {
-  id: 7, image: Officer7, name: "Patti Chan", job: "Social Director",
-},];
