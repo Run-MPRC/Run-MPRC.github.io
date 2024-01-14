@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import Card from "../UI/Card";
+import React, { useState } from "react";
 
 const Officer = ({ image, image_alt, name, job, socials }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -13,16 +12,15 @@ const Officer = ({ image, image_alt, name, job, socials }) => {
   };
 
   return (
-    <div 
+    <div
       className="card officer"
       onMouseOver={handleMouseOver}
       onMouseOut={handleMouseOut}
     >
-      <div className="officer__img" >
-        <img 
-          // src={image}
-          src={(isHovered && image_alt) ? image_alt : image}
-          alt={name} 
+      <div className="officer__img">
+        <img
+          src={isHovered && image_alt ? image_alt : image}
+          alt={name}
         />
       </div>
       <h3>{name}</h3>
