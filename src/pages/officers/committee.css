@@ -1,27 +1,27 @@
-.trainers__container {
+.officers__container {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 2rem;
 }
 
-.card.trainer {
+.card.officer {
   padding: 1rem;
 }
 
-.trainer__img {
+.officer__img {
   border-radius: 0 2rem;
   overflow: hidden;
 }
 
-.trainer h3 {
+.officer h3 {
   margin-top: 2rem;
 }
 
-.trainer p {
+.officer p {
   margin-top: 0.5rem;
 }
 
-.trainer__socials {
+.officer__socials {
   display: flex;
   gap: 1rem;
   justify-content: center;
@@ -29,7 +29,7 @@
   margin: 2rem 0;
 }
 
-.trainer__socials a {
+.officer__socials a {
   font-size: 0.7rem;
   background-color: var(--color-gray-600);
   padding: 0.7rem 0.8rem;
@@ -37,30 +37,30 @@
   transition: var(--transition);
 }
 
-.trainer:hover a {
+.officer:hover a {
   background: var(--color-gray-500);
 }
 
 /* MEDIA QUERIES (medium sxreen) */
 @media screen and (max-width: 1024px) {
-  .trainers__container {
+  .officers__container {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 /* MEDIA QUERIES (small sxreen) */
 @media screen and (max-width: 600px) {
-  .trainers__container {
+  .officers__container {
     grid-template-columns: repeat(2, 2fr);
   }
 }
 
 @media screen and (max-width: 400px) {
-  .trainers__container {
+  .officers__container {
     grid-template-columns: 1fr;
   }
 
-  .card.trainer {
+  .card.officer {
     width: 90%;
     margin-inline: auto;
   }
