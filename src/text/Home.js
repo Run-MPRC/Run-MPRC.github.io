@@ -1,7 +1,7 @@
 export const HOME_HERO_TEXT_1 = "Mid-Peninsula Run Club";
 export const HOME_HERO_TEXT_2 =
-  "Serving runners in the San Francisco peninsula since 1988";
-export const HOME_HERO_BUTTON_TEXT = "What we're about";
+  "Serving runners on the San Francisco Peninsula since 1988";
+export const HOME_HERO_BUTTON_TEXT = "Run with us";
 
 export const ABOUT_STORY_TITLE = "Welcome to MPRC!";
 
