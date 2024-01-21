@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.css": "/static/css/main.0f19827b.css",
-    "main.js": "/static/js/main.497866ed.js",
+    "main.css": "/static/css/main.4435cd89.css",
+    "main.js": "/static/js/main.d910e11d.js",
     "static/media/header_bg_5.jpg": "/static/media/header_bg_5.fc39d54e16ef933746bf.jpg",
     "static/media/dave.png": "/static/media/dave.e33225f607f3e6031525.png",
     "static/media/brunch2.jpeg": "/static/media/brunch2.d080a4301c309d9025da.jpeg",
@@ -22,17 +22,16 @@
     "static/media/extra1.jpg": "/static/media/extra1.e7b3fa913bdcdf1c3387.jpg",
     "static/media/extra2.jpeg": "/static/media/extra2.4ea3dc44a9bdf75377b6.jpeg",
     "static/media/brunch1.jpeg": "/static/media/brunch1.568b55d41608d4ef7fa0.jpeg",
-    "static/media/committee_default_portrait.png": "/static/media/committee_default_portrait.a815186ad9a499644033.png",
     "static/media/patti.jpg": "/static/media/patti.e8726d775021636bbc26.jpg",
     "static/media/avatar5.jpg": "/static/media/avatar5.d25e9a28e32aa5201afa.jpg",
     "static/media/logo.svg": "/static/media/logo.b8a6af1a9242954a82a28cb129b07f40.svg",
     "static/media/route.gpx": "/static/media/route.67f790526b3a5b193359.gpx",
     "index.html": "/index.html",
-    "main.0f19827b.css.map": "/static/css/main.0f19827b.css.map",
-    "main.497866ed.js.map": "/static/js/main.497866ed.js.map"
+    "main.4435cd89.css.map": "/static/css/main.4435cd89.css.map",
+    "main.d910e11d.js.map": "/static/js/main.d910e11d.js.map"
   },
   "entrypoints": [
-    "static/css/main.0f19827b.css",
-    "static/js/main.497866ed.js"
+    "static/css/main.4435cd89.css",
+    "static/js/main.d910e11d.js"
   ]
 }
