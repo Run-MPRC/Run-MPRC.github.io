@@ -34,11 +34,10 @@ import {
   MEETUP_URI,
 } from "../../text/externalLinks";
 
-
-const sectionBecomeMember = () => {
+const sectionRunWithUs = () => {
   return (
     <Card className="joinus__card">
-      <h2 className="h2_joinus">Become A Member</h2>
+      <h2 className="h2_joinus">Ways To Run With Us</h2>
       <ul>
         <li className="li_joinus">
           {JOIN_US_DESCRIPTION_1}
@@ -52,6 +51,16 @@ const sectionBecomeMember = () => {
         </li>
         <li className="li_joinus">{JOIN_US_DESCRIPTION_2}</li>
         <li className="li_joinus">{JOIN_US_DESCRIPTION_3}</li>
+      </ul>
+    </Card>
+  );
+}
+
+const sectionBecomeMember = () => {
+  return (
+    <Card className="joinus__card">
+      <h2 className="h2_joinus">Become A Member</h2>
+      <ul>
         <li className="li_joinus">
           {JOIN_US_DESCRIPTION_4}
           <a
@@ -102,6 +111,8 @@ const JoinUs = () => {
       <section className="joinus">
         <div className="container joinus__container">
           <div className="joinus__wrapper">
+            {sectionRunWithUs()}
+            &nbsp;&nbsp;
             {sectionBecomeMember()}
             &nbsp;&nbsp;
             {sectionMemberBenefits()}
