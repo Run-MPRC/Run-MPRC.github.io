@@ -216,7 +216,7 @@
 footer {
   background: var(--color-primary);
   margin-top: 7rem;
-  padding-top: 7rem;
+  padding-top: 3rem;
   font-size: 0.9rem;
   color: var(--color-gray-100);
 }
@@ -273,7 +273,7 @@ footer {
   text-align: center;
   padding: 1.5rem 0;
   border-top: 2px solid var(--color-primary-variant);
-  margin-top: 5rem;
+  margin-top: 3rem;
 }
 
 /******************** MEADIA QUERIES (medium screens) ********************/

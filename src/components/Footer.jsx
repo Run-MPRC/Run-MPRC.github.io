@@ -31,15 +31,15 @@ function Footer() {
             </a>
           </div>
         </article>
-        <article>
-          {/* <h4>Permalinks</h4> */}
+        {/* <article>
+          <h4>Permalinks</h4>
           <Link to="/">Home</Link>
           <Link to="/about">About</Link>
           <Link to="/activities">Activities</Link>
           <Link to="/committee">Committee</Link>
           <Link to="/joinus">Join US</Link>
           <Link to="/contact">Contact Us</Link>
-        </article>
+        </article> */}
       </div>
       <div className="footer__copyright">
         <small>
