@@ -7,6 +7,11 @@ export const links = [
     id: "home",
   },
   {
+    name: "Join Us",
+    path: "/joinus",
+    id: "joinus",
+  },
+  {
     name: "Activities",
     path: "/activities",
     id: "activities",
@@ -15,11 +20,6 @@ export const links = [
     name: "Committee",
     path: "/committee",
     id: "committee",
-  },
-  {
-    name: "Join Us",
-    path: "/joinus",
-    id: "joinus",
   },
   {
     name: "Contact Us",
