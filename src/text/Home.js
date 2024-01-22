@@ -1,9 +1,9 @@
 export const HOME_HERO_TEXT_1 = "Mid-Peninsula Run Club";
 export const HOME_HERO_TEXT_2 =
-  "Serving runners in the San Francisco peninsula since 1988";
+  "Serving runners on the San Francisco Peninsula since 1988";
 export const HOME_HERO_BUTTON_TEXT = "What we're about";
 
-export const ABOUT_STORY_TITLE = "Welcome to MPRC!";
+export const ABOUT_STORY_TITLE = "Run with us";
 
 export const ABOUT_STORY_CONTENT = [
   "Welcome to the Mid-Peninsula Running Club, where running is more than just a workout – it's a community and a way of life. Since 1988, we've been bringing together runners from all walks of life on the San Francisco Peninsula (San Mateo County).",
