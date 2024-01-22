@@ -11,6 +11,10 @@ export const JOIN_US_DESCRIPTION_4 =
 export const JOIN_US_DESCRIPTION_5 =
   "The fee is $15 per calendar year for individuals and $20 per calendar year for families.";
 export const GOOGLE_FORM = "Google Form";
+
+export const JOIN_US_BUTTON_1 = "RSVP on Meetup";
+export const JOIN_US_BUTTON_2 = "Membership Form";
+
 export const H2_JOIN_US = "Member Benefits";
 export const LI_SATURDAY_CLUB_RUNS = "Saturday morning club runs";
 export const LI_CLUB_SUPPORT_NETWORKING =

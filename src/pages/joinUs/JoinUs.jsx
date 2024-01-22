@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import "./joinUs.css";
 import Header from "../../components/Header";
 import HeaderImage from "../../images/joinus/header_bg_1.jpg";
@@ -24,6 +25,8 @@ import {
   LI_SATURDAY_CLUB_RUNS,
   LI_SOCIAL_RACE_ACTIVITIES,
   MEETUP_GROUP,
+  JOIN_US_BUTTON_1,
+  JOIN_US_BUTTON_2,
 } from "../../text/JoinUs";
 import Card from "../../UI/Card";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -38,7 +41,7 @@ const sectionRunWithUs = () => {
   return (
     <Card className="joinus__card">
       <h2 className="h2_joinus">Ways To Run With Us</h2>
-      <ul>
+      <ul className="ul_joinus">
         <li className="li_joinus">
           {JOIN_US_DESCRIPTION_1}
           <a
@@ -52,6 +55,14 @@ const sectionRunWithUs = () => {
         <li className="li_joinus">{JOIN_US_DESCRIPTION_2}</li>
         <li className="li_joinus">{JOIN_US_DESCRIPTION_3}</li>
       </ul>
+      <Link
+        to={MEETUP_URI}
+        className="btn lg"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {JOIN_US_BUTTON_1}
+      </Link>
     </Card>
   );
 }
@@ -60,7 +71,7 @@ const sectionBecomeMember = () => {
   return (
     <Card className="joinus__card">
       <h2 className="h2_joinus">Become A Member</h2>
-      <ul>
+      <ul className="ul_joinus">
         <li className="li_joinus">
           {JOIN_US_DESCRIPTION_4}
           <a
@@ -73,6 +84,14 @@ const sectionBecomeMember = () => {
         </li>
         <li className="li_joinus">{JOIN_US_DESCRIPTION_5}</li>
       </ul>
+      <Link
+        to={GOOGLE_FORM_LINK}
+        className="btn lg"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {JOIN_US_BUTTON_2}
+      </Link>
     </Card>
   );
 }
