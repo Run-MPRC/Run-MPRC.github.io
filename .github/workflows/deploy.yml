@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # This event allows manual triggering
+  workflow_dispatch:
 
 jobs:
   deploy:
