@@ -14,6 +14,13 @@ module.exports = {
         sourceType: 'script',
       },
     },
+    {
+      files: ['*.ts', '*.tsx'],
+      extends: ['airbnb-typescript'],
+      parserOptions: {
+        project: './tsconfig.json',
+      },
+    },
   ],
   parserOptions: {
     ecmaVersion: 'latest',

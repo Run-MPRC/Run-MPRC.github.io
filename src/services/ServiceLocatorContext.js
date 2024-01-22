@@ -1,3 +1,5 @@
-import React from "react";
+import React from 'react';
 
-export const ServiceLocatorContext = React.createContext(null);
+const ServiceLocatorContext = React.createContext(null);
+
+export default ServiceLocatorContext;

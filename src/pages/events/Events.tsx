@@ -1,15 +1,16 @@
-import React, { useContext, useEffect, useState } from "react";
-import { ServiceLocatorContext } from "../../services/ServiceLocatorContext";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import React, { useContext, useEffect, useState } from 'react';
+import {
+  collection, onSnapshot, query, where,
+} from 'firebase/firestore';
+import ServiceLocatorContext from '../../services/ServiceLocatorContext';
 
-// Define the Event type
 type Event = {
   id: number;
   title: string;
   member_only: boolean;
 };
 
-const Events: React.FC = () => {
+function Events() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -19,18 +20,18 @@ const Events: React.FC = () => {
 
   useEffect(() => {
     if (!identityService || !firebaseResources.firestore) {
-      console.log("Firebase resources not available yet.");
+      // console.log('Firebase resources not available yet.');
       return;
     }
 
     const db = firebaseResources.firestore;
-    const eventsCollection = collection(db, "events");
+    const eventsCollection = collection(db, 'events');
 
     // Check if the user is a member
     identityService.isMember.then((isMember: boolean) => {
-      let eventsQuery = isMember
+      const eventsQuery = isMember
         ? eventsCollection
-        : query(eventsCollection, where("member_only", "==", false));
+        : query(eventsCollection, where('member_only', '==', false));
       const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
         const eventsData: Event[] = snapshot.docs.map((doc) => ({
           ...(doc.data() as Event),
@@ -64,6 +65,5 @@ const Events: React.FC = () => {
       </ul>
     </div>
   );
-};
-
+}
 export default Events;

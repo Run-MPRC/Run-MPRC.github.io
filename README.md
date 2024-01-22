@@ -1,5 +1,4 @@
 # run-mprc.github.io
-
 Live sites are [runmprc.com](runmprc.com) and [dev.runmprc.com](dev.runmprc.com) for changes made in dev branch.
 
 ## Available Scripts
@@ -93,11 +92,11 @@ Runs are up to 6 miles or up to one hour. We do stretching and announcements aft
 
 Under “Activities”, something like:
 
-1.         Saturday morning Bay Trail runs of up to 6 miles or up to one hour.
+1.        Saturday morning Bay Trail runs of up to 6 miles or up to one hour.
 
-2.         Social Gathering takes place the last Saturday of every month after the run.  Coffee, tea, hot chocolate, pastries, etc. served  All are welcome.
+2.        Social Gathering takes place the last Saturday of every month after the run.  Coffee, tea, hot chocolate, pastries, etc. served  All are welcome.
 
-3.         Social events throughout the year: picnics, hikes, fun activities for MPRC members only.
+3.        Social events throughout the year: picnics, hikes, fun activities for MPRC members only.
 
 Under “Benefits”
 
@@ -137,9 +136,9 @@ For more information or questions, we can be reached at runmprc@gmail.com
 
 Under “Join Us”:
 
-1.         Find out about the location of our runs through “Meetup”  (and put in Meetup link).  You do not have to be an actual MPRC club member to come to the runs, but you must join Meetup.  There is no charge for joining Meetup nor coming to a run.
+1.        Find out about the location of our runs through “Meetup”  (and put in Meetup link).  You do not have to be an actual MPRC club member to come to the runs, but you must join Meetup.  There is no charge for joining Meetup nor coming to a run.
 
-2.         To become an actual MPRC club member, fill out the Google Form at (and put in link - https://docs.google.com/forms/d/e/1FAIpQLSd574vmu9CgznB3JxV01Vkjz3RijuhbHEqb6pCCRuC6s7DiHg/viewform?usp=sharing).  The fee is $15 per calendar year for individuals and $20 per calendar year for families.
+2.        To become an actual MPRC club member, fill out the Google Form at (and put in link - https://docs.google.com/forms/d/e/1FAIpQLSd574vmu9CgznB3JxV01Vkjz3RijuhbHEqb6pCCRuC6s7DiHg/viewform?usp=sharing).  The fee is $15 per calendar year for individuals and $20 per calendar year for families.
 
 Also, I don’t know a lot about the algorithms used by search engines. But if you do, make sure we have wording such as Run, running, club, Bay Area, San Mateo that can be keyed on.
 

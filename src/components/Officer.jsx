@@ -1,6 +1,9 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 
-const Officer = ({ image, image_alt, name, job, socials }) => {
+function Officer({
+  image, imageAlt, name, job, /* socials, */
+}) {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleMouseOver = () => {
@@ -16,16 +19,19 @@ const Officer = ({ image, image_alt, name, job, socials }) => {
       className="card officer"
       onMouseOver={handleMouseOver}
       onMouseOut={handleMouseOut}
+      onFocus={handleMouseOver}
+      onBlur={handleMouseOut}
     >
+
       <div className="officer__img">
         <img
-          src={isHovered && image_alt ? image_alt : image}
+          src={isHovered && imageAlt ? imageAlt : image}
           alt={name}
         />
       </div>
       <h3>{name}</h3>
       <p>{job}</p>
-      {/*<div className="officer__socials">
+      {/* <div className="officer__socials">
         {socials.map(({ icon, link }, index) => {
           return (
             <a
@@ -38,9 +44,21 @@ const Officer = ({ image, image_alt, name, job, socials }) => {
             </a>
           );
         })}
-      </div>*/}
+      </div> */}
     </div>
   );
-};
+}
 
+Officer.propTypes = {
+  image: PropTypes.string.isRequired,
+  imageAlt: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  job: PropTypes.string.isRequired,
+  /* socials: PropTypes.arrayOf(
+    PropTypes.shape({
+      icon: PropTypes.node.isRequired,
+      link: PropTypes.string.isRequired,
+    }),
+  ), */
+};
 export default Officer;

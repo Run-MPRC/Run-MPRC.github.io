@@ -1,9 +1,8 @@
-export const HOME_HERO_TEXT_1 = "Mid-Peninsula Run Club";
-export const HOME_HERO_TEXT_2 =
-  "Serving runners on the San Francisco Peninsula since 1988";
-export const HOME_HERO_BUTTON_TEXT = "Run with us";
+export const HOME_HERO_TEXT_1 = 'Mid-Peninsula Run Club';
+export const HOME_HERO_TEXT_2 = 'Serving runners on the San Francisco Peninsula since 1988';
+export const HOME_HERO_BUTTON_TEXT = 'Run with us';
 
-export const ABOUT_STORY_TITLE = "Welcome to MPRC!";
+export const ABOUT_STORY_TITLE = 'Welcome to MPRC!';
 
 export const ABOUT_STORY_CONTENT = [
   "Welcome to the Mid-Peninsula Running Club, where running is more than just a workout – it's a community and a way of life. Since 1988, we've been bringing together runners from all walks of life on the San Francisco Peninsula (San Mateo County).",
@@ -12,11 +11,8 @@ export const ABOUT_STORY_CONTENT = [
   "Come and join us! We're all about running, making friends, and having a good time.",
 ];
 
-// Saturday Runs Route(s) Section
-export const IMG_SECTION_TITLE = "Saturday Runs Route(s)";
-
 // Our Mission Section
-export const ABOUT_MISSION_TITLE = "Our Mission";
+export const ABOUT_MISSION_TITLE = 'Our Mission';
 export const ABOUT_MISSION_CONTENT = [
   'At our core, we\'re all about "supporting one another". We believe in creating a running community where everyone feels feels encouraged and connected.',
   'Now, we\'ve got this informal motto about ourselves too, that we are : "an eating club with a running problem". We get it – we love our post-run snacks as much as the run itself!',
@@ -24,4 +20,4 @@ export const ABOUT_MISSION_CONTENT = [
   "Join us in celebrating the joy of running and in our mission of supporting one another. Let's hit the trails, share some stories, and enjoy the ride – one step at a time!",
 ];
 
-export const JOINBUTTON = "Join Us Now!";
+export const JOINBUTTON = 'Join Us Now!';

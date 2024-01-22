@@ -1,18 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { FirebaseResources } from "./firebase/FirebaseResources";
-import { ServiceLocatorContext } from "./ServiceLocatorContext";
+import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
+import FirebaseResources from './firebase/FirebaseResources.ts';
+import ServiceLocatorContext from './ServiceLocatorContext';
+import IdentityService from './identity/Identity.ts';
 
-import IdentityService from "./identity/Identity";
-
-const ServiceLocatorProvider = ({ children }) => {
+function ServiceLocatorProvider({ children }) {
   const [services, setServices] = useState({});
-
-  console.log("ServiceLocatorProvider is mounted");
 
   useEffect(() => {
     const firebaseResources = new FirebaseResources();
     const identityService = new IdentityService(firebaseResources);
-    console.log("ServiceLocatorProvider use effect");
     setServices({
       firebaseResources,
       identityService,
@@ -24,6 +21,10 @@ const ServiceLocatorProvider = ({ children }) => {
       {children}
     </ServiceLocatorContext.Provider>
   );
+}
+
+ServiceLocatorProvider.propTypes = {
+  children: PropTypes.node.isRequired,
 };
 
 export default ServiceLocatorProvider;

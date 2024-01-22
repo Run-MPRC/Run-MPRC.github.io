@@ -1,10 +1,10 @@
 const theme = {
   palette: {
     primary: {
-      main: "#2196F3",
+      main: '#2196F3',
     },
     secondary: {
-      main: "#FF4081",
+      main: '#FF4081',
     },
   },
 };

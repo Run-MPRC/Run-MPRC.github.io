@@ -1,15 +1,15 @@
-import { FirebaseResources } from "../firebase/FirebaseResources";
 import {
   Auth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-} from "firebase/auth";
+} from 'firebase/auth';
+import FirebaseResources from '../firebase/FirebaseResources';
 
 class IdentityService {
   auth: Auth;
 
   constructor(firebase: FirebaseResources) {
-    this.auth = firebase.auth;
+    this.auth = firebase.getAuth;
   }
 
   get isMember(): Promise<boolean> {
@@ -17,25 +17,26 @@ class IdentityService {
       this.auth
         .authStateReady()
         .then(() => {
-          const currentUser = this.auth.currentUser;
+          const { currentUser } = this.auth;
           if (!currentUser) {
-            reject("current user is null");
+            reject(new Error('current user is null'));
             return;
           }
           currentUser
             .getIdTokenResult(true)
             .then((idTokenResult) => {
               const role = idTokenResult.claims.role as string;
-              const isMember = role === "member" || role === "admin";
+              const isMember = role === 'member' || role === 'admin';
               resolve(isMember);
             })
             .catch((error) => {
-              console.log(error);
-              reject(error);
+              // console.log(error);
+              reject(new Error(error));
             });
         })
         .catch((error) => {
-          console.log("Error occur while trying to fetch user." + error);
+          reject(new Error(error));
+          // console.log(`Error occur while trying to fetch user.${error}`);
         });
     });
   }

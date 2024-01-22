@@ -35,7 +35,7 @@ import {
   ARM_URI,
   GOOGLE_FORM_LINK,
   MEETUP_URI,
-} from "../../text/externalLinks";
+} from '../../text/externalLinks';
 
 const sectionRunWithUs = () => {
   return (
@@ -125,7 +125,7 @@ const sectionMemberBenefits = () => {
 const JoinUs = () => {
   return (
     <>
-      <Header title={JOIN_US_TITLE} image={HeaderImage}></Header>
+      <Header title={JOIN_US_TITLE} image={HeaderImage} />
 
       <section className="joinus">
         <div className="container joinus__container">
@@ -140,6 +140,6 @@ const JoinUs = () => {
       </section>
     </>
   );
-};
+}
 
 export default JoinUs;

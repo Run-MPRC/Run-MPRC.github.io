@@ -1,7 +1,7 @@
-import React from "react";
-import "./gallery.css";
-import HeaderImage from "../../images/header_bg_3.jpg";
-import Header from "../../components/Header";
+import React from 'react';
+import './gallery.css';
+import HeaderImage from '../../images/header_bg_3.jpg';
+import Header from '../../components/Header';
 
 function Gallery() {
   const galleryLength = 15;
@@ -19,13 +19,11 @@ function Gallery() {
       </Header>
       <section className="gallery">
         <div className="container gallery__container">
-          {images.map((image, index) => {
-            return (
-              <article key={index}>
-                <img src={image} alt={`GalleryImage ${index + 1}`} />
-              </article>
-            );
-          })}
+          {images.map((image, index) => (
+            <article key={index}>
+              <img src={image} alt={`GalleryImage ${index + 1}`} />
+            </article>
+          ))}
         </div>
       </section>
     </>

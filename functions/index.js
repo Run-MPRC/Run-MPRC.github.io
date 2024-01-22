@@ -1,6 +1,6 @@
-const admin = require("firebase-admin");
-const onSignUp = require("./signup");
-const updateMemberRole = require("./updatemembers");
+const admin = require('firebase-admin');
+const onSignUp = require('./signup');
+const updateMemberRole = require('./updatemembers');
 
 admin.initializeApp();
 
