@@ -4,18 +4,17 @@ import React from 'react';
 import Home from './pages/home/Home';
 import About from './pages/about/About';
 import Contact from './pages/contact/Contact';
-// import Gallery from "./pages/gallery/Gallery";
 import NotFound from './pages/notFound/NotFound';
 import Committee from './pages/officers/Committee';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import JoinUs from './pages/joinUs/JoinUs';
 import Activities from './pages/activities/Activities';
 import ServiceLocatorProvider from './services/ServiceLocatorProvider';
 import LoginForm from './pages/login/LoginForm';
 import Admin from './pages/admin/Admin';
 import Events from './pages/events/Events.tsx';
 import ScrollToTop from './components/ScrollToTop';
+import ConditionalRoute from './pages/joinUs/ConditionalRoute';
 
 function App() {
   return (

@@ -1,15 +1,10 @@
-import React, { useState } from 'react'; 
+import React, { useState, useContext } from 'react'; 
 import Header from '../../components/Header';
 import { useNavigate } from 'react-router-dom';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
-import { ServiceLocatorContext } from '../../services/ServiceLocatorContext';
 
 
 const Waiver = ({ onWaiverSubmit }) => {
-    const { firebaseResources } = useContext(ServiceLocatorContext);
-    const analytics = firebaseResources.analytics();
-    
-
     const [isAgreed, setIsAgreed] = useState(false);
     const navigate = useNavigate();
 

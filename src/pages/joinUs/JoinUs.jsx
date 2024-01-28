@@ -37,7 +37,7 @@ import {
   MEETUP_URI,
 } from "../../text/externalLinks";
 import MetaText from "../../components/MetaText";
-import { RouteLeaflet } from "./RouteLeaflet";
+import Route from "./Route";
 
 const sectionRunWithUs = () => (
   <Card className="joinus__card">
@@ -129,10 +129,9 @@ function JoinUs() {
   return (
     <>
       <Header title={JOIN_US_TITLE} image={HeaderImage} />
-
       <section className="joinus">
       <MetaText>Saturday Morning Route</MetaText>
-      <RouteLeaflet />
+      <Route />
         <div className="container joinus__container">
           <div className="joinus__wrapper">
             {sectionRunWithUs()}
