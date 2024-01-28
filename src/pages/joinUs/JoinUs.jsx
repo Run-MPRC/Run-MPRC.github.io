@@ -35,7 +35,9 @@ import {
   ARM_URI,
   GOOGLE_FORM_LINK,
   MEETUP_URI,
-} from '../../text/externalLinks';
+} from "../../text/externalLinks";
+import MetaText from "../../components/MetaText";
+import { RouteLeaflet } from "./RouteLeaflet";
 
 const sectionRunWithUs = () => (
   <Card className="joinus__card">
@@ -129,6 +131,8 @@ function JoinUs() {
       <Header title={JOIN_US_TITLE} image={HeaderImage} />
 
       <section className="joinus">
+      <MetaText>Saturday Morning Route</MetaText>
+      <RouteLeaflet />
         <div className="container joinus__container">
           <div className="joinus__wrapper">
             {sectionRunWithUs()}

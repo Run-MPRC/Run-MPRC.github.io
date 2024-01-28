@@ -14,11 +14,10 @@ import Brunch3 from '../../images/activities/brunch3.jpeg';
 import Activity1 from '../../images/activities/activity1.jpeg';
 import Activity2 from '../../images/activities/social1.jpeg';
 
-import Extra1 from '../../images/activities/extra1.jpg';
-import Extra2 from '../../images/activities/extra2.jpeg';
-import Extra3 from '../../images/activities/extra3.jpeg';
-import RouteLeaflet from './RouteLeaflet';
-import FlexColumnContainer from '../../components/FlexColumnContainer';
+import Extra1 from "../../images/activities/extra1.jpg";
+import Extra2 from "../../images/activities/extra2.jpeg";
+import Extra3 from "../../images/activities/extra3.jpeg";
+import FlexColumnContainer from "../../components/FlexColumnContainer";
 
 const brunchImages = [Brunch1, Brunch2, Brunch3];
 const activityImages = [Activity1, Activity2];
@@ -43,8 +42,6 @@ function Activities() {
           </a>
           , and come join us!
         </Paragraph>
-        <MetaText>Saturday Morning route</MetaText>
-        <RouteLeaflet />
         <Subheader title="Brunch" />
         <Paragraph>
           &ldquo;We love to eat just as much as we love to run (or more). After most

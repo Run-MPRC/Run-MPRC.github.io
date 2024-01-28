@@ -30,7 +30,7 @@ function App() {
           <Route path="activities" element={<Activities />} />
           <Route path="events" element={<Events />} />
           <Route path="contact" element={<Contact />} />
-          <Route path="joinus" element={<JoinUs />} />
+          <Route path="joinus" element={<ConditionalRoute />} />
           <Route path="committee" element={<Committee />} />
           <Route path="login" element={<LoginForm />} />
           <Route path="*" element={<NotFound />} />
