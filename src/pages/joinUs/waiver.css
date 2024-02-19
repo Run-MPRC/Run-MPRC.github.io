@@ -1,4 +1,21 @@
+.waiver-title {
+  margin: 40px;
+}
+
 .waiver-form {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+
+  max-width: 800px;
+  margin: 10px;
+}
+
+.waiver-agree-checkbox {
+  margin: 20px;
+}
+
+.waiver-agree-text {
+  margin: 10px;
 }

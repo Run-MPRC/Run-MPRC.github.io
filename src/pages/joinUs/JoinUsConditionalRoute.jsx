@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import JoinUs from './JoinUs';
 import Waiver from './Waiver';
+import Header from '../../components/Header';
+import HeaderImage from '../../images/joinus/header_bg_1.jpg';
+import {
+  JOIN_US_TITLE,
+} from '../../text/JoinUs';
 
 function JoinUsConditionalRoute() {
   const [hasSignedWaiver, setHasSignedWaiver] = useState(false);
 
   useEffect(() => {
-    // localStorage.setItem('waiverSigned', 'false');
+    localStorage.setItem('waiverSigned', 'false');
     const waiverSigned = localStorage.getItem('waiverSigned');
     console.log(waiverSigned);
     setHasSignedWaiver(waiverSigned === 'true');
@@ -16,13 +21,12 @@ function JoinUsConditionalRoute() {
     setHasSignedWaiver(true);
   };
 
-  if (hasSignedWaiver) {
-    console.log("has agreed to waiver")
-    return <JoinUs />;
-  } else {
-    console.log("has not agreed to waiver")
-    return <Waiver onWaiverSubmit={ onWaiverSubmit }/>;
-  }
+  return (
+    <>
+      <Header title={JOIN_US_TITLE} image={HeaderImage} />
+      {hasSignedWaiver ? <JoinUs /> : <Waiver onWaiverSubmit={ onWaiverSubmit }/>}
+    </>
+  );
 }
 
 export default JoinUsConditionalRoute;

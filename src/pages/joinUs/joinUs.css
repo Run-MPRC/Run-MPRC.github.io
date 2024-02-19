@@ -26,3 +26,11 @@
 .ul_joinus {
   margin-bottom: 3rem;
 }
+
+.route-map {
+  margin-top: 40px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}

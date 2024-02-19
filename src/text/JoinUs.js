@@ -23,3 +23,20 @@ export const LI_ACCESS_TO_STRAVA_FACEBOOK = "Access to Club's private Strava, Fa
 export const LI_AFFORDABLE_MEMBERSHIP_FEES = 'Affordable membership fees';
 export const LI_EASY_ANNUAL_RENEWAL_PROCESS = 'Easy annual renewal process';
 export const ARM = 'A Runner\'s Mind';
+
+export const WAIVER_TEXT = `I understand that participating in group runs, social events, and
+  races are potentially hazardous activities that could cause injury or
+  death. I will not participate in any group activities unless I am
+  medically able and properly trained. I assume all risks associated
+  with being a member of this group and participating in its activities,
+  which may include, but are not limited to: falls, contact with other
+  participants, effects of the weather, traffic, and road conditions.
+  Having read this waiver and knowing these facts, I waive and release
+  the group organizers and hosts, the Mid-Peninsula Running Club
+  \(including its officers and other members\), all sponsors, and their
+  representatives and successors from all claims or liabilities of any
+  kind arising out of my participation in group activities, even though
+  that liability may arise out of negligence or carelessness on the part
+  of persons named in this waiver. By participating in this group, I
+  accept these terms and conditions.`;
+  export const WAIVER_AGREEMENT = 'I agree to the terms and conditions.';

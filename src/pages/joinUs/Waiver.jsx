@@ -1,10 +1,10 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../../components/Header';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
 import './waiver.css';
 import FirebaseResources from '../../services/firebase/FirebaseResources';
-import { logEvent } from "firebase/analytics";
+import { logEvent } from 'firebase/analytics';
+import { WAIVER_TEXT, WAIVER_AGREEMENT } from '../../text/JoinUs';
 
 function Waiver({ onWaiverSubmit }) {
   const [isAgreed, setIsAgreed] = useState(false);
@@ -31,35 +31,18 @@ function Waiver({ onWaiverSubmit }) {
 
   return (
     <FlexColumnContainer>
-      <Header title='Waiver' />
-      <h1>Waiver</h1>
+      <h1 className='waiver-title'>Waiver</h1>
       <form className='waiver-form' onSubmit={handleSubmit}>
-        <p>
-          I understand that participating in group runs, social events, and
-          races are potentially hazardous activities that could cause injury or
-          death. I will not participate in any group activities unless I am
-          medically able and properly trained. I assume all risks associated
-          with being a member of this group and participating in its activities,
-          which may include, but are not limited to: falls, contact with other
-          participants, effects of the weather, traffic, and road conditions.
-          Having read this waiver and knowing these facts, I waive and release
-          the group organizers and hosts, the Mid-Peninsula Running Club
-          (including its officers and other members), all sponsors, and their
-          representatives and successors from all claims or liabilities of any
-          kind arising out of my participation in group activities, even though
-          that liability may arise out of negligence or carelessness on the part
-          of persons named in this waiver. By participating in this group, I
-          accept these terms and conditions.
-        </p>
-        <label>
+        <p className='waiver-text'>{WAIVER_TEXT}</p>
+        <label className='waiver-agree-checkbox'>
           <input
             type='checkbox'
             checked={isAgreed}
             onChange={handleCheckboxChange}
           />
-          I agree to the terms and conditions.
+          <span className='waiver-agree-text'>{WAIVER_AGREEMENT}</span>
         </label>
-        <button type='submit'>Submit</button>
+        <button type='submit' className='btn lg'>Submit</button>
       </form>
     </FlexColumnContainer>
   );
