@@ -14,7 +14,7 @@ import LoginForm from './pages/login/LoginForm';
 import Admin from './pages/admin/Admin';
 import Events from './pages/events/Events.tsx';
 import ScrollToTop from './components/ScrollToTop';
-import ConditionalRoute from './pages/joinUs/ConditionalRoute';
+import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 
 function App() {
   return (
@@ -29,7 +29,7 @@ function App() {
           <Route path="activities" element={<Activities />} />
           <Route path="events" element={<Events />} />
           <Route path="contact" element={<Contact />} />
-          <Route path="joinus" element={<ConditionalRoute />} />
+          <Route path="joinus" element={<JoinUsConditionalRoute />} />
           <Route path="committee" element={<Committee />} />
           <Route path="login" element={<LoginForm />} />
           <Route path="*" element={<NotFound />} />
