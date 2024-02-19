@@ -39,4 +39,4 @@ export const WAIVER_TEXT = `I understand that participating in group runs, socia
   that liability may arise out of negligence or carelessness on the part
   of persons named in this waiver. By participating in this group, I
   accept these terms and conditions.`;
-  export const WAIVER_AGREEMENT = 'I agree to the terms and conditions.';
+export const WAIVER_AGREEMENT = 'I agree to the terms and conditions.';

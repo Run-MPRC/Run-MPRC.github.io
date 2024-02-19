@@ -31,18 +31,20 @@ function Waiver({ onWaiverSubmit }) {
 
   return (
     <FlexColumnContainer>
-      <h1 className='waiver-title'>Waiver</h1>
-      <form className='waiver-form' onSubmit={handleSubmit}>
-        <p className='waiver-text'>{WAIVER_TEXT}</p>
-        <label className='waiver-agree-checkbox'>
+      <h1 className="waiver-title">Waiver</h1>
+      <form className="waiver-form" onSubmit={handleSubmit}>
+        <p className="waiver-text">{WAIVER_TEXT}</p>
+        <label className="waiver-agree-checkbox">
           <input
-            type='checkbox'
+            type="checkbox"
             checked={isAgreed}
             onChange={handleCheckboxChange}
           />
-          <span className='waiver-agree-text'>{WAIVER_AGREEMENT}</span>
+          <span className="waiver-agree-text">{WAIVER_AGREEMENT}</span>
         </label>
-        <button type='submit' className='btn lg' disabled={!isAgreed}>Submit</button>
+        <button type="submit" className="btn lg" disabled={!isAgreed}>
+          Submit
+        </button>
       </form>
     </FlexColumnContainer>
   );
