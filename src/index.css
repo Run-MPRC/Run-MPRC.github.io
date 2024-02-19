@@ -92,9 +92,14 @@ img {
   transition: var(--transition);
 }
 
-.btn:hover {
+.btn:not(:disabled):hover {
   background: var(--color-secondary);
   color: var(--color-gray-600);
+}
+
+.btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 
 .btn.lg {

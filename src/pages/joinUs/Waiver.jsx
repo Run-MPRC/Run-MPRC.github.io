@@ -42,7 +42,7 @@ function Waiver({ onWaiverSubmit }) {
           />
           <span className='waiver-agree-text'>{WAIVER_AGREEMENT}</span>
         </label>
-        <button type='submit' className='btn lg'>Submit</button>
+        <button type='submit' className='btn lg' disabled={!isAgreed}>Submit</button>
       </form>
     </FlexColumnContainer>
   );
