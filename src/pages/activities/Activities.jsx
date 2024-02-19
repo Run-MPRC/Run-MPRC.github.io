@@ -35,34 +35,30 @@ function Activities() {
           Every Saturday morning, we run on the part of the Bay trail near
           downtown San Mateo. We meet in Seal Point Park near the green marker
           on the map listed below - come rain or shine. We welcome all paces and
-          walkers as well. To get our starting time,
+          walkers as well. Non-members can run with us, but must agree to the waiver
           {' '}
-          <a href="https://docs.google.com/forms/d/e/1FAIpQLSd574vmu9CgznB3JxV01Vkjz3RijuhbHEqb6pCCRuC6s7DiHg/viewform">
-            fill out the waiver
+          <a href="https://www.meetup.com/mid-peninsula-running-club/">
+            on our Meetup Page. No exceptions, sorry!
           </a>
-          , and come join us!
         </Paragraph>
         <Subheader title="Brunch" />
         <Paragraph>
-          &ldquo;We love to eat just as much as we love to run (or more). After most
-          Saturday runs, we organize a group of folks that would like to hang
-          out in a restaurant in the community.&rdquo;
+          &ldquo;Our informal motto is "the eating club with a running problem".
+          We love to eat just as much as we love to run (or more)!
+          After most Saturday runs, we organize a group to try brunch at nearby places.&rdquo;
         </Paragraph>
         <ImageCarousel images={brunchImages} />
         <Subheader title="Run Club Social" />
         <Paragraph>
-          Celebrate the end of each month with our Run Club Socials! These
-          gatherings are a fantastic way to connect with other members over
-          homemade goodies, fruits, and refreshing beverages, provided by the
-          club.
+          Celebrate the end of each month with our Run Club Socials!
+          On the last Saturday of each month, our club members bring food and drink to share.
+          These gatherings are a fantastic way to connect with other members over
+          homemade goodies, fruits, and refreshing beverages, provided by the club!
         </Paragraph>
         <ImageCarousel images={activityImages} />
         <h2 className="my-8">And sometimes, we just like to hang out…</h2>
         <Paragraph>
-          Celebrate the end of each month with our Run Club Socials! These
-          gatherings are a fantastic way to connect with other members over
-          homemade goodies, fruits, and refreshing beverages, provided by the
-          club.
+          We also host bi-annual club picnics for club members, volunteer at big races together, and have costumed runs on some holidays!
         </Paragraph>
         <ImageCarousel images={extraImages} />
       </FlexColumnContainer>
