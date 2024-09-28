@@ -14,9 +14,9 @@ import Brunch3 from '../../images/activities/brunch3.jpeg';
 import Activity1 from '../../images/activities/social1.jpeg';
 import Activity2 from '../../images/activities/social2.jpeg';
 
-import Extra1 from '../../images/activities/hangout_picnic.jpg';
+import Extra1 from '../../images/activities/hangout_picnic.jpeg';
 import Extra2 from '../../images/activities/hangout_volunteering.jpeg';
-import Extra3 from '../../images/activities/hangout_costume.jpeg';
+import Extra3 from '../../images/activities/hangout_costume.jpg';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
 import VideoContainer from '../../components/VideoCarousel';
 
