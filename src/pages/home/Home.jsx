@@ -8,10 +8,6 @@ function Home() {
     <>
       <MainHeader />
       <About />
-      {/* <Program/>
-    <Values/>
-    <FAQs/>
-    <Testimonial/> */}
     </>
   );
 }

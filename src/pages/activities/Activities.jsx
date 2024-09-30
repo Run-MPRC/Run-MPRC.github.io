@@ -11,12 +11,12 @@ import Brunch1 from '../../images/activities/brunch1.jpeg';
 import Brunch2 from '../../images/activities/brunch2.jpeg';
 import Brunch3 from '../../images/activities/brunch3.jpeg';
 
-import Activity1 from '../../images/activities/activity1.jpeg';
-import Activity2 from '../../images/activities/social1.jpeg';
+import Activity1 from '../../images/activities/social1.jpeg';
+import Activity2 from '../../images/activities/social2.jpeg';
 
-import Extra1 from '../../images/activities/extra1.jpg';
-import Extra2 from '../../images/activities/extra2.jpeg';
-import Extra3 from '../../images/activities/extra3.jpeg';
+import Extra1 from '../../images/activities/hangout_picnic.jpeg';
+import Extra2 from '../../images/activities/hangout_volunteering.jpeg';
+import Extra3 from '../../images/activities/hangout_costume.jpg';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
 import VideoContainer from '../../components/VideoCarousel';
 
@@ -58,7 +58,7 @@ function Activities() {
           Celebrate the end of each month with our Run Club Socials!
           On the last Saturday of each month, our club members bring food and drink to share.
           These gatherings are a fantastic way to connect with other members over
-          homemade goodies, fruits, and refreshing beverages, provided by the club!
+          homemade baked goods, fruits, snacks, and refreshing beverages, contributed by anyone who wishes!
         </Paragraph>
         <ImageCarousel images={activityImages} />
         <h2 className="my-8">And sometimes, we just like to hang out…</h2>
