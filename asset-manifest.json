@@ -1,12 +1,13 @@
 {
   "files": {
     "main.css": "/static/css/main.f7c3f9b2.css",
-    "main.js": "/static/js/main.bd9235b1.js",
+    "main.js": "/static/js/main.fad37642.js",
     "static/media/header_bg_5.jpg": "/static/media/header_bg_5.fc39d54e16ef933746bf.jpg",
     "static/media/dave.png": "/static/media/dave.e33225f607f3e6031525.png",
     "static/media/frances_1.jpg": "/static/media/frances_1.7e3ac4a61e8ce4c96811.jpg",
     "static/media/brunch2.jpeg": "/static/media/brunch2.d080a4301c309d9025da.jpeg",
     "static/media/header_bg_1.jpg": "/static/media/header_bg_1.e6089dac641c35cdf206.jpg",
+    "static/media/social2.jpeg": "/static/media/social2.7c55bdf345741cd9a629.jpeg",
     "static/media/header_bg_2.jpg": "/static/media/header_bg_2.2888c6453c0c090b8c8b.jpg",
     "static/media/kat.jpg": "/static/media/kat.402c46c0c703bc75c5d0.jpg",
     "static/media/mprc_home.jpg": "/static/media/mprc_home.d74f6e44b2a768be025a.jpg",
@@ -14,23 +15,21 @@
     "static/media/debbie.jpeg": "/static/media/debbie.6668c5db716ec64abef5.jpeg",
     "static/media/ted.jpg": "/static/media/ted.b9c37dc223af0e91f7de.jpg",
     "static/media/frank.jpg": "/static/media/frank.2e07e8d0981046c92c6e.jpg",
-    "static/media/extra3.jpeg": "/static/media/extra3.9a43b096f4bf937fea0f.jpeg",
+    "static/media/hangout_volunteering.jpeg": "/static/media/hangout_volunteering.9a43b096f4bf937fea0f.jpeg",
     "static/media/brunch3.jpeg": "/static/media/brunch3.f44e79713fd24500dd92.jpeg",
-    "static/media/activity1.jpeg": "/static/media/activity1.0751edf1176f2105df19.jpeg",
-    "static/media/social1.jpeg": "/static/media/social1.2c77ac710fd87ce878c5.jpeg",
-    "static/media/extra1.jpg": "/static/media/extra1.e7b3fa913bdcdf1c3387.jpg",
-    "static/media/extra2.jpeg": "/static/media/extra2.4ea3dc44a9bdf75377b6.jpeg",
+    "static/media/social1.jpeg": "/static/media/social1.0751edf1176f2105df19.jpeg",
+    "static/media/hangout_costume.jpg": "/static/media/hangout_costume.e7b3fa913bdcdf1c3387.jpg",
+    "static/media/hangout_picnic.jpeg": "/static/media/hangout_picnic.4ea3dc44a9bdf75377b6.jpeg",
     "static/media/brunch1.jpeg": "/static/media/brunch1.568b55d41608d4ef7fa0.jpeg",
     "static/media/patti.jpg": "/static/media/patti.e8726d775021636bbc26.jpg",
-    "static/media/avatar5.jpg": "/static/media/avatar5.d25e9a28e32aa5201afa.jpg",
     "static/media/logo.svg": "/static/media/logo.b8a6af1a9242954a82a28cb129b07f40.svg",
     "static/media/route.gpx": "/static/media/route.67f790526b3a5b193359.gpx",
     "index.html": "/index.html",
     "main.f7c3f9b2.css.map": "/static/css/main.f7c3f9b2.css.map",
-    "main.bd9235b1.js.map": "/static/js/main.bd9235b1.js.map"
+    "main.fad37642.js.map": "/static/js/main.fad37642.js.map"
   },
   "entrypoints": [
     "static/css/main.f7c3f9b2.css",
-    "static/js/main.bd9235b1.js"
+    "static/js/main.fad37642.js"
   ]
 }
