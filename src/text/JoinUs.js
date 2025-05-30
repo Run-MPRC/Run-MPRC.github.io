@@ -10,9 +10,9 @@ export const GOOGLE_FORM = 'Google Form';
 export const BECOME_A_MEMBER = 'Become an MPRC Member';
 
 export const JUST_RUN_WITH_US = 'Just Come Out and Run With Us';
-export const JUST_RUN_WITH_US_CONTENT_1 = 'Just show up at a run and see what we\'re all about!';
+export const JUST_RUN_WITH_US_CONTENT_1 = 'Just show up at a run, rain or shine!';
 export const JUST_RUN_WITH_US_CONTENT_2 = 'There\'s no need to be a member of any group or organization.';
-export const JUST_RUN_WITH_US_CONTENT_3 = 'Details about time and location are provided above.';
+export const JUST_RUN_WITH_US_CONTENT_3 = 'Details about time and location are provided above. If the park is crowded due to other events, we meet at the bathrooms by the dog park (parking lot at the right of the entrance)';
 
 export const WAYS_TO_RUN = 'Ways To Run With Us';
 
