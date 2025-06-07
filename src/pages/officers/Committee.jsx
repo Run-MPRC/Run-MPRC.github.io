@@ -50,7 +50,7 @@ const officers = [
   {
     id: 5,
     image: Officer5,
-    name: 'Allison Song',
+    name: 'Allison Soung',
     job: 'Newsletter Editor',
   },
   {
