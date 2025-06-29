@@ -1,6 +1,7 @@
 // rafce -> shortcut to create component and export
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
+import { HelmetProvider } from 'react-helmet-async';
 import Home from './pages/home/Home';
 import About from './pages/about/About';
 import Contact from './pages/contact/Contact';
@@ -18,25 +19,27 @@ import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 
 function App() {
   return (
-    <ServiceLocatorProvider>
-      <BrowserRouter>
-        <Navbar />
-        <ScrollToTop />
-        <Routes>
-          <Route index element={<Home />} />
-          <Route path="admin" element={<Admin />} />
-          <Route path="about" element={<About />} />
-          <Route path="activities" element={<Activities />} />
-          <Route path="events" element={<Events />} />
-          <Route path="contact" element={<Contact />} />
-          <Route path="joinus" element={<JoinUsConditionalRoute />} />
-          <Route path="committee" element={<Committee />} />
-          <Route path="login" element={<LoginForm />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-        <Footer />
-      </BrowserRouter>
-    </ServiceLocatorProvider>
+    <HelmetProvider>
+      <ServiceLocatorProvider>
+        <BrowserRouter>
+          <Navbar />
+          <ScrollToTop />
+          <Routes>
+            <Route index element={<Home />} />
+            <Route path="admin" element={<Admin />} />
+            <Route path="about" element={<About />} />
+            <Route path="activities" element={<Activities />} />
+            <Route path="events" element={<Events />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="joinus" element={<JoinUsConditionalRoute />} />
+            <Route path="committee" element={<Committee />} />
+            <Route path="login" element={<LoginForm />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+          <Footer />
+        </BrowserRouter>
+      </ServiceLocatorProvider>
+    </HelmetProvider>
   );
 }
 

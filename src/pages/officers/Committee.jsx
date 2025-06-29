@@ -2,6 +2,7 @@ import React from 'react';
 import Header from '../../components/Header';
 import HeaderImage from '../../images/committee/header_bg_5.jpg';
 import Officer from '../../components/Officer';
+import SEO from '../../components/SEO';
 import './committee.css';
 import { COMMITTEE_INTRO, COMMITTEE_TITLE } from '../../text/Committee';
 
@@ -74,8 +75,70 @@ const officers = [
 ];
 
 function Committee() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "MPRC Committee and Leadership",
+    "description": "Meet the Mid-Peninsula Running Club committee and leadership team. Our Bay Area running club is led by dedicated volunteers who organize weekly runs, social events, and community activities.",
+    "url": "https://run-mprc.github.io/committee",
+    "mainEntity": {
+      "@type": "Organization",
+      "name": "Mid-Peninsula Running Club",
+      "employee": [
+        {
+          "@type": "Person",
+          "name": "Frances Schulze",
+          "jobTitle": "President"
+        },
+        {
+          "@type": "Person",
+          "name": "David Liu",
+          "jobTitle": "Vice President"
+        },
+        {
+          "@type": "Person",
+          "name": "Ted Levine",
+          "jobTitle": "Treasurer"
+        },
+        {
+          "@type": "Person",
+          "name": "Kat Mar",
+          "jobTitle": "Secretary"
+        },
+        {
+          "@type": "Person",
+          "name": "Allison Soung",
+          "jobTitle": "Newsletter Editor"
+        },
+        {
+          "@type": "Person",
+          "name": "Debbie Mar",
+          "jobTitle": "Social Director"
+        },
+        {
+          "@type": "Person",
+          "name": "Patti Chan",
+          "jobTitle": "Social Director"
+        },
+        {
+          "@type": "Person",
+          "name": "Dalton Chan",
+          "jobTitle": "Photographer"
+        }
+      ]
+    }
+  };
+
   return (
     <>
+      <SEO 
+        title="Running Club Committee and Leadership"
+        description="Meet the Mid-Peninsula Running Club committee and leadership team. Our Bay Area running club is led by dedicated volunteers who organize weekly runs, social events, and community activities."
+        keywords="MPRC committee, running club leadership, Bay Area running club officers, Mid-Peninsula Running Club board, running club volunteers, San Mateo running club leadership"
+        url="https://run-mprc.github.io/committee"
+        canonicalUrl="https://run-mprc.github.io/committee"
+        structuredData={structuredData}
+      />
       <Header image={HeaderImage} title={COMMITTEE_TITLE}>
         {COMMITTEE_INTRO}
       </Header>

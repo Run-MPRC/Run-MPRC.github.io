@@ -1,45 +1,45 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
    <url>
-      <loc>http://www.runmprc.com/</loc>
-      <lastmod>2023-12-22</lastmod>
-      <changefreq>yearly</changefreq>
+      <loc>https://run-mprc.github.io/</loc>
+      <lastmod>2024-12-19</lastmod>
+      <changefreq>weekly</changefreq>
       <priority>1.0</priority>
    </url>
    <url>
-      <loc>http://www.runmprc.com/about</loc>
-      <lastmod>2023-12-22</lastmod>
+      <loc>https://run-mprc.github.io/about</loc>
+      <lastmod>2024-12-19</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.8</priority>
+   </url>
+   <url>
+      <loc>https://run-mprc.github.io/activities</loc>
+      <lastmod>2024-12-19</lastmod>
+      <changefreq>weekly</changefreq>
+      <priority>0.8</priority>
+   </url>
+   <url>
+      <loc>https://run-mprc.github.io/joinus</loc>
+      <lastmod>2024-12-19</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.9</priority>
+   </url>
+   <url>
+      <loc>https://run-mprc.github.io/contact</loc>
+      <lastmod>2024-12-19</lastmod>
+      <changefreq>yearly</changefreq>
+      <priority>0.6</priority>
+   </url>
+   <url>
+      <loc>https://run-mprc.github.io/committee</loc>
+      <lastmod>2024-12-19</lastmod>
       <changefreq>yearly</changefreq>
       <priority>0.5</priority>
    </url>
    <url>
-      <loc>http://www.runmprc.com/activities</loc>
-      <lastmod>2023-12-22</lastmod>
-      <changefreq>yearly</changefreq>
-      <priority>0.5</priority>
-   </url>
-   <url>
-      <loc>http://www.runmprc.com/contact</loc>
-      <lastmod>2023-12-22</lastmod>
-      <changefreq>yearly</changefreq>
-      <priority>0.5</priority>
-   </url>
-   <url>
-      <loc>http://www.runmprc.com/gallery</loc>
-      <lastmod>2023-12-22</lastmod>
-      <changefreq>yearly</changefreq>
-      <priority>0.5</priority>
-   </url>
-   <url>
-      <loc>http://www.runmprc.com/joinus</loc>
-      <lastmod>2023-12-22</lastmod>
-      <changefreq>yearly</changefreq>
-      <priority>0.5</priority>
-   </url>
-   <url>
-      <loc>http://www.runmprc.com/committee</loc>
-      <lastmod>2023-12-22</lastmod>
-      <changefreq>yearly</changefreq>
-      <priority>0.5</priority>
+      <loc>https://run-mprc.github.io/events</loc>
+      <lastmod>2024-12-19</lastmod>
+      <changefreq>weekly</changefreq>
+      <priority>0.7</priority>
    </url>
 </urlset>

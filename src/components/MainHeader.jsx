@@ -9,11 +9,14 @@ import {
 
 function MainHeader() {
   return (
-    <header className="main__header">
+    <header className="main__header" role="banner">
       <div className="main__header-background">
         <div className="container main__header-container">
-          <h1>{HOME_HERO_TEXT_1}</h1>
-          <p>{HOME_HERO_TEXT_2}</p>
+          <h1 itemProp="name">{HOME_HERO_TEXT_1}</h1>
+          <p itemProp="description">{HOME_HERO_TEXT_2}</p>
+          <meta itemProp="location" content="San Mateo, California" />
+          <meta itemProp="sport" content="Running" />
+          <meta itemProp="foundingDate" content="1988" />
           {/* <Link
             to={MEETUP_URI}
             className="btn lg"

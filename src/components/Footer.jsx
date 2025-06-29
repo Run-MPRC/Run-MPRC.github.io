@@ -7,7 +7,8 @@ import {
   faStrava,
 } from '@fortawesome/free-brands-svg-icons';
 import Logo from '../assets/images/logo.svg';
-import { FB_URI, MEETUP_URI, STRAVA_URI } from '../text/externalLinks';
+// import { FB_URI, MEETUP_URI, STRAVA_URI } from '../text/externalLinks';
+import { FB_URI, STRAVA_URI } from '../text/externalLinks';
 import { COPYRIGHT, DESC } from '../text/Footer';
 
 function Footer() {
@@ -20,9 +21,9 @@ function Footer() {
           </Link>
           <p>{DESC}</p>
           <div className="footer__socials">
-            <a href={MEETUP_URI} target="_blank" rel="noreferrer noopener" aria-label="Meetup">
+            {/* <a href={MEETUP_URI} target="_blank" rel="noreferrer noopener" aria-label="Meetup">
               <FontAwesomeIcon icon={faMeetup} />
-            </a>
+            </a> */}
             <a href={FB_URI} target="_blank" rel="noreferrer noopener" aria-label="Facebook">
               <FontAwesomeIcon icon={faFacebook} />
             </a>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import './joinUs.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGoogle /* , faMeetup */ } from '@fortawesome/free-brands-svg-icons';
+import SEO from '../../components/SEO';
 import MetaText from '../../components/MetaText';
 import {
   ARM,
@@ -141,21 +142,86 @@ const sectionBecomeMember = () => (
 );
 
 function JoinUs() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Join Mid-Peninsula Running Club",
+    "description": "Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts and perks, volunteering opportunities, and a supportive Bay Area running community.",
+    "url": "https://run-mprc.github.io/joinus",
+    "mainEntity": {
+      "@type": "SportsOrganization",
+      "name": "Mid-Peninsula Running Club",
+      "description": "A running club serving the San Francisco Peninsula since 1988",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "1901 J Hart Clinton Dr",
+        "addressLocality": "San Mateo",
+        "addressRegion": "CA",
+        "postalCode": "94401",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 37.5629,
+        "longitude": -122.3255
+      },
+      "event": {
+        "@type": "SportsEvent",
+        "name": "Saturday Morning Run",
+        "description": "Weekly group run at Seal Point Park",
+        "location": {
+          "@type": "Place",
+          "name": "Seal Point Park",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "1901 J Hart Clinton Dr",
+            "addressLocality": "San Mateo",
+            "addressRegion": "CA",
+            "postalCode": "94401",
+            "addressCountry": "US"
+          }
+        },
+        "startTime": "09:00",
+        "dayOfWeek": "Saturday",
+        "organizer": {
+          "@type": "Organization",
+          "name": "Mid-Peninsula Running Club"
+        }
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "15",
+        "priceCurrency": "USD",
+        "description": "Annual membership fee for individuals"
+      }
+    }
+  };
+
   return (
-    <section className="joinus">
-      <div className="container joinus__container">
-        <div className="joinus__wrapper">
-          {sectionHeading()}
-          &nbsp;&nbsp;
-          {sectionRunWithUs()}
-          &nbsp;&nbsp;
-          {/* {sectionMeetup()} */}
-          &nbsp;&nbsp;
-          {sectionBecomeMember()}
-          &nbsp;&nbsp;
+    <>
+      <SEO 
+        title="Join Our Bay Area Running Club"
+        description="Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts, and a supportive Bay Area running community."
+        keywords="join running club, Bay Area running club membership, San Mateo running club join, Seal Point Park running, Saturday running group join, MPRC membership, running club benefits, Bay Area runners welcome"
+        url="https://run-mprc.github.io/joinus"
+        canonicalUrl="https://run-mprc.github.io/joinus"
+        structuredData={structuredData}
+      />
+      <section className="joinus">
+        <div className="container joinus__container">
+          <div className="joinus__wrapper">
+            {sectionHeading()}
+            &nbsp;&nbsp;
+            {sectionRunWithUs()}
+            &nbsp;&nbsp;
+            {/* {sectionMeetup()} */}
+            &nbsp;&nbsp;
+            {sectionBecomeMember()}
+            &nbsp;&nbsp;
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 

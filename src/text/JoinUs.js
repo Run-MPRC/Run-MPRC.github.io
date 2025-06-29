@@ -5,7 +5,7 @@ export const MEETUP_GROUP = 'Meetup ';
 export const JOIN_US_DESCRIPTION_2 = 'Joining Meetup and attending runs are both free of charge.';
 export const JOIN_US_DESCRIPTION_3 = 'You don\'t have to be an MPRC member to run with us, but feel free to check out our meetup for the calendar events.';
 export const JOIN_US_DESCRIPTION_4 = 'Fill out the ';
-export const JOIN_US_DESCRIPTION_5 = 'The fee is $15 per calendar year for individuals and $20 per calendar year for families.';
+export const JOIN_US_DESCRIPTION_5 = 'The fee is $15 per calendar year for individuals and $20 per calendar year for families. (Venmo/Zelle/Cash)';
 export const GOOGLE_FORM = 'Google Form';
 export const BECOME_A_MEMBER = 'Become an MPRC Member';
 
