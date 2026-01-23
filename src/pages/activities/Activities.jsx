@@ -32,82 +32,82 @@ const videos = [
 const brunchAltTexts = [
   'MPRC members enjoying brunch together',
   'Club members sharing a meal after running',
-  'Social gathering with food and conversation'
+  'Social gathering with food and conversation',
 ];
 
 const activityAltTexts = [
   'Monthly run club social gathering',
-  'Members sharing homemade treats and drinks'
+  'Members sharing homemade treats and drinks',
 ];
 
 const extraAltTexts = [
   'Club picnic in the park',
   'Volunteering at a local race',
-  'Costumed run celebration'
+  'Costumed run celebration',
 ];
 
 const videoTitles = [
   'MPRC Saturday Morning Run Experience',
-  'Club Activities and Social Events'
+  'Club Activities and Social Events',
 ];
 
 function Activities() {
   const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "MPRC Activities and Events",
-    "description": "Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners.",
-    "url": "https://run-mprc.github.io/activities",
-    "mainEntity": {
-      "@type": "Organization",
-      "name": "Mid-Peninsula Running Club",
-      "event": [
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'MPRC Activities and Events',
+    description: 'Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners.',
+    url: 'https://run-mprc.github.io/activities',
+    mainEntity: {
+      '@type': 'Organization',
+      name: 'Mid-Peninsula Running Club',
+      event: [
         {
-          "@type": "SportsEvent",
-          "name": "Saturday Morning Run",
-          "description": "Weekly group run on the scenic Bay Trail near downtown San Mateo",
-          "location": {
-            "@type": "Place",
-            "name": "Bay Trail",
-            "address": {
-              "@type": "PostalAddress",
-              "addressLocality": "San Mateo",
-              "addressRegion": "CA"
-            }
+          '@type': 'SportsEvent',
+          name: 'Saturday Morning Run',
+          description: 'Weekly group run on the scenic Bay Trail near downtown San Mateo',
+          location: {
+            '@type': 'Place',
+            name: 'Bay Trail',
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: 'San Mateo',
+              addressRegion: 'CA',
+            },
           },
-          "startTime": "09:00",
-          "endTime": "10:00",
-          "dayOfWeek": "Saturday",
-          "organizer": {
-            "@type": "Organization",
-            "name": "Mid-Peninsula Running Club"
-          }
+          startTime: '09:00',
+          endTime: '10:00',
+          dayOfWeek: 'Saturday',
+          organizer: {
+            '@type': 'Organization',
+            name: 'Mid-Peninsula Running Club',
+          },
         },
         {
-          "@type": "SocialEvent",
-          "name": "Club Brunch",
-          "description": "Post-run brunch at local restaurants",
-          "organizer": {
-            "@type": "Organization",
-            "name": "Mid-Peninsula Running Club"
-          }
+          '@type': 'SocialEvent',
+          name: 'Club Brunch',
+          description: 'Post-run brunch at local restaurants',
+          organizer: {
+            '@type': 'Organization',
+            name: 'Mid-Peninsula Running Club',
+          },
         },
         {
-          "@type": "SocialEvent",
-          "name": "Monthly Run Club Social",
-          "description": "Monthly gathering with food and drinks on the last Saturday of each month",
-          "organizer": {
-            "@type": "Organization",
-            "name": "Mid-Peninsula Running Club"
-          }
-        }
-      ]
-    }
+          '@type': 'SocialEvent',
+          name: 'Monthly Run Club Social',
+          description: 'Monthly gathering with food and drinks on the last Saturday of each month',
+          organizer: {
+            '@type': 'Organization',
+            name: 'Mid-Peninsula Running Club',
+          },
+        },
+      ],
+    },
   };
 
   return (
     <>
-      <SEO 
+      <SEO
         title="Running Club Activities and Events"
         description="Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners."
         keywords="running club activities, Bay Trail running, Saturday running group, running club social events, Bay Area running events, MPRC activities, running club brunch, monthly running social"

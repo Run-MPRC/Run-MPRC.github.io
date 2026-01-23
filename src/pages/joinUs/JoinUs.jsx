@@ -112,63 +112,63 @@ const sectionBecomeMember = () => (
 
 function JoinUs() {
   const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "Join Mid-Peninsula Running Club",
-    "description": "Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts and perks, volunteering opportunities, and a supportive Bay Area running community.",
-    "url": "https://run-mprc.github.io/joinus",
-    "mainEntity": {
-      "@type": "SportsOrganization",
-      "name": "Mid-Peninsula Running Club",
-      "description": "A running club serving the San Francisco Peninsula since 1988",
-      "address": {
-        "@type": "PostalAddress",
-        "streetAddress": "1901 J Hart Clinton Dr",
-        "addressLocality": "San Mateo",
-        "addressRegion": "CA",
-        "postalCode": "94401",
-        "addressCountry": "US"
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'Join Mid-Peninsula Running Club',
+    description: 'Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts and perks, volunteering opportunities, and a supportive Bay Area running community.',
+    url: 'https://run-mprc.github.io/joinus',
+    mainEntity: {
+      '@type': 'SportsOrganization',
+      name: 'Mid-Peninsula Running Club',
+      description: 'A running club serving the San Francisco Peninsula since 1988',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: '1901 J Hart Clinton Dr',
+        addressLocality: 'San Mateo',
+        addressRegion: 'CA',
+        postalCode: '94401',
+        addressCountry: 'US',
       },
-      "geo": {
-        "@type": "GeoCoordinates",
-        "latitude": 37.5629,
-        "longitude": -122.3255
+      geo: {
+        '@type': 'GeoCoordinates',
+        latitude: 37.5629,
+        longitude: -122.3255,
       },
-      "event": {
-        "@type": "SportsEvent",
-        "name": "Saturday Morning Run",
-        "description": "Weekly group run at Seal Point Park",
-        "location": {
-          "@type": "Place",
-          "name": "Seal Point Park",
-          "address": {
-            "@type": "PostalAddress",
-            "streetAddress": "1901 J Hart Clinton Dr",
-            "addressLocality": "San Mateo",
-            "addressRegion": "CA",
-            "postalCode": "94401",
-            "addressCountry": "US"
-          }
+      event: {
+        '@type': 'SportsEvent',
+        name: 'Saturday Morning Run',
+        description: 'Weekly group run at Seal Point Park',
+        location: {
+          '@type': 'Place',
+          name: 'Seal Point Park',
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: '1901 J Hart Clinton Dr',
+            addressLocality: 'San Mateo',
+            addressRegion: 'CA',
+            postalCode: '94401',
+            addressCountry: 'US',
+          },
         },
-        "startTime": "09:00",
-        "dayOfWeek": "Saturday",
-        "organizer": {
-          "@type": "Organization",
-          "name": "Mid-Peninsula Running Club"
-        }
+        startTime: '09:00',
+        dayOfWeek: 'Saturday',
+        organizer: {
+          '@type': 'Organization',
+          name: 'Mid-Peninsula Running Club',
+        },
       },
-      "offers": {
-        "@type": "Offer",
-        "price": "15",
-        "priceCurrency": "USD",
-        "description": "Annual membership fee for individuals"
-      }
-    }
+      offers: {
+        '@type': 'Offer',
+        price: '15',
+        priceCurrency: 'USD',
+        description: 'Annual membership fee for individuals',
+      },
+    },
   };
 
   return (
     <>
-      <SEO 
+      <SEO
         title="Join Our Bay Area Running Club"
         description="Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts, and a supportive Bay Area running community."
         keywords="join running club, Bay Area running club membership, San Mateo running club join, Seal Point Park running, Saturday running group join, MPRC membership, running club benefits, Bay Area runners welcome"

@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 
 function FlexColumnContainer({ children, className, style }) {
   return (
-    <div 
+    <div
       className={`container mx-auto md flex flex-col items-center ${className || ''}`}
       style={style}
     >
