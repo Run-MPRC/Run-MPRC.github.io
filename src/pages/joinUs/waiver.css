@@ -1,5 +1,43 @@
 .waiver-title {
   margin: 40px;
+  text-align: center;
+}
+
+.waiver-intro {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto 20px;
+  color: #666;
+}
+
+.waiver-form-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 0 20px;
+}
+
+.waiver-iframe {
+  width: 100%;
+  min-height: 800px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.waiver-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 30px 20px;
+  max-width: 600px;
+}
+
+.waiver-instruction {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #666;
+  font-style: italic;
 }
 
 .waiver-form {
@@ -7,7 +45,6 @@
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-
   max-width: 800px;
   margin: 10px;
 }
@@ -23,4 +60,14 @@
 .waiver-text {
   white-space: pre-line;
   text-align: justify;
+}
+
+@media (max-width: 768px) {
+  .waiver-iframe {
+    min-height: 1000px;
+  }
+
+  .waiver-form-container {
+    padding: 0 10px;
+  }
 }

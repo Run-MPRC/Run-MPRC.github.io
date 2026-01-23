@@ -9,6 +9,23 @@ export const JOIN_US_DESCRIPTION_5 = 'The fee is $25 per calendar year for indiv
 export const GOOGLE_FORM = 'Google Form';
 export const BECOME_A_MEMBER = 'Become an MPRC Member';
 
+// 2026 Membership & RRCA
+export const RRCA_ANNOUNCEMENT_TITLE = 'New Membership Fees + Road Runners Clubs of America';
+export const RRCA_ANNOUNCEMENT_INTRO = 'We are excited to announce that the MPRC will officially be joining the Road Runners Clubs of America (RRCA) at the end of this year. Joining RRCA provides many benefits for the club that will be helpful to assist with the significant growth of the club in recent years. These benefits among other things include insurance for the club and its officers.';
+export const RRCA_ANNOUNCEMENT_FEE_INTRO = 'The club dues are being increased to cover the cost of MPRC joining the RRCA. The new dues for the 2026 year will be as follows:';
+export const MEMBERSHIP_EARLY_BIRD_TITLE = 'Early Bird Renewal Membership (before December 1, 2025)';
+export const MEMBERSHIP_EARLY_BIRD_DESC = 'We are offering a special EARLY BIRD incentive discount to our current members who both renew and pay by 12/1:';
+export const MEMBERSHIP_EARLY_BIRD_INDIVIDUAL = 'Individual membership: $20';
+export const MEMBERSHIP_EARLY_BIRD_HOUSEHOLD = 'Household membership: $25';
+export const MEMBERSHIP_STANDARD_TITLE = 'Standard Membership (after December 1, 2025)';
+export const MEMBERSHIP_STANDARD_INDIVIDUAL = 'Individual membership: $25';
+export const MEMBERSHIP_STANDARD_HOUSEHOLD = 'Household membership: $30';
+export const MEMBERSHIP_NON_RESIDENT_TITLE = 'Non-Resident Members';
+export const MEMBERSHIP_NON_RESIDENT_DESC = 'For members who have moved out of the Bay Area and would like to stay in contact with the club in 2026 via the club\'s WhatsApp, FB, Strava, and the newsletter, membership will be $5';
+export const MEMBERSHIP_RENEWAL_NOTE = 'Each person is required to fill out the renewal form for 2026 membership.';
+export const MEMBERSHIP_WARNING = 'NOTE: If you do not renew by January 1, 2026, your access and history in club apps will be deleted once your name is removed from the roster.';
+export const RENEWAL_FORM_2026 = '2026 Renewal Form';
+
 export const JUST_RUN_WITH_US = 'Just Come Out and Run With Us';
 export const JUST_RUN_WITH_US_CONTENT_1 = 'Just show up at a run and see what we\'re all about!';
 export const JUST_RUN_WITH_US_CONTENT_2 = 'There\'s no need to be a member of any group or organization.';
@@ -20,17 +37,20 @@ export const JOIN_US_BUTTON_1 = 'RSVP on Meetup';
 export const JOIN_US_BUTTON_2 = 'Membership Form';
 
 export const MEMBER_BENEFITS = 'Member benefits include:';
-export const LI_SATURDAY_CLUB_RUNS = 'Saturday morning club runs';
-export const LI_CLUB_SUPPORT_NETWORKING = 'Club support, networking with members, guest coaches/speakers';
-export const LI_CLUB_GATHERINGS = 'Club gatherings with baked goods and hot beverages the last Saturday of every month';
-export const LI_MONTHLY_NEWSLETTERS = 'Monthly newsletters';
-export const LI_CLUB_LOGO_MERCHANDISE = 'Club logo merchandise (caps & jackets)';
-export const LI_SOCIAL_RACE_ACTIVITIES = 'Club social and race activities (annual club picnic/dinner)';
-export const LI_RACE_DISCOUNT_CODES = 'Race discount codes';
-export const LI_DISCOUNT_ON_SHOES = '10% discount on shoes at ';
-export const LI_ACCESS_TO_STRAVA_FACEBOOK = "Access to club's private Strava, Facebook, Instagram, and WhatsApp groups";
-export const LI_AFFORDABLE_MEMBERSHIP_FEES = 'Affordable membership fees';
+export const LI_WHATSAPP_ACCESS = 'Access to MPRC WhatsApp - where the majority of club communication takes place';
+export const LI_FACEBOOK_STRAVA_ACCESS = 'Access to MPRC Facebook and Strava (approval required to ensure members-only access)';
+export const LI_STORE_DISCOUNTS = 'Discounts at a variety of local and online stores offering running gear';
+export const LI_SOCIAL_RACE_ACTIVITIES = 'Club social and race activities (annual club picnic/dinner, volunteering opportunities, race coordination)';
+export const LI_RACE_DISCOUNT_CODES = 'Race discount codes (see monthly newsletters, FB, or WhatsApp)';
+export const LI_CLUB_LOGO_MERCHANDISE = 'Club logo merchandise';
+export const LI_MONTHLY_NEWSLETTERS = 'Monthly newsletters (typically sent the first week of every month)';
+export const LI_SATURDAY_CLUB_RUNS = 'Club runs on Saturdays';
+export const LI_TRAIL_RUNS_TRACK = 'Informal trail runs and track workouts';
+export const LI_CLUB_GATHERINGS = 'Club social gatherings with baked goods and hot beverages on the last Saturday of every month';
+export const LI_CLUB_SUPPORT_NETWORKING = 'Club support and networking with members';
+export const LI_AFFORDABLE_MEMBERSHIP_FEES = 'Affordable membership fees: $25/individual or $30/household per calendar year';
 export const LI_EASY_ANNUAL_RENEWAL_PROCESS = 'Easy annual renewal process';
+export const LI_DISCOUNT_ON_SHOES = '10% discount on shoes at ';
 export const ARM = 'A Runner\'s Mind';
 
 export const WAIVER_TITLE = 'Club Activity Terms and Consent';

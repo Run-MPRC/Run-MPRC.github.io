@@ -6,71 +6,65 @@ import SEO from '../../components/SEO';
 import './committee.css';
 import { COMMITTEE_INTRO, COMMITTEE_TITLE } from '../../text/Committee';
 
-// const OfficerDefault = require('../../images/committee/committee_default_portrait.png');
-const Officer1 = require('../../images/committee/frances.jpg');
-/* const Officer1Alt = require('../../images/committee/frances_2.jpg'); */
-const Officer2 = require('../../images/committee/dave.png');
-const Officer3 = require('../../images/committee/ted.jpg');
-const Officer4 = require('../../images/committee/kat.jpg');
-const Officer5 = require('../../images/committee/allison.jpg');
-const Officer6 = require('../../images/committee/debbie.jpg');
-const Officer7 = require('../../images/committee/patti.jpg');
-const Officer8 = require('../../images/committee/dalton.jpg');
+const OfficerDefault = require('../../images/committee/committee_default_portrait.png');
+const OfficerTed = require('../../images/committee/ted.jpg');
+const OfficerAllison = require('../../images/committee/allison.jpg');
+const OfficerPatti = require('../../images/committee/patti.jpg');
 
 const officers = [
   {
     id: 1,
-    image: Officer1,
-    /* imageAlt: Officer1Alt, */
-    name: 'Frances Schulze',
-    job: 'President' /* socials: [
-      "https://instagram.com/",
-      "https://twitter.com/",
-      "https://facebook.com/",
-      "https://linkedin.com/",
-    ], */,
+    image: OfficerDefault, // TODO: Add Kim G. photo
+    name: 'Kim G.',
+    job: 'Co-President',
   },
   {
     id: 2,
-    image: Officer2,
-    name: 'David Liu',
-    job: 'Vice President',
+    image: OfficerDefault, // TODO: Add Jeanne L. photo
+    name: 'Jeanne L.',
+    job: 'Co-President',
   },
   {
     id: 3,
-    image: Officer3,
-    name: 'Ted Levine',
-    job: 'Treasurer',
+    image: OfficerDefault, // TODO: Add Andrea B. photo
+    name: 'Andrea B.',
+    job: 'Co-Vice President',
   },
   {
     id: 4,
-    image: Officer4,
-    name: 'Kat Mar',
-    job: 'Secretary',
+    image: OfficerDefault, // TODO: Add David L. photo
+    name: 'David L.',
+    job: 'Co-Vice President',
   },
   {
     id: 5,
-    image: Officer5,
-    name: 'Allison Soung',
-    job: 'Newsletter Editor',
+    image: OfficerTed,
+    name: 'Ted L.',
+    job: 'Treasurer',
   },
   {
     id: 6,
-    image: Officer6,
-    name: 'Debbie Mar',
-    job: 'Social Director',
+    image: OfficerDefault, // TODO: Add Amy B. photo
+    name: 'Amy B.',
+    job: 'Secretary',
   },
   {
     id: 7,
-    image: Officer7,
-    name: 'Patti Chan',
-    job: 'Social Director',
+    image: OfficerAllison,
+    name: 'Allison S.',
+    job: 'Newsletter Editor',
   },
   {
     id: 8,
-    image: Officer8,
-    name: 'Dalton Chan',
-    job: 'Photographer',
+    image: OfficerPatti,
+    name: 'Patty C.',
+    job: 'Co-Social Director',
+  },
+  {
+    id: 9,
+    image: OfficerDefault, // TODO: Add Sarah W. photo
+    name: 'Sarah W.',
+    job: 'Co-Social Director',
   },
 ];
 
@@ -87,43 +81,48 @@ function Committee() {
       employee: [
         {
           '@type': 'Person',
-          name: 'Frances Schulze',
-          jobTitle: 'President',
+          name: 'Kim G.',
+          jobTitle: 'Co-President',
         },
         {
           '@type': 'Person',
-          name: 'David Liu',
-          jobTitle: 'Vice President',
+          name: 'Jeanne L.',
+          jobTitle: 'Co-President',
         },
         {
           '@type': 'Person',
-          name: 'Ted Levine',
+          name: 'Andrea B.',
+          jobTitle: 'Co-Vice President',
+        },
+        {
+          '@type': 'Person',
+          name: 'David L.',
+          jobTitle: 'Co-Vice President',
+        },
+        {
+          '@type': 'Person',
+          name: 'Ted L.',
           jobTitle: 'Treasurer',
         },
         {
           '@type': 'Person',
-          name: 'Kat Mar',
+          name: 'Amy B.',
           jobTitle: 'Secretary',
         },
         {
           '@type': 'Person',
-          name: 'Allison Soung',
+          name: 'Allison S.',
           jobTitle: 'Newsletter Editor',
         },
         {
           '@type': 'Person',
-          name: 'Debbie Mar',
-          jobTitle: 'Social Director',
+          name: 'Patty C.',
+          jobTitle: 'Co-Social Director',
         },
         {
           '@type': 'Person',
-          name: 'Patti Chan',
-          jobTitle: 'Social Director',
-        },
-        {
-          '@type': 'Person',
-          name: 'Dalton Chan',
-          jobTitle: 'Photographer',
+          name: 'Sarah W.',
+          jobTitle: 'Co-Social Director',
         },
       ],
     },

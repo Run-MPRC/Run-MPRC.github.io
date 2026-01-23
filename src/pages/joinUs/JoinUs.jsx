@@ -11,28 +11,45 @@ import {
   GOOGLE_FORM,
   JOIN_US_BUTTON_2,
   JOIN_US_DESCRIPTION_4,
-  JOIN_US_DESCRIPTION_5,
   JOIN_US_HEADING_DESC,
   JUST_RUN_WITH_US,
   JUST_RUN_WITH_US_CONTENT_1,
   JUST_RUN_WITH_US_CONTENT_2,
   JUST_RUN_WITH_US_CONTENT_3,
-  LI_ACCESS_TO_STRAVA_FACEBOOK,
-  LI_AFFORDABLE_MEMBERSHIP_FEES,
-  LI_CLUB_GATHERINGS,
-  LI_CLUB_LOGO_MERCHANDISE,
-  LI_CLUB_SUPPORT_NETWORKING,
-  LI_DISCOUNT_ON_SHOES,
-  LI_EASY_ANNUAL_RENEWAL_PROCESS,
-  LI_MONTHLY_NEWSLETTERS,
-  LI_RACE_DISCOUNT_CODES,
-  LI_SATURDAY_CLUB_RUNS,
+  LI_WHATSAPP_ACCESS,
+  LI_FACEBOOK_STRAVA_ACCESS,
+  LI_STORE_DISCOUNTS,
   LI_SOCIAL_RACE_ACTIVITIES,
+  LI_RACE_DISCOUNT_CODES,
+  LI_CLUB_LOGO_MERCHANDISE,
+  LI_MONTHLY_NEWSLETTERS,
+  LI_SATURDAY_CLUB_RUNS,
+  LI_TRAIL_RUNS_TRACK,
+  LI_CLUB_GATHERINGS,
+  LI_CLUB_SUPPORT_NETWORKING,
+  LI_AFFORDABLE_MEMBERSHIP_FEES,
+  LI_EASY_ANNUAL_RENEWAL_PROCESS,
+  LI_DISCOUNT_ON_SHOES,
   MEMBER_BENEFITS,
   WAYS_TO_RUN,
+  RRCA_ANNOUNCEMENT_TITLE,
+  RRCA_ANNOUNCEMENT_INTRO,
+  RRCA_ANNOUNCEMENT_FEE_INTRO,
+  MEMBERSHIP_EARLY_BIRD_TITLE,
+  MEMBERSHIP_EARLY_BIRD_DESC,
+  MEMBERSHIP_EARLY_BIRD_INDIVIDUAL,
+  MEMBERSHIP_EARLY_BIRD_HOUSEHOLD,
+  MEMBERSHIP_STANDARD_TITLE,
+  MEMBERSHIP_STANDARD_INDIVIDUAL,
+  MEMBERSHIP_STANDARD_HOUSEHOLD,
+  MEMBERSHIP_NON_RESIDENT_TITLE,
+  MEMBERSHIP_NON_RESIDENT_DESC,
+  MEMBERSHIP_RENEWAL_NOTE,
+  MEMBERSHIP_WARNING,
+  RENEWAL_FORM_2026,
 } from '../../text/JoinUs';
 import Card from '../../UI/Card';
-import { ARM_URI, GOOGLE_FORM_LINK } from '../../text/externalLinks';
+import { ARM_URI, GOOGLE_FORM_LINK, RENEWAL_FORM_2026_LINK } from '../../text/externalLinks';
 import Route from './Route';
 import Paragraph from '../../components/Paragraph';
 
@@ -62,6 +79,49 @@ const sectionRunWithUs = () => (
   </Card>
 );
 
+const sectionRRCAAnnouncement = () => (
+  <Card className="joinus__card">
+    <h2 className="h2_joinus">{RRCA_ANNOUNCEMENT_TITLE}</h2>
+    <Paragraph>{RRCA_ANNOUNCEMENT_INTRO}</Paragraph>
+    <Paragraph>{RRCA_ANNOUNCEMENT_FEE_INTRO}</Paragraph>
+    <ul className="ul_joinus">
+      <li className="li_joinus">
+        <strong>{MEMBERSHIP_EARLY_BIRD_TITLE}</strong>
+        {' - '}
+        {MEMBERSHIP_EARLY_BIRD_DESC}
+        <ul className="ul_joinus">
+          <li className="li_joinus">{MEMBERSHIP_EARLY_BIRD_INDIVIDUAL}</li>
+          <li className="li_joinus">{MEMBERSHIP_EARLY_BIRD_HOUSEHOLD}</li>
+        </ul>
+      </li>
+      <li className="li_joinus">
+        <strong>{MEMBERSHIP_STANDARD_TITLE}</strong>
+        <ul className="ul_joinus">
+          <li className="li_joinus">{MEMBERSHIP_STANDARD_INDIVIDUAL}</li>
+          <li className="li_joinus">{MEMBERSHIP_STANDARD_HOUSEHOLD}</li>
+        </ul>
+      </li>
+      <li className="li_joinus">
+        <strong>{MEMBERSHIP_NON_RESIDENT_TITLE}</strong>
+        {' - '}
+        {MEMBERSHIP_NON_RESIDENT_DESC}
+      </li>
+    </ul>
+    <Paragraph>{MEMBERSHIP_RENEWAL_NOTE}</Paragraph>
+    <Link
+      to={RENEWAL_FORM_2026_LINK}
+      className="btn lg"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {RENEWAL_FORM_2026}
+    </Link>
+    <Paragraph style={{ marginTop: '1rem', fontWeight: 'bold', color: '#c00' }}>
+      {MEMBERSHIP_WARNING}
+    </Paragraph>
+  </Card>
+);
+
 const sectionBecomeMember = () => (
   <Card className="joinus__card">
     <h2 className="h2_joinus">{BECOME_A_MEMBER}</h2>
@@ -76,26 +136,28 @@ const sectionBecomeMember = () => (
           {' '}
         </a>
       </li>
-      <li className="li_joinus">{JOIN_US_DESCRIPTION_5}</li>
       <li className="li_joinus">
         {MEMBER_BENEFITS}
         <ul className="ul_joinus">
-          <li className="li_joinus">{LI_SATURDAY_CLUB_RUNS}</li>
-          <li className="li_joinus">{LI_CLUB_SUPPORT_NETWORKING}</li>
-          <li className="li_joinus">{LI_CLUB_GATHERINGS}</li>
-          <li className="li_joinus">{LI_MONTHLY_NEWSLETTERS}</li>
-          <li className="li_joinus">{LI_CLUB_LOGO_MERCHANDISE}</li>
+          <li className="li_joinus">{LI_WHATSAPP_ACCESS}</li>
+          <li className="li_joinus">{LI_FACEBOOK_STRAVA_ACCESS}</li>
+          <li className="li_joinus">{LI_STORE_DISCOUNTS}</li>
           <li className="li_joinus">{LI_SOCIAL_RACE_ACTIVITIES}</li>
           <li className="li_joinus">{LI_RACE_DISCOUNT_CODES}</li>
+          <li className="li_joinus">{LI_CLUB_LOGO_MERCHANDISE}</li>
+          <li className="li_joinus">{LI_MONTHLY_NEWSLETTERS}</li>
+          <li className="li_joinus">{LI_SATURDAY_CLUB_RUNS}</li>
+          <li className="li_joinus">{LI_TRAIL_RUNS_TRACK}</li>
+          <li className="li_joinus">{LI_CLUB_GATHERINGS}</li>
+          <li className="li_joinus">{LI_CLUB_SUPPORT_NETWORKING}</li>
+          <li className="li_joinus">{LI_AFFORDABLE_MEMBERSHIP_FEES}</li>
+          <li className="li_joinus">{LI_EASY_ANNUAL_RENEWAL_PROCESS}</li>
           <li className="li_joinus">
             {LI_DISCOUNT_ON_SHOES}
             <a className="hyperlink" href={ARM_URI} target="_blank" rel="noreferrer noopener">
               {ARM}
             </a>
           </li>
-          <li className="li_joinus">{LI_ACCESS_TO_STRAVA_FACEBOOK}</li>
-          <li className="li_joinus">{LI_AFFORDABLE_MEMBERSHIP_FEES}</li>
-          <li className="li_joinus">{LI_EASY_ANNUAL_RENEWAL_PROCESS}</li>
         </ul>
       </li>
     </ul>
@@ -159,9 +221,9 @@ function JoinUs() {
       },
       offers: {
         '@type': 'Offer',
-        price: '15',
+        price: '25',
         priceCurrency: 'USD',
-        description: 'Annual membership fee for individuals',
+        description: 'Annual membership fee for individuals (2026)',
       },
     },
   };
@@ -180,6 +242,8 @@ function JoinUs() {
         <div className="container joinus__container">
           <div className="joinus__wrapper">
             {sectionHeading()}
+            &nbsp;&nbsp;
+            {sectionRRCAAnnouncement()}
             &nbsp;&nbsp;
             {sectionRunWithUs()}
             &nbsp;&nbsp;
