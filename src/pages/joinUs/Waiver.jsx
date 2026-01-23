@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import PropTypes from 'prop-types'; // Import PropTypes
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { logEvent } from 'firebase/analytics';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
 import './waiver.css';
-import FirebaseResources from '../../services/firebase/FirebaseResources.ts';
+import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { WAIVER_AGREEMENT, WAIVER_TEXT, WAIVER_TITLE } from '../../text/JoinUs';
 
 function Waiver({ onWaiverSubmit }) {
   const [isAgreed, setIsAgreed] = useState(false);
   const navigate = useNavigate();
-  const firebaseResources = new FirebaseResources();
+  const { services } = useServiceLocator();
 
   const handleCheckboxChange = (event) => {
     setIsAgreed(event.target.checked);
@@ -18,10 +18,12 @@ function Waiver({ onWaiverSubmit }) {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    const analytics = firebaseResources.getAnalytics;
-    logEvent(analytics, 'signed_waiver', {
-      signed: isAgreed,
-    });
+    const { analytics } = services?.firebaseResources || {};
+    if (analytics) {
+      logEvent(analytics, 'signed_waiver', {
+        signed: isAgreed,
+      });
+    }
     if (isAgreed) {
       localStorage.setItem('waiverSigned', 'true');
       onWaiverSubmit();

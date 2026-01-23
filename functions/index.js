@@ -1,8 +1,14 @@
 const admin = require('firebase-admin');
-const onSignUp = require('./signup');
-const updateMemberRole = require('./updatemembers');
 
+// Initialize Firebase Admin SDK
 admin.initializeApp();
 
-exports.updateMemberRole = updateMemberRole;
+// Import and export cloud functions
+const { onSignUp } = require('./signup');
+const { updateMemberRole } = require('./updatemembers');
+
+// Auth triggers
 exports.createMemberOnSignUp = onSignUp;
+
+// HTTP endpoints
+exports.updateMemberRole = updateMemberRole;

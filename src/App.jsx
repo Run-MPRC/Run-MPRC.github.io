@@ -1,4 +1,3 @@
-// rafce -> shortcut to create component and export
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import { HelmetProvider } from 'react-helmet-async';
@@ -13,7 +12,7 @@ import Activities from './pages/activities/Activities';
 import ServiceLocatorProvider from './services/ServiceLocatorProvider';
 import LoginForm from './pages/login/LoginForm';
 import Admin from './pages/admin/Admin';
-import Events from './pages/events/Events.tsx';
+import Events from './pages/events/Events';
 import ScrollToTop from './components/ScrollToTop';
 import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 

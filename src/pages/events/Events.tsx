@@ -1,8 +1,8 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   collection, onSnapshot, query, where,
 } from 'firebase/firestore';
-import ServiceLocatorContext from '../../services/ServiceLocatorContext';
+import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 
 type Event = {
@@ -16,50 +16,62 @@ function Events() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { identityService, firebaseResources } = useContext(
-    ServiceLocatorContext,
-  ) as any;
+  const { services, isReady } = useServiceLocator();
 
   useEffect(() => {
-    if (!identityService || !firebaseResources?.firestore) {
-      setError('Services not available');
-      setLoading(false);
+    if (!isReady || !services) {
       return;
     }
 
+    const { identityService, firebaseResources } = services;
     const db = firebaseResources.firestore;
     const eventsCollection = collection(db, 'events');
 
-    const unsubscribe = identityService.isMember
+    let unsubscribeFn: (() => void) | null = null;
+
+    identityService.checkMembership()
       .then((isMember: boolean) => {
         const eventsQuery = isMember
           ? eventsCollection
           : query(eventsCollection, where('member_only', '==', false));
-        
-        return onSnapshot(eventsQuery, (snapshot) => {
+
+        unsubscribeFn = onSnapshot(eventsQuery, (snapshot) => {
           const eventsData: Event[] = snapshot.docs.map((doc) => ({
             ...(doc.data() as Event),
           }));
           setEvents(eventsData);
           setLoading(false);
-        }, (error) => {
+        }, (snapshotError) => {
           setError('Failed to load events');
           setLoading(false);
-          console.error('Error loading events:', error);
+          console.error('Error loading events:', snapshotError);
         });
       })
-      .catch((error: Error) => {
-        setError('Failed to check membership status');
-        setLoading(false);
-        console.error('Error checking membership:', error);
+      .catch((membershipError: Error) => {
+        // User not authenticated - show public events only
+        unsubscribeFn = onSnapshot(
+          query(eventsCollection, where('member_only', '==', false)),
+          (snapshot) => {
+            const eventsData: Event[] = snapshot.docs.map((doc) => ({
+              ...(doc.data() as Event),
+            }));
+            setEvents(eventsData);
+            setLoading(false);
+          },
+          (snapshotError) => {
+            setError('Failed to load events');
+            setLoading(false);
+            console.error('Error loading events:', snapshotError);
+          },
+        );
       });
 
     return () => {
-      if (unsubscribe && typeof unsubscribe.then === 'function') {
-        unsubscribe.then((unsub: () => void) => unsub());
+      if (unsubscribeFn) {
+        unsubscribeFn();
       }
     };
-  }, [identityService, firebaseResources]);
+  }, [services, isReady]);
 
   const structuredData = {
     "@context": "https://schema.org",

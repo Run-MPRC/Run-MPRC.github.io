@@ -1,30 +1,37 @@
-import React, { useContext, useState } from 'react';
+import React, { useState } from 'react';
 import HeaderImage from '../../images/activities/header_bg_1.jpg';
 import Header from '../../components/Header';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
-import ServiceLocatorContext from '../../services/ServiceLocatorContext';
+import { useServiceLocator } from '../../services/ServiceLocatorContext';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { identityService } = useContext(ServiceLocatorContext);
+  const { services, isReady } = useServiceLocator();
   const [currentUser, setCurrentUser] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!isReady || !services) {
+      setError('Services not ready. Please try again.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      const { identityService } = services;
       if (isRegistering) {
-        const user = await identityService.register(email, password);
-        setCurrentUser(user);
+        const credential = await identityService.register(email, password);
+        setCurrentUser(credential.user);
       } else {
-        const user = await identityService.signIn(email, password);
-        setCurrentUser(user);
+        const credential = await identityService.signIn(email, password);
+        setCurrentUser(credential.user);
       }
     } catch (loginError) {
       setError('Failed to authenticate. Please check your credentials and try again.');
@@ -70,12 +77,12 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={isLoading}
-            style={{ 
+            style={{
               marginBottom: '10px',
               padding: '0.5rem',
               width: '100%',
               border: '1px solid #ccc',
-              borderRadius: '4px'
+              borderRadius: '4px',
             }}
           />
           <input
@@ -86,16 +93,16 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             disabled={isLoading}
-            style={{ 
+            style={{
               marginBottom: '10px',
               padding: '0.5rem',
               width: '100%',
               border: '1px solid #ccc',
-              borderRadius: '4px'
+              borderRadius: '4px',
             }}
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading}
             style={{
               padding: '0.5rem 1rem',
@@ -104,14 +111,17 @@ function LoginForm() {
               border: 'none',
               borderRadius: '4px',
               cursor: isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1
+              opacity: isLoading ? 0.6 : 1,
             }}
           >
             {isLoading ? 'Processing...' : (isRegistering ? 'Register' : 'Login')}
           </button>
           {currentUser && (
             <p style={{ color: 'green', textAlign: 'center' }}>
-              Welcome, {currentUser.email}!
+              Welcome,
+              {' '}
+              {currentUser.email}
+              !
             </p>
           )}
           <button
@@ -124,7 +134,7 @@ function LoginForm() {
               color: '#007bff',
               border: '1px solid #007bff',
               borderRadius: '4px',
-              cursor: isLoading ? 'not-allowed' : 'pointer'
+              cursor: isLoading ? 'not-allowed' : 'pointer',
             }}
           >
             {isRegistering ? 'Switch to Login' : 'Switch to Register'}

@@ -1,5 +1,5 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
-import { Analytics, getAnalytics } from 'firebase/analytics';
+import { Analytics, getAnalytics, isSupported } from 'firebase/analytics';
 import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
@@ -7,52 +7,72 @@ import {
   getFirestore,
 } from 'firebase/firestore';
 
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyD0-xVlhYZvUk-A2zRO5pJ3_2vYDI8Phc0',
+  authDomain: 'runmprc-97922.firebaseapp.com',
+  projectId: 'runmprc-97922',
+  storageBucket: 'runmprc-97922.appspot.com',
+  messagingSenderId: '421024796584',
+  appId: '1:421024796584:web:608b41bd53f0dd44a1179d',
+  measurementId: 'G-BJX9HM4FQ8',
+} as const;
+
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 class FirebaseResources {
-  private readonly app: FirebaseApp;
+  readonly app: FirebaseApp;
 
-  private readonly analytics: Analytics;
+  readonly auth: Auth;
 
-  private readonly auth: Auth;
+  readonly firestore: Firestore;
 
-  private readonly firestore: Firestore;
+  private _analytics: Analytics | null = null;
 
-  constructor() {
-    const firebaseConfig = {
-      apiKey: 'AIzaSyD0-xVlhYZvUk-A2zRO5pJ3_2vYDI8Phc0',
-      authDomain: 'runmprc-97922.firebaseapp.com',
-      projectId: 'runmprc-97922',
-      storageBucket: 'runmprc-97922.appspot.com',
-      messagingSenderId: '421024796584',
-      appId: '1:421024796584:web:608b41bd53f0dd44a1179d',
-      measurementId: 'G-BJX9HM4FQ8',
-    };
+  private static _instance: FirebaseResources | null = null;
 
-    try {
-      this.app = initializeApp(firebaseConfig);
-      this.analytics = getAnalytics(this.app);
-      this.auth = getAuth(this.app);
-      this.firestore = getFirestore(this.app);
+  private static _emulatorsConnected = false;
 
-      if (process.env.NODE_ENV === 'development') {
-        connectAuthEmulator(this.auth, 'http://localhost:9099');
+  private constructor() {
+    this.app = initializeApp(FIREBASE_CONFIG);
+    this.auth = getAuth(this.app);
+    this.firestore = getFirestore(this.app);
+
+    this.connectEmulators();
+    this.initAnalytics();
+  }
+
+  static getInstance(): FirebaseResources {
+    if (!FirebaseResources._instance) {
+      FirebaseResources._instance = new FirebaseResources();
+    }
+    return FirebaseResources._instance;
+  }
+
+  private connectEmulators(): void {
+    if (isDevelopment && !FirebaseResources._emulatorsConnected) {
+      try {
+        connectAuthEmulator(this.auth, 'http://localhost:9099', { disableWarnings: true });
         connectFirestoreEmulator(this.firestore, '127.0.0.1', 8080);
+        FirebaseResources._emulatorsConnected = true;
+      } catch (error) {
+        console.warn('Failed to connect to Firebase emulators:', error);
       }
-    } catch (error) {
-      console.error('Failed to initialize Firebase:', error);
-      throw new Error('Firebase initialization failed');
     }
   }
 
-  get getAnalytics(): Analytics {
-    return this.analytics;
+  private async initAnalytics(): Promise<void> {
+    try {
+      const supported = await isSupported();
+      if (supported) {
+        this._analytics = getAnalytics(this.app);
+      }
+    } catch (error) {
+      console.warn('Analytics not supported:', error);
+    }
   }
 
-  get getAuth(): Auth {
-    return this.auth;
-  }
-
-  get getFirestore(): Firestore {
-    return this.firestore;
+  get analytics(): Analytics | null {
+    return this._analytics;
   }
 }
 
