@@ -7,7 +7,6 @@ import {
   faInstagram,
 } from '@fortawesome/free-brands-svg-icons';
 import Logo from '../assets/images/logo.svg';
-// import { FB_URI, MEETUP_URI, STRAVA_URI } from '../text/externalLinks';
 import { FB_URI, STRAVA_URI, INSTAGRAM_URI } from '../text/externalLinks';
 import { COPYRIGHT, DESC, DISCLAIMER } from '../text/Footer';
 
@@ -21,9 +20,6 @@ function Footer() {
           </Link>
           <p>{DESC}</p>
           <div className="footer__socials">
-            {/* <a href={MEETUP_URI} target="_blank" rel="noreferrer noopener" aria-label="Meetup">
-              <FontAwesomeIcon icon={faMeetup} />
-            </a> */}
             <a href={FB_URI} target="_blank" rel="noreferrer noopener" aria-label="Visit our Facebook page">
               <FontAwesomeIcon icon={faFacebook} />
             </a>

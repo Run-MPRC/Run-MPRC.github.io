@@ -19,3 +19,15 @@ export type { UserRole, AuthUser } from './identity/Identity';
 // Hooks
 export { useAuth } from './hooks/useAuth';
 export type { UseAuthResult } from './hooks/useAuth';
+
+// SEO Utilities
+export {
+  ORGANIZATION_INFO,
+  createOrganizationSchema,
+  createSportsOrganizationSchema,
+  createSaturdayRunEventSchema,
+  createPageSchema,
+  createContactPageSchema,
+  createJoinUsPageSchema,
+} from './seo';
+export type { StructuredDataOptions } from './seo';

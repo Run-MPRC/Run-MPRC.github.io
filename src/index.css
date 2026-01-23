@@ -223,7 +223,7 @@ section {
 }
 
 .header__content p {
-  color: rgba(255, 255, 255, 0.7, green, blue, alpha);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /******************** MEADIA QUERIES (medium screens) ********************/

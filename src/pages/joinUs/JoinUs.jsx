@@ -48,7 +48,7 @@ import {
   MEMBERSHIP_WARNING,
   RENEWAL_FORM_2026,
 } from '../../text/JoinUs';
-import Card from '../../UI/Card';
+import Card from '../../components/Card';
 import { ARM_URI, GOOGLE_FORM_LINK, RENEWAL_FORM_2026_LINK } from '../../text/externalLinks';
 import Route from './Route';
 import Paragraph from '../../components/Paragraph';
