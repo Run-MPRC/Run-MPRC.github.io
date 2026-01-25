@@ -45,7 +45,9 @@ module.exports = {
       },
     ],
     'react/require-default-props': 'off',
-    'no-underscore-dangle': ['warn', { allowAfterThis: true }],
+    'no-underscore-dangle': ['warn', { allowAfterThis: true, allow: ['_instance', '_analytics', '_emulatorsConnected'] }],
+    'no-console': ['warn', { allow: ['warn', 'error'] }],
+    'react/forbid-prop-types': 'off',
   },
   plugins: ['only-warn'],
 };
