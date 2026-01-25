@@ -113,10 +113,11 @@ const sectionRRCAAnnouncement = () => (
       className="btn lg"
       target="_blank"
       rel="noopener noreferrer"
+      style={{ margin: '1.5rem 0' }}
     >
       {RENEWAL_FORM_2026}
     </Link>
-    <Paragraph style={{ marginTop: '1rem', fontWeight: 'bold', color: '#c00' }}>
+    <Paragraph style={{ fontWeight: 'bold', color: '#c00' }}>
       {MEMBERSHIP_WARNING}
     </Paragraph>
   </Card>

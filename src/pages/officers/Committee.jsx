@@ -7,9 +7,14 @@ import './committee.css';
 import { COMMITTEE_INTRO, COMMITTEE_TITLE } from '../../text/Committee';
 
 const OfficerDefault = require('../../images/committee/committee_default_portrait.png');
+const OfficerJeanne = require('../../images/committee/jeanne.jpg');
+const OfficerAndrea = require('../../images/committee/andrea_1.jpeg');
+const OfficerDave = require('../../images/committee/dave.png');
 const OfficerTed = require('../../images/committee/ted.jpg');
+const OfficerAmy = require('../../images/committee/amy.jpeg');
 const OfficerAllison = require('../../images/committee/allison.jpg');
 const OfficerPatti = require('../../images/committee/patti.jpg');
+const OfficerSarah = require('../../images/committee/sarah.jpg');
 
 const officers = [
   {
@@ -20,19 +25,19 @@ const officers = [
   },
   {
     id: 2,
-    image: OfficerDefault, // TODO: Add Jeanne L. photo
+    image: OfficerJeanne,
     name: 'Jeanne L.',
     job: 'Co-President',
   },
   {
     id: 3,
-    image: OfficerDefault, // TODO: Add Andrea B. photo
+    image: OfficerAndrea,
     name: 'Andrea B.',
     job: 'Co-Vice President',
   },
   {
     id: 4,
-    image: OfficerDefault, // TODO: Add David L. photo
+    image: OfficerDave,
     name: 'David L.',
     job: 'Co-Vice President',
   },
@@ -44,7 +49,7 @@ const officers = [
   },
   {
     id: 6,
-    image: OfficerDefault, // TODO: Add Amy B. photo
+    image: OfficerAmy,
     name: 'Amy B.',
     job: 'Secretary',
   },
@@ -62,7 +67,7 @@ const officers = [
   },
   {
     id: 9,
-    image: OfficerDefault, // TODO: Add Sarah W. photo
+    image: OfficerSarah,
     name: 'Sarah W.',
     job: 'Co-Social Director',
   },
