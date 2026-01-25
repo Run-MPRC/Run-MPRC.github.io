@@ -30,7 +30,7 @@ export function useAuth(): UseAuthResult {
     setIsLoading(false);
 
     // Subscribe to auth state changes
-    const unsubscribe = identityService.onAuthStateChanged((authUser) => {
+    const unsubscribe = identityService.onAuthStateChanged((authUser: AuthUser | null) => {
       setUser(authUser);
       setIsLoading(false);
     });

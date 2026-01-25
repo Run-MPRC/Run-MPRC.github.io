@@ -26,6 +26,26 @@ module.exports = {
     ecmaVersion: 'latest',
     sourceType: 'module',
   },
-  rules: {},
+  settings: {
+    'import/resolver': {
+      node: {
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      },
+    },
+  },
+  rules: {
+    'import/extensions': [
+      'warn',
+      'ignorePackages',
+      {
+        js: 'never',
+        jsx: 'never',
+        ts: 'never',
+        tsx: 'never',
+      },
+    ],
+    'react/require-default-props': 'off',
+    'no-underscore-dangle': ['warn', { allowAfterThis: true }],
+  },
   plugins: ['only-warn'],
 };

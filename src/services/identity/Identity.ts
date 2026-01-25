@@ -19,7 +19,7 @@ export interface AuthUser {
   role: UserRole;
 }
 
-type AuthStateCallback = (user: AuthUser | null) => void;
+export type AuthStateCallback = (user: AuthUser | null) => void;
 
 class IdentityService {
   private readonly auth: Auth;

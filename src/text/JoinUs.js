@@ -60,7 +60,7 @@ I know that running in and volunteering for organized group runs, social events,
 associated with the club are potentially hazardous activities, which could cause injury or death.
 I will not participate in any club organized events, group training runs or social events, unless I
 am medically able and properly trained. I certify that I am medically able to perform all
-activities associated with the club and am in good health, and I am properly trained.  I agree to
+activities associated with the club and am in good health, and I am properly trained.  I agree to
 abide by all rules established by the club, including the right of any official to deny or suspend
 my participation for any reason whatsoever. I assume all risks associated with being a member,
 or guest, of the club and participating in all club activities, which may include but not limited
@@ -72,7 +72,7 @@ but not limited to: the effects of the weather, high heat and/or humidity, freez
 temperatures, traffic and the conditions of the road, including surrounding terrain.
 I understand that bicycles, skateboards, baby joggers/strollers, roller skates or inline skates,
 animals, and personal music players are not allowed in club organized runs or events, and I will
-abide by all rules of the club. Having read this waiver and knowing these facts, and in
+abide by all rules of the club. Having read this waiver and knowing these facts, and in
 consideration of your accepting my membership or allowing me to run as a guest, I, for myself
 and anyone entitled to act on my behalf, waive and release the Mid-Peninsula Running Club
 and the Road Runners Club of America, all club sponsors, their representatives and successors
@@ -81,7 +81,7 @@ even though that liability may arise out of negligence or carelessness on the pa
 or organizations named in this waiver.
 
 While club members, and others, may organize runs or other events, they are not official club
-runs or events unless organized or endorsed by the club.  The club bears no responsibility for
+runs or events unless organized or endorsed by the club.  The club bears no responsibility for
 such non-club events.
 
 I grant permission to all of the foregoing to use my photographs, motion pictures, recordings or
