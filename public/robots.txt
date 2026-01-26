@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 
 # Sitemap location
-Sitemap: https://run-mprc.github.io/sitemap.xml
+Sitemap: https://runmprc.com/sitemap.xml
 
 # Crawl-delay for respectful crawling
 Crawl-delay: 1

@@ -39,13 +39,13 @@
     <meta name="DC.subject" content="Running Club, Bay Area, San Mateo, Peninsula" />
     <meta name="DC.creator" content="Mid-Peninsula Running Club" />
     <meta name="DC.publisher" content="Mid-Peninsula Running Club" />
-    <meta name="DC.date" content="2024" />
+    <meta name="DC.date" content="2026" />
     <meta name="DC.type" content="Text" />
     <meta name="DC.format" content="text/html" />
     <meta name="DC.identifier" content="https://run-mprc.github.io/" />
     <meta name="DC.language" content="en" />
     <meta name="DC.coverage" content="San Mateo County, California" />
-    <meta name="DC.rights" content="Copyright 2024 Mid-Peninsula Running Club" />
+    <meta name="DC.rights" content="Copyright 2026 Mid-Peninsula Running Club" />
     
     <!-- Structured Data for Local Business -->
     <script type="application/ld+json">
@@ -81,12 +81,63 @@
         "name": "Bay Area Running Community"
       },
       "sameAs": [
-        "https://www.facebook.com/groups/midpeninsularunningclub",
-        "https://www.instagram.com/runmprc/"
+        "https://www.facebook.com/groups/RunMPRC",
+        "https://www.instagram.com/runmprc/",
+        "https://www.strava.com/clubs/RunMPRC",
+        "https://www.meetup.com/mid-peninsula-running-club/"
       ]
     }
     </script>
-    
+
+    <!-- Event Schema for Saturday Runs -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      "name": "MPRC Saturday Morning Run",
+      "description": "Weekly group run on the scenic Bay Trail. All paces welcome, from walkers to experienced runners. Meet at Seal Point Park at 8:45 AM, run starts at 9:00 AM.",
+      "image": "https://runmprc.com/logo512.png",
+      "startDate": "2026-01-25T09:00:00-08:00",
+      "endDate": "2026-01-25T10:30:00-08:00",
+      "eventStatus": "https://schema.org/EventScheduled",
+      "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+      "location": {
+        "@type": "Place",
+        "name": "Seal Point Park",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "1901 J Hart Clinton Dr",
+          "addressLocality": "San Mateo",
+          "addressRegion": "CA",
+          "postalCode": "94401",
+          "addressCountry": "US"
+        },
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": 37.5629,
+          "longitude": -122.3255
+        }
+      },
+      "organizer": {
+        "@type": "Organization",
+        "name": "Mid-Peninsula Running Club",
+        "url": "https://runmprc.com"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock",
+        "validFrom": "2026-01-01",
+        "url": "https://runmprc.com/joinus"
+      },
+      "performer": {
+        "@type": "Organization",
+        "name": "Mid-Peninsula Running Club"
+      }
+    }
+    </script>
+
     <!-- GOOGLE FONTS (montserrat) -->
     <link
       href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
