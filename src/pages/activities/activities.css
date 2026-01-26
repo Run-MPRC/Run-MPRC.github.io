@@ -1,29 +1,76 @@
 #activities {
   margin: 80px;
 }
+
+/* Activity sections */
+.activities-section {
+  margin-bottom: 3rem;
+}
+
+.activities-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Section divider for activity sections */
+.activities-divider {
+  width: 60px;
+  height: 2px;
+  background: var(--color-primary-variant);
+  margin: 2.5rem auto;
+  border-radius: 1px;
+}
+
+/* Video container */
 .video-container {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
 }
 
 .video-item {
   width: 100%;
-  height: 250px; /* Set default height for mobile */
-  max-width: 450px; /* Set maximum width for larger screens */
-  margin-bottom: 20px; /* Add vertical spacing between videos */
+  height: 250px;
+  max-width: 450px;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.video-item iframe {
+  border-radius: 0.5rem;
 }
 
 @media (min-width: 768px) {
   .video-item {
-    width: calc(50% - 20px); /* Two videos side by side with spacing */
-    height: auto; /* Reset height for larger screens */
-    margin-right: 20px; /* Add horizontal spacing between videos */
-    margin-bottom: 0; /* Remove vertical margin for larger screens */
+    width: calc(50% - 1rem);
+    height: 280px;
   }
+}
 
-  .video-item:last-child {
-    margin-right: 0; /* Remove margin from the last video to prevent overflow */
-  }
+/* Improve paragraph readability */
+.activities-content p {
+  max-width: 750px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.8;
+}
+
+/* Subheader styling enhancement */
+.activities-content h2 {
+  position: relative;
+  display: inline-block;
+}
+
+.activities-content h2::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  width: 40%;
+  height: 2px;
+  background: var(--color-secondary);
+  border-radius: 1px;
 }
 
 

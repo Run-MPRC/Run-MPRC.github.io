@@ -5,20 +5,43 @@
 }
 
 .card.officer {
-  padding: 1rem;
+  padding: 1.5rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card.officer:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
 .officer__img {
   border-radius: 0 2rem;
   overflow: hidden;
+  aspect-ratio: 1 / 1;
+  background: var(--color-gray-600);
+}
+
+.officer__img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  transition: transform 0.4s ease;
+}
+
+.card.officer:hover .officer__img img {
+  transform: scale(1.05);
 }
 
 .officer h3 {
-  margin-top: 2rem;
+  margin-top: 1.5rem;
+  font-size: 1.1rem;
 }
 
 .officer p {
   margin-top: 0.5rem;
+  color: var(--color-primary-variant);
+  font-size: 0.95rem;
 }
 
 .officer__socials {

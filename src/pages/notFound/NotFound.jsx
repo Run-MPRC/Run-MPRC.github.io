@@ -7,7 +7,7 @@ function NotFound() {
     <section>
       <div className="container notFound__container">
         <h2>Page Not Found</h2>
-        <p>Sorry, the page you're looking for doesn't exist.</p>
+        <p>Sorry, the page you&apos;re looking for doesn&apos;t exist.</p>
         <Link to="/" className="btn">
           Go Back Home
         </Link>

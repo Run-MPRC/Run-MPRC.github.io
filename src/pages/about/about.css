@@ -3,33 +3,73 @@
 }
 
 .about__mission {
-  margin-top: 3rem;
+  margin-top: 4rem;
+  padding-top: 4rem;
+  position: relative;
+}
+
+/* Section divider */
+.about__mission::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  border-radius: 2px;
 }
 
 .about__section-content h2 {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
   text-align: center;
+  font-size: 1.8rem;
+  color: var(--color-gray-100);
 }
 
 .about__section-content p {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  line-height: 1.8;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.about__section-content p:last-child {
+  margin-bottom: 0;
 }
 
 .img_section {
   margin-top: 3rem;
-  text-align: center; /* Center the content horizontally */
+  text-align: center;
 }
 
 .img_section img {
   width: 80%;
-  display: block; /* Ensure the image is a block element */
-  margin: 0 auto; /* Center the image horizontally */
+  display: block;
+  margin: 0 auto;
 }
 
 .img_section h2 {
-  margin-bottom: 10px; /* Add spacing between the heading and image */
+  margin-bottom: 10px;
 }
 
 .join_btn_section {
   text-align: center;
+  margin-top: 3rem;
+  padding-top: 3rem;
+  position: relative;
+}
+
+.join_btn_section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-secondary), transparent);
+  border-radius: 2px;
 }

@@ -116,18 +116,25 @@ function Activities() {
         structuredData={structuredData}
       />
       <Header title="Activities" image={HeaderImage} />
-      <FlexColumnContainer>
+      <FlexColumnContainer className="activities-content">
         <div className="first:mt-8">
           <Subheader title="Saturday Morning Runs" />
         </div>
         <Paragraph>
-          Every Saturday morning, we run along the scenic Bay trail near downtown San Mateo.
-          With the motto "Support One Another", we try to partner new members with a similar paced runner!
-          Many of our members enjoy the company and conversations on their runs, and paces vary widely.
-          We welcome runners of all paces as well as walkers (and their dogs).
-          Even non-members are welcome to run with us as well, but yearly membership is $25/year per person and $30/year for the whole family.
-          We use the money to help us book venues, pay for food, and buy supplies for our seasonal picnics and events.
-          For more details on how to run with us, check out our
+          Every Saturday morning, we run along the scenic Bay Trail near downtown San Mateo.
+          With the motto &ldquo;Support One Another&rdquo;, we try to partner new members
+          with a similar-paced runner!
+        </Paragraph>
+        <Paragraph>
+          Many of our members enjoy the company and conversations on their runs,
+          and paces vary widely. We welcome runners of all paces as well as walkers
+          (and their dogs).
+        </Paragraph>
+        <Paragraph>
+          Even non-members are welcome to run with us! Yearly membership is $25/year
+          per person and $30/year for the whole family. We use the money to help us
+          book venues, pay for food, and buy supplies for our seasonal picnics and events.
+          For more details, check out our
           {' '}
           <Link className="hyperlink" to="/joinus">Join Us</Link>
           {' '}
@@ -137,8 +144,11 @@ function Activities() {
         <Paragraph>
           Our informal motto is &ldquo;The eating club with a running problem&rdquo;.
           We love to eat just as much as we love to run (probably more)!
-          After most Saturday runs, we organize a group to try a different restaurant that we vote on.
-          If you're looking for a group of food-enthusiasts, this might be the place!
+        </Paragraph>
+        <Paragraph>
+          After most Saturday runs, we organize a group to try a different restaurant
+          that we vote on. If you&apos;re looking for a group of food-enthusiasts,
+          this might be the place!
         </Paragraph>
         <ImageCarousel images={brunchImages} altTexts={brunchAltTexts} />
         <Subheader title="Run Club Socials" />
