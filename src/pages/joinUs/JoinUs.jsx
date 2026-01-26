@@ -80,7 +80,7 @@ const sectionRunWithUs = () => (
 );
 
 const sectionRRCAAnnouncement = () => (
-  <Card className="joinus__card">
+  <Card className="joinus__card joinus__card--highlight">
     <h2 className="h2_joinus">{RRCA_ANNOUNCEMENT_TITLE}</h2>
     <Paragraph>{RRCA_ANNOUNCEMENT_INTRO}</Paragraph>
     <Paragraph>{RRCA_ANNOUNCEMENT_FEE_INTRO}</Paragraph>
@@ -107,19 +107,22 @@ const sectionRRCAAnnouncement = () => (
         {MEMBERSHIP_NON_RESIDENT_DESC}
       </li>
     </ul>
-    <Paragraph>{MEMBERSHIP_RENEWAL_NOTE}</Paragraph>
-    <Link
-      to={RENEWAL_FORM_2026_LINK}
-      className="btn lg"
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ margin: '1.5rem 0' }}
-    >
-      {RENEWAL_FORM_2026}
-    </Link>
-    <Paragraph style={{ fontWeight: 'bold', color: '#c00' }}>
-      {MEMBERSHIP_WARNING}
-    </Paragraph>
+    <div className="renewal-cta">
+      <Paragraph className="renewal-note">{MEMBERSHIP_RENEWAL_NOTE}</Paragraph>
+      <Link
+        to={RENEWAL_FORM_2026_LINK}
+        className="btn lg"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {RENEWAL_FORM_2026}
+      </Link>
+      <div className="warning-callout">
+        <Paragraph className="warning-text">
+          {MEMBERSHIP_WARNING}
+        </Paragraph>
+      </div>
+    </div>
   </Card>
 );
 
@@ -243,13 +246,9 @@ function JoinUs() {
         <div className="container joinus__container">
           <div className="joinus__wrapper">
             {sectionHeading()}
-            &nbsp;&nbsp;
             {sectionRRCAAnnouncement()}
-            &nbsp;&nbsp;
             {sectionRunWithUs()}
-            &nbsp;&nbsp;
             {sectionBecomeMember()}
-            &nbsp;&nbsp;
           </div>
         </div>
       </section>
