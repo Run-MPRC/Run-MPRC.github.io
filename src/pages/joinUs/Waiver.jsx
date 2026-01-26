@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { logEvent } from 'firebase/analytics';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
@@ -10,6 +10,7 @@ const WAIVER_INTRO = 'Please read and complete the waiver form below before join
 const WAIVER_TITLE = 'Club Activity Waiver';
 
 function Waiver({ onWaiverSubmit }) {
+  const [hasConfirmed, setHasConfirmed] = useState(false);
   const { services } = useServiceLocator();
 
   const handleContinue = () => {
@@ -42,13 +43,20 @@ function Waiver({ onWaiverSubmit }) {
       </div>
 
       <div className="waiver-actions">
-        <p className="waiver-instruction">
-          After submitting the form above, click the button below to continue.
-        </p>
+        <label className="waiver-checkbox-label">
+          <input
+            type="checkbox"
+            checked={hasConfirmed}
+            onChange={(e) => setHasConfirmed(e.target.checked)}
+            className="waiver-checkbox"
+          />
+          I have submitted the waiver form above
+        </label>
         <button
           type="button"
           className="btn lg primary"
           onClick={handleContinue}
+          disabled={!hasConfirmed}
         >
           Continue to Join Us Page
         </button>
