@@ -103,3 +103,17 @@
 .head_desc {
   text-align: center;
 }
+
+.calendar-btn {
+  margin-top: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-secondary);
+  color: var(--color-gray-600);
+}
+
+.calendar-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-gray-100);
+}

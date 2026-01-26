@@ -1,5 +1,5 @@
 export const JOIN_US_TITLE = 'JOIN US';
-export const JOIN_US_HEADING_DESC = 'We gather every Saturday morning at Seal Point Park (1901 J Hart Clinton Dr, San Mateo, CA 94401) by four cement benches near the north end (left of entrance) of the parking lot at 8:45 am, and we begin our runs at 9:00 am. Come and run with us!';
+export const JOIN_US_HEADING_DESC = 'We gather every Saturday morning at Seal Point Park (1901 J Hart Clinton Dr, San Mateo, CA 94401) by four cement benches near the north end (left of entrance) of the parking lot at 8:45 am, and we begin our runs at 9:00 am. Rain or shine, we run! Come join us!';
 export const JOIN_US_DESCRIPTION_1 = 'Join us through ';
 export const MEETUP_GROUP = 'Meetup ';
 export const JOIN_US_DESCRIPTION_2 = 'Joining Meetup and attending runs are both free of charge.';

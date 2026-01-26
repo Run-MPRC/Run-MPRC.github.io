@@ -49,7 +49,12 @@ import {
   RENEWAL_FORM_2026,
 } from '../../text/JoinUs';
 import Card from '../../components/Card';
-import { ARM_URI, GOOGLE_FORM_LINK, RENEWAL_FORM_2026_LINK } from '../../text/externalLinks';
+import {
+  ARM_URI,
+  GOOGLE_FORM_LINK,
+  RENEWAL_FORM_2026_LINK,
+  GOOGLE_CALENDAR_ADD_LINK,
+} from '../../text/externalLinks';
 import Route from './Route';
 import Paragraph from '../../components/Paragraph';
 
@@ -58,6 +63,14 @@ const sectionHeading = () => (
     <div className="head_desc">
       <h2 className="h2_joinus">{WAYS_TO_RUN}</h2>
       <Paragraph>{JOIN_US_HEADING_DESC}</Paragraph>
+      <a
+        href={GOOGLE_CALENDAR_ADD_LINK}
+        className="btn calendar-btn"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Add to Google Calendar
+      </a>
     </div>
     <div className="route-map">
       <MetaText>Saturday Morning Route</MetaText>
