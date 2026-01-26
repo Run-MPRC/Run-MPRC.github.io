@@ -10,9 +10,9 @@ export const GOOGLE_FORM = 'Google Form';
 export const BECOME_A_MEMBER = 'Become an MPRC Member';
 
 // 2026 Membership & RRCA
-export const RRCA_ANNOUNCEMENT_TITLE = 'New Membership Fees + Road Runners Clubs of America';
-export const RRCA_ANNOUNCEMENT_INTRO = 'We are excited to announce that the MPRC will officially be joining the Road Runners Clubs of America (RRCA) at the end of this year. Joining RRCA provides many benefits for the club that will be helpful to assist with the significant growth of the club in recent years. These benefits among other things include insurance for the club and its officers.';
-export const RRCA_ANNOUNCEMENT_FEE_INTRO = 'The club dues are being increased to cover the cost of MPRC joining the RRCA. The new dues for the 2026 year will be as follows:';
+export const RRCA_ANNOUNCEMENT_TITLE = 'Membership Fees + Road Runners Clubs of America';
+export const RRCA_ANNOUNCEMENT_INTRO = 'The MPRC has officially joined the Road Runners Clubs of America (RRCA). Being part of RRCA provides many benefits for the club that help support our significant growth in recent years. These benefits include insurance for the club and its officers.';
+export const RRCA_ANNOUNCEMENT_FEE_INTRO = 'The club dues cover the cost of MPRC joining the RRCA. The dues for the 2026 year are as follows:';
 export const MEMBERSHIP_EARLY_BIRD_TITLE = 'Early Bird Renewal Membership (before December 1, 2025)';
 export const MEMBERSHIP_EARLY_BIRD_DESC = 'We are offering a special EARLY BIRD incentive discount to our current members who both renew and pay by 12/1:';
 export const MEMBERSHIP_EARLY_BIRD_INDIVIDUAL = 'Individual membership: $20';
