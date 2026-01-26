@@ -14,7 +14,6 @@ import {
   JOIN_US_HEADING_DESC,
   JUST_RUN_WITH_US,
   JUST_RUN_WITH_US_CONTENT_1,
-  JUST_RUN_WITH_US_CONTENT_2,
   JUST_RUN_WITH_US_CONTENT_3,
   LI_WHATSAPP_ACCESS,
   LI_FACEBOOK_STRAVA_ACCESS,
@@ -32,27 +31,11 @@ import {
   LI_DISCOUNT_ON_SHOES,
   MEMBER_BENEFITS,
   WAYS_TO_RUN,
-  RRCA_ANNOUNCEMENT_TITLE,
-  RRCA_ANNOUNCEMENT_INTRO,
-  RRCA_ANNOUNCEMENT_FEE_INTRO,
-  MEMBERSHIP_EARLY_BIRD_TITLE,
-  MEMBERSHIP_EARLY_BIRD_DESC,
-  MEMBERSHIP_EARLY_BIRD_INDIVIDUAL,
-  MEMBERSHIP_EARLY_BIRD_HOUSEHOLD,
-  MEMBERSHIP_STANDARD_TITLE,
-  MEMBERSHIP_STANDARD_INDIVIDUAL,
-  MEMBERSHIP_STANDARD_HOUSEHOLD,
-  MEMBERSHIP_NON_RESIDENT_TITLE,
-  MEMBERSHIP_NON_RESIDENT_DESC,
-  MEMBERSHIP_RENEWAL_NOTE,
-  MEMBERSHIP_WARNING,
-  RENEWAL_FORM_2026,
 } from '../../text/JoinUs';
 import Card from '../../components/Card';
 import {
   ARM_URI,
   GOOGLE_FORM_LINK,
-  RENEWAL_FORM_2026_LINK,
   GOOGLE_CALENDAR_ADD_LINK,
 } from '../../text/externalLinks';
 import Route from './Route';
@@ -86,56 +69,8 @@ const sectionRunWithUs = () => (
     </h2>
     <ul className="ul_joinus">
       <li className="li_joinus">{JUST_RUN_WITH_US_CONTENT_1}</li>
-      <li className="li_joinus">{JUST_RUN_WITH_US_CONTENT_2}</li>
       <li className="li_joinus">{JUST_RUN_WITH_US_CONTENT_3}</li>
     </ul>
-  </Card>
-);
-
-const sectionRRCAAnnouncement = () => (
-  <Card className="joinus__card joinus__card--highlight">
-    <h2 className="h2_joinus">{RRCA_ANNOUNCEMENT_TITLE}</h2>
-    <Paragraph>{RRCA_ANNOUNCEMENT_INTRO}</Paragraph>
-    <Paragraph>{RRCA_ANNOUNCEMENT_FEE_INTRO}</Paragraph>
-    <ul className="ul_joinus">
-      <li className="li_joinus">
-        <strong>{MEMBERSHIP_EARLY_BIRD_TITLE}</strong>
-        {' - '}
-        {MEMBERSHIP_EARLY_BIRD_DESC}
-        <ul className="ul_joinus">
-          <li className="li_joinus">{MEMBERSHIP_EARLY_BIRD_INDIVIDUAL}</li>
-          <li className="li_joinus">{MEMBERSHIP_EARLY_BIRD_HOUSEHOLD}</li>
-        </ul>
-      </li>
-      <li className="li_joinus">
-        <strong>{MEMBERSHIP_STANDARD_TITLE}</strong>
-        <ul className="ul_joinus">
-          <li className="li_joinus">{MEMBERSHIP_STANDARD_INDIVIDUAL}</li>
-          <li className="li_joinus">{MEMBERSHIP_STANDARD_HOUSEHOLD}</li>
-        </ul>
-      </li>
-      <li className="li_joinus">
-        <strong>{MEMBERSHIP_NON_RESIDENT_TITLE}</strong>
-        {' - '}
-        {MEMBERSHIP_NON_RESIDENT_DESC}
-      </li>
-    </ul>
-    <div className="renewal-cta">
-      <Paragraph className="renewal-note">{MEMBERSHIP_RENEWAL_NOTE}</Paragraph>
-      <Link
-        to={RENEWAL_FORM_2026_LINK}
-        className="btn lg"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {RENEWAL_FORM_2026}
-      </Link>
-      <div className="warning-callout">
-        <Paragraph className="warning-text">
-          {MEMBERSHIP_WARNING}
-        </Paragraph>
-      </div>
-    </div>
   </Card>
 );
 
@@ -259,7 +194,6 @@ function JoinUs() {
         <div className="container joinus__container">
           <div className="joinus__wrapper">
             {sectionHeading()}
-            {sectionRRCAAnnouncement()}
             {sectionRunWithUs()}
             {sectionBecomeMember()}
           </div>
