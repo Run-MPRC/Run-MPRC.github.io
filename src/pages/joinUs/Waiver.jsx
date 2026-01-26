@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import { logEvent } from 'firebase/analytics';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
@@ -10,10 +10,9 @@ const WAIVER_INTRO = 'Please read and complete the waiver form below before join
 const WAIVER_TITLE = 'Club Activity Waiver';
 
 function Waiver({ onWaiverSubmit }) {
-  const [hasSubmitted, setHasSubmitted] = useState(false);
   const { services } = useServiceLocator();
 
-  const handleFormSubmit = () => {
+  const handleContinue = () => {
     const { analytics } = services?.firebaseResources || {};
     if (analytics) {
       logEvent(analytics, 'signed_waiver', {
@@ -21,10 +20,6 @@ function Waiver({ onWaiverSubmit }) {
       });
     }
     localStorage.setItem('waiverSigned', 'true');
-    setHasSubmitted(true);
-  };
-
-  const handleContinue = () => {
     onWaiverSubmit();
   };
 
@@ -52,23 +47,11 @@ function Waiver({ onWaiverSubmit }) {
         </p>
         <button
           type="button"
-          className="btn lg"
-          onClick={handleFormSubmit}
-          disabled={hasSubmitted}
+          className="btn lg primary"
+          onClick={handleContinue}
         >
-          {hasSubmitted ? 'Form Acknowledged' : 'I Have Submitted the Waiver'}
+          Continue to Join Us Page
         </button>
-
-        {hasSubmitted && (
-          <button
-            type="button"
-            className="btn lg primary"
-            onClick={handleContinue}
-            style={{ marginTop: '1rem' }}
-          >
-            Continue to Join Us Page
-          </button>
-        )}
       </div>
     </FlexColumnContainer>
   );
