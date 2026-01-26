@@ -37,6 +37,7 @@ import {
   ARM_URI,
   GOOGLE_FORM_LINK,
   GOOGLE_CALENDAR_ADD_LINK,
+  WAIVER_FORM_LINK,
 } from '../../text/externalLinks';
 import Route from './Route';
 import Paragraph from '../../components/Paragraph';
@@ -196,6 +197,16 @@ function JoinUs() {
             {sectionHeading()}
             {sectionRunWithUs()}
             {sectionBecomeMember()}
+            <div className="waiver-link-container">
+              <a
+                href={WAIVER_FORM_LINK.replace('?embedded=true', '')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="waiver-link"
+              >
+                View Club Activity Waiver
+              </a>
+            </div>
           </div>
         </div>
       </section>

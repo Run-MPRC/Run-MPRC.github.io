@@ -117,3 +117,20 @@
   background: var(--color-primary);
   color: var(--color-gray-100);
 }
+
+/* Waiver link at bottom of page */
+.waiver-link-container {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.waiver-link {
+  font-size: 0.9rem;
+  color: var(--color-gray-300);
+  text-decoration: underline;
+  transition: var(--transition);
+}
+
+.waiver-link:hover {
+  color: var(--color-primary);
+}

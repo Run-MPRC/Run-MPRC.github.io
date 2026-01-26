@@ -44,6 +44,13 @@
   font-weight: 500;
 }
 
+.main__header-container .hero-tagline {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--color-secondary);
+}
+
 .main__header-container p {
   font-size: 1.1rem;
   margin-bottom: 3.5rem;

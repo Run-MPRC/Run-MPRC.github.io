@@ -1,4 +1,5 @@
 export const HOME_HERO_TEXT_1 = 'Mid-Peninsula Running Club';
+export const HOME_HERO_TAGLINE = 'The largest and friendliest running club in the Bay Area!';
 export const HOME_HERO_TEXT_2 = 'Serving runners on the San Francisco Peninsula since 1988';
 
 export const ABOUT_STORY_TITLE = 'Welcome to MPRC!';
