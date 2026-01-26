@@ -6,7 +6,7 @@ import SEO from '../../components/SEO';
 import './committee.css';
 import { COMMITTEE_INTRO, COMMITTEE_TITLE } from '../../text/Committee';
 
-const OfficerDefault = require('../../images/committee/committee_default_portrait.png');
+const OfficerKim = require('../../images/committee/kim.jpeg');
 const OfficerJeanne = require('../../images/committee/jeanne.jpg');
 const OfficerAndrea = require('../../images/committee/andrea_1.jpeg');
 const OfficerDave = require('../../images/committee/dave.png');
@@ -19,7 +19,7 @@ const OfficerSarah = require('../../images/committee/sarah.jpg');
 const officers = [
   {
     id: 1,
-    image: OfficerDefault, // TODO: Add Kim G. photo
+    image: OfficerKim,
     name: 'Kim G.',
     job: 'Co-President',
   },
