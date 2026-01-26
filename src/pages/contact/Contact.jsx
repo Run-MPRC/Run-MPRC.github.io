@@ -4,7 +4,13 @@ import { MdEmail } from 'react-icons/md';
 import SEO from '../../components/SEO';
 import Header from '../../components/Header';
 import HeaderImage from '../../images/contact/header_bg_2.jpg';
-import { CONTACT_DESCRIPTION, CONTACT_TITLE } from '../../text/ContactUs';
+import ObfuscatedEmail from '../../components/ObfuscatedEmail';
+import { CONTACT_TITLE } from '../../text/ContactUs';
+
+// Email parts split to prevent bot scraping
+const EMAIL_USER = 'runmprc';
+const EMAIL_DOMAIN = 'gmail';
+const EMAIL_TLD = 'com';
 
 function Contact() {
   const structuredData = {
@@ -16,11 +22,10 @@ function Contact() {
     mainEntity: {
       '@type': 'Organization',
       name: 'Mid-Peninsula Running Club',
-      email: 'runmprc@gmail.com',
+      // Email omitted from structured data to prevent scraping
       contactPoint: {
         '@type': 'ContactPoint',
         contactType: 'customer service',
-        email: 'runmprc@gmail.com',
         availableLanguage: 'English',
       },
     },
@@ -31,7 +36,7 @@ function Contact() {
       <SEO
         title="Contact Our Bay Area Running Club"
         description="Contact the Mid-Peninsula Running Club in San Mateo, CA. Get in touch with our Bay Area running community for questions about joining, events, or running with us."
-        keywords="contact MPRC, Mid-Peninsula Running Club contact, Bay Area running club email, San Mateo running club contact, running club questions, MPRC email"
+        keywords="contact MPRC, Mid-Peninsula Running Club contact, Bay Area running club, San Mateo running club contact, running club questions"
         url="https://run-mprc.github.io/contact"
         canonicalUrl="https://run-mprc.github.io/contact"
         structuredData={structuredData}
@@ -40,16 +45,20 @@ function Contact() {
 
       <section className="contact">
         <div className="container contact__container">
-          {CONTACT_DESCRIPTION}
+          <p className="contact__description">
+            Have questions? Interested in joining? Exciting running stories to share?
+            Reach out to us and we are ready to welcome you into the world of running.
+            Let&apos;s run together!
+          </p>
           <div className="contact__wrapper">
-            <a
-              href="mailto:runmprc@gmail.com"
-              target="_blank"
-              rel="noreferrer noopener"
-              aria-label="Send an email to runmprc@gmail.com"
+            <ObfuscatedEmail
+              user={EMAIL_USER}
+              domain={EMAIL_DOMAIN}
+              tld={EMAIL_TLD}
+              className="contact__email-link"
             >
               <MdEmail />
-            </a>
+            </ObfuscatedEmail>
           </div>
         </div>
       </section>

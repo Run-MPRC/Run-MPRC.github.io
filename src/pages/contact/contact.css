@@ -3,10 +3,21 @@
   place-items: center;
 }
 
+.contact__description {
+  text-align: center;
+  max-width: 600px;
+  margin-bottom: 2rem;
+  line-height: 1.8;
+}
+
 .contact__wrapper {
   width: fit-content;
   display: flex;
   gap: 2rem;
+}
+
+.contact__email-link {
+  cursor: pointer;
 }
 
 .contact__wrapper a {
