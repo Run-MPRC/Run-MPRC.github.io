@@ -12,9 +12,6 @@ import {
   JOIN_US_BUTTON_2,
   JOIN_US_DESCRIPTION_4,
   JOIN_US_HEADING_DESC,
-  JUST_RUN_WITH_US,
-  JUST_RUN_WITH_US_CONTENT_1,
-  JUST_RUN_WITH_US_CONTENT_3,
   LI_WHATSAPP_ACCESS,
   LI_FACEBOOK_STRAVA_ACCESS,
   LI_STORE_DISCOUNTS,
@@ -63,18 +60,6 @@ const sectionHeading = () => (
       <Route />
     </div>
   </>
-);
-
-const sectionRunWithUs = () => (
-  <Card className="joinus__card">
-    <h2 className="h2_joinus">
-      {JUST_RUN_WITH_US}
-    </h2>
-    <ul className="ul_joinus">
-      <li className="li_joinus">{JUST_RUN_WITH_US_CONTENT_1}</li>
-      <li className="li_joinus">{JUST_RUN_WITH_US_CONTENT_3}</li>
-    </ul>
-  </Card>
 );
 
 const sectionBecomeMember = () => (
@@ -130,6 +115,10 @@ const sectionBecomeMember = () => (
 const sectionWaiver = () => (
   <Card className="joinus__card waiver-card">
     <h2 className="h2_joinus">{WAIVER_TITLE}</h2>
+    <p className="waiver-note">
+      You have already signed the waiver. This is provided for reference, or if a partner or
+      another person needs to sign the waiver form.
+    </p>
     <div className="waiver-text-container">
       {WAIVER_TEXT.trim().split('\n\n').map((paragraph, index) => (
         <p key={`waiver-p-${index}`} className="waiver-paragraph">
@@ -220,7 +209,6 @@ function JoinUs() {
         <div className="container joinus__container">
           <div className="joinus__wrapper">
             {sectionHeading()}
-            {sectionRunWithUs()}
             {sectionBecomeMember()}
             {sectionWaiver()}
           </div>

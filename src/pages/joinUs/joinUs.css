@@ -123,6 +123,14 @@
   background: var(--color-gray-500);
 }
 
+.waiver-note {
+  text-align: center;
+  font-style: italic;
+  color: var(--color-gray-300);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
 .waiver-text-container {
   max-height: 300px;
   overflow-y: auto;
