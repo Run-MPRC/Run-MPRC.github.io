@@ -53,38 +53,14 @@ export const LI_EASY_ANNUAL_RENEWAL_PROCESS = 'Easy annual renewal process';
 export const LI_DISCOUNT_ON_SHOES = '10% discount on shoes at ';
 export const ARM = 'A Runner\'s Mind';
 
-export const WAIVER_TITLE = 'Club Activity Terms and Consent';
+export const WAIVER_TITLE = 'Club Activity Waiver';
 export const WAIVER_TEXT = `
-I agree that as a member, or guest, of The Mid-Peninsula Running Club (hereinafter “the club”),
-I know that running in and volunteering for organized group runs, social events, and races
-associated with the club are potentially hazardous activities, which could cause injury or death.
-I will not participate in any club organized events, group training runs or social events, unless I
-am medically able and properly trained. I certify that I am medically able to perform all
-activities associated with the club and am in good health, and I am properly trained.  I agree to
-abide by all rules established by the club, including the right of any official to deny or suspend
-my participation for any reason whatsoever. I assume all risks associated with being a member,
-or guest, of the club and participating in all club activities, which may include but not limited
-to: falls, physical contact with other participants/members, volunteers, race personnel, contract
-service providers, employees, and spectators, including the potential of contracting a
-communicable disease resulting from contact with other participants/members, volunteers, race
-personnel, contract service providers, employees, and spectators. I assume all risks, including
-but not limited to: the effects of the weather, high heat and/or humidity, freezing cold
-temperatures, traffic and the conditions of the road, including surrounding terrain.
-I understand that bicycles, skateboards, baby joggers/strollers, roller skates or inline skates,
-animals, and personal music players are not allowed in club organized runs or events, and I will
-abide by all rules of the club. Having read this waiver and knowing these facts, and in
-consideration of your accepting my membership or allowing me to run as a guest, I, for myself
-and anyone entitled to act on my behalf, waive and release the Mid-Peninsula Running Club
-and the Road Runners Club of America, all club sponsors, their representatives and successors
-from all claims or liabilities of any kind arising out of my participation in the club activities,
-even though that liability may arise out of negligence or carelessness on the part of the persons
-or organizations named in this waiver.
+I agree that as a member, or guest, of The Mid-Peninsula Running Club (hereinafter "the club"), I know that running in and volunteering for organized group runs, social events, and races associated with the club are potentially hazardous activities, which could cause injury or death. I will not participate in any club organized events, group training runs or social events, unless I am medically able and properly trained. I certify that I am medically able to perform all activities associated with the club and am in good health, and I am properly trained. I agree to abide by all rules established by the club, including the right of any official to deny or suspend my participation for any reason whatsoever. I assume all risks associated with being a member, or guest, of the club and participating in all club activities, which may include but not limited to: falls, physical contact with other participants/members, volunteers, race personnel, contract service providers, employees, and spectators, including the potential of contracting a communicable disease resulting from contact with other participants/members, volunteers, race personnel, contract service providers, employees, and spectators. I assume all risks, including but not limited to: the effects of the weather, high heat and/or humidity, freezing cold temperatures, traffic and the conditions of the road, including surrounding terrain.
 
-While club members, and others, may organize runs or other events, they are not official club
-runs or events unless organized or endorsed by the club.  The club bears no responsibility for
-such non-club events.
+I understand that bicycles, skateboards, baby joggers/strollers, roller skates or inline skates, animals, and personal music players are not allowed in club organized runs or events, and I will abide by all rules of the club. Having read this waiver and knowing these facts, and in consideration of your accepting my membership or allowing me to run as a guest, I, for myself and anyone entitled to act on my behalf, waive and release the Mid-Peninsula Running Club and the Road Runners Club of America, all club sponsors, their representatives and successors from all claims or liabilities of any kind arising out of my participation in the club activities, even though that liability may arise out of negligence or carelessness on the part of the persons or organizations named in this waiver.
 
-I grant permission to all of the foregoing to use my photographs, motion pictures, recordings or
-any other record of the club for any legitimate purposes.
+While club members, and others, may organize runs or other events, they are not official club runs or events unless organized or endorsed by the club. The club bears no responsibility for such non-club events.
+
+I grant permission to all of the foregoing to use my photographs, motion pictures, recordings or any other record of the club for any legitimate purposes.
 `;
 export const WAIVER_AGREEMENT = 'I agree to the terms and conditions.';

@@ -31,6 +31,8 @@ import {
   LI_DISCOUNT_ON_SHOES,
   MEMBER_BENEFITS,
   WAYS_TO_RUN,
+  WAIVER_TITLE,
+  WAIVER_TEXT,
 } from '../../text/JoinUs';
 import Card from '../../components/Card';
 import {
@@ -125,6 +127,29 @@ const sectionBecomeMember = () => (
   </Card>
 );
 
+const sectionWaiver = () => (
+  <Card className="joinus__card waiver-card">
+    <h2 className="h2_joinus">{WAIVER_TITLE}</h2>
+    <div className="waiver-text-container">
+      {WAIVER_TEXT.trim().split('\n\n').map((paragraph, index) => (
+        <p key={`waiver-p-${index}`} className="waiver-paragraph">
+          {paragraph}
+        </p>
+      ))}
+    </div>
+    <div className="waiver-actions">
+      <a
+        href={WAIVER_FORM_LINK.replace('?embedded=true', '')}
+        className="btn lg"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Sign Waiver Form
+      </a>
+    </div>
+  </Card>
+);
+
 function JoinUs() {
   const structuredData = {
     '@context': 'https://schema.org',
@@ -197,16 +222,7 @@ function JoinUs() {
             {sectionHeading()}
             {sectionRunWithUs()}
             {sectionBecomeMember()}
-            <div className="waiver-link-container">
-              <a
-                href={WAIVER_FORM_LINK.replace('?embedded=true', '')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="waiver-link"
-              >
-                View Club Activity Waiver
-              </a>
-            </div>
+            {sectionWaiver()}
           </div>
         </div>
       </section>
