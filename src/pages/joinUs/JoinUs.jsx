@@ -115,6 +115,9 @@ const sectionBecomeMember = () => (
 const sectionWaiver = () => (
   <Card className="joinus__card waiver-card">
     <h2 className="h2_joinus">{WAIVER_TITLE}</h2>
+    <p className="waiver-requirement">
+      All runners are required to sign the waiver form prior to running with the club.
+    </p>
     <p className="waiver-note">
       You have already signed the waiver. This is provided for reference, or if a partner or
       another person needs to sign the waiver form.
@@ -208,9 +211,9 @@ function JoinUs() {
       <section className="joinus">
         <div className="container joinus__container">
           <div className="joinus__wrapper">
+            {sectionWaiver()}
             {sectionHeading()}
             {sectionBecomeMember()}
-            {sectionWaiver()}
           </div>
         </div>
       </section>

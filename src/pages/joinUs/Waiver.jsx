@@ -6,7 +6,7 @@ import './waiver.css';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { WAIVER_FORM_LINK } from '../../text/externalLinks';
 
-const WAIVER_INTRO = 'Please read and complete the waiver form below before joining our runs.';
+const WAIVER_INTRO = 'Regardless of membership, participants are required to read and complete the waiver form below before joining our runs.';
 const WAIVER_TITLE = 'Club Activity Waiver';
 
 function Waiver({ onWaiverSubmit }) {
