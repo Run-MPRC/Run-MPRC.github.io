@@ -32,13 +32,16 @@ function Route() {
       style={{
         height: '400px', width: '100%', maxWidth: '800px', zIndex: 1,
       }}
-      center={[37.57236641, -122.28687946]}
-      zoom={14}
+      center={[37.573, -122.283]}
+      zoom={13}
       scrollWheelZoom={false}
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Marker position={[37.57401089, -122.302166]}>
-        <Popup>Starting Location</Popup>
+      <Marker position={[37.5741586, -122.3040731]}>
+        <Popup>Start/End: Seal Point Park</Popup>
+      </Marker>
+      <Marker position={[37.5725052, -122.2620212]}>
+        <Popup>Turnaround: Bridgeview Park</Popup>
       </Marker>
       {polylinePositions.length > 0 && (
         <Polyline

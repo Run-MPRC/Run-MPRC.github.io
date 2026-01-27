@@ -6,7 +6,7 @@ export const JOIN_US_DESCRIPTION_2 = 'Joining Meetup and attending runs are both
 export const JOIN_US_DESCRIPTION_3 = 'You don\'t have to be an MPRC member to run with us, but feel free to check out our meetup for the calendar events.';
 export const JOIN_US_DESCRIPTION_4 = 'Fill out the ';
 export const JOIN_US_DESCRIPTION_5 = 'The fee is $25 per calendar year for individuals and $30 per calendar year for families. (Venmo/Cash)';
-export const GOOGLE_FORM = 'Google Form';
+export const GOOGLE_FORM = 'Membership Application Form';
 export const BECOME_A_MEMBER = 'Become an MPRC Member';
 
 // 2026 Membership & RRCA
@@ -38,10 +38,10 @@ export const JOIN_US_BUTTON_2 = 'Membership Form';
 
 export const MEMBER_BENEFITS = 'Member benefits include:';
 export const LI_WHATSAPP_ACCESS = 'Access to MPRC WhatsApp - where the majority of club communication takes place';
-export const LI_FACEBOOK_STRAVA_ACCESS = 'Access to MPRC Facebook and Strava (approval required to ensure members-only access)';
+export const LI_FACEBOOK_STRAVA_ACCESS = 'Access to MPRC and Strava (approval required to ensure members-only access)';
 export const LI_STORE_DISCOUNTS = 'Discounts at a variety of local and online stores offering running gear';
 export const LI_SOCIAL_RACE_ACTIVITIES = 'Club social and race activities (annual club picnic/dinner, volunteering opportunities, race coordination)';
-export const LI_RACE_DISCOUNT_CODES = 'Race discount codes (see monthly newsletters, FB, or WhatsApp)';
+export const LI_RACE_DISCOUNT_CODES = 'Race discount codes';
 export const LI_CLUB_LOGO_MERCHANDISE = 'Club logo merchandise';
 export const LI_MONTHLY_NEWSLETTERS = 'Monthly newsletters (typically sent the first week of every month)';
 export const LI_SATURDAY_CLUB_RUNS = 'Club runs on Saturdays';
@@ -50,7 +50,7 @@ export const LI_CLUB_GATHERINGS = 'Club social gatherings with baked goods and h
 export const LI_CLUB_SUPPORT_NETWORKING = 'Club support and networking with members';
 export const LI_AFFORDABLE_MEMBERSHIP_FEES = 'Affordable membership fees: $25/individual or $30/household per calendar year';
 export const LI_EASY_ANNUAL_RENEWAL_PROCESS = 'Easy annual renewal process';
-export const LI_DISCOUNT_ON_SHOES = '10% discount on shoes at ';
+export const LI_DISCOUNT_ON_SHOES = 'Discounts on shoes at ';
 export const ARM = 'A Runner\'s Mind';
 
 export const WAIVER_TITLE = 'Club Activity Waiver';

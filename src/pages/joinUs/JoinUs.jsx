@@ -54,7 +54,7 @@ const sectionHeading = () => (
           target="_blank"
           rel="noopener noreferrer"
         >
-          Get Directions
+          Get Directions To Our Meeting Location
         </a>
         <a
           href={GOOGLE_CALENDAR_ADD_LINK}
