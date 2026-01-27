@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="MPRC">
+<metadata>
+    <name>MPRC Saturday Morning Route</name>
+    <desc>Out and back from Seal Point Park to Bridgeview Park via Bay Trail</desc>
+</metadata>
+<trk>
+    <name>MPRC Saturday Morning Route</name>
+    <type>Running</type>
+    <trkseg>
+        <!-- Start: Seal Point Park meeting location -->
+        <trkpt lat="37.5741586" lon="-122.3040731"><ele>5.0</ele></trkpt>
+        <trkpt lat="37.5739500" lon="-122.3025000"><ele>5.0</ele></trkpt>
+        <trkpt lat="37.5736000" lon="-122.3010000"><ele>4.8</ele></trkpt>
+        <trkpt lat="37.5732000" lon="-122.2995000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5727000" lon="-122.2980000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5722000" lon="-122.2965000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5717000" lon="-122.2950000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5712000" lon="-122.2935000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5708000" lon="-122.2920000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5706000" lon="-122.2905000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5707000" lon="-122.2890000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5710000" lon="-122.2875000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5718000" lon="-122.2862000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2850000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5740000" lon="-122.2842000"><ele>4.5</ele></trkpt>
+        <!-- 3rd Avenue Upper Launch -->
+        <trkpt lat="37.5745441" lon="-122.2835767"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5748000" lon="-122.2820000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2805000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5752000" lon="-122.2790000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5752000" lon="-122.2775000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2760000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5746000" lon="-122.2745000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5742000" lon="-122.2730000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5738000" lon="-122.2715000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5734000" lon="-122.2700000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2685000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5727000" lon="-122.2670000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5725000" lon="-122.2655000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5724000" lon="-122.2640000"><ele>4.5</ele></trkpt>
+        <!-- Turnaround: Bridgeview Park -->
+        <trkpt lat="37.5725052" lon="-122.2620212"><ele>4.5</ele></trkpt>
+        <!-- Return journey -->
+        <trkpt lat="37.5724000" lon="-122.2640000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5725000" lon="-122.2655000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5727000" lon="-122.2670000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2685000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5734000" lon="-122.2700000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5738000" lon="-122.2715000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5742000" lon="-122.2730000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5746000" lon="-122.2745000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2760000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5752000" lon="-122.2775000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5752000" lon="-122.2790000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2805000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5748000" lon="-122.2820000"><ele>4.5</ele></trkpt>
+        <!-- 3rd Avenue Upper Launch (return) -->
+        <trkpt lat="37.5745441" lon="-122.2835767"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5740000" lon="-122.2842000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2850000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5718000" lon="-122.2862000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5710000" lon="-122.2875000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5707000" lon="-122.2890000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5706000" lon="-122.2905000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5708000" lon="-122.2920000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5712000" lon="-122.2935000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5717000" lon="-122.2950000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5722000" lon="-122.2965000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5727000" lon="-122.2980000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5732000" lon="-122.2995000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5736000" lon="-122.3010000"><ele>4.8</ele></trkpt>
+        <trkpt lat="37.5739500" lon="-122.3025000"><ele>5.0</ele></trkpt>
+        <!-- End: Public Restrooms at Seal Point Park -->
+        <trkpt lat="37.5745301" lon="-122.3046757"><ele>5.0</ele></trkpt>
+    </trkseg>
+</trk>
+</gpx>
