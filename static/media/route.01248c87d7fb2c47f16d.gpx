@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="MPRC">
+<metadata>
+    <name>MPRC Saturday Morning Route</name>
+    <desc>Out and back from Seal Point Park to Bridgeview Park, Foster City</desc>
+</metadata>
+<trk>
+    <name>MPRC Saturday Morning Route</name>
+    <type>Running</type>
+    <trkseg>
+        <!-- Start: Seal Point Park meeting location -->
+        <trkpt lat="37.5741586" lon="-122.3040731"><ele>5.0</ele></trkpt>
+        <trkpt lat="37.5742000" lon="-122.3030000"><ele>5.0</ele></trkpt>
+        <trkpt lat="37.5740000" lon="-122.3010000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5735000" lon="-122.2990000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2970000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5725000" lon="-122.2950000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5720000" lon="-122.2930000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5715000" lon="-122.2910000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5710000" lon="-122.2890000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5708000" lon="-122.2870000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5710000" lon="-122.2850000"><ele>4.5</ele></trkpt>
+        <!-- Bay Trail heading east -->
+        <trkpt lat="37.5745232" lon="-122.2833827"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5748000" lon="-122.2810000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2790000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5752000" lon="-122.2770000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2750000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5745000" lon="-122.2730000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5740000" lon="-122.2710000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5735000" lon="-122.2690000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2670000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5727000" lon="-122.2650000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5725000" lon="-122.2630000"><ele>4.5</ele></trkpt>
+        <!-- Turnaround: Bridgeview Park -->
+        <trkpt lat="37.5725052" lon="-122.2620212"><ele>4.5</ele></trkpt>
+        <!-- Return journey -->
+        <trkpt lat="37.5725000" lon="-122.2630000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5727000" lon="-122.2650000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2670000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5735000" lon="-122.2690000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5740000" lon="-122.2710000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5745000" lon="-122.2730000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2750000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5752000" lon="-122.2770000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5750000" lon="-122.2790000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5748000" lon="-122.2810000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5745327" lon="-122.2832456"><ele>4.5</ele></trkpt>
+        <!-- Bay Trail heading back west -->
+        <trkpt lat="37.5710000" lon="-122.2850000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5708000" lon="-122.2870000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5710000" lon="-122.2890000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5715000" lon="-122.2910000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5720000" lon="-122.2930000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5725000" lon="-122.2950000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5730000" lon="-122.2970000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5735000" lon="-122.2990000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5740000" lon="-122.3010000"><ele>4.5</ele></trkpt>
+        <trkpt lat="37.5742000" lon="-122.3030000"><ele>5.0</ele></trkpt>
+        <!-- End: Public Restrooms at Seal Point Park -->
+        <trkpt lat="37.5745301" lon="-122.3046757"><ele>5.0</ele></trkpt>
+    </trkseg>
+</trk>
+</gpx>
