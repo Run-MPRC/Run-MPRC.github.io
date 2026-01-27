@@ -123,20 +123,18 @@
   background: var(--color-gray-500);
 }
 
-.waiver-requirement {
-  text-align: center;
-  font-weight: 600;
-  color: var(--color-secondary);
-  margin-bottom: 0.75rem;
-  font-size: 1.05rem;
-}
-
 .waiver-note {
   text-align: center;
-  font-style: italic;
-  color: var(--color-gray-300);
+  color: var(--color-gray-200);
   margin-bottom: 1.5rem;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.waiver-note strong {
+  color: var(--color-secondary);
+  display: block;
+  margin-bottom: 0.5rem;
 }
 
 .waiver-text-container {
