@@ -100,6 +100,34 @@
   align-items: center;
 }
 
+.route-container {
+  text-align: center;
+  padding: 1.5rem;
+  background: var(--color-gray-500);
+  border-radius: 1rem;
+  max-width: 500px;
+  width: 100%;
+}
+
+.route-info {
+  margin-bottom: 1.5rem;
+}
+
+.route-info p {
+  margin: 0.5rem 0;
+  color: var(--color-gray-200);
+}
+
+.route-btn {
+  background: var(--color-secondary);
+  color: var(--color-gray-600);
+}
+
+.route-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-gray-100);
+}
+
 .head_desc {
   text-align: center;
 }

@@ -1,55 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import {
-  MapContainer,
-  Marker,
-  Polyline,
-  Popup,
-  TileLayer,
-} from 'react-leaflet';
-import GPXParser from 'gpxparser';
-import route from './route.gpx';
-import theme from '../../theme';
+import React from 'react';
+
+const GOOGLE_MAPS_ROUTE_URL = 'https://www.google.com/maps/dir/37.5741586,-122.3040731/3rd+Avenue+Upper+Launch,+Foster+City,+CA+94404/Bridgeview+Park,+Parks+and+Recreation,+Beach+Park+Blvd,+Foster+City,+CA+94404/3rd+Avenue+Upper+Launch,+Foster+City,+CA+94404/Public+Restrooms+%7C+Seal+Point+Park,+San+Mateo,+CA+94401/@37.5724003,-122.293607,3461m/data=!3m2!1e3!4b1!4m28!4m27!1m1!4e1!1m5!1m1!1s0x808f9ea333a9a057:0xdbe3ef521e618261!2m2!1d-122.2835767!2d37.5745441!1m5!1m1!1s0x808f994a7c77a8df:0xd13b2dc363ab1c81!2m2!1d-122.2620212!2d37.5725052!1m5!1m1!1s0x808f9ea333a9a057:0xdbe3ef521e618261!2m2!1d-122.2835767!2d37.5745441!1m5!1m1!1s0x808f9fadf8f78683:0x1b0c3693727b78da!2m2!1d-122.3046757!2d37.5745301!3e2?entry=ttu';
 
 function Route() {
-  const [polylinePositions, setPolylinePositions] = useState([]);
-  useEffect(() => {
-    fetch(route)
-      .then((r) => r.text())
-      .then((text) => {
-        const gpx = new GPXParser();
-        gpx.parse(text);
-        // Assuming you want to extract coordinates from the first track
-        const positions = gpx.tracks[0].points.map((point) => [
-          point.lat,
-          point.lon,
-        ]);
-        setPolylinePositions(positions);
-      });
-  }, []);
-
   return (
-    <MapContainer
-      style={{
-        height: '400px', width: '100%', maxWidth: '800px', zIndex: 1,
-      }}
-      center={[37.573, -122.283]}
-      zoom={13}
-      scrollWheelZoom={false}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Marker position={[37.5741586, -122.3040731]}>
-        <Popup>Start/End: Seal Point Park</Popup>
-      </Marker>
-      <Marker position={[37.5725052, -122.2620212]}>
-        <Popup>Turnaround: Bridgeview Park</Popup>
-      </Marker>
-      {polylinePositions.length > 0 && (
-        <Polyline
-          pathOptions={{ color: theme.palette.primary.main }}
-          positions={polylinePositions}
-        />
-      )}
-    </MapContainer>
+    <div className="route-container">
+      <div className="route-info">
+        <p><strong>Route:</strong> Seal Point Park → 3rd Ave Launch → Bridgeview Park → back</p>
+        <p><strong>Distance:</strong> ~5 miles out and back</p>
+      </div>
+      <a
+        href={GOOGLE_MAPS_ROUTE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="btn route-btn"
+      >
+        View Full Route on Google Maps
+      </a>
+    </div>
   );
 }
 
