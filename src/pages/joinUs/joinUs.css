@@ -104,8 +104,16 @@
   text-align: center;
 }
 
-.calendar-btn {
+.joinus-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
   margin-top: 1.5rem;
+}
+
+.directions-btn,
+.calendar-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -113,6 +121,7 @@
   color: var(--color-gray-600);
 }
 
+.directions-btn:hover,
 .calendar-btn:hover {
   background: var(--color-primary);
   color: var(--color-gray-100);

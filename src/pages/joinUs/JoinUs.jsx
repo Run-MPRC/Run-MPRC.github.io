@@ -36,6 +36,7 @@ import {
   ARM_URI,
   GOOGLE_FORM_LINK,
   GOOGLE_CALENDAR_ADD_LINK,
+  GOOGLE_MAPS_LOCATION_LINK,
   WAIVER_FORM_LINK,
 } from '../../text/externalLinks';
 import Route from './Route';
@@ -46,14 +47,24 @@ const sectionHeading = () => (
     <div className="head_desc">
       <h2 className="h2_joinus">{WAYS_TO_RUN}</h2>
       <Paragraph>{JOIN_US_HEADING_DESC}</Paragraph>
-      <a
-        href={GOOGLE_CALENDAR_ADD_LINK}
-        className="btn calendar-btn"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Add to Google Calendar
-      </a>
+      <div className="joinus-buttons">
+        <a
+          href={GOOGLE_MAPS_LOCATION_LINK}
+          className="btn directions-btn"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Get Directions
+        </a>
+        <a
+          href={GOOGLE_CALENDAR_ADD_LINK}
+          className="btn calendar-btn"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Add to Google Calendar
+        </a>
+      </div>
     </div>
     <div className="route-map">
       <MetaText>Saturday Morning Route</MetaText>
