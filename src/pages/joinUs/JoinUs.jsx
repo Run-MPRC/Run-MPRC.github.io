@@ -117,9 +117,6 @@ const sectionWaiver = () => (
     <h2 className="h2_joinus">{WAIVER_TITLE}</h2>
     <p className="waiver-note">
       <strong>All runners are required to sign the waiver form prior to running with the club.</strong>
-      {' '}
-      You have already signed the waiver. This is provided for reference, or if a partner or
-      another person needs to sign.
     </p>
     <div className="waiver-text-container">
       {WAIVER_TEXT.trim().split('\n\n').map((paragraph, index) => (

@@ -125,16 +125,10 @@
 
 .waiver-note {
   text-align: center;
-  color: var(--color-gray-200);
-  margin-bottom: 1.5rem;
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-.waiver-note strong {
   color: var(--color-secondary);
-  display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .waiver-text-container {
