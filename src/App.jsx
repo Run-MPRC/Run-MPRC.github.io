@@ -14,6 +14,7 @@ import LoginForm from './pages/login/LoginForm';
 import Admin from './pages/admin/Admin';
 import Events from './pages/events/Events';
 import ScrollToTop from './components/ScrollToTop';
+import AnnouncementBanner from './components/AnnouncementBanner';
 import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
       <ServiceLocatorProvider>
         <BrowserRouter>
           <Navbar />
+          <AnnouncementBanner />
           <ScrollToTop />
           <Routes>
             <Route index element={<Home />} />
