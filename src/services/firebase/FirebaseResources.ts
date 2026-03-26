@@ -8,13 +8,13 @@ import {
 } from 'firebase/firestore';
 
 const FIREBASE_CONFIG = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
+  apiKey: 'AIzaSyD0-xVlhYZvUk-A2zRO5pJ3_2vYDI8Phc0',
+  authDomain: 'runmprc-97922.firebaseapp.com',
+  projectId: 'runmprc-97922',
+  storageBucket: 'runmprc-97922.appspot.com',
+  messagingSenderId: '421024796584',
+  appId: '1:421024796584:web:608b41bd53f0dd44a1179d',
+  measurementId: 'G-BJX9HM4FQ8',
 } as const;
 
 const isDevelopment = process.env.NODE_ENV === 'development';
