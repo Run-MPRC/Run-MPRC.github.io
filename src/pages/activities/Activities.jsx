@@ -57,7 +57,7 @@ function Activities() {
     '@type': 'WebPage',
     name: 'MPRC Activities and Events',
     description: 'Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners.',
-    url: 'https://run-mprc.github.io/activities',
+    url: 'https://runmprc.com/activities',
     mainEntity: {
       '@type': 'Organization',
       name: 'Mid-Peninsula Running Club',
@@ -111,8 +111,8 @@ function Activities() {
         title="Running Club Activities and Events"
         description="Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners."
         keywords="running club activities, Bay Trail running, Saturday running group, running club social events, Bay Area running events, MPRC activities, running club brunch, monthly running social"
-        url="https://run-mprc.github.io/activities"
-        canonicalUrl="https://run-mprc.github.io/activities"
+        url="https://runmprc.com/activities"
+        canonicalUrl="https://runmprc.com/activities"
         structuredData={structuredData}
       />
       <Header title="Activities" image={HeaderImage} />

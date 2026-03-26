@@ -10,7 +10,7 @@ function Home() {
     '@type': 'WebPage',
     name: 'Mid-Peninsula Running Club Home',
     description: 'Join the Mid-Peninsula Running Club in San Mateo, CA! Weekly Saturday runs on the Bay Trail, social events, and a supportive community of Bay Area runners since 1988.',
-    url: 'https://run-mprc.github.io/',
+    url: 'https://runmprc.com/',
     mainEntity: {
       '@type': 'SportsOrganization',
       name: 'Mid-Peninsula Running Club',
@@ -66,7 +66,8 @@ function Home() {
         title="Bay Area Running Club in San Mateo"
         description="Join the Mid-Peninsula Running Club in San Mateo, CA! Weekly Saturday runs on the Bay Trail, social events, and a supportive community of Bay Area runners since 1988. Free to run with us!"
         keywords="running club, Bay Area running, San Mateo running club, Peninsula running, Bay Trail running, Saturday running group, MPRC, Mid-Peninsula Running Club, California running club, San Francisco Peninsula running, Seal Point Park running"
-        url="https://run-mprc.github.io/"
+        url="https://runmprc.com/"
+        canonicalUrl="https://runmprc.com/"
         structuredData={structuredData}
       />
       <MainHeader />

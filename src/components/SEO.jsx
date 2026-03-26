@@ -11,6 +11,7 @@ function SEO({
   type = 'website',
   structuredData,
   canonicalUrl,
+  noindex = false,
 }) {
   const fullTitle = title
     ? `${title} - Mid-Peninsula Running Club | Bay Area Running Club`
@@ -18,8 +19,8 @@ function SEO({
 
   const defaultDescription = 'Join the Mid-Peninsula Running Club in San Mateo, CA! Weekly Saturday runs on the Bay Trail, social events, and a supportive community of Bay Area runners since 1988.';
   const defaultKeywords = 'running club, Bay Area running, San Mateo running club, Peninsula running, Bay Trail running, Saturday running group, MPRC, Mid-Peninsula Running Club, California running club, San Francisco Peninsula running';
-  const defaultImage = 'https://run-mprc.github.io/logo512.png';
-  const defaultUrl = 'https://run-mprc.github.io/';
+  const defaultImage = 'https://runmprc.com/logo512.png';
+  const defaultUrl = 'https://runmprc.com/';
 
   return (
     <Helmet>
@@ -28,6 +29,9 @@ function SEO({
       <meta name="title" content={fullTitle} />
       <meta name="description" content={description || defaultDescription} />
       <meta name="keywords" content={keywords || defaultKeywords} />
+
+      {/* Robots */}
+      {noindex && <meta name="robots" content="noindex, nofollow" />}
 
       {/* Canonical URL */}
       {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
@@ -67,6 +71,7 @@ SEO.propTypes = {
   type: PropTypes.string,
   structuredData: PropTypes.object,
   canonicalUrl: PropTypes.string,
+  noindex: PropTypes.bool,
 };
 
 export default SEO;

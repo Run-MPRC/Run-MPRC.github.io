@@ -3,6 +3,7 @@ import HeaderImage from '../../images/activities/header_bg_1.jpg';
 import Header from '../../components/Header';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
+import SEO from '../../components/SEO';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -48,6 +49,7 @@ function LoginForm() {
 
   return (
     <div>
+      <SEO title="Member Login" noindex />
       <Header
         title={isRegistering ? 'Register' : 'Login'}
         image={HeaderImage}

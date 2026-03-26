@@ -34,7 +34,7 @@
     "eject": "react-scripts eject",
     "lint:all": "find . -name '*.{js,jsx,tsx,ts}' -exec pretty-quick {} + && eslint --fix ."
   },
-  "homepage": "https://run-mprc.github.io",
+  "homepage": "https://runmprc.com",
   "eslintConfig": {
     "extends": [
       "react-app",

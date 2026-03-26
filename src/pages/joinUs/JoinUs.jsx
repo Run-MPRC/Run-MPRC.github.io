@@ -155,7 +155,7 @@ function JoinUs() {
     '@type': 'WebPage',
     name: 'Join Mid-Peninsula Running Club',
     description: 'Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts and perks, volunteering opportunities, and a supportive Bay Area running community.',
-    url: 'https://run-mprc.github.io/joinus',
+    url: 'https://runmprc.com/joinus',
     mainEntity: {
       '@type': 'SportsOrganization',
       name: 'Mid-Peninsula Running Club',
@@ -211,8 +211,8 @@ function JoinUs() {
         title="Join Our Bay Area Running Club"
         description="Join the Mid-Peninsula Running Club in San Mateo! Free to run with us every Saturday at Seal Point Park. Membership benefits include social events, race discounts, and a supportive Bay Area running community."
         keywords="join running club, Bay Area running club membership, San Mateo running club join, Seal Point Park running, Saturday running group join, MPRC membership, running club benefits, Bay Area runners welcome"
-        url="https://run-mprc.github.io/joinus"
-        canonicalUrl="https://run-mprc.github.io/joinus"
+        url="https://runmprc.com/joinus"
+        canonicalUrl="https://runmprc.com/joinus"
         structuredData={structuredData}
       />
       <section className="joinus">

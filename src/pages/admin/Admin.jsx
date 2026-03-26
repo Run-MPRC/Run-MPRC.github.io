@@ -2,10 +2,12 @@ import React from 'react';
 import './Admin.css';
 import Header from '../../components/Header';
 import HeaderImage from '../../images/contact/header_bg_2.jpg';
+import SEO from '../../components/SEO';
 
 function Admin() {
   return (
     <>
+      <SEO title="Admin Panel" noindex />
       <Header title="Admin Panel" image={HeaderImage} />
       <section className="admin">
         <div className="container admin__container">

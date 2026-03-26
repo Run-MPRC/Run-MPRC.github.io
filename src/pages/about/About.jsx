@@ -16,7 +16,7 @@ function About() {
     '@type': 'WebPage',
     name: 'About Mid-Peninsula Running Club',
     description: "Learn about the Mid-Peninsula Running Club's history, mission, and community. Serving Bay Area runners on the San Francisco Peninsula since 1988 with weekly runs and social events.",
-    url: 'https://run-mprc.github.io/about',
+    url: 'https://runmprc.com/about',
     mainEntity: {
       '@type': 'Organization',
       name: 'Mid-Peninsula Running Club',
@@ -49,8 +49,8 @@ function About() {
         title="About Our Bay Area Running Club"
         description="Learn about the Mid-Peninsula Running Club's history, mission, and community. Serving Bay Area runners on the San Francisco Peninsula since 1988 with weekly runs and social events."
         keywords="about MPRC, Mid-Peninsula Running Club history, Bay Area running club mission, San Francisco Peninsula running community, running club since 1988, Support One Another running motto"
-        url="https://run-mprc.github.io/about"
-        canonicalUrl="https://run-mprc.github.io/about"
+        url="https://runmprc.com/about"
+        canonicalUrl="https://runmprc.com/about"
         structuredData={structuredData}
       />
       <section className="about__story">

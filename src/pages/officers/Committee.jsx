@@ -79,7 +79,7 @@ function Committee() {
     '@type': 'WebPage',
     name: 'MPRC Committee and Leadership',
     description: 'Meet the Mid-Peninsula Running Club committee and leadership team. Our Bay Area running club is led by dedicated volunteers who organize weekly runs, social events, and community activities.',
-    url: 'https://run-mprc.github.io/committee',
+    url: 'https://runmprc.com/committee',
     mainEntity: {
       '@type': 'Organization',
       name: 'Mid-Peninsula Running Club',
@@ -139,8 +139,8 @@ function Committee() {
         title="Running Club Committee and Leadership"
         description="Meet the Mid-Peninsula Running Club committee and leadership team. Our Bay Area running club is led by dedicated volunteers who organize weekly runs, social events, and community activities."
         keywords="MPRC committee, running club leadership, Bay Area running club officers, Mid-Peninsula Running Club board, running club volunteers, San Mateo running club leadership"
-        url="https://run-mprc.github.io/committee"
-        canonicalUrl="https://run-mprc.github.io/committee"
+        url="https://runmprc.com/committee"
+        canonicalUrl="https://runmprc.com/committee"
         structuredData={structuredData}
       />
       <Header image={HeaderImage} title={COMMITTEE_TITLE}>

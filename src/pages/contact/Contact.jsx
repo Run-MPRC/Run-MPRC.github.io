@@ -18,7 +18,7 @@ function Contact() {
     '@type': 'WebPage',
     name: 'Contact Mid-Peninsula Running Club',
     description: 'Contact the Mid-Peninsula Running Club in San Mateo, CA. Get in touch with our Bay Area running community for questions about joining, events, or running with us.',
-    url: 'https://run-mprc.github.io/contact',
+    url: 'https://runmprc.com/contact',
     mainEntity: {
       '@type': 'Organization',
       name: 'Mid-Peninsula Running Club',
@@ -37,8 +37,8 @@ function Contact() {
         title="Contact Our Bay Area Running Club"
         description="Contact the Mid-Peninsula Running Club in San Mateo, CA. Get in touch with our Bay Area running community for questions about joining, events, or running with us."
         keywords="contact MPRC, Mid-Peninsula Running Club contact, Bay Area running club, San Mateo running club contact, running club questions"
-        url="https://run-mprc.github.io/contact"
-        canonicalUrl="https://run-mprc.github.io/contact"
+        url="https://runmprc.com/contact"
+        canonicalUrl="https://runmprc.com/contact"
         structuredData={structuredData}
       />
       <Header title={CONTACT_TITLE} image={HeaderImage} />

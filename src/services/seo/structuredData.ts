@@ -3,7 +3,7 @@ export const ORGANIZATION_INFO = {
   name: 'Mid-Peninsula Running Club',
   shortName: 'MPRC',
   description: 'A running club serving the San Francisco Peninsula since 1988',
-  url: 'https://run-mprc.github.io',
+  url: 'https://runmprc.com',
   address: {
     streetAddress: '1901 J Hart Clinton Dr',
     addressLocality: 'San Mateo',

@@ -15,7 +15,7 @@ const SEO_CONFIG = {
   title: 'Running Club Events Calendar',
   description: 'Stay updated with Mid-Peninsula Running Club events, races, social gatherings, and special activities for Bay Area runners. Check our calendar for upcoming running events.',
   keywords: 'MPRC events, running club calendar, Bay Area running events, San Mateo running club events, running club activities, MPRC calendar',
-  url: 'https://run-mprc.github.io/events',
+  url: 'https://runmprc.com/events',
 };
 
 const structuredData = {
