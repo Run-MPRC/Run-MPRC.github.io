@@ -26,6 +26,7 @@ function Officer({
         <img
           src={isHovered && imageAlt ? imageAlt : image}
           alt={name}
+          loading="lazy"
         />
       </div>
       <h3>{name}</h3>

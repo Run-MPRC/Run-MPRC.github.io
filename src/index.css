@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 999;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.skip-to-content:focus {
+  left: 0;
+}
+
 *,
 *::before,
 *::after {

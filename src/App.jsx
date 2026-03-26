@@ -22,21 +22,24 @@ function App() {
     <HelmetProvider>
       <ServiceLocatorProvider>
         <BrowserRouter>
+          <a href="#main-content" className="skip-to-content">Skip to content</a>
           <Navbar />
           <AnnouncementBanner />
           <ScrollToTop />
-          <Routes>
-            <Route index element={<Home />} />
-            <Route path="admin" element={<Admin />} />
-            <Route path="about" element={<About />} />
-            <Route path="activities" element={<Activities />} />
-            <Route path="events" element={<Events />} />
-            <Route path="contact" element={<Contact />} />
-            <Route path="joinus" element={<JoinUsConditionalRoute />} />
-            <Route path="committee" element={<Committee />} />
-            <Route path="login" element={<LoginForm />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <main id="main-content">
+            <Routes>
+              <Route index element={<Home />} />
+              <Route path="admin" element={<Admin />} />
+              <Route path="about" element={<About />} />
+              <Route path="activities" element={<Activities />} />
+              <Route path="events" element={<Events />} />
+              <Route path="contact" element={<Contact />} />
+              <Route path="joinus" element={<JoinUsConditionalRoute />} />
+              <Route path="committee" element={<Committee />} />
+              <Route path="login" element={<LoginForm />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </main>
           <Footer />
         </BrowserRouter>
       </ServiceLocatorProvider>
