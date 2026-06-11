@@ -3,6 +3,7 @@ import './home.css';
 import MainHeader from '../../components/MainHeader';
 import About from '../about/About';
 import SEO from '../../components/SEO';
+import UpcomingEventsPreview from '../../components/UpcomingEventsPreview';
 
 function Home() {
   const structuredData = {
@@ -71,6 +72,7 @@ function Home() {
         structuredData={structuredData}
       />
       <MainHeader />
+      <UpcomingEventsPreview />
       <About />
     </>
   );

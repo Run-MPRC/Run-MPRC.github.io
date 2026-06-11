@@ -1,0 +1,144 @@
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+
+const {
+  getStripe,
+  requireAdmin,
+  requireAppCheck,
+  auditEntry,
+  Timestamp,
+} = require('./stripeHelpers');
+
+const ACTIONS = new Set([
+  'mark_fulfilled',
+  'set_tracking',
+  'add_note',
+  'cancel',
+  'refund_full',
+  'refund_partial',
+]);
+
+function orderRef(orderId) {
+  return admin.firestore().collection('orders').doc(orderId);
+}
+
+exports.adminOrderAction = functions
+  .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
+  .https.onCall(async (data, context) => {
+    requireAppCheck(context);
+    await requireAdmin(context);
+
+    const { orderId, action, payload = {} } = data || {};
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+    if (!ACTIONS.has(action)) {
+      throw new functions.https.HttpsError('invalid-argument', `Unknown action: ${action}`);
+    }
+
+    const ref = orderRef(orderId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Order not found');
+    }
+    const order = snap.data();
+    const actor = {
+      uid: context.auth.uid,
+      email: context.auth.token?.email || null,
+    };
+
+    if (action === 'add_note') {
+      await ref.update({
+        updatedAt: Timestamp.now(),
+        auditLog: admin.firestore.FieldValue.arrayUnion(
+          auditEntry({
+            actorUid: actor.uid, actorEmail: actor.email, action: 'admin.note', note: payload.note || '',
+          }),
+        ),
+      });
+      return { ok: true };
+    }
+
+    if (action === 'mark_fulfilled') {
+      await ref.update({
+        status: 'fulfilled',
+        fulfilledAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        fulfillmentNote: payload.note || order.fulfillmentNote || null,
+        trackingNumber: payload.trackingNumber || order.trackingNumber || null,
+        auditLog: admin.firestore.FieldValue.arrayUnion(
+          auditEntry({
+            actorUid: actor.uid, actorEmail: actor.email, action: 'admin.mark_fulfilled', note: payload.note || '',
+          }),
+        ),
+      });
+      return { ok: true };
+    }
+
+    if (action === 'set_tracking') {
+      await ref.update({
+        trackingNumber: payload.trackingNumber || null,
+        updatedAt: Timestamp.now(),
+        auditLog: admin.firestore.FieldValue.arrayUnion(
+          auditEntry({
+            actorUid: actor.uid, actorEmail: actor.email, action: 'admin.set_tracking', note: payload.trackingNumber || '',
+          }),
+        ),
+      });
+      return { ok: true };
+    }
+
+    if (action === 'cancel') {
+      await ref.update({
+        status: 'cancelled',
+        cancelledAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        auditLog: admin.firestore.FieldValue.arrayUnion(
+          auditEntry({
+            actorUid: actor.uid, actorEmail: actor.email, action: 'admin.cancel', note: payload.note || '',
+          }),
+        ),
+      });
+      return { ok: true };
+    }
+
+    if (action === 'refund_full' || action === 'refund_partial') {
+      if (!order.stripePaymentIntentId) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'No Stripe payment intent on this order',
+        );
+      }
+      const amountCents = action === 'refund_partial' ? Number(payload.amountCents) : null;
+      if (action === 'refund_partial' && (!amountCents || amountCents <= 0)) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'amountCents required for partial refund',
+        );
+      }
+      const stripe = getStripe();
+      const refundPayload = { payment_intent: order.stripePaymentIntentId };
+      if (amountCents && amountCents < order.amountCents) {
+        refundPayload.amount = amountCents;
+      }
+      const stripeRefund = await stripe.refunds.create(refundPayload);
+      const isFull = !refundPayload.amount;
+      await ref.update({
+        status: isFull ? 'refunded' : 'partially_refunded',
+        refundedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        stripeRefundIds: admin.firestore.FieldValue.arrayUnion(stripeRefund.id),
+        auditLog: admin.firestore.FieldValue.arrayUnion(
+          auditEntry({
+            actorUid: actor.uid,
+            actorEmail: actor.email,
+            action: isFull ? 'admin.refund_full' : 'admin.refund_partial',
+            note: `refund=${stripeRefund.id} amount=${refundPayload.amount || order.amountCents}`,
+          }),
+        ),
+      });
+      return { ok: true, refundId: stripeRefund.id };
+    }
+
+    throw new functions.https.HttpsError('internal', 'Unhandled action');
+  });

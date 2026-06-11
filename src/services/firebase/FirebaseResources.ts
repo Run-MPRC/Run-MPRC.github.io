@@ -1,5 +1,8 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
 import { Analytics, getAnalytics, isSupported } from 'firebase/analytics';
+import {
+  AppCheck, initializeAppCheck, ReCaptchaV3Provider,
+} from 'firebase/app-check';
 import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
@@ -28,17 +31,44 @@ class FirebaseResources {
 
   private _analytics: Analytics | null = null;
 
+  private _appCheck: AppCheck | null = null;
+
   private static _instance: FirebaseResources | null = null;
 
   private static _emulatorsConnected = false;
 
   private constructor() {
     this.app = initializeApp(FIREBASE_CONFIG);
+    this.initAppCheck();
     this.auth = getAuth(this.app);
     this.firestore = getFirestore(this.app);
 
     this.connectEmulators();
     this.initAnalytics();
+  }
+
+  private initAppCheck(): void {
+    const siteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+    if (!siteKey) {
+      if (!isDevelopment) {
+        console.warn(
+          'App Check disabled: set REACT_APP_RECAPTCHA_SITE_KEY to enable',
+        );
+      }
+      return;
+    }
+    if (isDevelopment) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    try {
+      this._appCheck = initializeAppCheck(this.app, {
+        provider: new ReCaptchaV3Provider(siteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+    } catch (error) {
+      console.warn('App Check init failed:', error);
+    }
   }
 
   static getInstance(): FirebaseResources {

@@ -3,27 +3,122 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---------------------------------------------------------------
+    // Admin has full access to everything via this catch-all rule.
+    // Specific allow rules below EXTEND access for other roles;
+    // they do not restrict admin access (Firestore rules are additive).
+    // ---------------------------------------------------------------
     match /{document=**} {
-			allow read, write: if request.auth != null && request.auth.token.role == 'admin';
+      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
     }
 
-    // Rules for any document within the members_only collection
+    // Members-only legacy collection
     match /members_only/{document} {
-      // Admins can read and write
-      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
-
-      // Members can only read
       allow read: if request.auth != null && request.auth.token.role == 'member';
     }
 
-    // Rules for the event collection
-    // If member_only is not true (resource.data.member_only != true), any authenticated user can read the document.
-    // If member_only is true, then only users with a role of 'member' (request.auth.token.role == 'member') can read
-    // the document.
+    // A signed-in user can read and update their own member doc.
+    // Member docs are CREATED only by the onSignUp Cloud Function (Admin SDK);
+    // there is intentionally no client `create` rule.
+    match /members/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
 
-    match /events/{event} {
-        allow read: if request.auth != null &&
-        (resource.data.member_only != true || request.auth.token.role == 'member');
+      // Self-service edits are restricted to an explicit field allowlist.
+      // An allowlist (rather than pinning each protected field individually)
+      // blocks BOTH tampering with managed fields — role, email, createdAt,
+      // emailVerified, provider — AND injection of arbitrary new fields (e.g.
+      // a planted `isAdmin` flag or a multi-MB blob). Managed fields are set
+      // only by Cloud Functions (Admin SDK) or by admins via the catch-all.
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['fullName', 'phoneNumber', 'updatedAt'])
+        && (request.resource.data.fullName == null
+            || (request.resource.data.fullName is string
+                && request.resource.data.fullName.size() <= 200))
+        && request.resource.data.phoneNumber is string
+        && request.resource.data.phoneNumber.size() <= 40;
+
+      // Third-party connections (Strava, etc). Users can read *whether*
+      // a connection exists and basic metadata, but CANNOT read tokens —
+      // enforced server-side: the token fields live in a sibling `secrets`
+      // subcollection with allow read: false. Writes always via Cloud
+      // Functions, which use the Admin SDK.
+      match /connections/{connectionId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      // OAuth tokens & other secrets — server-only. Clients MUST NOT read.
+      match /secrets/{secretId} {
+        allow read, write: if false;
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Events
+    //
+    // Schema fields used here:
+    //   - visibility: 'public' | 'members_only' | 'draft'
+    //   - status:     'draft' | 'open' | 'closed' | 'cancelled'
+    //   - member_only: legacy boolean (pre-stripe schema)
+    //
+    // Writes flow only through admin (catch-all) or Cloud Functions
+    // (Admin SDK bypasses rules). No direct client writes.
+    // ---------------------------------------------------------------
+    match /events/{eventId} {
+      // Public read: new-schema event with public visibility and not draft
+      allow read: if resource.data.visibility == 'public'
+        && resource.data.status != 'draft';
+
+      // Public read: legacy event (no visibility field) not flagged member_only
+      allow read: if !('visibility' in resource.data)
+        && resource.data.member_only != true;
+
+      // Authenticated member/admin read: members-only events
+      allow read: if request.auth != null
+        && (request.auth.token.role == 'member' || request.auth.token.role == 'admin')
+        && (resource.data.visibility == 'members_only' || resource.data.member_only == true);
+
+      // Registrations subcollection — clients CANNOT read or write directly.
+      // Creation, updates, refunds, and substitutions all go through
+      // Cloud Functions which use the Admin SDK. Admins still get access
+      // via the top-level catch-all rule.
+      match /registrations/{regId} {
+        allow read, write: if false;
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Promo codes — admin-only via catch-all. Clients may not read,
+    // even to validate: validation happens in the Cloud Function
+    // that creates the Stripe Checkout Session.
+    // ---------------------------------------------------------------
+    match /promoCodes/{codeId} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // Rate-limit buckets — server-only. Configure a Firestore TTL
+    // policy on this collection (field: expiresAt) to prune old docs.
+    // ---------------------------------------------------------------
+    match /ratelimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // Shop products — publicly readable when active or sold_out.
+    // Drafts and archived are hidden from clients. Writes via admin.
+    // ---------------------------------------------------------------
+    match /products/{productId} {
+      allow read: if resource.data.status == 'active'
+        || resource.data.status == 'sold_out';
+    }
+
+    // Orders — client-inaccessible. All reads/writes via Cloud Functions.
+    // Admin gets access via the top-level catch-all.
+    match /orders/{orderId} {
+      allow read, write: if false;
     }
   }
 }

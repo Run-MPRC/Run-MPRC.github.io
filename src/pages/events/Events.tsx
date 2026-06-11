@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import {
-  collection, onSnapshot, query, where,
-} from 'firebase/firestore';
+import { Link } from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
-
-type Event = {
-  id: number;
-  title: string;
-  member_only: boolean;
-};
+import {
+  listPublicEvents,
+  listMemberEvents,
+  formatPrice,
+  formatEventDate,
+} from '../../services/events/eventsService';
+import { Event } from '../../types/events';
+import { useAuth } from '../../services/hooks/useAuth';
 
 const SEO_CONFIG = {
   title: 'Running Club Events Calendar',
@@ -24,47 +24,63 @@ const structuredData = {
   name: 'MPRC Events Calendar',
   description: SEO_CONFIG.description,
   url: SEO_CONFIG.url,
-  mainEntity: {
-    '@type': 'Organization',
-    name: 'Mid-Peninsula Running Club',
-    event: {
-      '@type': 'SportsEvent',
-      name: 'MPRC Events',
-      description: 'Various running events, social gatherings, and club activities',
-    },
-  },
 };
 
-function EventsContent({ loading, error, events }: {
-  loading: boolean;
-  error: string | null;
-  events: Event[];
-}) {
-  if (loading) {
-    return <div className="text-center p-4">Loading events...</div>;
+function PriceBadge({ event }: { event: Event }) {
+  const { memberCents, nonMemberCents, earlyBirdCents } = event.pricing || {};
+  if (!memberCents && !nonMemberCents && !earlyBirdCents) {
+    return <span className="text-green-700 font-semibold">Free</span>;
   }
+  const lowest = Math.min(
+    ...[memberCents, nonMemberCents, earlyBirdCents].filter(
+      (v): v is number => typeof v === 'number' && v > 0,
+    ),
+  );
+  return (
+    <span className="text-gray-800">
+      From
+      {' '}
+      <span className="font-semibold">{formatPrice(lowest)}</span>
+    </span>
+  );
+}
 
-  if (error) {
-    return <div className="text-center p-4 text-red-500">Error: {error}</div>;
-  }
-
-  if (events.length === 0) {
-    return <p className="text-gray-500">No events scheduled at this time.</p>;
-  }
+function EventListItem({ event }: { event: Event }) {
+  const isFull = event.capacity != null
+    && event.registeredCount >= event.capacity;
+  const closed = event.status === 'closed' || isFull;
 
   return (
-    <ul className="list-disc pl-5">
-      {events.map((event) => (
-        <li key={event.title} className="mb-3">
+    <Link
+      to={`/events/${event.slug}`}
+      className="block border rounded-lg p-4 hover:shadow-md transition mb-4"
+    >
+      <div className="flex justify-between items-start gap-4">
+        <div className="flex-1">
           <h3 className="text-xl font-semibold">{event.title}</h3>
-          {event.member_only && (
-            <p className="text-red-500 text-xs">
-              This event is for members only.
+          <p className="text-sm text-gray-600 mt-1">
+            {formatEventDate(event.startAt)}
+            {event.location ? ` · ${event.location}` : ''}
+          </p>
+          {event.visibility === 'members_only' && (
+            <p className="text-red-500 text-xs mt-1">Members only</p>
+          )}
+          {closed && (
+            <p className="text-amber-700 text-xs mt-1 font-semibold">
+              {isFull ? 'Sold out' : 'Registration closed'}
             </p>
           )}
-        </li>
-      ))}
-    </ul>
+          {event.resultsUrl && (
+            <p className="text-yellow-700 text-xs mt-1 font-semibold">
+              Results posted
+            </p>
+          )}
+        </div>
+        <div className="text-right">
+          <PriceBadge event={event} />
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -72,53 +88,20 @@ function Events() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-
   const { services, isReady } = useServiceLocator();
+  const { isMember } = useAuth();
 
   useEffect(() => {
-    if (!isReady || !services) {
-      return;
-    }
-
-    const { identityService, firebaseResources } = services;
-    const db = firebaseResources.firestore;
-    const eventsCollection = collection(db, 'events');
-
-    let unsubscribeFn: (() => void) | null = null;
-
-    const subscribeToEvents = (isMember: boolean) => {
-      const eventsQuery = isMember
-        ? eventsCollection
-        : query(eventsCollection, where('member_only', '==', false));
-
-      return onSnapshot(eventsQuery, (snapshot) => {
-        const eventsData: Event[] = snapshot.docs.map((doc) => ({
-          ...(doc.data() as Event),
-        }));
-        setEvents(eventsData);
-        setLoading(false);
-      }, (snapshotError) => {
-        setError('Failed to load events');
-        setLoading(false);
-        console.error('Error loading events:', snapshotError);
-      });
-    };
-
-    identityService.checkMembership()
-      .then((isMember: boolean) => {
-        unsubscribeFn = subscribeToEvents(isMember);
-      })
-      .catch(() => {
-        // User not authenticated - show public events only
-        unsubscribeFn = subscribeToEvents(false);
-      });
-
-    return () => {
-      if (unsubscribeFn) {
-        unsubscribeFn();
-      }
-    };
-  }, [services, isReady]);
+    if (!isReady || !services) return undefined;
+    const db = services.firebaseResources.firestore;
+    const lister = isMember ? listMemberEvents : listPublicEvents;
+    const unsub = lister(
+      db,
+      (evs) => { setEvents(evs); setLoading(false); },
+      (err) => { setError(err.message); setLoading(false); },
+    );
+    return unsub;
+  }, [services, isReady, isMember]);
 
   return (
     <>
@@ -130,9 +113,21 @@ function Events() {
         canonicalUrl={SEO_CONFIG.url}
         structuredData={structuredData}
       />
-      <div className="container mx-auto p-4">
-        <h2 className="text-2xl font-bold mb-4">Events</h2>
-        <EventsContent loading={loading} error={error} events={events} />
+      <div className="container mx-auto p-4 max-w-3xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold">Upcoming Events</h2>
+          <Link to="/events/calendar" className="text-sm text-blue-600 hover:underline">
+            Calendar view →
+          </Link>
+        </div>
+        {loading && <p className="text-gray-500">Loading events...</p>}
+        {error && <p className="text-red-500">Error: {error}</p>}
+        {!loading && !error && events.length === 0 && (
+          <p className="text-gray-500">No events scheduled at this time.</p>
+        )}
+        {!loading && !error && events.map((e) => (
+          <EventListItem key={e.id} event={e} />
+        ))}
       </div>
     </>
   );

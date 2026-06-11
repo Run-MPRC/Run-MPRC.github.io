@@ -1,7 +1,10 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
-const VALID_ROLES = ['member', 'admin', 'unverified'];
+// Deliberately excludes 'admin': this endpoint is gated by a static API key,
+// and a leaked key must not be able to mint admins. Admin grants go through
+// the setMemberRole callable, which requires an authenticated admin caller.
+const GRANTABLE_ROLES = ['member', 'unverified'];
 const MAX_EMAILS_PER_REQUEST = 100;
 
 /**
@@ -43,9 +46,10 @@ exports.updateMemberRole = functions.https.onRequest(
       return;
     }
 
-    // Validate API key from Firebase config
+    // Validate API key from Firebase config. Header only — accepting the key
+    // as a query parameter would leak it into HTTP/proxy/CDN logs.
     const configApiKey = functions.config().api?.key;
-    const requestApiKey = request.get('X-API-Key') || request.query.apiKey;
+    const requestApiKey = request.get('X-API-Key');
 
     if (!configApiKey) {
       console.error('API key not configured. Set with: firebase functions:config:set api.key="your-key"');
@@ -78,9 +82,9 @@ exports.updateMemberRole = functions.https.onRequest(
       return;
     }
 
-    if (!VALID_ROLES.includes(role)) {
+    if (!GRANTABLE_ROLES.includes(role)) {
       response.status(400).json({
-        error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`,
+        error: `Invalid role. Must be one of: ${GRANTABLE_ROLES.join(', ')} (admin grants require the setMemberRole callable)`,
       });
       return;
     }

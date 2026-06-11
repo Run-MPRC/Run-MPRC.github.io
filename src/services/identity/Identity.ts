@@ -1,6 +1,8 @@
 import {
   Auth,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -128,12 +130,29 @@ class IdentityService {
   async register(email: string, password: string): Promise<UserCredential> {
     const credential = await createUserWithEmailAndPassword(this.auth, email, password);
     this.currentUserRole = 'unverified';
+    try {
+      await sendEmailVerification(credential.user);
+    } catch (error) {
+      console.warn('Failed to send verification email:', error);
+    }
     return credential;
   }
 
   async signOut(): Promise<void> {
     await firebaseSignOut(this.auth);
     this.currentUserRole = null;
+  }
+
+  async sendPasswordReset(email: string): Promise<void> {
+    await sendPasswordResetEmail(this.auth, email);
+  }
+
+  async resendVerificationEmail(): Promise<void> {
+    const user = this.auth.currentUser;
+    if (!user) {
+      throw new Error('Not signed in');
+    }
+    await sendEmailVerification(user);
   }
 
   async refreshToken(): Promise<string | null> {

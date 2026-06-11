@@ -35,9 +35,12 @@ function Footer() {
           <Link to="/">Home</Link>
           <Link to="/about">About</Link>
           <Link to="/activities">Activities</Link>
+          <Link to="/events">Events</Link>
           <Link to="/committee">Committee</Link>
           <Link to="/joinus">Join Us</Link>
           <Link to="/contact">Contact Us</Link>
+          <Link to="/terms">Terms</Link>
+          <Link to="/privacy">Privacy</Link>
         </article>
       </div>
       <div className="footer__copyright">

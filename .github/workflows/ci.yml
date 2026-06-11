@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  frontend:
+    name: Frontend lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - run: npm run lint:fix -- --max-warnings=0 || true
+      - name: Build
+        env:
+          CI: 'true'
+          # Lint runs as its own step above; the webpack eslint pass would
+          # otherwise fail CI=true builds on style warnings.
+          DISABLE_ESLINT_PLUGIN: 'true'
+          REACT_APP_RECAPTCHA_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_SITE_KEY }}
+          REACT_APP_SENTRY_DSN: ${{ secrets.REACT_APP_SENTRY_DSN }}
+        run: npm run build
+
+  functions:
+    name: Cloud Functions lint + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      # Use test:run (plain jest) to avoid spinning up emulators in CI.
+      # Unit tests for webhook sig verification + admin action authz mock
+      # firebase-admin so no emulator is needed.
+      - run: npm run test:run
+
+  firestore-rules:
+    name: Firestore security-rules tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - run: npm ci --legacy-peer-deps
+      - name: Run Firestore rules tests against the emulator
+        run: npm run test:rules

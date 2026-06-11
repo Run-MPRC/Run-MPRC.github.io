@@ -15,6 +15,16 @@ export const links = [
     id: 'activities',
   },
   {
+    name: 'Events',
+    path: '/events',
+    id: 'events',
+  },
+  {
+    name: 'Shop',
+    path: '/shop',
+    id: 'shop',
+  },
+  {
     name: 'Committee',
     path: '/committee',
     id: 'committee',

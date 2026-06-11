@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import HeaderImage from '../../images/activities/header_bg_1.jpg';
 import Header from '../../components/Header';
-import FlexColumnContainer from '../../components/FlexColumnContainer';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 
@@ -13,6 +13,7 @@ function LoginForm() {
   const { services, isReady } = useServiceLocator();
   const [currentUser, setCurrentUser] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,105 +46,141 @@ function LoginForm() {
     setIsRegistering(!isRegistering);
     setError('');
     setCurrentUser(null);
+    setResetSent(false);
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    setResetSent(false);
+    if (!email) {
+      setError('Enter your email above first, then click "Forgot password?" again.');
+      return;
+    }
+    if (!isReady || !services) {
+      setError('Services not ready. Please try again.');
+      return;
+    }
+    try {
+      await services.identityService.sendPasswordReset(email);
+    } catch {
+      // Intentionally swallow — we don't want to leak whether the email exists.
+    }
+    setResetSent(true);
   };
 
   return (
-    <div>
-      <SEO title="Member Login" noindex />
+    <>
+      <SEO title={isRegistering ? 'Register' : 'Member Login'} noindex />
       <Header
         title={isRegistering ? 'Register' : 'Login'}
         image={HeaderImage}
       />
-      {error && (
-        <div className="error-message" style={{ color: 'red', textAlign: 'center', padding: '1rem' }}>
-          {error}
-        </div>
-      )}
-      <FlexColumnContainer style={{ alignItems: 'center' }}>
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            width: '100%',
-            maxWidth: '300px',
-            alignItems: 'center',
-            gap: '1rem',
-          }}
-        >
-          <input
-            type="email"
-            placeholder="Email"
-            aria-label="Email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={isLoading}
-            style={{
-              marginBottom: '10px',
-              padding: '0.5rem',
-              width: '100%',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            aria-label="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={isLoading}
-            style={{
-              marginBottom: '10px',
-              padding: '0.5rem',
-              width: '100%',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          />
-          <button
-            type="submit"
-            disabled={isLoading}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
-            }}
-          >
-            {isLoading ? 'Processing...' : (isRegistering ? 'Register' : 'Login')}
-          </button>
+      <div className="container mx-auto px-4 py-10 flex justify-center">
+        <div className="w-full max-w-sm border rounded-lg p-6 bg-white shadow-sm">
+          <h2 className="text-xl font-semibold mb-4 text-center">
+            {isRegistering ? 'Create your account' : 'Sign in'}
+          </h2>
+
           {currentUser && (
-            <p style={{ color: 'green', textAlign: 'center' }}>
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800">
               Welcome,
               {' '}
               {currentUser.email}
               !
-            </p>
+              {isRegistering && (
+                <p className="mt-1 text-xs">
+                  Check your inbox for a verification email.
+                </p>
+              )}
+            </div>
           )}
-          <button
-            type="button"
-            onClick={handleToggleMode}
-            disabled={isLoading}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: 'transparent',
-              color: '#007bff',
-              border: '1px solid #007bff',
-              borderRadius: '4px',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isRegistering ? 'Switch to Login' : 'Switch to Register'}
-          </button>
-        </form>
-      </FlexColumnContainer>
-    </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {resetSent && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+              If an account exists for that email, a password reset link is on its way.
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <label className="block">
+              <span className="text-sm font-medium">Email</span>
+              <input
+                type="email"
+                aria-label="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                className="border rounded px-3 py-2 w-full mt-1 disabled:bg-gray-100"
+                autoComplete="email"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium">Password</span>
+              <input
+                type="password"
+                aria-label="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                className="border rounded px-3 py-2 w-full mt-1 disabled:bg-gray-100"
+                autoComplete={isRegistering ? 'new-password' : 'current-password'}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 rounded w-full"
+            >
+              {isLoading
+                ? 'Working...'
+                : isRegistering
+                  ? 'Create account'
+                  : 'Sign in'}
+            </button>
+          </form>
+
+          <div className="mt-4 flex justify-between items-center text-sm">
+            <button
+              type="button"
+              onClick={handleToggleMode}
+              disabled={isLoading}
+              className="text-blue-600 hover:underline"
+            >
+              {isRegistering ? 'Have an account? Sign in' : 'New here? Register'}
+            </button>
+            {!isRegistering && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isLoading}
+                className="text-blue-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            )}
+          </div>
+
+          <p className="mt-6 pt-4 border-t text-xs text-gray-500 text-center">
+            By continuing you agree to the
+            {' '}
+            <Link to="/terms" className="underline">Terms</Link>
+            {' '}
+            and
+            {' '}
+            <Link to="/privacy" className="underline">Privacy Policy</Link>
+            .
+          </p>
+        </div>
+      </div>
+    </>
   );
 }
 
