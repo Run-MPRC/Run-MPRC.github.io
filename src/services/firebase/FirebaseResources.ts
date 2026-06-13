@@ -11,13 +11,13 @@ import {
 } from 'firebase/firestore';
 
 const FIREBASE_CONFIG = {
-  apiKey: 'AIzaSyD0-xVlhYZvUk-A2zRO5pJ3_2vYDI8Phc0',
-  authDomain: 'runmprc-97922.firebaseapp.com',
-  projectId: 'runmprc-97922',
-  storageBucket: 'runmprc-97922.appspot.com',
-  messagingSenderId: '421024796584',
-  appId: '1:421024796584:web:608b41bd53f0dd44a1179d',
-  measurementId: 'G-BJX9HM4FQ8',
+  apiKey: 'AIzaSyD2u17HMhDPZ0Tn9D3H71fep1vZgT-njnw',
+  authDomain: 'mid-peninsula-running-club.firebaseapp.com',
+  projectId: 'mid-peninsula-running-club',
+  storageBucket: 'mid-peninsula-running-club.firebasestorage.app',
+  messagingSenderId: '253289716314',
+  appId: '1:253289716314:web:dcad9766d820044d7f9663',
+  measurementId: 'G-ECN7TT0BGF',
 } as const;
 
 const isDevelopment = process.env.NODE_ENV === 'development';

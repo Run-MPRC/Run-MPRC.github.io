@@ -14,7 +14,7 @@ function syncToFirestoreAndUpdateRoles() {
   const range = sheet.getDataRange();
   const values = range.getValues();
 
-  const cloudFunctionUrl = 'https://us-central1-runmprc-97922.cloudfunctions.net/updateMemberRole';
+  const cloudFunctionUrl = 'https://us-central1-mid-peninsula-running-club.cloudfunctions.net/updateMemberRole';
   const apiKey = 'your_secret_api_key'; // Replace with your actual API key
 
   // Collect rows where column C is TRUE
