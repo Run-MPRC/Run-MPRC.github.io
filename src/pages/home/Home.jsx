@@ -6,6 +6,7 @@ import SEO from '../../components/SEO';
 import UpcomingEventsPreview from '../../components/UpcomingEventsPreview';
 
 function Home() {
+  const year = new Date().getFullYear();
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
@@ -39,8 +40,8 @@ function Home() {
         '@type': 'SportsEvent',
         name: 'Saturday Morning Run',
         description: 'Weekly group run on the Bay Trail',
-        startDate: '2024-01-01T09:00:00-08:00',
-        endDate: '2024-12-31T10:00:00-08:00',
+        startDate: `${year}-01-01T09:00:00-08:00`,
+        endDate: `${year}-12-31T10:00:00-08:00`,
         location: {
           '@type': 'Place',
           name: 'Seal Point Park',

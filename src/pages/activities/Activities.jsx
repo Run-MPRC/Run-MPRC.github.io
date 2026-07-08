@@ -52,6 +52,7 @@ const videoTitles = [
 ];
 
 function Activities() {
+  const year = new Date().getFullYear();
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
@@ -73,11 +74,11 @@ function Activities() {
               '@type': 'PostalAddress',
               addressLocality: 'San Mateo',
               addressRegion: 'CA',
+              addressCountry: 'US',
             },
           },
-          startTime: '09:00',
-          endTime: '10:00',
-          dayOfWeek: 'Saturday',
+          startDate: `${year}-01-01T09:00:00-08:00`,
+          endDate: `${year}-12-31T10:00:00-08:00`,
           organizer: {
             '@type': 'Organization',
             name: 'Mid-Peninsula Running Club',
@@ -87,6 +88,18 @@ function Activities() {
           '@type': 'SocialEvent',
           name: 'Club Brunch',
           description: 'Post-run brunch at local restaurants',
+          startDate: `${year}-01-01`,
+          endDate: `${year}-12-31`,
+          location: {
+            '@type': 'Place',
+            name: 'San Mateo, California',
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: 'San Mateo',
+              addressRegion: 'CA',
+              addressCountry: 'US',
+            },
+          },
           organizer: {
             '@type': 'Organization',
             name: 'Mid-Peninsula Running Club',
@@ -96,6 +109,18 @@ function Activities() {
           '@type': 'SocialEvent',
           name: 'Monthly Run Club Social',
           description: 'Monthly gathering with food and drinks on the last Saturday of each month',
+          startDate: `${year}-01-01`,
+          endDate: `${year}-12-31`,
+          location: {
+            '@type': 'Place',
+            name: 'San Mateo, California',
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: 'San Mateo',
+              addressRegion: 'CA',
+              addressCountry: 'US',
+            },
+          },
           organizer: {
             '@type': 'Organization',
             name: 'Mid-Peninsula Running Club',

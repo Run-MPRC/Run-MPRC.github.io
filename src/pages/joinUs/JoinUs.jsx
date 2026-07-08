@@ -150,6 +150,7 @@ const sectionWaiver = () => (
 );
 
 function JoinUs() {
+  const year = new Date().getFullYear();
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
@@ -189,8 +190,8 @@ function JoinUs() {
             addressCountry: 'US',
           },
         },
-        startTime: '09:00',
-        dayOfWeek: 'Saturday',
+        startDate: `${year}-01-01T09:00:00-08:00`,
+        endDate: `${year}-12-31T10:00:00-08:00`,
         organizer: {
           '@type': 'Organization',
           name: 'Mid-Peninsula Running Club',
