@@ -40,14 +40,19 @@ describe('members_only collection', () => {
     await assertSucceeds(admin.doc('members_only/benefits').get());
   });
 
-  test('members CANNOT create, update, or delete private content', async () => {
+  test.each([
+    ['anonymous users', undefined],
+    ['users without a role claim', { uid: 'u1' }],
+    ['unverified users', { uid: 'u2', role: 'unverified' }],
+    ['members', { uid: 'u3', role: 'member' }],
+  ])('%s CANNOT create, update, or delete private content', async (_label, auth) => {
     await seed('members_only/benefits', PRIVATE_CONTENT);
-    const member = await db({ uid: 'u1', role: 'member' });
+    const user = await db(auth);
 
-    await assertFails(member.doc('members_only/new-benefit').set(PRIVATE_CONTENT));
-    await assertFails(member.doc('members_only/benefits').update({
-      discounts: '<p>Changed by a member.</p>',
+    await assertFails(user.doc('members_only/new-benefit').set(PRIVATE_CONTENT));
+    await assertFails(user.doc('members_only/benefits').update({
+      discounts: '<p>Changed without admin access.</p>',
     }));
-    await assertFails(member.doc('members_only/benefits').delete());
+    await assertFails(user.doc('members_only/benefits').delete());
   });
 });
