@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  Link, useLocation, useNavigate,
+} from 'react-router-dom';
 import HeaderImage from '../../images/activities/header_bg_1.jpg';
 import Header from '../../components/Header';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
+import { getSafeLoginReturnPath } from './loginReturnPath';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -14,6 +17,8 @@ function LoginForm() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,6 +39,7 @@ function LoginForm() {
       } else {
         const credential = await identityService.signIn(email, password);
         setCurrentUser(credential.user);
+        navigate(getSafeLoginReturnPath(location.state?.from), { replace: true });
       }
     } catch (loginError) {
       setError('Failed to authenticate. Please check your credentials and try again.');
