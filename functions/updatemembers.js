@@ -1,11 +1,13 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { assertVerifiedEmailForRole } = require('./roleGrantPolicy');
 
 // Deliberately excludes 'admin': this endpoint is gated by a static API key,
 // and a leaked key must not be able to mint admins. Admin grants go through
 // the setMemberRole callable, which requires an authenticated admin caller.
 const GRANTABLE_ROLES = ['member', 'unverified'];
 const MAX_EMAILS_PER_REQUEST = 100;
+const BULK_ROLE_UPDATE_FAILURE = 'Role update not applied';
 
 /**
  * Validates an email address format
@@ -20,6 +22,7 @@ function isValidEmail(email) {
  */
 async function updateSingleMemberRole(email, role) {
   const userRecord = await admin.auth().getUserByEmail(email);
+  assertVerifiedEmailForRole(userRecord, role);
   await admin.auth().setCustomUserClaims(userRecord.uid, { role });
 
   const membersRef = admin.firestore().collection('members');
@@ -113,7 +116,7 @@ exports.updateMemberRole = functions.https.onRequest(
         } else {
           failed.push({
             email: emails[index],
-            error: result.reason?.message || 'Unknown error',
+            error: BULK_ROLE_UPDATE_FAILURE,
           });
         }
       });

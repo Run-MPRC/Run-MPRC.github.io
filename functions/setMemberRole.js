@@ -1,6 +1,10 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { requireAdmin, requireAppCheck } = require('./stripeHelpers');
+const {
+  assertVerifiedEmailForRole,
+  EMAIL_UNVERIFIED_GRANT_CODE,
+} = require('./roleGrantPolicy');
 
 const VALID_ROLES = ['admin', 'member', 'unverified'];
 
@@ -33,6 +37,13 @@ exports.setMemberRole = functions.https.onCall(async (data, context) => {
       'failed-precondition',
       'You cannot remove your own admin role',
     );
+  }
+
+  try {
+    assertVerifiedEmailForRole(userRecord, role);
+  } catch (error) {
+    if (error.code !== EMAIL_UNVERIFIED_GRANT_CODE) throw error;
+    throw new functions.https.HttpsError('failed-precondition', error.message);
   }
 
   await admin.auth().setCustomUserClaims(userRecord.uid, { role });
