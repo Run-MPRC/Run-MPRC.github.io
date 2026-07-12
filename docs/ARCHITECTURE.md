@@ -1,5 +1,7 @@
 # Architecture Overview
 
+> **Historical overview—do not execute commands from this file:** this file predates significant account, registration, Stripe, merchandise, admin, security-rule, and operations work. Use [`SYSTEM_DESIGN.md`](../SYSTEM_DESIGN.md) and the other root design documents for the current/target architecture and launch gates. Some Firebase/secret commands below are unsafe or retired and remain only as project history.
+
 ## Technology Stack
 
 | Layer | Technology |
