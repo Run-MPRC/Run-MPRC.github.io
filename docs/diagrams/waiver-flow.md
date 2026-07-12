@@ -1,5 +1,7 @@
 # Waiver Flow State Machine
 
+> **Legacy Join Us content gate only:** this diagram describes a browser `localStorage` acknowledgement around an embedded membership Google Form. It is not proof of race-waiver acceptance and must never gate or fabricate race eligibility. Race registration requires immutable, versioned, truthful evidence under [DATA-002](../../GITHUB_ISSUES.md) and the root [commerce design](../../STRIPE_COMMERCE_DESIGN.md), subject to LEGAL-001 owner approval.
+
 ## Overview
 
 The waiver flow gates access to the Join Us page content. Users must acknowledge the waiver (via embedded Google Form) before viewing membership information.
