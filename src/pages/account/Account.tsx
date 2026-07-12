@@ -13,6 +13,7 @@ import {
 } from '../../services/account/accountService';
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
 import StravaSection from './StravaSection';
+import { getLocationReturnPath } from '../login/loginReturnPath';
 
 function roleLabel(role: string) {
   if (role === 'admin') return 'Admin';
@@ -347,7 +348,13 @@ function Account() {
 
   if (isLoading) return <div className="container mx-auto p-6">Loading...</div>;
   if (!isAuthenticated || !user) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    return (
+      <Navigate
+        to="/login"
+        state={{ from: getLocationReturnPath(location) }}
+        replace
+      />
+    );
   }
   return <AccountContent user={user} />;
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../services/hooks/useAuth';
+import { getLocationReturnPath } from '../login/loginReturnPath';
 
 interface AdminGuardProps {
   children: React.ReactNode;
@@ -14,7 +15,13 @@ function AdminGuard({ children }: AdminGuardProps) {
     return <div className="container mx-auto p-6">Loading...</div>;
   }
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    return (
+      <Navigate
+        to="/login"
+        state={{ from: getLocationReturnPath(location) }}
+        replace
+      />
+    );
   }
   if (!isAdmin) {
     return (
