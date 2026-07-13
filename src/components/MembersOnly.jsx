@@ -2,7 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import parse from 'html-react-parser';
 import { useServiceLocator } from '../services/ServiceLocatorContext';
+import {
+  clientFailureEvents,
+  reportClientFailure,
+} from '../services/monitoring/clientDiagnostics';
 
+// This legacy JSX component predates typed props; adding a dependency or
+// migrating the component is outside this privacy-only change.
+// eslint-disable-next-line react/prop-types
 function MembersOnly({ dataKey, style }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,9 +35,9 @@ function MembersOnly({ dataKey, style }) {
         } else {
           setError('Document not found');
         }
-      } catch (err) {
+      } catch {
         setError('Failed to fetch data');
-        console.error('Error fetching members-only data:', err);
+        reportClientFailure(clientFailureEvents.membersOnlyFetchFailed);
       } finally {
         setLoading(false);
       }

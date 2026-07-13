@@ -1,5 +1,9 @@
 import React from 'react';
 import { captureException } from '../services/monitoring/sentry';
+import {
+  clientFailureEvents,
+  reportClientFailure,
+} from '../services/monitoring/clientDiagnostics';
 
 interface Props {
   children: React.ReactNode;
@@ -19,10 +23,9 @@ class ErrorBoundary extends React.Component<Props, State> {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  componentDidCatch(error: Error) {
     captureException(error);
-    // eslint-disable-next-line no-console
-    console.error('ErrorBoundary caught:', error, info.componentStack);
+    reportClientFailure(clientFailureEvents.renderFailed);
   }
 
   handleReset = () => {

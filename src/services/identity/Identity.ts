@@ -11,6 +11,10 @@ import {
   Unsubscribe,
   IdTokenResult,
 } from 'firebase/auth';
+import {
+  clientFailureEvents,
+  reportClientFailure,
+} from '../monitoring/clientDiagnostics';
 import FirebaseResources from '../firebase/FirebaseResources';
 
 export type UserRole = 'admin' | 'member' | 'unverified' | null;
@@ -132,8 +136,8 @@ class IdentityService {
     this.currentUserRole = 'unverified';
     try {
       await sendEmailVerification(credential.user);
-    } catch (error) {
-      console.warn('Failed to send verification email:', error);
+    } catch {
+      reportClientFailure(clientFailureEvents.emailVerificationFailed);
     }
     return credential;
   }
