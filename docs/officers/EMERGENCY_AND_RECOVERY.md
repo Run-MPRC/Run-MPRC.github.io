@@ -29,6 +29,7 @@
 | Site unavailable or old after a merge | Ask the platform owner to check Netlify and GitHub Pages separately; do not change DNS. |
 | Login or member access is wrong | Stop role requests and contact the identity/platform owners. |
 | Account exists but a verification email request is unavailable | Ask the member to stop resending. Record only the time, route path `/login` or `/account`, and plain status. Omit all query/fragment text. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
+| Password reset does not lead to a private message | Ask the member to stop after one displayed wait and one retry. Record only the time, route path `/login`, and plain status. Do not ask which address they entered or whether an account exists. |
 | Profile Save says permission is missing | Ask the member to stop, sign out, and wait. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
 | Private member information is visible | Contact platform and privacy owners immediately; they choose containment through an approved service procedure. Do not change permissions yourself. |
 | Unexpected payment, refund, order, or signup | Contact treasurer and platform owners. The new source guard is not deployed and its officer control is NOT AVAILABLE YET. Do not test with real money. |
@@ -112,6 +113,51 @@ After the exact #118 and #153 live proofs exist:
 **Undo:** ask for one reviewed frontend revert or safe roll-forward. Never undo this problem by deleting the login account.
 
 **Escalation:** membership lead plus identity/platform owner; communications owner for delivery or Spam.
+
+### Password reset request — NOT AVAILABLE YET
+
+**Status:** [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155) is the tracked source change. It is not a live procedure until the exact revision is merged, published, and verified on `runmprc.com`. The protected release is also blocked on approved App Check and deployment configuration. Sender, Spam, delivery, and Firebase account-enumeration settings remain unverified owner work under [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
+
+**Purpose:** give every member the same private reset instructions without revealing whether an account or message exists.
+
+**Approver:** membership lead plus identity/platform owner. The communications owner approves sender and Spam guidance.
+
+**Prerequisites:** exact #155 merge and website publication evidence; exact `runmprc.com` revision evidence; private #119 readback of sender and Firebase enumeration protection; and an approved safe email sink for any staged provider check. A source test, preview, green workflow, or real member mailbox is not enough.
+
+```mermaid
+flowchart LR
+    Start["Member chooses Forgot password once"] --> Same["Page always shows the same private result"]
+    Same --> Wait["Wait through the visible 60 seconds"]
+    Wait --> Retry["Try once more if needed"]
+    Retry --> Stop["Stop and contact the identity owner"]
+```
+
+In words: make one request, show no account or provider result, wait one full minute, allow one retry, then stop.
+
+Officer steps after every prerequisite has live proof:
+
+1. Ask the member to choose **Forgot password?** once on their own device.
+2. Do not ask which email address they entered.
+3. Do not ask for a password, code, reset link, screenshot, or mailbox access.
+4. Ask them to read only the plain result title.
+5. Ask them to wait through the full visible 60-second countdown.
+6. Ask them to check Inbox and Spam privately after a few minutes.
+7. If a reset message is in Spam, ask them to mark it **Not spam**.
+8. If no message arrives, ask them to choose the one retry after the countdown.
+9. If the second attempt does not help, stop.
+10. Open a redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
+11. Record only the time, `/login`, and `Password reset request finished`.
+12. Contact the identity/platform owner and communications owner.
+
+**Expected result:** every attempted provider outcome has the same plain result, rapid repeats are blocked, the same 60-second wait follows, and no address or provider detail appears in the result. This does not prove an account exists, a message was sent, Firebase blocks direct enumeration, or delivery works.
+
+**Stop conditions:** more than one retry, refresh used to bypass the countdown, a real mailbox test, a request for an address or private link, different public results for different addresses, missing exact website evidence, or missing private #119 provider readback.
+
+**Success proof:** exact #155 pull request and merge commit; green synthetic no-network tests; website publication record; separate `runmprc.com` revision check; dated keyboard and screen-reader review; and private #119 evidence for sender, enumeration protection, and approved staged delivery. Keep each proof separate.
+
+**Undo:** publish and verify one reviewed frontend revert or safe roll-forward. Do not delete an account, edit Firebase Auth, or change an email template as a quick fix.
+
+**Escalation:** membership lead plus identity/platform owner; add the communications owner for Spam or delivery and the security owner if public results differ by account state.
 
 ### Missing profile or profile permission error
 

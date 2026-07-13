@@ -109,6 +109,8 @@ Officer steps after live proof:
 
 **Escalation:** membership lead plus identity/platform owner; add the communications owner for Spam or delivery problems.
 
+Password reset is a separate recovery path. [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155) tracks one neutral result and one browser wait; it must never reuse the verification flow's `accepted` or `unavailable` account-specific wording. Until its exact website and private provider proofs exist, use only [Password reset request — NOT AVAILABLE YET](./EMERGENCY_AND_RECOVERY.md#password-reset-request--not-available-yet). Do not ask a member which address they entered.
+
 ## Checkout adjustment guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** prevent an unknown discount, tax, or shipping charge from being treated as a valid payment.
