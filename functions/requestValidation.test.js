@@ -526,9 +526,13 @@ describe('bounded array and string primitives', () => {
     const fabricated = new RequestValidationError(
       REQUEST_VALIDATION_REASONS.INVALID_EMAIL,
     );
+    expect(Object.isFrozen(fabricated)).toBe(true);
     expect(Reflect.set(fabricated, 'message', HOSTILE_CANARY)).toBe(false);
-    expect(Reflect.set(fabricated, 'stack', HOSTILE_CANARY)).toBe(false);
-    expectSafeError(
+    // V8's special lazy Error.stack slot can report or accept this write in
+    // some Jest hosts even when Object.isFrozen is true. The fabricated error
+    // is untrusted; the boundary is that the parser replaces it below.
+    Reflect.set(fabricated, 'stack', HOSTILE_CANARY);
+    const recaptured = expectSafeError(
       () => parseBoundedArray(['safe'], {
         maxItems: 1,
         itemParser: () => {
@@ -537,6 +541,7 @@ describe('bounded array and string primitives', () => {
       }),
       REQUEST_VALIDATION_REASONS.INVALID_VALUE,
     );
+    expect(recaptured).not.toBe(fabricated);
   });
 
   test('recaptures a genuine parser error without a value-derived function name', () => {
