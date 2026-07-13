@@ -55,6 +55,53 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 If any proof is missing, report the change as **not live**.
 
+## Profile permission error
+
+**Status: AUTOMATIC REPAIR NOT LIVE YET**
+
+**Purpose:** help a signed-in member whose profile is missing or cannot be read.
+
+**Approver:** membership lead plus platform/security owner.
+
+**Prerequisites:** a new redacted incident from [Request a change](./REQUEST_A_CHANGE.md), made-up test accounts, an isolated Firebase test project, and an approved release plan. Issues [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) and [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) are engineering references, not places to add member details.
+
+The planned safe flow is automatic. An officer does not create or edit the member record.
+
+```mermaid
+flowchart LR
+    A["Member opens My Account"] --> B["Server checks only this member's profile"]
+    B --> C{"Profile exists?"}
+    C -- "Yes" --> D["Keep it unchanged"]
+    C -- "No" --> E["Create one pending profile"]
+    D --> F["Read through normal permissions"]
+    E --> F
+    F -- "Success" --> G["Edit name and phone"]
+    F -- "Failure" --> H["Hide Edit and show Try again"]
+```
+
+In words: the server preserves an existing profile or creates one pending profile for the signed-in person; editing stays hidden unless the normal read succeeds.
+
+Safe officer steps:
+
+1. Ask the member to stop retrying Save.
+2. Record the time and the public `/account` page address.
+3. Do not record their name, email, phone, login code, or screenshot of profile details.
+4. Ask them to sign out.
+5. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
+6. Link #118 only as past repair work. Do not reopen it or add member incidents to it.
+7. Wait for the platform owner to test with a made-up account.
+8. Tell the member to retry only after the website, server Function, database permissions, and live behavior are each proven.
+
+**Expected result:** after all release proof is complete, the member sees a profile or a plain temporary-unavailable message. A missing profile is displayed as pending or unverified. The repair does not grant, remove, or change actual access. If displayed profile status and actual access disagree, stop and escalate.
+
+**Stop conditions:** stop if anyone proposes a direct database change, login-account deletion, account recreation, role grant, real-member test, or website-only release before the server Function is live.
+
+**Success proof:** name the merged pull request, website commit, Function deployment, database-permission deployment, made-up staged account test, `runmprc.com` check, and separate live-state check. A green workflow with “skipping Firebase deploy” is not proof.
+
+**Undo:** ask the platform owner to prepare, approve, publish, and verify a reviewed revert or safe roll-forward. Never undo by deleting a member profile or login account.
+
+**Escalation:** membership lead plus identity/security owner. Add the privacy owner if private information appeared. Email landing in spam is a separate delivery problem; do not treat it as proof of this permission failure.
+
 ## Admin screens — NOT AVAILABLE YET
 
 Admin event and product editors exist in source, but their live permissions, backup, preview, and rollback behavior have not been approved. Saving can write directly to production Firestore. Officers must not use these screens as a continuity procedure yet.
