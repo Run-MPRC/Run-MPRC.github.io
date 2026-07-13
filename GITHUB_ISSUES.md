@@ -186,19 +186,19 @@ Repository changes can implement tests/workflow shape, but OIDC/IAM/environment 
 ## SUPPLY-001 — Remove vulnerable dependency chains and stage SDK/build upgrades
 
 **Labels:** `priority:P0`, `type:maintenance`, `type:security`, `area:web`, `area:firebase`, `area:stripe`, `size:L`
-**Status:** Partial; SUPPLY-001A is published as [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127), with the remaining upgrade/scanning slices open
+**Status:** Partial; SUPPLY-001A is represented by [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127), SUPPLY-001B is represented by [#192](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/192), and the remaining upgrade/scanning slices stay open
 **Depends on:** CI-001A
 
 ### Problem
 
-The 2026-07-12 baseline production audit reported 33 root advisories (3 critical, 9 high) and 9 Functions advisories (1 high). SUPPLY-001A/#127 removes the unused `gpxparser` and obsolete `jsdom/request/form-data` chain; on a fresh Node 20 install, the root production audit falls to 22 advisories (1 critical, 8 high) while production bundle hashes remain identical. The direct router and Firebase client still need patches, Firebase Admin needs a staged major upgrade, and Create React App remains unmaintained.
+The 2026-07-12 baseline production audit reported 33 root advisories (3 critical, 9 high) and 9 Functions advisories (1 high). SUPPLY-001A/#127 removes the unused `gpxparser` and obsolete `jsdom/request/form-data` chain; on a fresh Node 20 install, the root production audit falls to 22 advisories (1 critical, 8 high) while production bundle hashes remain identical. SUPPLY-001B/#192 pins the compatible React Router 6.30.4 graph and removes all three router findings, reducing that root audit to 19 advisories (1 critical, 5 high). The Firebase client still needs a tested patch, Firebase Admin needs a staged major upgrade, and Create React App remains unmaintained.
 
 ### Scope
 
 Deliver as small ordered PRs:
 
 1. [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127): prove `gpxparser` is unused, remove it, refresh only its lockfile graph, and retest route behavior.
-2. Upgrade `react-router-dom` to the safe compatible 6.x release; test all redirects/navigation.
+2. [#192](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/192): pin `react-router-dom` to 6.30.4 with `react-router` 6.30.4 and `@remix-run/router` 1.23.3; enable and test the two declarative-router future flags without changing the route tree.
 3. Upgrade Firebase web SDK within compatibility, then evaluate/stage the next supported major.
 4. Upgrade Firebase Admin/Functions with emulator and Auth/Firestore trigger tests.
 5. Upgrade Stripe SDK and deliberately select/test the Stripe API version.
@@ -220,10 +220,11 @@ Deliver as small ordered PRs:
 - Full CI and test-mode Stripe/Firebase smoke suite at every upgrade boundary.
 - Bundle/dependency diff and SBOM artifact.
 - SUPPLY-001A/#127: source search finds no runtime use; a fresh Node 20 lockfile install contains no `gpxparser`; 50 entries are removed with no retained package identity change; the root production audit changes from 33 to 22; all 47 frontend and 10 standalone SPA tests pass; and optimized JS/CSS asset hashes match the baseline exactly.
+- SUPPLY-001B/#192: the root declaration and only the three router package records change; a fresh Node 20 production audit changes from 22 findings (1 critical, 8 high, 12 moderate, 1 low) to 19 (1 critical, 5 high, 12 moderate, 1 low), with no remaining router entry. A fail-before/pass-after test covers the compatibility warnings; the focused suite also covers double-slash normalization, wildcard-to-home navigation, login return-path handling, account routing, and the 10-test standalone callback boundary.
 
 ### Agent handoff
 
-Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewable lockfile diff. SUPPLY-001A is represented by #127; do not publish a duplicate. Stop if a major provider SDK change needs a product/runtime decision.
+Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewable lockfile diff. SUPPLY-001A is represented by #127 and SUPPLY-001B by #192; do not publish duplicates. Stop if a major provider SDK change needs a product/runtime decision.
 
 ---
 

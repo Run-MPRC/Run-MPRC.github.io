@@ -54,7 +54,13 @@ LocationProbe.propTypes = {
 
 function renderLogin(initialEntry = '/login') {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter
+      future={{
+        v7_relativeSplatPath: true,
+        v7_startTransition: true,
+      }}
+      initialEntries={[initialEntry]}
+    >
       <Routes>
         <Route
           path="/login"
