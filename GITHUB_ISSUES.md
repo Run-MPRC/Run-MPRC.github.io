@@ -394,7 +394,7 @@ External workload identity configuration needs an authorized owner. Do not repla
 
 ## OAUTH-001 — Make Strava token lifecycle server-only, transactional, and auditable
 
-**Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:auth`, `area:firebase`, `size:M`, `needs-external-config`
+**Labels:** `priority:P0`, `type:security`, `area:auth`, `area:strava`, `size:M`, `status:proposed`, `needs-external-config`
 **Status:** Represented by live [#88 — STRAVA-001](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed, unassigned, and unclaimed
 **Depends on:** SAFETY-001/#99 for C; SEC-001 and AUTH-003 capability model for A; ABUSE-001A may proceed with `stravaExchangeCode` deferred, then C proves its safe cutover
 
