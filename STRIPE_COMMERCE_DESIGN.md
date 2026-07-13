@@ -362,7 +362,7 @@ Store actual total, discount, tax, shipping, Stripe customer reference if requir
 
 ## 12. Payment and business state machines
 
-Payment and operational state should be separate.
+Payment, registration, fulfillment, confirmed refunds, and each dispute are separate dimensions. PAY-002A1 is tracked in live [#161](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/161) as the pure version-1 source/test contract. It does not change the current webhook, write a record, or migrate/deploy anything.
 
 ### Payment state
 
@@ -374,28 +374,46 @@ stateDiagram-v2
     checkout_creating --> checkout_failed
     checkout_open --> processing
     checkout_open --> paid
+    checkout_open --> failed
     checkout_open --> expired
     checkout_open --> cancelled
     processing --> paid
     processing --> failed
-    paid --> refund_pending
-    refund_pending --> partially_refunded
-    refund_pending --> refunded
-    paid --> disputed
-    partially_refunded --> disputed
-    disputed --> paid: won/closed without loss
-    disputed --> refunded: lost/returned
 ```
+
+Text alternative: one Checkout attempt moves forward from creating to open, then to processing or one terminal result. A raw state regression never starts a second attempt; PAY-002B must give that attempt its own command identity.
 
 ### Registration state
 
-`reserved -> confirmed -> attended|no_show|transferred|cancelled`. Waiver acceptance and eligibility are attributes/evidence, not inferred from payment state. A substitute must accept the applicable waiver; an admin cannot silently transfer the original person's acceptance.
+`reserved -> confirmed|cancelled`; then `confirmed -> attended|no_show|transferred|cancelled`. Waiver acceptance and eligibility are attributes/evidence, not inferred from payment state. A substitute must accept the applicable waiver; an admin cannot silently transfer the original person's acceptance.
 
 ### Fulfillment state
 
-`unfulfilled -> picking -> packed -> shipped|ready_for_pickup -> delivered|picked_up`, with separate `cancelled`, `return_requested`, `returned`, and `written_off` paths as needed.
+`unfulfilled -> picking -> packed -> shipped|ready_for_pickup -> delivered|picked_up`. The three active pre-handoff states (`unfulfilled`, `picking`, and `packed`) may instead move to `cancelled`. Completed legacy orders map only to `fulfilled_legacy`; that state does not pretend delivery or pickup is known. Completed states may enter `return_requested -> returned -> written_off`. Cancellation is a separate terminal operational result.
 
-During migration, the existing single `status` remains as a derived compatibility field. New code writes explicit states first and derives the legacy field in one place.
+### Confirmed refund aggregate
+
+```mermaid
+stateDiagram-v2
+    [*] --> none
+    none --> partially_refunded
+    none --> refunded
+    partially_refunded --> refunded
+```
+
+Text alternative: the status summarizes refund evidence already confirmed by Stripe. Verified cumulative integer cents remain a separate PAY-003B/PAY-005 field, and another confirmed partial refund can raise that total while the status stays `partially_refunded`. A pending refund command is a separate PAY-005 operation, so a later request cannot erase an earlier confirmed partial refund.
+
+### Per-dispute state
+
+Each Stripe dispute has its own state. An order or registration never stores one canonical `disputeStatus`, because a payment can rarely have more than one dispute. A separately authorized per-dispute record stores its own status; any singular business-record summary is derived compatibility only. Formal disputes move from `needs_response` to `under_review`, `won`, or `lost`. Inquiries use `warning_needs_response`, `warning_under_review`, and `warning_closed`, but an inquiry can escalate to `needs_response` on the same Dispute. Stripe also documents a rare late-win correction from `lost` to `won`. The current [Stripe Dispute object](https://docs.stripe.com/api/disputes/object) includes `prevented`, which was added in [API version 2025-08-27.basil](https://docs.stripe.com/changelog/basil/2025-08-27/add-preventions-to-dispute).
+
+The server's Stripe client requests select `2023-10-16`, but [webhook endpoint Event versioning](https://docs.stripe.com/webhooks/versioning) is independent and the provider setting is unverified. Current webhook source neither accepts `prevented` nor validates `event.api_version`. PAY-003B must inventory and pin/validate the endpoint Event contract, then add fixtures before adopting any newer value.
+
+A same-state observation is `unchanged`, not proven duplicate. A different Event can carry a higher confirmed partial-refund total or new dispute evidence without changing the enum. PAY-003's Event inbox and PAY-002B/PAY-005 command IDs—not this reducer—prove replay. Because Stripe can deliver the first observed Event out of order, the pure reducer can accept a structurally supported first observation while the provider adapter remains responsible for signature, object, version, ownership, amount, currency, environment, and evidence checks.
+
+Every allowed edge is only a structurally possible change. It never authorizes a caller or proves a waiver, refund decision, Session state, return/write-off decision, or provider fact. PAY-004, PAY-005, MERCH-002, LEGAL-001, scoped authorization, and provider validation must supply those gates before runtime adoption.
+
+The #161 classifier uses only synthetic fixtures. It can split known legacy meaning into a canonical projection and fixed review reasons, but emits no write patch. Stored Session, Payment Link, PaymentIntent, Charge, refund, and dispute IDs prove only references, never provider state. Stripe IDs are opaque bounded strings; A1 does not infer their type from a fixed prefix or format. A reference that could contradict the legacy status returns review-required with no guessed projection; dispute references require separate records. Operational legacy `fulfilled`, `transferred`, or `cancelled` status never proves payment: without separate compatible payment evidence, classification returns review-required with no projection. A later inventory/adoption child must keep the existing single `status` readable, define one write-time compatibility derivation with domain context, retrieve provider truth safely, and dry-run before any additive migration.
 
 ## 13. Cancellation, expiry, and late registration
 
@@ -404,6 +422,8 @@ During migration, the existing single `status` remains as a derived compatibilit
 - Cancelling an unpaid record expires the active Stripe Session before or as part of the saga, then releases the hold.
 - If Session expiry fails transiently, keep a cancellation-pending state and retry; do not merely mark local cancelled while payment remains possible.
 - Cancelling a paid record requires an explicit refund/no-refund policy and permission. It cannot be the same operation as unpaid cancellation.
+
+`cancellation_pending` is a PAY-004 command/saga operation state, not a canonical payment status in PAY-002A1. Payment remains at its last verified value until the provider result and compensating action are known.
 
 ### Expiry
 
