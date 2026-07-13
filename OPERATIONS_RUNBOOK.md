@@ -588,7 +588,9 @@ AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145)
 
 AUTH-MAIL-002B [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) adds the My Account source state machine: idle, requesting, accepted, or unavailable. Request acceptance is not delivery. A synchronous guard blocks rapid duplicate activation. Both completed outcomes start the same visible 60-second wait, then allow one retry. Remounting the page or changing the signed-in account resets this browser-only timer; Firebase can still throttle requests. The timer is not server authorization or abuse protection.
 
-The source and tests do not change Firebase Auth, email templates, DNS, sender branding, or mailbox/provider settings. Tests use a mocked request and no network. Do not test this flow with a production mailbox or a real member.
+AUTH-MAIL-002C1 [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155) tracks the password-reset request source state machine: idle, requesting, finished, and retry-ready. Provider success and failure enter the same `finished` DOM, copy, accessibility state, and 60-second deadline. The browser never says sent, delivered, accepted, failed, or whether an account exists. Missing local input makes no request. A synchronous ref blocks duplicate activation; unmount discards a late result and clears the timer. Remounting may reset this usability guard.
+
+The source and tests do not change Firebase Auth, email templates, DNS, sender branding, account-enumeration protection, or mailbox/provider settings. Tests use a mocked request and no network. Identical browser output does not prove the direct Firebase API hides account state; the identity owner must record that provider setting privately under [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119). Do not test these flows with a production mailbox or a real member.
 
 Release and evidence order:
 
@@ -600,7 +602,7 @@ Release and evidence order:
 6. Use an isolated staging Firebase project and approved safe email sink before any end-to-end test.
 7. Record request acceptance separately from message delivery, Spam placement, and sender configuration.
 8. Keep provider/DNS/template work under [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
-9. Keep password/action-code recovery in AUTH-MAIL-002C under parent [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120). #153 changes only the browser resend result and usability timer; it does not prove provider delivery or impose a durable rate limit.
+9. Keep password reset request work in AUTH-MAIL-002C1 [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155) and incoming action-code work in the future AUTH-MAIL-002C2 under parent [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120). #153/#155 change browser results and usability timers only; they do not prove provider delivery, enumeration protection, or a durable rate limit.
 
 Rollback is a reviewed frontend revert or safe roll-forward. Do not delete or recreate an Auth account because the verification request failed.
 
@@ -627,5 +629,7 @@ For OBS-001A3 [#142](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/142),
 For AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145), **source/tests** means mocked account-create and email-request outcomes plus fixed-output canary checks; **merge** means the resulting `main` SHA; **website publication** and **`runmprc.com` revision verification** are separate; **Firebase/provider configuration** is unchanged; and **live delivery** remains unverified. An `accepted` result proves only that Firebase accepted the request. It does not prove Inbox delivery, sender reputation, or Spam placement.
 
 For AUTH-MAIL-002B [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153), **source/tests** means mocked resend outcomes, double-click/ref/timer/UID cleanup, fixed-output canaries, and accessible status/action checks; **merge** is a separate `main` SHA; **website publication** and **`runmprc.com` revision verification** are separate; **Firebase/provider configuration** is unchanged; and **delivery** remains unverified. The 60-second display resets with browser component/session changes and is not provider throttling proof.
+
+For AUTH-MAIL-002C1 [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155), **source/tests** means mocked reset success/failure produce byte-equivalent neutral public output, immediate repeat protection, deadline/retry/unmount tests, return-state preservation, hostile-canary redaction, and accessible controls; **merge** is a separate `main` SHA; **website publication** and **`runmprc.com` revision verification** are separate; **Firebase/provider configuration** is unchanged; and **delivery plus API enumeration protection** remain unverified. A neutral page does not prove provider policy or direct-API behavior.
 
 Provider configuration, production secrets, Netlify publication, Firebase deployment, and live behavior always require separate dated evidence. Local tests and a green GitHub summary do not prove them.
