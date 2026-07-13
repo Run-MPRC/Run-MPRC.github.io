@@ -15,6 +15,7 @@ Published foundation mapping:
 - PROMO-001 → [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102)
 - CI-001A → [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103)
 - CI-001B1 → [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124)
+- SUPPLY-001A → [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127)
 - ARCH-001 documentation → [#104](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/104)
 - CI-001 tracker → [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105)
 - PAY-003 tracker → [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106)
@@ -51,7 +52,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | ---: | --- | --- | --- | --- | --- | --- |
 | 1 | SAFETY-001 | Preserve commerce/OAuth callbacks and isolate local Firebase Functions | P0 | S | source/test complete under #99; provider/live callback unproven | — |
 | 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | partial: #103 baseline + #124 hosted Jest; #126 SPA gate and remaining gates open | SAFETY-001 |
-| 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | ready | CI-001 baseline |
+| 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | partial: SUPPLY-001A tracked by #127; remaining upgrade/scanning slices open | CI-001 baseline |
 | 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | source merged #123; Firebase live unproven | — |
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | ready | CI-001A recommended |
 | 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; backend live unproven; parent open | SEC-001 recommended |
@@ -185,18 +186,18 @@ Repository changes can implement tests/workflow shape, but OIDC/IAM/environment 
 ## SUPPLY-001 — Remove vulnerable dependency chains and stage SDK/build upgrades
 
 **Labels:** `priority:P0`, `type:maintenance`, `type:security`, `area:web`, `area:firebase`, `area:stripe`, `size:L`
-**Status:** Ready after CI baseline
+**Status:** Partial; SUPPLY-001A is published as [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127), with the remaining upgrade/scanning slices open
 **Depends on:** CI-001A
 
 ### Problem
 
-The 2026-07-12 production audit reports 33 root advisories (3 critical, 9 high) and 9 Functions advisories (1 high). The direct router and Firebase client need patches; Firebase Admin needs a staged major upgrade. Unused `gpxparser` pulls obsolete `jsdom/request/form-data`. Create React App is unmaintained and contributes legacy dependency pressure.
+The 2026-07-12 baseline production audit reported 33 root advisories (3 critical, 9 high) and 9 Functions advisories (1 high). SUPPLY-001A/#127 removes the unused `gpxparser` and obsolete `jsdom/request/form-data` chain; on a fresh Node 20 install, the root production audit falls to 22 advisories (1 critical, 8 high) while production bundle hashes remain identical. The direct router and Firebase client still need patches, Firebase Admin needs a staged major upgrade, and Create React App remains unmaintained.
 
 ### Scope
 
 Deliver as small ordered PRs:
 
-1. Prove `gpxparser` is unused, remove it, refresh lockfile, and retest route behavior.
+1. [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127): prove `gpxparser` is unused, remove it, refresh only its lockfile graph, and retest route behavior.
 2. Upgrade `react-router-dom` to the safe compatible 6.x release; test all redirects/navigation.
 3. Upgrade Firebase web SDK within compatibility, then evaluate/stage the next supported major.
 4. Upgrade Firebase Admin/Functions with emulator and Auth/Firestore trigger tests.
@@ -218,10 +219,11 @@ Deliver as small ordered PRs:
 - Before/after `npm audit --omit=dev` for both lockfiles.
 - Full CI and test-mode Stripe/Firebase smoke suite at every upgrade boundary.
 - Bundle/dependency diff and SBOM artifact.
+- SUPPLY-001A/#127: source search finds no runtime use; a fresh Node 20 lockfile install contains no `gpxparser`; 50 entries are removed with no retained package identity change; the root production audit changes from 33 to 22; all 47 frontend and 10 standalone SPA tests pass; and optimized JS/CSS asset hashes match the baseline exactly.
 
 ### Agent handoff
 
-Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewable lockfile diff. Stop if a major provider SDK change needs a product/runtime decision.
+Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewable lockfile diff. SUPPLY-001A is represented by #127; do not publish a duplicate. Stop if a major provider SDK change needs a product/runtime decision.
 
 ---
 
