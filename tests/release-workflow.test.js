@@ -45,6 +45,10 @@ test('release workflow is manual, exact-commit, and fixed-scope', () => {
   assert.match(workflow, /\.conclusion == "success"/);
   assert.match(workflow, /Frontend lint \+ build/);
   assert.match(workflow, /Cloud Functions lint \+ test/);
+  assert.equal(
+    (workflow.match(/"Commerce command journal emulator"/g) ?? []).length,
+    2,
+  );
   assert.match(workflow, /Firestore security-rules tests/);
   assert.match(workflow, /options:\n          - profile-recovery/);
   assert.match(workflow, /RELEASE_PLAN: \$\{\{ inputs\.release_plan \}\}/);

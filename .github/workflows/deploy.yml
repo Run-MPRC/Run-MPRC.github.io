@@ -112,6 +112,7 @@ jobs:
           for required_job in \
             "Frontend lint + build" \
             "Cloud Functions lint + test" \
+            "Commerce command journal emulator" \
             "Firestore security-rules tests"
           do
             if ! jq -e --arg name "$required_job" '
@@ -391,6 +392,7 @@ jobs:
           for required_job in \
             "Frontend lint + build" \
             "Cloud Functions lint + test" \
+            "Commerce command journal emulator" \
             "Firestore security-rules tests"
           do
             if ! jq -e --arg name "$required_job" '

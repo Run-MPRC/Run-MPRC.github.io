@@ -62,7 +62,7 @@ Maintain an internal inventory with project/account IDs and console links:
 | Environment | Firebase project | Stripe mode/account | Web domain | GitHub environment | Status |
 | --- | --- | --- | --- | --- | --- |
 | Local source runtime | `demo-mprc-local` emulators | Providers remain separately gated | `localhost:3000` | None | Available for synthetic Firebase work after all three loopback emulators report ready |
-| CI | Demo/emulator project | Fixtures/test only | None | CI | Partially implemented |
+| CI | Separate named demo/emulator projects | Fixtures/test only | None | CI | Frontend, Functions, Rules, SPA, and commerce-journal checks run; broader gates remain partial |
 | Staging | **Create dedicated project** | Test/sandbox + unique endpoint | `dev.runmprc.com` | `staging` | Launch blocker |
 | Production | `mid-peninsula-running-club` (verify) | Live + unique endpoint | `runmprc.com` | `production` | Informational site only until gates close |
 
@@ -265,7 +265,7 @@ CI=true npm test -- --watchAll=false --runInBand
 npm run test:spa-navigation
 ```
 
-The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Hosted CI also runs the separate Node SPA suite as `Run SPA callback safety tests` under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126), plus the manual-release source invariants under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). Protected environment/OIDC configuration, actual staged/live deployment, fail-closed lint, required checks, and controlled Netlify publication remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105), [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133), [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136), and WEB-001.
+The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Hosted CI also runs the separate Node SPA suite as `Run SPA callback safety tests` under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126). CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) adds the blocking `Commerce command journal emulator` job. That job uses exact demo project `demo-pay002b2-test`, Firestore only, an explicit opt-in, and the focused transaction suite. The protected release source gate requires that named job both before artifact work and after approval. Its green result proves synthetic transaction behavior, not Firebase deployment or Stripe behavior. The manual-release source invariants remain under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). Protected environment/OIDC configuration, actual staged/live deployment, fail-closed lint, branch-required-check configuration, and controlled Netlify publication remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105), [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133), [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136), and WEB-001.
 
 ### Firestore Rules
 

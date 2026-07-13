@@ -26,7 +26,8 @@ jobs:
       - name: Validate protected release workflow
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
-          node --test tests/release-workflow.test.js tests/firebase-release-verification.test.js
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/ci.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
+          node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js
       - run: npm run lint:fix -- --max-warnings=0 || true
       - name: Build
         env:
@@ -57,6 +58,34 @@ jobs:
       # Unit tests for webhook sig verification + admin action authz mock
       # firebase-admin so no emulator is needed.
       - run: npm run test:run
+
+  commerce-command-journal:
+    name: Commerce command journal emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install committed root dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+      - name: Install committed Functions dependencies
+        run: npm --prefix functions ci --ignore-scripts
+      - name: Run commerce command journal concurrency tests
+        env:
+          REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR: '1'
+        run: >-
+          npx --no-install firebase emulators:exec
+          --project demo-pay002b2-test
+          --only firestore
+          "npm --prefix functions run test:run --
+          --runInBand commerceCommandJournal.emulator.test.js"
 
   firestore-rules:
     name: Firestore security-rules tests
