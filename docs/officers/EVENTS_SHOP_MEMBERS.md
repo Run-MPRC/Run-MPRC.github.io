@@ -88,7 +88,7 @@ Safe officer steps:
 3. Do not record their name, email, phone, login code, or screenshot of profile details.
 4. Ask them to sign out.
 5. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
-6. Link #118 only as past repair work. Do not reopen it or add member incidents to it.
+6. Use #118 only as engineering context. Do not add member incidents or private details to it.
 7. Wait for the platform owner to test with a made-up account.
 8. Tell the member to retry only after the website, server Function, database permissions, and live behavior are each proven.
 

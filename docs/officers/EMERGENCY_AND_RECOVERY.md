@@ -48,7 +48,7 @@ Live commerce is not approved as of 2026-07-12. If the public site appears to ac
 1. Ask the member to stop using Save.
 2. Ask the member to sign out.
 3. Open a new redacted incident by following [Request a change](./REQUEST_A_CHANGE.md).
-4. Link [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) only as past repair work. Do not reopen it or add member incidents to it.
+4. Use [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) only as engineering context. Do not add member incidents or private details to it.
 5. Share only the time and the plain symptom.
 6. Wait for a made-up account test and separate website, server Function, and database-permission proof.
 
