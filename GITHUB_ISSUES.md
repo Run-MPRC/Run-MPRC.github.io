@@ -56,7 +56,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | ready | CI-001A recommended |
 | 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; backend live unproven; parent open | SEC-001 recommended |
 | 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | ready | AUTH-001 |
-| 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P1 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SEC-001, AUTH-003 capability model |
+| 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P0 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SAFETY-001/#99; SEC-001 and AUTH-003 for A; staged deferral/cutover with ABUSE-001A for C |
 | 9 | AUTH-003 | Introduce scoped admin capabilities, MFA, and recent authentication | P1 | L | proposed | AUTH-001, AUTH-002, SEC-001 |
 | 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | ready | CI-001 baseline |
 | 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | ready | ABUSE-001 interface agreed |
@@ -394,9 +394,9 @@ External workload identity configuration needs an authorized owner. Do not repla
 
 ## OAUTH-001 — Make Strava token lifecycle server-only, transactional, and auditable
 
-**Labels:** `priority:P1`, `type:security`, `type:reliability`, `area:auth`, `area:firebase`, `size:M`, `needs-external-config`
+**Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:auth`, `area:firebase`, `size:M`, `needs-external-config`
 **Status:** Represented by live [#88 — STRAVA-001](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed, unassigned, and unclaimed
-**Depends on:** SEC-001 and AUTH-003 capability model
+**Depends on:** SAFETY-001/#99 for C; SEC-001 and AUTH-003 capability model for A; ABUSE-001A may proceed with `stravaExchangeCode` deferred, then C proves its safe cutover
 
 **Canonical live tracker:** [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88). OAUTH-001A/B/C are bounded slices inside that tracker, not separate tickets to publish without first splitting and cross-linking #88.
 
