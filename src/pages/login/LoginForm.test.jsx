@@ -37,6 +37,9 @@ function LocationProbe({ label }) {
         {location.search}
         {location.hash}
       </span>
+      {location.state?.from && (
+        <span data-testid="return-path">{location.state.from}</span>
+      )}
     </div>
   );
 }
@@ -49,7 +52,15 @@ function renderLogin(initialEntry = '/login') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/login" element={<LoginForm />} />
+        <Route
+          path="/login"
+          element={(
+            <>
+              <LoginForm />
+              <LocationProbe label="Login location" />
+            </>
+          )}
+        />
         <Route path="/account" element={<LocationProbe label="Account destination" />} />
         <Route path="/discounts" element={<LocationProbe label="Discounts destination" />} />
         <Route
@@ -75,6 +86,17 @@ function submitCredentials() {
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 }
 
+function submitRegistration(email = 'member@example.test') {
+  fireEvent.click(screen.getByRole('button', { name: 'New here? Register' }));
+  fireEvent.change(screen.getByLabelText('Email address'), {
+    target: { value: email },
+  });
+  fireEvent.change(screen.getByLabelText('Password'), {
+    target: { value: 'correct horse battery staple' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+}
+
 describe('LoginForm return navigation', () => {
   const signIn = jest.fn();
   const register = jest.fn();
@@ -83,7 +105,10 @@ describe('LoginForm return navigation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     signIn.mockResolvedValue({ user: { email: 'member@example.com' } });
-    register.mockResolvedValue({ user: { email: 'member@example.com' } });
+    register.mockResolvedValue({
+      user: { email: 'member@example.test' },
+      verificationEmailRequest: 'accepted',
+    });
     useServiceLocator.mockReturnValue({
       isReady: true,
       services: {
@@ -169,23 +194,80 @@ describe('LoginForm return navigation', () => {
     expect(screen.queryByText('Discounts destination')).not.toBeInTheDocument();
   });
 
-  test('keeps the registration confirmation on the login page', async () => {
+  test('separates account creation from an accepted email request without promising delivery', async () => {
     renderLogin({ pathname: '/login', state: { from: '/discounts' } });
-    fireEvent.click(screen.getByRole('button', { name: 'New here? Register' }));
-    fireEvent.change(screen.getByLabelText('Email address'), {
-      target: { value: 'member@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'correct horse battery staple' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    submitRegistration();
 
-    expect(await screen.findByText('Check your inbox for a verification email.'))
-      .toBeInTheDocument();
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Account created.');
+    expect(status).toHaveTextContent(
+      'The email service accepted the verification email request.',
+    );
+    expect(status).toHaveTextContent('Delivery is not guaranteed.');
+    expect(status).toHaveTextContent('Check your Inbox and Spam folder.');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    expect(status).toHaveFocus();
+    expect(screen.getByRole('link', { name: 'Check My Account' }))
+      .toHaveAttribute('href', '/account');
     expect(screen.queryByText('Discounts destination')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/login');
+    expect(screen.getByTestId('return-path')).toHaveTextContent('/discounts');
+    expect(screen.queryByRole('button', { name: 'Create account' }))
+      .not.toBeInTheDocument();
     expect(register).toHaveBeenCalledWith(
-      'member@example.com',
+      'member@example.test',
       'correct horse battery staple',
     );
+  });
+
+  test('shows a recovery action without inbox guidance when the email request is unavailable', async () => {
+    register.mockResolvedValueOnce({
+      user: { email: 'private-member@example.test' },
+      verificationEmailRequest: 'unavailable',
+    });
+    renderLogin({ pathname: '/login', state: { from: '/discounts?kind=race' } });
+    submitRegistration('private-member@example.test');
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Account created.');
+    expect(status).toHaveTextContent('The verification email request did not finish.');
+    expect(status).toHaveTextContent('Keep this account.');
+    expect(status).toHaveTextContent(
+      'Check My Account for the next available step.',
+    );
+    expect(status).toHaveTextContent(
+      'If My Account is unavailable, stop and ask the club membership contact for help.',
+    );
+    expect(status).not.toHaveTextContent('Resend');
+    expect(status).not.toHaveTextContent('Inbox');
+    expect(status).not.toHaveTextContent('Spam');
+    expect(status).not.toHaveTextContent('private-member@example.test');
+    expect(status).toHaveFocus();
+    expect(screen.getByTestId('location')).toHaveTextContent('/login');
+    expect(screen.getByTestId('return-path'))
+      .toHaveTextContent('/discounts?kind=race');
+    expect(screen.queryByRole('button', { name: 'Create account' }))
+      .not.toBeInTheDocument();
+  });
+
+  test('shows only a generic error when account creation fails', async () => {
+    const providerCanaries = [
+      'private-member@example.test',
+      'auth/provider-response-canary',
+      'https://example.test/action?token=verification-token-canary',
+    ];
+    register.mockRejectedValueOnce(new Error(providerCanaries.join(' ')));
+    renderLogin({ pathname: '/login', state: { from: '/discounts' } });
+    submitRegistration('private-member@example.test');
+
+    expect(await screen.findByText(
+      'We could not create the account. Please try again.',
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Account created.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/login');
+    const visibleText = document.body.textContent;
+    providerCanaries.forEach((canary) => expect(visibleText).not.toContain(canary));
   });
 });
