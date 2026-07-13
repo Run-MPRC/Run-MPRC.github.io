@@ -17,7 +17,6 @@ export interface Member {
 
 export interface MemberEditableFields {
   fullName: string;
-  phoneNumber: string;
 }
 
 export interface PersonalRecord {

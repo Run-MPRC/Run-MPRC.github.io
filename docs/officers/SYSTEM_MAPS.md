@@ -92,14 +92,15 @@ flowchart TD
     Existing -- "No" --> Pending["Create one pending profile"]
     Preserve --> Read["Website reads through normal Firebase permissions"]
     Pending --> Read
-    Read -- "Read succeeds" --> Edit["Member may edit name and phone only"]
+    Read -- "Read succeeds" --> Edit["Member may edit name only"]
+    Read -- "Read succeeds" --> Phone["Phone display and entry paused\nexisting value unchanged"]
     Read -- "Setup or read fails" --> Safe["Edit stays hidden; Try again or sign out"]
     Ensure -. "does not grant, remove, or change" .-> Access["Membership, payment, discount, or admin access"]
 ```
 
-In words: a signed-in member gets their existing profile unchanged or one new pending profile; the website permits only name and phone editing after the normal permission check succeeds. The repair does not change actual access. If displayed profile status and actual access disagree, stop and escalate.
+In words: a signed-in member gets their existing profile unchanged or one new pending profile; the website permits only name editing after the normal permission check succeeds, while phone display and entry stay paused without changing an existing stored value. The repair does not change actual access. If displayed profile status and actual access disagree, stop and escalate.
 
-Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair. Source code and local tests do not make it live. The website, server Function, database permissions, and made-up live check must each be proven separately.
+Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair, and [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) owns the temporary phone-collection pause. Source code and local tests do not make either live. The website, server Function, database permissions, and made-up live check must each be proven separately.
 
 ## Emergency decision
 

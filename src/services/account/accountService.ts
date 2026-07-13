@@ -5,14 +5,14 @@ import { FirebaseApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Member, MemberEditableFields } from '../../types/member';
 
+export type MyMemberProfile = Omit<Member, 'phoneNumber'>;
+
 export const MEMBER_PROFILE_LIMITS = {
   fullName: 200,
-  phoneNumber: 40,
 } as const;
 
 export interface ValidatedMemberProfileFields {
   fullName: string;
-  phoneNumber: string;
 }
 
 export type MemberProfileValidation =
@@ -23,14 +23,10 @@ export function validateMemberProfileFields(
   fields: MemberEditableFields,
 ): MemberProfileValidation {
   const fullName = fields.fullName.trim();
-  const phoneNumber = fields.phoneNumber.trim();
   if (fullName.length > MEMBER_PROFILE_LIMITS.fullName) {
     return { valid: false, message: 'Full name must be 200 characters or fewer.' };
   }
-  if (phoneNumber.length > MEMBER_PROFILE_LIMITS.phoneNumber) {
-    return { valid: false, message: 'Phone must be 40 characters or fewer.' };
-  }
-  return { valid: true, fields: { fullName, phoneNumber } };
+  return { valid: true, fields: { fullName } };
 }
 
 export async function ensureMyProfile(
@@ -45,7 +41,10 @@ export async function ensureMyProfile(
   return result.data;
 }
 
-export async function getMyProfile(db: Firestore, uid: string): Promise<Member | null> {
+export async function getMyProfile(
+  db: Firestore,
+  uid: string,
+): Promise<MyMemberProfile | null> {
   const ref = doc(db, 'members', uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
@@ -55,7 +54,6 @@ export async function getMyProfile(db: Firestore, uid: string): Promise<Member |
     email: d.email || '',
     fullName: d.fullName || null,
     role: d.role || 'unverified',
-    phoneNumber: d.phoneNumber || '',
     emailVerified: d.emailVerified || false,
     provider: d.provider || 'unknown',
     createdAt: d.createdAt || null,
@@ -71,12 +69,11 @@ export async function updateMyProfile(
 ): Promise<void> {
   const validation = validateMemberProfileFields(fields);
   if (!validation.valid) throw new Error(validation.message);
-  const { fullName, phoneNumber } = validation.fields;
+  const { fullName } = validation.fields;
 
   const ref = doc(db, 'members', uid);
   await updateDoc(ref, {
     fullName: fullName || null,
-    phoneNumber,
     updatedAt: serverTimestamp(),
   });
 }

@@ -66,7 +66,6 @@ describe('members collection', () => {
       const me = await db({ uid: 'u1', role: 'unverified' });
       await assertFails(me.doc('members/u1').update({
         fullName: 'New Name',
-        phoneNumber: '555-1234',
       }));
     });
 
@@ -82,22 +81,20 @@ describe('members collection', () => {
       const me = await db(auth);
       await assertSucceeds(me.doc('members/u1').update({
         fullName: 'New Name',
-        phoneNumber: '555-1234',
         updatedAt: new Date(),
       }));
     });
 
-    test('profile length boundaries are accepted', async () => {
+    test('name length boundary is accepted', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
       const me = await db({ uid: 'u1', role: 'unverified' });
       await assertSucceeds(me.doc('members/u1').update({
         fullName: 'n'.repeat(200),
-        phoneNumber: '1'.repeat(40),
         updatedAt: new Date(),
       }));
     });
 
-    test('profile Unicode boundaries match the browser validator', async () => {
+    test('name Unicode boundary matches the browser validator', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
       const me = await db({ uid: 'u1', role: 'unverified' });
 
@@ -106,7 +103,6 @@ describe('members collection', () => {
         // symbols as two UTF-16 units. Keep the client validation aligned
         // with the behavior proven by this emulator suite.
         fullName: '🏃'.repeat(100),
-        phoneNumber: '📞'.repeat(20),
         updatedAt: new Date(),
       }));
     });
@@ -114,11 +110,6 @@ describe('members collection', () => {
     test.each([
       ['a Unicode name over the 200-unit limit', {
         fullName: '🏃'.repeat(101),
-        phoneNumber: '',
-      }],
-      ['a Unicode phone over the 40-unit limit', {
-        fullName: '',
-        phoneNumber: '📞'.repeat(21),
       }],
     ])('user CANNOT set %s', async (_label, fields) => {
       await seed('members/u1', SAMPLE_MEMBER);
@@ -133,7 +124,6 @@ describe('members collection', () => {
       const me = await db({ uid: 'u1', role: 'unverified' });
       await assertFails(me.doc('members/u1').update({
         fullName: 'New Name',
-        phoneNumber: '555-1234',
         updatedAt: new Date(),
       }));
     });
@@ -179,6 +169,47 @@ describe('members collection', () => {
       }));
     });
 
+    test('user CANNOT add a non-empty phone during the privacy pause', async () => {
+      const memberWithoutPhone = { ...SAMPLE_MEMBER };
+      delete memberWithoutPhone.phoneNumber;
+      await seed('members/u1', memberWithoutPhone);
+      const me = await db({ uid: 'u1', role: 'unverified' });
+      await assertFails(me.doc('members/u1').update({
+        phoneNumber: 'synthetic-phone-canary',
+        updatedAt: new Date(),
+      }));
+    });
+
+    test('user CANNOT replace a non-empty phone during the privacy pause', async () => {
+      await seed('members/u1', { ...SAMPLE_MEMBER, phoneNumber: 'existing-value' });
+      const me = await db({ uid: 'u1', role: 'unverified' });
+      await assertFails(me.doc('members/u1').update({
+        phoneNumber: 'synthetic-phone-canary',
+        updatedAt: new Date(),
+      }));
+    });
+
+    test('user CANNOT clear an existing phone outside an approved deletion flow', async () => {
+      await seed('members/u1', { ...SAMPLE_MEMBER, phoneNumber: 'existing-value' });
+      const me = await db({ uid: 'u1', role: 'unverified' });
+      await assertFails(me.doc('members/u1').update({
+        phoneNumber: '',
+        updatedAt: new Date(),
+      }));
+    });
+
+    test('a name-only edit preserves an existing phone value byte-for-byte', async () => {
+      await seed('members/u1', { ...SAMPLE_MEMBER, phoneNumber: 'existing-value' });
+      const me = await db({ uid: 'u1', role: 'unverified' });
+      await assertSucceeds(me.doc('members/u1').update({
+        fullName: 'New Name',
+        updatedAt: new Date(),
+      }));
+
+      const updated = await me.doc('members/u1').get();
+      expect(updated.data().phoneNumber).toBe('existing-value');
+    });
+
     test.each([
       ['a non-string phone number', 12345],
       ['an oversized phone number', '1'.repeat(41)],
@@ -196,7 +227,6 @@ describe('members collection', () => {
       const me = await db({ uid: 'u1', role: 'unverified' });
       await assertFails(me.doc('members/u1').update({
         fullName: 'New Name',
-        phoneNumber: '555-1234',
         updatedAt: 'now',
       }));
     });

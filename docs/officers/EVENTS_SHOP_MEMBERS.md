@@ -168,11 +168,11 @@ flowchart LR
     C -- "No" --> E["Create one pending profile"]
     D --> F["Read through normal permissions"]
     E --> F
-    F -- "Success" --> G["Edit name and phone"]
+    F -- "Success" --> G["Edit name only; phone entry paused"]
     F -- "Failure" --> H["Hide Edit and show Try again"]
 ```
 
-In words: the server preserves an existing profile or creates one pending profile for the signed-in person; editing stays hidden unless the normal read succeeds.
+In words: the server preserves an existing profile or creates one pending profile for the signed-in person; editing stays hidden unless the normal read succeeds, and the temporary privacy pause permits name editing only.
 
 Safe officer steps:
 
@@ -194,6 +194,47 @@ Safe officer steps:
 **Undo:** ask the platform owner to prepare, approve, publish, and verify a reviewed revert or safe roll-forward. Never undo by deleting a member profile or login account.
 
 **Escalation:** membership lead plus identity/security owner. Add the privacy owner if private information appeared. Email landing in spam is a separate delivery problem; do not treat it as proof of this permission failure.
+
+## My Account phone collection pause — SOURCE ONLY, NOT LIVE
+
+**Purpose:** stop My Account from accepting another phone number while the club reviews why it collects phone data, who can access it, how long it is kept, and whether the live Firebase boundary matches the reviewed source.
+
+**Approver:** membership lead plus privacy/platform owner.
+
+**Prerequisites:** claimed issue [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178), a private redacted incident record under #112, the authorized service inventory under #113, made-up test data, and the protected backend-first release path. Do not put a member's number, spam message, screenshot, or provider record in GitHub, email, or AI.
+
+```mermaid
+flowchart LR
+    Account["Member opens My Account"] --> Read["Read this member's profile"]
+    Read --> Name["Display and edit name"]
+    Read --> Pause["Do not display or accept phone"]
+    Name --> Rules["Firebase Rules allow name-only update"]
+    PhoneAttempt["Browser tries a phone change"] --> Deny["Firebase Rules deny"]
+    Pause --> Existing["Existing stored value stays unchanged"]
+```
+
+In words: My Account shows and edits the member's name, does not display or accept a phone number, and leaves any existing stored value unchanged; the reviewed Rules deny a browser phone change.
+
+Officer steps after every prerequisite has proof:
+
+1. Tell members not to add a phone number in My Account.
+2. Do not ask whether a member already has a number stored.
+3. Do not copy a number or spam message into an issue, email, screenshot, or AI tool.
+4. Keep the Google membership form, event registration, shop, and provider review separate; this source change does not alter them.
+5. Ask the platform owner to identify the exact merged website and Rules revisions.
+6. Require the reviewed Rules to deploy and pass readback before the website is published.
+7. Use one made-up staged profile to prove name-only editing and phone-write denial.
+8. Check the exact website revision on `runmprc.com` without opening a real member profile.
+
+**Expected result:** My Account contains no phone value, phone input, or phone browser autocomplete. A name-only change succeeds. A direct non-empty phone change is denied. Existing stored data, membership, payment status, and external forms/providers remain unchanged.
+
+**Stop conditions:** a real member profile, a provider Console change, a database export, a request to inspect or delete stored numbers, skipped/partial Rules deployment, website publication before Rules proof, or a proposal to treat spam timing as proof of a breach.
+
+**Success proof:** exact #178 pull request and merge commit; green synthetic frontend and Rules tests; exact Rules deployment/readback; later website publication record; separate `runmprc.com` revision check; and a dated made-up name-only/phone-denial check. Google, Firebase, Sentry, Stripe, and other provider evidence remains separate and private.
+
+**Undo:** use one reviewed revert or safe roll-forward through the same backend-first gate. Do not restore phone collection until #110 approves its purpose, notice, access, and retention, and #113/#133/#136 prove the intended live boundary.
+
+**Escalation:** membership lead plus privacy/platform owner; use the private incident path under #112 if exposure is suspected.
 
 ## Admin screens — NOT AVAILABLE YET
 
