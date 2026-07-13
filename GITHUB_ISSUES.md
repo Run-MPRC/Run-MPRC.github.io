@@ -60,7 +60,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P0 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SAFETY-001/#99; SEC-001 and AUTH-003 for A; staged deferral/cutover with ABUSE-001A for C |
 | 9 | AUTH-003 | Introduce scoped admin capabilities, MFA, and recent authentication | P1 | L | proposed | AUTH-001, AUTH-002, SEC-001 |
 | 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | ready | CI-001 baseline |
-| 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | ready | ABUSE-001 interface agreed |
+| 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | partial: PAY-001A source/tests tracked in [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157); B/C/D and endpoint adoption open | ABUSE-001 interface agreed |
 | 12 | PROMO-001 | Disable unmodeled Stripe promotions until discounts are authoritative | P0 | S | source/tests complete under open GitHub issue #102; provider inventory and deployment remain owner action | PAY-001 for any future discount contract |
 | 13 | PAY-002 | Implement idempotent payment commands and explicit state machines | P0 | L | ready after PAY-001 | CONFIG-001, PAY-001 |
 | 14 | PAY-003 | Build idempotent, async-aware Stripe webhook ingestion | P0 | L | PAY-003A source merged in #101; PAY-003B/C remain open; not deployed | CONFIG-001, PAY-001/PAY-002 target contract |
@@ -533,8 +533,14 @@ App Check is not authentication. Do not remove Auth/capability checks or rely on
 ## PAY-001 — Add strict request schemas and immutable monetary snapshots
 
 **Labels:** `priority:P0`, `type:security`, `area:stripe`, `area:race`, `area:shop`, `size:L`
-**Status:** Ready
+**Status:** Partial. PAY-001A source/tests are tracked in live [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157). PAY-001B/C/D, endpoint adoption, snapshots, deployment, and live behavior remain open.
 **Depends on:** ABUSE-001 interface agreed
+
+### Current atomic boundary
+
+PAY-001A adds dependency-free strict-root-object, root-budget, bounded array/string, integer-cents, fixed-currency, calendar-date, canonical-URL, conservative-email, fixed-error, and closed-enum safe-log primitives. Unknown configured root keys reject; nested values remain data-only/budgeted until endpoint-owned exact schemas validate them. The libraries return new immutable values, contain no Firebase, Stripe, network, logger, clock, or random dependency, and make no such call themselves. A supplied array item parser must be trusted, pure, synchronous, and endpoint-owned. Exact review, merge, and hosted-CI status belong to [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157).
+
+No current endpoint imports these helpers. Race, merchandise, lookup, refund, cancellation, substitution, role, tracking, export, and dynamic custom-field schemas remain **NOT AVAILABLE YET** under PAY-001B/C/D. PAY-001A also does not create immutable price/waiver snapshots, deploy Firebase, configure Stripe, or prove production protection.
 
 ### Problem
 

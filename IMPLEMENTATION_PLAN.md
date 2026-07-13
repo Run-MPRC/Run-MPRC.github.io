@@ -108,6 +108,8 @@ Exit gate:
 - Sensitive callables enforce App Check at the Firebase runtime.
 - All public/admin request shapes are strict, bounded, server-validated, and covered by hostile-input tests.
 
+**Current partial boundary:** PAY-001A is tracked in live [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157). It provides pure strict-object, shared-budget, scalar, fixed-error, and safe-log primitives with synthetic hostile-input tests. No current endpoint imports them, so PAY-001B/C/D endpoint schemas, immutable monetary snapshots, deployment, and live protection remain **NOT AVAILABLE YET**.
+
 ### Phase 2 — Build the payment integrity core
 
 **Issues:** PROMO-001, PAY-002, PAY-003, RACE-001, MERCH-001
@@ -211,7 +213,7 @@ The first tranche deliberately combines one urgent safety repair with the most c
 3. **SEC-001 — Firestore trust boundaries:** #100 merged through [PR #123](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/123) at `a7fc301e85b0aeabe396e771faea21d3fc8e7b2b`. Source and 295 Rules tests remove recursive browser-admin authority. Firebase deployment explicitly skipped, so deployed/live Rules remain unproven under #105.
 4. **PROMO-001 — fail-safe monetary policy:** [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102) disables promotion entry and automatic tax in both current creators, adds exact payload tests, and quarantines unknown or nonzero discount/tax/shipping adjustments on success, failure, and expiry. The private pre-change Session/provider inventory, protected deployment, provider readback, and live verification remain owner actions; no discount, tax, or shipping feature is authorized.
 5. **Identity/config next:** AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) merged at `ce22c110`, proving source/tests for unverified-target rejection at the existing role-grant endpoints. Its Firebase deployment skipped, so backend-live status is unproven and the remaining AUTH-001 parent work stays open. CONFIG-001A merged through [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) / PR #150 as `2c62b8dd`, but remains undeployed. CONFIG-001B1 is tracked in [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) for fail-closed read-only admission; B2 retains the protected audited operator control, provider-object recovery, and drill. Follow the live issues and do not duplicate these slices.
-6. **Then:** PAY-001/PAY-002 so checkout creation, refunds, and every later handler share strict schemas and idempotent state.
+6. **PAY-001/PAY-002:** PAY-001A source/tests are tracked in [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157) as the shared validation/logging foundation. PAY-001B/C/D must still wire exact endpoint schemas and immutable snapshots before PAY-002 can make checkout creation, refunds, and later handlers idempotent.
 7. **Then:** RACE-001 and MERCH-001 transactional reservations.
 
 Why this order: SAFETY-001 removes immediate accidental-production and callback hazards without schema impact. PAY-003 closes the most dangerous “unpaid looks paid” and replay gaps while establishing test fixtures. The subsequent trust-boundary and command/state work completes the surrounding architecture; no live launch is authorized by the partial webhook patch alone.

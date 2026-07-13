@@ -101,6 +101,19 @@ The backend should remain correct if a delayed method appears accidentally:
 - Keep Stripe IDs as references, not proof: Session, PaymentIntent, Charge, Refund, Product, Price, and Event IDs each have different semantics.
 - Do not put PII, waiver text, emergency contacts, or secrets in Stripe metadata. Use opaque local IDs and a schema version.
 
+### Shared request-safety primitives (PAY-001A)
+
+PAY-001A is tracked in live issue [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157). It adds two pure CommonJS libraries for later server endpoint work:
+
+- `requestValidation` accepts an exact root plain object with own data properties, rejects unknown configured root keys and dangerous keys anywhere, returns a new deeply frozen value, and applies one technical budget across a strict-object tree. Nested values are data-only and budgeted; every nested object still needs an endpoint-owned exact schema. The hard ceilings are depth 6, 100 object/array entries, 50 items per array, 128 code points/512 bytes per key, 2,000 code points/8,192 bytes per string, and 64 KiB serialized. Every endpoint must define a smaller business limit where appropriate.
+- Its scalar helpers accept only nonnegative integer cents (maximum 100,000,000 technical cents, with a lower endpoint limit expected), launch currency `usd`, canonical calendar dates, canonical HTTPS DNS URLs, explicitly enabled canonical test/development loopback URLs, and conservative bounded ASCII email syntax. URL syntax validation is not an outbound-host authorization or SSRF allowlist. Email syntax is not proof of identity, membership, or delivery.
+- `safeLogging` creates only a new frozen five-field projection—event, operation, outcome, code, and environment—from fixed low-cardinality values. It cannot copy request bodies, arbitrary keys, IDs, URLs, contact details, addresses, Stripe/OAuth material, or raw errors, and it does not call a logger.
+- Failures expose one fixed message and a fixed reason category. Supplied values and provider details are not included.
+
+The libraries contain no Firebase, Stripe, provider, logger, network, clock, or random dependency and make no such call themselves. `parseBoundedArray` deliberately invokes a supplied item parser; that parser must be trusted, pure, synchronous, and endpoint-owned.
+
+These helpers are a source/test foundation only. No checkout, refund, admin, webhook, Firebase, or Stripe endpoint imports them in PAY-001A. Endpoint schemas, immutable business-price snapshots, deployment, and production behavior remain **NOT AVAILABLE YET** under PAY-001B/C/D and later payment issues.
+
 ## 5. Catalog model
 
 ### Race pricing
