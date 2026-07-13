@@ -61,7 +61,7 @@ If any proof is missing, report the change as **not live**.
 
 **Approver:** membership lead plus identity/platform owner.
 
-**Prerequisites:** issue [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) is merged; the exact website revision is published and verified; and the identity owner confirms the plain status text. Before calling My Account a working recovery path, also verify the profile Rules, Functions, and page from [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) plus the resend truth/cooldown child under [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120). Email sender and Spam-folder improvements remain separate owner work in [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
+**Prerequisites:** issue [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) is merged. Before publishing the #153 website revision, verify that the exact [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) Rules and Functions were deployed and read back. After publishing, verify the matching profile page and the resend result/countdown from [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) before calling My Account a working recovery path. The identity owner must confirm the plain status text. Source or merge evidence alone is not live proof. Email sender and Spam-folder improvements remain separate owner work in [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
 
 ```mermaid
 flowchart TD
@@ -70,10 +70,16 @@ flowchart TD
     B -- "Yes" --> D["Show Account created"]
     D --> E{"Did the email service accept the request?"}
     E -- "Yes" --> F["Say accepted; check Inbox and Spam"]
-    E -- "No" --> G["Keep account; check My Account; stop if unavailable"]
+    E -- "No" --> G["Keep account; open My Account"]
+    G --> H["Choose Request once"]
+    H --> I{"Was the request accepted?"}
+    I -- "Yes" --> K["Wait through the same 60-second countdown"]
+    I -- "No" --> K
+    K -- "Accepted result" --> J["Check Inbox and Spam once"]
+    K -- "Unavailable result" --> L["Try once more, then stop and escalate"]
 ```
 
-In words: account creation and the later email request are two separate results. Neither result proves that an email reached the Inbox.
+In words: account creation and each later email request are separate results. Accepted does not mean delivered. The same 60-second browser wait follows either resend result. Refreshing the page or changing accounts can reset that display, so it is not a server safety limit.
 
 Until the prerequisites are proven, the current website message may still be wrong. Do not treat it as delivery evidence.
 
@@ -85,14 +91,19 @@ Officer steps after live proof:
 4. If the message is in Spam, ask them to mark it **Not spam**.
 5. If the status says the request did not finish, ask them to choose **Check My Account**.
 6. If My Account is unavailable, stop. Keep the account and open a redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
-7. Do not ask the member to use the existing Resend button yet. A truthful resend result, cooldown, and session recovery are **NOT AVAILABLE YET** under parent issue [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120).
-8. Stop repeated create-account or resend attempts.
+7. Use the next steps only after the exact [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) website revision is published and verified. Until then, stop and escalate.
+8. Ask the member to choose **Request another verification email** once.
+9. Ask them to wait through the full visible 60-second countdown.
+10. If the page says the request was accepted, ask them to check Inbox and Spam once. Do not promise delivery.
+11. If the page says the request was unavailable, wait for the countdown and try once more.
+12. If that second request is unavailable, stop. Open a redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
+13. Do not refresh to bypass the display, create another account, or keep clicking. Firebase can still throttle a reset browser countdown.
 
-**Expected result:** the page says `Account created` only after creation succeeds. It separately says the email request was accepted or did not finish. It never displays the member's address or the provider's error. An unavailable My Account page is a stop-and-escalate result, not proof that the account failed.
+**Expected result:** the page says `Account created` only after creation succeeds. It separately says an email request was accepted or unavailable. My Account disables the request action for 60 visible seconds after either result. The request-result message never repeats the member's address or the provider's error. An unavailable My Account page is a stop-and-escalate result, not proof that the account failed.
 
-**Stop conditions:** a request for private account details, repeated resends, a production email test, a claim that accepted means delivered, or a website revision that cannot be identified.
+**Stop conditions:** a request for private account details, more than one retry after the countdown, a production email test, refreshing to bypass the countdown, a claim that accepted means delivered, or a website revision that cannot be identified.
 
-**Success proof:** exact pull request and merge commit, green synthetic tests, website publication record, separate `runmprc.com` revision check, and dated plain-text review. Claim My Account recovery only after #118's exact backend/profile page and #120's truthful resend/cooldown child are verified together. Provider delivery, sender branding, Spam placement, and a real mailbox remain unproven unless #119 records owner-approved private evidence.
+**Success proof:** exact pull requests and merge commits for #145, #118, and #153; green synthetic tests; exact #118 Rules and Function deployment/readback before the website; a made-up profile-page check; website publication record; separate `runmprc.com` revision check; and dated plain-text review. Provider delivery, sender branding, Spam placement, and a real mailbox remain unproven unless #119 records owner-approved private evidence.
 
 **Undo:** publish and verify one reviewed frontend revert or safe roll-forward. Do not delete or recreate the Firebase account.
 
