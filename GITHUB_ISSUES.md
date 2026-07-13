@@ -129,7 +129,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 ### Agent handoff
 
-Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A/DATA-001A must design a safe handoff before a callback page depends on an App Check-protected browser request; do not weaken the initial capability guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
+Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A must explicitly defer App Check enforcement on `lookupRegistration`, `lookupOrder`, and `stravaExchangeCode` while the initial capability guard is active. DATA-001A owns the two payment-confirmation handoffs; OAUTH-001C owns the Strava exchange handoff. Do not weaken the guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
 
 ---
 
@@ -486,6 +486,7 @@ App Check is optional on the client and enforced only by a custom `ENFORCE_APP_C
 
 - Configure reCAPTCHA Enterprise for each web environment and observe App Check metrics.
 - Replace custom fail-open checks with Firebase `enforceAppCheck: true` runtime options on sensitive callable functions.
+- Inventory the exact callable group. Mark `lookupRegistration` and `lookupOrder` deferred until DATA-001A supplies a tested safe confirmation handoff. Mark `stravaExchangeCode` deferred until OAUTH-001C supplies a tested safe OAuth handoff.
 - Evaluate limited-use/replay-protected tokens for checkout/refund commands after measuring web support and latency.
 - Derive client address only from platform-trusted request metadata.
 - HMAC rate-limit identifiers with a bound rotating secret; do not store raw email/IP.
@@ -496,6 +497,7 @@ App Check is optional on the client and enforced only by a custom `ENFORCE_APP_C
 ### Acceptance criteria
 
 - [ ] Hosted sensitive callables reject missing/invalid App Check without relying on an optional env toggle.
+- [ ] The enforcement inventory explicitly excludes the three initial-callback callables until their named handoff dependency merges; a test prevents accidental early enforcement.
 - [ ] Local emulator/CI behavior is explicit and cannot silently route to production.
 - [ ] Rate-limit documents contain no raw email/IP and expire automatically.
 - [ ] One attacker cannot block a victim solely by repeatedly submitting the victim's known email; mitigation/policy is documented.
@@ -505,12 +507,13 @@ App Check is optional on the client and enforced only by a custom `ENFORCE_APP_C
 ### Tests/evidence
 
 - Missing/invalid/valid App Check tests in staging.
+- Source inventory tests for enforced versus deferred callables, plus callback regression tests before any deferred callable moves to enforcement.
 - Rate-limit boundary, concurrent transaction, expiry, HMAC rotation, and spoofed-header tests.
 - Private console evidence for Enterprise key/domain, enforcement, TTL, budget, and alerts.
 
 ### Agent handoff
 
-App Check is not authentication. Do not remove Auth/capability checks or rely on it as the only bot/fraud control.
+App Check is not authentication. Do not remove Auth/capability checks or rely on it as the only bot/fraud control. Do not enforce it on `lookupRegistration`, `lookupOrder`, or `stravaExchangeCode` while #99 suppresses the reCAPTCHA provider on an initial capability URL. Move each callable only after DATA-001A or OAUTH-001C proves a safe handoff and the callback regression passes.
 
 ---
 
