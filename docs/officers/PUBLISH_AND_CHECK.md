@@ -44,7 +44,7 @@ As of **2026-07-13**:
 - `main` is the canonical branch.
 - A merge starts CI checks. It does not start `.github/workflows/deploy.yml`.
 - The release workflow accepts only a full commit already merged into `main`.
-- It requires successful frontend, Functions, commerce command journal, and Firestore Rules checks for that commit.
+- It requires successful frontend, Functions, commerce command journal, test artifact scrubber, and Firestore Rules checks for that commit.
 - Its only current release plan is the reviewed profile-recovery set: Firestore Rules, `createMemberOnSignUp`, and `ensureMemberProfile`.
 - A caller cannot type a Firebase project or deployment target into the release form.
 - Missing environment configuration or cloud authority makes the release red before backend dependencies, cloud authentication, or deployment. A public website artifact may be prepared without cloud authority, but it cannot be published.
@@ -97,18 +97,19 @@ If a member or officer sees **Server configuration is unavailable**:
 6. Confirm `Run frontend Jest tests` is present and green.
 7. Confirm `Run SPA callback safety tests` is present and green.
 8. Confirm `Commerce command journal emulator` is present and green. It uses made-up payment-command records and does not contact Stripe.
-9. Confirm the Functions and Firestore Rules jobs are green.
-10. Use a preview only for public, read-only pages.
-11. Do not sign in, open private/admin pages, submit forms, or test signup, checkout, refund, email, or Strava in a preview.
-12. Confirm the officer guide and undo note are present.
-13. Approve or reject the merge. Do not describe merge approval as release approval.
+9. Confirm `Test artifact scrubber` is green. It proves the deliberate made-up output scan ran. It does not prove a report was uploaded or a live service changed.
+10. Confirm the Functions and Firestore Rules jobs are green.
+11. Use a preview only for public, read-only pages.
+12. Do not sign in, open private/admin pages, submit forms, or test signup, checkout, refund, email, or Strava in a preview.
+13. Confirm the officer guide and undo note are present.
+14. Approve or reject the merge. Do not describe merge approval as release approval.
 
 ## After merge
 
 1. Record the pull request number.
 2. Record the full merged commit.
 3. Wait for that commit's CI jobs.
-4. Confirm all four named jobs are green again: Frontend, Functions, commerce command journal, and Firestore Rules.
+4. Confirm all five named jobs are green again: Frontend, Functions, commerce command journal, test artifact scrubber, and Firestore Rules.
 5. Mark the result **merged — not released**.
 6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from the merge.
 7. If Netlify unexpectedly publishes the merge, stop and treat it as a hosting incident.
@@ -179,6 +180,7 @@ Stop and contact the platform owner if:
 - A project or deployment target can be typed freely.
 - Netlify publishes unexpectedly or its live commit is unknown.
 - A test needs real member, payment, or private data.
+- `Test artifact scrubber` is missing or red, or anyone asks you to bypass it.
 
 ## Success proof
 
@@ -221,6 +223,6 @@ Known remaining problem:
 
 ## Undo
 
-Use one reviewed rollback or safe roll-forward commit through the same protected, backend-first gate. Restore a compatible Firebase set before publishing a dependent website. A Netlify rollback remains a provider-owner procedure and is **NOT AVAILABLE YET** for backup officers.
+Use one reviewed rollback or safe roll-forward commit through the same protected, backend-first gate. Restore a compatible Firebase set before publishing a dependent website. Before removing `Test artifact scrubber`, a platform maintainer must confirm that no later test-report job depends on its exact name. Never bypass the check to make a release pass. A Netlify rollback remains a provider-owner procedure and is **NOT AVAILABLE YET** for backup officers.
 
-**Escalation:** platform owner plus backup for release/hosting; Firebase owner for backend; treasurer plus platform owner for commerce; privacy owner for member data.
+**Escalation:** platform owner plus backup for release/hosting; Firebase owner for backend; treasurer plus platform owner for commerce; privacy owner for member data. If real credentials, member details, or private links appear in output, stop and open a security incident. Do not copy the value into GitHub, a screenshot, email, or an AI tool.

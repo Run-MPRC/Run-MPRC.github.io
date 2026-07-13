@@ -37,6 +37,7 @@ Use the club's approved password manager for access. Share only a public link or
 - **Code changed:** What changed?
 - **Hosted frontend tests passed:** Did the `Frontend lint + build` job show a green `Run frontend Jest tests` step? Jest is the automated frontend behavior test.
 - **Hosted payment-safety test passed:** Did the `Commerce command journal emulator` job finish green? This check uses made-up records in a closed test database.
+- **Hosted test-output safety check passed:** Did the `Test artifact scrubber` job finish green? It proves the deliberate made-up output scan ran. It does not prove that a report was uploaded or that a live service changed.
 - **Other tests passed:** What else was checked for this change?
 - **Code merged:** Which pull request was approved?
 - **Release approved:** Which environment, exact commit, and named approver were recorded?

@@ -113,6 +113,7 @@ jobs:
             "Frontend lint + build" \
             "Cloud Functions lint + test" \
             "Commerce command journal emulator" \
+            "Test artifact scrubber" \
             "Firestore security-rules tests"
           do
             if ! jq -e --arg name "$required_job" '
@@ -393,6 +394,7 @@ jobs:
             "Frontend lint + build" \
             "Cloud Functions lint + test" \
             "Commerce command journal emulator" \
+            "Test artifact scrubber" \
             "Firestore security-rules tests"
           do
             if ! jq -e --arg name "$required_job" '
