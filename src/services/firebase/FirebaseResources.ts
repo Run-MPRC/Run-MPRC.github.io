@@ -15,6 +15,8 @@ import {
   getFunctions,
 } from 'firebase/functions';
 
+import hasCapabilityCallbackState from '../monitoring/capabilityCallback';
+
 const isLocalRuntime = process.env.NODE_ENV !== 'production';
 const LOCAL_FIREBASE_PROJECT_ID = 'demo-mprc-local';
 const FUNCTION_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
@@ -119,7 +121,12 @@ class FirebaseResources {
   private async initAnalytics(): Promise<void> {
     // Analytics has no Emulator Suite target. Never initialize it from local
     // development or tests, even when a production measurement ID is present.
-    if (isLocalRuntime) return;
+    // A restored OAuth/checkout callback may contain a capability in its URL;
+    // do not let automatic analytics startup observe that initial location.
+    if (
+      isLocalRuntime
+      || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
+    ) return;
     try {
       const supported = await isSupported();
       if (supported) {

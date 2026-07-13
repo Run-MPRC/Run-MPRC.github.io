@@ -95,10 +95,11 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 - Preserve same-origin pathname, search, and hash through the GitHub Pages root redirect.
 - Clear temporary redirect state before restoration and reject malformed, protocol-relative, or cross-origin targets.
+- Send only the site origin as the referrer when either Pages document loads a subresource.
 - Use a fully synthetic Firebase configuration in development/test.
 - Connect shared Auth, Firestore, and Functions clients to their loopback emulators and stop startup if connector setup fails.
 - Route the existing direct CSV Function URL through the same local/production resolver.
-- Keep App Check, Analytics, and Sentry off locally; do not initialize Sentry on an initial capability callback URL.
+- Keep App Check, Analytics, and Sentry off locally; do not initialize Analytics or Sentry on an initial capability callback URL.
 - Add focused callback, environment, failure, direct-URL, and monitoring tests.
 
 ### Acceptance criteria
@@ -106,9 +107,11 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 - [x] `/register/success?session_id=cs_test_x&reg=r1#done` restores exactly after the 404 bridge.
 - [x] `/account/strava/callback?code=x&state=y` restores query parameters.
 - [x] Cross-origin and protocol-relative stored targets are discarded.
+- [x] Both Pages documents apply `strict-origin` before their first subresource.
 - [x] Auth, Firestore, and Functions all connect to emulators in development.
 - [x] Development/test Firebase configuration contains no production project identifiers.
 - [x] App Check, Analytics, and Sentry do not initialize locally, even when public config is present.
+- [x] Analytics and Sentry do not initialize on an initial capability callback carrying query or fragment state.
 - [x] Every Auth/Firestore/Functions connector failure stops local startup.
 - [x] The direct CSV export resolves to the local Functions emulator outside production.
 - [x] None connects to an emulator in a production build.
@@ -117,8 +120,8 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 ### Verification
 
-- Node 20: 9/9 standalone SPA navigation tests.
-- Node 20: 16/16 focused Firebase/Sentry tests and 4 frontend suites / 32 tests.
+- Node 20: 10/10 standalone SPA navigation/referrer-policy tests.
+- Node 20: 20/20 focused Firebase/monitoring tests and 4 frontend suites / 36 tests.
 - Node 20: Functions lint and 17/17 Functions tests.
 - Java 17 + Firebase CLI: demo-only Auth/Firestore/Functions readiness and loopback-port smoke.
 - Diagnostic production compile invoked without the sitemap-generating prebuild.

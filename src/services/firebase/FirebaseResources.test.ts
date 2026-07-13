@@ -52,12 +52,18 @@ function setNodeEnv(value: string | undefined) {
   });
 }
 
-function createResourcesFor(nodeEnv: string, siteKey?: string) {
+function createResourcesFor(
+  nodeEnv: string,
+  siteKey?: string,
+  locationPath = '/',
+) {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+  const originalLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   setNodeEnv(nodeEnv);
   if (siteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
   else process.env.REACT_APP_RECAPTCHA_SITE_KEY = siteKey;
+  window.history.replaceState(null, '', locationPath);
 
   try {
     let resources: import('./FirebaseResources').default;
@@ -68,6 +74,7 @@ function createResourcesFor(nodeEnv: string, siteKey?: string) {
     });
     return resources!;
   } finally {
+    window.history.replaceState(null, '', originalLocation);
     setNodeEnv(originalNodeEnv);
     if (originalSiteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
     else process.env.REACT_APP_RECAPTCHA_SITE_KEY = originalSiteKey;
@@ -175,6 +182,18 @@ describe('FirebaseResources environment isolation', () => {
       'https://us-central1-mid-peninsula-running-club.cloudfunctions.net/'
       + 'exportRegistrationsCsv',
     );
+  });
+
+  test.each([
+    '/account/strava/callback?code=example&state=example-state',
+    '/register/success?registration=r1&token=example-capability',
+    '/shop/purchase/success?order=o1&token=example-capability',
+    '/register/success#example-capability',
+  ])('production does not initialize Analytics on a capability callback: %s', (pathName) => {
+    createResourcesFor('production', 'configured-public-site-key', pathName);
+
+    expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
+    expect(mockGetAnalytics).not.toHaveBeenCalled();
   });
 
   test('rejects malformed direct Function names before building a URL', () => {

@@ -147,3 +147,25 @@ test('the Pages documents invoke the shared capture and restore actions', () => 
   assert.doesNotMatch(notFound, /sessionStorage\.setItem/);
   assert.doesNotMatch(index, /sessionStorage\.getItem/);
 });
+
+test('the Pages documents strip callback details before loading subresources', () => {
+  const root = path.join(__dirname, '..', 'public');
+  const documents = [
+    fs.readFileSync(path.join(root, '404.html'), 'utf8'),
+    fs.readFileSync(path.join(root, 'index.html'), 'utf8'),
+  ];
+
+  documents.forEach((document) => {
+    const policyIndex = document.search(
+      /<meta name="referrer" content="strict-origin"\s*\/?\s*>/i,
+    );
+    const firstSubresourceIndex = document.search(/<(?:script|link|img)\b/i);
+
+    assert.notEqual(policyIndex, -1, 'strict-origin policy must be present');
+    assert.notEqual(firstSubresourceIndex, -1, 'document must load a subresource');
+    assert.ok(
+      policyIndex < firstSubresourceIndex,
+      'referrer policy must precede every subresource',
+    );
+  });
+});

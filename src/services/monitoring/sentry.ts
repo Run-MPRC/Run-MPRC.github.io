@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/react';
 
+import hasCapabilityCallbackState from './capabilityCallback';
+
 /**
  * Initialize Sentry error monitoring iff REACT_APP_SENTRY_DSN is set.
  * Without the DSN this is a no-op, so the build works fine without Sentry
@@ -10,25 +12,16 @@ import * as Sentry from '@sentry/react';
  */
 
 let initialized = false;
-const CAPABILITY_CALLBACK_PATHS = new Set([
-  '/account/strava/callback',
-  '/register/success',
-  '/shop/purchase/success',
-]);
-
-function hasCapabilityCallbackState(): boolean {
-  if (typeof window === 'undefined') return false;
-  const { pathname, search, hash } = window.location;
-  return CAPABILITY_CALLBACK_PATHS.has(pathname)
-    && (search.length > 0 || hash.length > 0);
-}
 
 export function initSentry(): void {
   if (initialized) return;
   // Local/test sessions must not reach an outside monitoring service. In
   // production, do not initialize on callback URLs carrying OAuth or checkout
   // capabilities. #111 owns the broader hosted redaction/replay policy.
-  if (process.env.NODE_ENV !== 'production' || hasCapabilityCallbackState()) return;
+  if (
+    process.env.NODE_ENV !== 'production'
+    || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
+  ) return;
   const dsn = process.env.REACT_APP_SENTRY_DSN;
   if (!dsn) return;
   const environment = process.env.REACT_APP_SENTRY_ENV
