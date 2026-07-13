@@ -56,7 +56,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | ready | CI-001A recommended |
 | 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; backend live unproven; parent open | SEC-001 recommended |
 | 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | ready | AUTH-001 |
-| 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P1 | M | proposed | SEC-001, AUTH-003 capability model |
+| 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P0 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SAFETY-001/#99; SEC-001 and AUTH-003 for A; staged deferral/cutover with ABUSE-001A for C |
 | 9 | AUTH-003 | Introduce scoped admin capabilities, MFA, and recent authentication | P1 | L | proposed | AUTH-001, AUTH-002, SEC-001 |
 | 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | ready | CI-001 baseline |
 | 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | ready | ABUSE-001 interface agreed |
@@ -129,7 +129,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 ### Agent handoff
 
-Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A must explicitly defer App Check enforcement on `lookupRegistration`, `lookupOrder`, and `stravaExchangeCode` while the initial capability guard is active. DATA-001A owns the two payment-confirmation handoffs; OAUTH-001C owns the Strava exchange handoff. Do not weaken the guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
+Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A must explicitly defer App Check enforcement on `lookupRegistration`, `lookupOrder`, and `stravaExchangeCode` while the initial capability guard is active. DATA-001A owns the two payment-confirmation handoffs; OAUTH-001C within live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) owns the Strava exchange handoff. Do not weaken the guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
 
 ---
 
@@ -394,9 +394,11 @@ External workload identity configuration needs an authorized owner. Do not repla
 
 ## OAUTH-001 — Make Strava token lifecycle server-only, transactional, and auditable
 
-**Labels:** `priority:P1`, `type:security`, `type:reliability`, `area:auth`, `area:firebase`, `size:M`, `needs-external-config`
-**Status:** Proposed
-**Depends on:** SEC-001 and AUTH-003 capability model
+**Labels:** `priority:P0`, `type:security`, `area:auth`, `area:strava`, `size:M`, `status:proposed`, `needs-external-config`
+**Status:** Represented by live [#88 — STRAVA-001](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed, unassigned, and unclaimed
+**Depends on:** SAFETY-001/#99 for C; SEC-001 and AUTH-003 capability model for A; ABUSE-001A may proceed with `stravaExchangeCode` deferred, then C proves its safe cutover
+
+**Canonical live tracker:** [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88). OAUTH-001A/B/C are bounded slices inside that tracker, not separate tickets to publish without first splitting and cross-linking #88.
 
 ### Problem
 
@@ -431,7 +433,7 @@ SEC-001 removes browser access to stored OAuth secrets, but that does not comple
 
 ### Agent handoff
 
-Use OAUTH-001A/B/C from the atomic slices. A owns refresh concurrency, B owns scopes/revocation/governance, and C owns the initial protected callback handoff. Never call the real Strava API with a member token in tests and never migrate/export production token documents into the workspace.
+Use OAUTH-001A/B/C as bounded outcomes within canonical tracker [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88). A owns refresh concurrency, B owns scopes/revocation/governance, and C owns the initial protected callback handoff. Do not publish any of them as a duplicate ticket; if #88 must be split, first make #88 the explicit tracker and cross-link the claimed child. Never call the real Strava API with a member token in tests and never migrate/export production token documents into the workspace.
 
 ---
 
@@ -489,7 +491,7 @@ App Check is optional on the client and enforced only by a custom `ENFORCE_APP_C
 
 - Configure reCAPTCHA Enterprise for each web environment and observe App Check metrics.
 - Replace custom fail-open checks with Firebase `enforceAppCheck: true` runtime options on sensitive callable functions.
-- Inventory the exact callable group. Mark `lookupRegistration` and `lookupOrder` deferred until DATA-001A supplies a tested safe confirmation handoff. Mark `stravaExchangeCode` deferred until OAUTH-001C supplies a tested safe OAuth handoff.
+- Inventory the exact callable group. Mark `lookupRegistration` and `lookupOrder` deferred until DATA-001A supplies a tested safe confirmation handoff. Mark `stravaExchangeCode` deferred until OAUTH-001C within canonical tracker #88 supplies a tested safe OAuth handoff.
 - Evaluate limited-use/replay-protected tokens for checkout/refund commands after measuring web support and latency.
 - Derive client address only from platform-trusted request metadata.
 - HMAC rate-limit identifiers with a bound rotating secret; do not store raw email/IP.
@@ -516,7 +518,7 @@ App Check is optional on the client and enforced only by a custom `ENFORCE_APP_C
 
 ### Agent handoff
 
-App Check is not authentication. Do not remove Auth/capability checks or rely on it as the only bot/fraud control. Do not enforce it on `lookupRegistration`, `lookupOrder`, or `stravaExchangeCode` while #99 suppresses the reCAPTCHA provider on an initial capability URL. Move each callable only after DATA-001A or OAUTH-001C proves a safe handoff and the callback regression passes.
+App Check is not authentication. Do not remove Auth/capability checks or rely on it as the only bot/fraud control. Do not enforce it on `lookupRegistration`, `lookupOrder`, or `stravaExchangeCode` while #99 suppresses the reCAPTCHA provider on an initial capability URL. Move each callable only after DATA-001A or OAUTH-001C within canonical tracker #88 proves a safe handoff and the callback regression passes.
 
 ---
 
