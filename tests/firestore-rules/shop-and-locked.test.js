@@ -402,6 +402,37 @@ describe('server-only operational collections', () => {
   });
 
   describe.each([
+    ['anonymous', undefined],
+    ['member', { uid: 'member-1', role: 'member' }],
+    ['browser admin', { uid: 'admin-1', role: 'admin' }],
+  ])('checkoutRequests provider send evidence — %s', (_label, auth) => {
+    const existingPath = 'checkoutRequests/synthetic-existing/providerAttempts/0000000001/sendEvidence/first';
+    const newPath = 'checkoutRequests/synthetic-new/providerAttempts/0000000001/sendEvidence/first';
+    const evidence = {
+      providerSendEvidenceSchemaVersion: 1,
+      providerAttempt: 1,
+      provider: 'stripe',
+      providerPlanCommitment: 'c'.repeat(64),
+      prePostFenceEpoch: 1,
+    };
+
+    test('CANNOT read, create, update, delete, list, or collection-group-list send evidence', async () => {
+      await seed(existingPath, evidence);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingPath).get());
+      await assertFails(client.doc(newPath).set(evidence));
+      await assertFails(client.doc(existingPath).update({ providerAttempt: 2 }));
+      await assertFails(client.doc(existingPath).delete());
+      await assertFails(
+        client.collection('checkoutRequests/synthetic-existing/providerAttempts/0000000001/sendEvidence')
+          .get(),
+      );
+      await assertFails(client.collectionGroup('sendEvidence').get());
+    });
+  });
+
+  describe.each([
     ['promoCodes/PROMO1', 'promoCodes/PROMO2', { discountPercent: 10 }],
     ['ratelimits/checkout_ip__1.2.3.4', 'ratelimits/checkout_ip__5.6.7.8', { count: 5 }],
     ['mail/message1', 'mail/message2', { to: ['runner@example.com'] }],

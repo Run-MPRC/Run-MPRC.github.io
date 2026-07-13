@@ -12,11 +12,13 @@ const {
 const {
   journalSchemaVersion,
   lifecycleSchemaVersion,
+  providerSendEvidenceSchemaVersion,
   CommerceCommandJournalError,
   acquireCommerceCommandLease,
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
+  recordInitialStripeSendEvidence,
   registerCommerceCommand,
 } = require('./commerceCommandJournal');
 
@@ -40,6 +42,7 @@ const GOLDEN_IDEMPOTENCY_KEY_FINGERPRINT = '104e34d2323cce2f25e0d5f391f9ebc3b581
 const RAW_CALLER = 'private-runner@example.test';
 const HOSTILE_CANARY = 'private-runner@example.test/token?secret=do-not-copy';
 const NOW_MILLIS = 1800000000123;
+const PROVIDER_SEND_RETRY_WINDOW_MILLIS = 23 * 60 * 60 * 1000;
 
 function frozenRecord(entries = []) {
   const value = Object.create(null);
@@ -273,6 +276,18 @@ function providerPlanPaths(input) {
     providerPlanAuditPath: documentPath(
       'auditEvents',
       `commerce_provider_attempt_${identity.commandKeyHash}_0000000001`,
+    ),
+  });
+}
+
+function providerSendPaths(input) {
+  const paths = providerPlanPaths(input);
+  return Object.freeze({
+    ...paths,
+    providerSendPath: `${paths.providerPlanPath}/sendEvidence/first`,
+    providerSendAuditPath: documentPath(
+      'auditEvents',
+      `commerce_provider_send_${paths.commandKeyHash}_0000000001`,
     ),
   });
 }
@@ -2221,6 +2236,569 @@ describe('provider plan fail-closed record and input boundary', () => {
   });
 });
 
+describe('pre-POST Stripe send evidence and retry cutoff', () => {
+  let nowMillis;
+  let timestampNow;
+
+  beforeEach(() => {
+    nowMillis = NOW_MILLIS;
+    timestampNow = jest.spyOn(Timestamp, 'now')
+      .mockImplementation(() => Timestamp.fromMillis(nowMillis));
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  async function createBoundPlan(mock, overrides = {}) {
+    await registerCommerceCommand(validInput(mock.db, overrides));
+    nowMillis += 1000;
+    await acquireCommerceCommandLease(leaseInput(mock.db, overrides));
+    nowMillis += 1000;
+    await bindInitialStripeProviderPlan(providerPlanInput(mock.db, overrides));
+  }
+
+  async function recordEvidence(mock, overrides = {}) {
+    nowMillis += 1000;
+    return recordInitialStripeSendEvidence(providerPlanInput(mock.db, overrides));
+  }
+
+  test('atomically records one pre-send pair after all reads and preserves B2A/B2B/C1 bytes', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    const input = providerPlanInput(mock.db);
+    const paths = providerSendPaths(input);
+    const preserved = cloneStore(mock.store);
+    const callsBefore = timestampNow.mock.calls.length;
+
+    const result = await recordEvidence(mock);
+
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      providerPlanSchemaVersion: 1,
+      providerSendEvidenceSchemaVersion: 1,
+      outcome: 'send_permitted',
+      state: 'pre_send_recorded',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(timestampNow).toHaveBeenCalledTimes(callsBefore + 2);
+    const transactionRun = mock.callbackRuns.at(-1);
+    expect(transactionRun.transaction.get).toHaveBeenCalledTimes(8);
+    expect(transactionRun.transaction.create).toHaveBeenCalledTimes(2);
+    expect(Math.max(...transactionRun.transaction.get.mock.invocationCallOrder))
+      .toBeLessThan(Math.min(...transactionRun.transaction.create.mock.invocationCallOrder));
+    expect(transactionRun.writes.map((write) => write.ref.path)).toEqual([
+      paths.providerSendPath,
+      paths.providerSendAuditPath,
+    ]);
+
+    const evidence = mock.store.get(paths.providerSendPath);
+    const audit = mock.store.get(paths.providerSendAuditPath);
+    expect(evidence).toEqual({
+      providerSendEvidenceSchemaVersion: 1,
+      providerPlanSchemaVersion: 1,
+      commandIdentityVersion: 1,
+      commandKeyHash: paths.commandKeyHash,
+      providerAttempt: 1,
+      provider: 'stripe',
+      providerPlanCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      prePostFenceEpoch: 1,
+      prePostRecordedAt: expect.any(Timestamp),
+      automaticRetryDeadlineAt: expect.any(Timestamp),
+    });
+    expect(audit).toEqual({
+      providerSendAuditSchemaVersion: 1,
+      aggregateType: 'commerce_provider_send',
+      commandKeyHash: paths.commandKeyHash,
+      providerAttempt: 1,
+      eventType: 'provider_pre_send_recorded',
+      provider: 'stripe',
+      environment: 'test',
+      stripeMode: 'test',
+      providerOperation: PROVIDER_OPERATION,
+      providerPlanCommitment: evidence.providerPlanCommitment,
+      prePostFenceEpoch: 1,
+      automaticRetryDeadlineAt: expect.any(Timestamp),
+      occurredAt: expect.any(Timestamp),
+    });
+    expect(evidence.prePostRecordedAt).toBe(audit.occurredAt);
+    expect(evidence.automaticRetryDeadlineAt).toBe(audit.automaticRetryDeadlineAt);
+    expect(evidence.prePostRecordedAt.toMillis()).toBe(NOW_MILLIS + 3000);
+    expect(evidence.automaticRetryDeadlineAt.toMillis()
+      - evidence.prePostRecordedAt.toMillis()).toBe(PROVIDER_SEND_RETRY_WINDOW_MILLIS);
+    expect(Object.isFrozen(evidence)).toBe(true);
+    expect(Object.isFrozen(audit)).toBe(true);
+    for (const [path_, value] of preserved) expect(mock.store.get(path_)).toBe(value);
+
+    const rawStripeKey = createStripeIdempotencyKey({
+      stripeMode: 'test',
+      environment: 'test',
+      providerOperation: PROVIDER_OPERATION,
+      commandKeyHash: paths.commandKeyHash,
+      providerAttempt: 1,
+    }).stripeIdempotencyKey;
+    const rendered = JSON.stringify({ result, evidence, audit });
+    for (const raw of [
+      STRIPE_ACCOUNT_ID,
+      HOSTILE_CANARY,
+      rawStripeKey,
+      LEASE_ID,
+      RAW_CALLER,
+      COMMAND_ID,
+    ]) expect(rendered).not.toContain(raw);
+  });
+
+  test('transaction retries reuse one trusted timestamp, deadline, and immutable pair', async () => {
+    const foundation = createMockDb();
+    await createBoundPlan(foundation);
+    const mock = createMockDb([...foundation.store], { callbackRuns: 4 });
+    timestampNow.mockClear();
+    nowMillis += 1000;
+
+    const result = await recordInitialStripeSendEvidence(providerPlanInput(mock.db));
+
+    expect(result.outcome).toBe('send_permitted');
+    expect(timestampNow).toHaveBeenCalledTimes(2);
+    const retries = mock.callbackRuns.slice(-4);
+    expect(retries).toHaveLength(4);
+    const evidence = retries.map(({ writes }) => writes[0].value);
+    const audits = retries.map(({ writes }) => writes[1].value);
+    expect(new Set(evidence.map((value) => value.prePostRecordedAt))).toHaveProperty('size', 1);
+    expect(new Set(evidence.map((value) => value.automaticRetryDeadlineAt)))
+      .toHaveProperty('size', 1);
+    expect(new Set(audits.map((value) => value.occurredAt))).toHaveProperty('size', 1);
+    expect(new Set(audits.map((value) => value.automaticRetryDeadlineAt)))
+      .toHaveProperty('size', 1);
+  });
+
+  test('exact and canonically equivalent retries are read-only while plan changes conflict', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    await recordEvidence(mock);
+    const paths = providerSendPaths(providerPlanInput(mock.db));
+    const before = cloneStore(mock.store);
+    nowMillis += 1;
+    const equivalentParameters = validProviderParameters([
+      ['synthetic_reference', HOSTILE_CANARY],
+      ['currency', 'usd'],
+      ['amount_total', 2500],
+    ]);
+
+    await expect(recordInitialStripeSendEvidence(providerPlanInput(mock.db)))
+      .resolves.toMatchObject({ outcome: 'send_permitted' });
+    await expect(recordInitialStripeSendEvidence(providerPlanInput(mock.db, {
+      providerParameters: equivalentParameters,
+    }))).resolves.toMatchObject({ outcome: 'send_permitted' });
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db, {
+        stripeAccountId: OTHER_STRIPE_ACCOUNT_ID,
+      })),
+      'command_conflict',
+      [STRIPE_ACCOUNT_ID, OTHER_STRIPE_ACCOUNT_ID],
+    );
+    expect(mock.store).toEqual(before);
+    expect(mock.store.get(paths.providerSendPath)).toBe(before.get(paths.providerSendPath));
+    expect(mock.store.get(paths.providerSendAuditPath))
+      .toBe(before.get(paths.providerSendAuditPath));
+    for (const { writes } of mock.callbackRuns.slice(-3)) expect(writes).toEqual([]);
+  });
+
+  test('a self-consistent C1 replacement cannot reuse earlier send evidence', async () => {
+    const original = createMockDb();
+    await createBoundPlan(original);
+    await recordEvidence(original);
+    const originalPaths = providerSendPaths(providerPlanInput(original.db));
+
+    nowMillis = NOW_MILLIS;
+    const replacement = createMockDb();
+    const replacementParameters = validProviderParameters([
+      ['amount_total', 5100],
+      ['currency', 'usd'],
+      ['synthetic_reference', 'replacement-plan'],
+    ]);
+    const replacementOverrides = {
+      stripeAccountId: OTHER_STRIPE_ACCOUNT_ID,
+      stripeApiVersion: '2024-06-20',
+      providerParameters: replacementParameters,
+    };
+    await registerCommerceCommand(validInput(replacement.db));
+    nowMillis += 1000;
+    await acquireCommerceCommandLease(leaseInput(replacement.db));
+    nowMillis += 1000;
+    await bindInitialStripeProviderPlan(providerPlanInput(
+      replacement.db,
+      replacementOverrides,
+    ));
+    const replacementPaths = providerPlanPaths(providerPlanInput(
+      replacement.db,
+      replacementOverrides,
+    ));
+
+    const replacedStore = cloneStore(original.store);
+    replacedStore.set(
+      originalPaths.providerPlanPath,
+      replacement.store.get(replacementPaths.providerPlanPath),
+    );
+    replacedStore.set(
+      originalPaths.providerPlanAuditPath,
+      replacement.store.get(replacementPaths.providerPlanAuditPath),
+    );
+    const mock = createMockDb([...replacedStore]);
+    const before = cloneStore(mock.store);
+    nowMillis = NOW_MILLIS + 3001;
+
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db, replacementOverrides)),
+      'journal_record_invalid',
+      [STRIPE_ACCOUNT_ID, OTHER_STRIPE_ACCOUNT_ID],
+    );
+    expect(mock.store).toEqual(before);
+    expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+  });
+
+  test('post-transaction lease expiry downgrades a committed marker before send', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    const paths = providerSendPaths(providerPlanInput(mock.db));
+    const checkedAt = Timestamp.fromMillis(NOW_MILLIS + 3000);
+    const leaseExpiry = Timestamp.fromMillis(NOW_MILLIS + 61000);
+    timestampNow
+      .mockImplementationOnce(() => checkedAt)
+      .mockImplementationOnce(() => leaseExpiry);
+
+    await expect(recordInitialStripeSendEvidence(providerPlanInput(mock.db)))
+      .resolves.toMatchObject({ outcome: 'reconciliation_required' });
+    expect(mock.store.has(paths.providerSendPath)).toBe(true);
+    expect(mock.store.has(paths.providerSendAuditPath)).toBe(true);
+  });
+
+  test('post-transaction deadline equality and clock rollback downgrade read-only retries', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    await recordEvidence(mock);
+    const paths = providerSendPaths(providerPlanInput(mock.db));
+    const evidence = mock.store.get(paths.providerSendPath);
+    const deadline = evidence.automaticRetryDeadlineAt;
+    const immediatelyBeforeDeadline = new Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds - 1,
+    );
+    const beforeMarker = new Timestamp(
+      evidence.prePostRecordedAt._seconds,
+      evidence.prePostRecordedAt._nanoseconds - 1,
+    );
+
+    nowMillis = deadline.toMillis() - 1000;
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    const before = cloneStore(mock.store);
+    const takeoverInput = providerPlanInput(mock.db, {
+      leaseId: OTHER_LEASE_ID,
+      expectedFenceEpoch: 2,
+    });
+
+    timestampNow
+      .mockImplementationOnce(() => immediatelyBeforeDeadline)
+      .mockImplementationOnce(() => deadline);
+    await expect(recordInitialStripeSendEvidence(takeoverInput))
+      .resolves.toMatchObject({ outcome: 'reconciliation_required' });
+
+    timestampNow
+      .mockImplementationOnce(() => immediatelyBeforeDeadline)
+      .mockImplementationOnce(() => beforeMarker);
+    await expect(recordInitialStripeSendEvidence(takeoverInput))
+      .resolves.toMatchObject({ outcome: 'reconciliation_required' });
+    expect(mock.store).toEqual(before);
+  });
+
+  test('permits only strictly before the persisted 23-hour deadline at nanosecond precision', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    await recordEvidence(mock);
+    const paths = providerSendPaths(providerPlanInput(mock.db));
+    const evidence = mock.store.get(paths.providerSendPath);
+    const deadline = evidence.automaticRetryDeadlineAt;
+    const first = evidence.prePostRecordedAt;
+
+    timestampNow.mockImplementationOnce(() => new Timestamp(
+      first._seconds,
+      first._nanoseconds - 1,
+    ));
+    await expect(recordInitialStripeSendEvidence(providerPlanInput(mock.db)))
+      .resolves.toEqual({
+        journalSchemaVersion: 1,
+        providerPlanSchemaVersion: 1,
+        providerSendEvidenceSchemaVersion: 1,
+        outcome: 'reconciliation_required',
+        state: 'provider_outcome_unknown',
+      });
+
+    nowMillis = deadline.toMillis() - 1000;
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    const takeoverInput = providerPlanInput(mock.db, {
+      leaseId: OTHER_LEASE_ID,
+      expectedFenceEpoch: 2,
+    });
+    const immediatelyBeforeDeadline = new Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds - 1,
+    );
+    timestampNow
+      .mockImplementationOnce(() => immediatelyBeforeDeadline)
+      .mockImplementationOnce(() => immediatelyBeforeDeadline);
+    await expect(recordInitialStripeSendEvidence(takeoverInput))
+      .resolves.toMatchObject({ outcome: 'send_permitted' });
+    timestampNow.mockImplementationOnce(() => new Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds,
+    ));
+    await expect(recordInitialStripeSendEvidence(takeoverInput))
+      .resolves.toMatchObject({ outcome: 'reconciliation_required' });
+    timestampNow.mockImplementationOnce(() => new Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds + 1,
+    ));
+    await expect(recordInitialStripeSendEvidence(takeoverInput))
+      .resolves.toMatchObject({ outcome: 'reconciliation_required' });
+    expect(mock.store.get(paths.providerSendPath)).toBe(evidence);
+  });
+
+  test('missing or unreadable paired times require reconciliation without mutation', async () => {
+    const foundation = createMockDb();
+    await createBoundPlan(foundation);
+    await recordEvidence(foundation);
+    const paths = providerSendPaths(providerPlanInput(foundation.db));
+
+    for (const mutate of [
+      (record, audit) => {
+        const nextRecord = { ...record };
+        const nextAudit = { ...audit };
+        delete nextRecord.prePostRecordedAt;
+        delete nextAudit.occurredAt;
+        return [Object.freeze(nextRecord), Object.freeze(nextAudit)];
+      },
+      (record, audit) => [Object.freeze({
+        ...record,
+        automaticRetryDeadlineAt: { _seconds: 1, _nanoseconds: 0 },
+      }), audit],
+      (record, audit) => [record, Object.freeze({
+        ...audit,
+        occurredAt: Timestamp.fromMillis(record.prePostRecordedAt.toMillis() + 1),
+      })],
+    ]) {
+      const seed = cloneStore(foundation.store);
+      const [record, audit] = mutate(
+        seed.get(paths.providerSendPath),
+        seed.get(paths.providerSendAuditPath),
+      );
+      seed.set(paths.providerSendPath, record);
+      seed.set(paths.providerSendAuditPath, audit);
+      const mock = createMockDb([...seed]);
+      const before = cloneStore(mock.store);
+      nowMillis += 1;
+
+      await expect(recordInitialStripeSendEvidence(providerPlanInput(mock.db)))
+        .resolves.toMatchObject({ outcome: 'reconciliation_required' });
+      expect(mock.store).toEqual(before);
+      expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+    }
+  });
+
+  test('orphan, future, extra, and missing C1 partners fail closed without repair', async () => {
+    const active = createMockDb();
+    await registerCommerceCommand(validInput(active.db));
+    nowMillis += 1000;
+    await acquireCommerceCommandLease(leaseInput(active.db));
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(active.db)),
+      'journal_record_invalid',
+    );
+
+    const foundation = createMockDb();
+    await createBoundPlan(foundation);
+    await recordEvidence(foundation);
+    const paths = providerSendPaths(providerPlanInput(foundation.db));
+    const corruptions = [
+      (seed) => seed.delete(paths.providerSendAuditPath),
+      (seed) => seed.set(paths.providerSendPath, Object.freeze({
+        ...seed.get(paths.providerSendPath),
+        providerSendEvidenceSchemaVersion: 2,
+      })),
+      (seed) => seed.set(paths.providerSendAuditPath, Object.freeze({
+        ...seed.get(paths.providerSendAuditPath),
+        unexpected: HOSTILE_CANARY,
+      })),
+      (seed) => seed.delete(paths.providerPlanAuditPath),
+    ];
+
+    for (const corrupt of corruptions) {
+      const seed = cloneStore(foundation.store);
+      corrupt(seed);
+      const mock = createMockDb([...seed]);
+      const before = cloneStore(mock.store);
+      nowMillis += 1;
+      await expectSafeError(
+        () => recordInitialStripeSendEvidence(providerPlanInput(mock.db)),
+        'journal_record_invalid',
+      );
+      expect(mock.store).toEqual(before);
+      expect(mock.callbackRuns.at(-1).transaction.create).not.toHaveBeenCalled();
+    }
+  });
+
+  test('accessors, proxies, and a missing originating lease audit fail without traps or repair', async () => {
+    const foundation = createMockDb();
+    await createBoundPlan(foundation);
+    await recordEvidence(foundation);
+    const paths = providerSendPaths(providerPlanInput(foundation.db));
+
+    let getterCalls = 0;
+    const accessor = { ...foundation.store.get(paths.providerSendPath) };
+    Object.defineProperty(accessor, 'provider', {
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        return HOSTILE_CANARY;
+      },
+    });
+    let mock = createMockDb([...foundation.store]);
+    mock.store.set(paths.providerSendPath, accessor);
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db)),
+      'journal_record_invalid',
+    );
+    expect(getterCalls).toBe(0);
+
+    let trapCalls = 0;
+    const proxy = new Proxy(foundation.store.get(paths.providerSendAuditPath), {
+      ownKeys() {
+        trapCalls += 1;
+        return [];
+      },
+    });
+    mock = createMockDb([...foundation.store]);
+    mock.store.set(paths.providerSendAuditPath, proxy);
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db)),
+      'journal_record_invalid',
+    );
+    expect(trapCalls).toBe(0);
+
+    nowMillis = NOW_MILLIS + 61000;
+    await acquireCommerceCommandLease(leaseInput(foundation.db, { leaseId: OTHER_LEASE_ID }));
+    const missingHistory = cloneStore(foundation.store);
+    missingHistory.delete(paths.lifecycleAuditPath);
+    mock = createMockDb([...missingHistory]);
+    const before = cloneStore(mock.store);
+    nowMillis += 1;
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db, {
+        leaseId: OTHER_LEASE_ID,
+        expectedFenceEpoch: 2,
+      })),
+      'journal_record_invalid',
+    );
+    expect(mock.store).toEqual(before);
+  });
+
+  test('wrong holder, wrong fence, expired lease, and terminal state never reveal the marker', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    await recordEvidence(mock);
+    const before = cloneStore(mock.store);
+    nowMillis += 1;
+
+    for (const change of [
+      { leaseId: OTHER_LEASE_ID },
+      { expectedFenceEpoch: 2 },
+      { leaseId: OTHER_LEASE_ID, expectedFenceEpoch: 2 },
+    ]) {
+      await expectSafeError(
+        () => recordInitialStripeSendEvidence(providerPlanInput(mock.db, change)),
+        'lease_stale',
+      );
+    }
+    nowMillis = NOW_MILLIS + 61000;
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db)),
+      'lease_stale',
+    );
+    expect(mock.store).toEqual(before);
+
+    const terminal = createMockDb();
+    nowMillis = NOW_MILLIS;
+    await createBoundPlan(terminal);
+    nowMillis += 1000;
+    await completeCommerceCommand(completionInput(terminal.db));
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(terminal.db)),
+      'lease_stale',
+    );
+  });
+
+  test('rejects ambiguous outcomes and caller-selected send controls without advancing', async () => {
+    const mock = createMockDb();
+    await createBoundPlan(mock);
+    await recordEvidence(mock);
+    const before = cloneStore(mock.store);
+    const paths = providerSendPaths(providerPlanInput(mock.db));
+    const transactionCount = mock.db.runTransaction.mock.calls.length;
+    for (const extra of [
+      { providerOutcome: 'timeout' },
+      { providerOutcome: 'connection_loss' },
+      { providerOutcome: 'stripe_5xx' },
+      { providerHttpStatus: 500 },
+      { providerAttempt: 2 },
+      { httpMethod: 'POST' },
+      { stripeIdempotencyKey: HOSTILE_CANARY },
+      { retryWindowSeconds: 86400 },
+      { automaticRetryDeadlineAt: Timestamp.fromMillis(NOW_MILLIS) },
+    ]) {
+      await expectSafeError(
+        () => recordInitialStripeSendEvidence({ ...providerPlanInput(mock.db), ...extra }),
+        'invalid_command_input',
+      );
+    }
+    expect(mock.db.runTransaction).toHaveBeenCalledTimes(transactionCount);
+    expect(mock.store).toEqual(before);
+    expect(mock.store.has(`${paths.commandPath}/providerAttempts/0000000002`)).toBe(false);
+  });
+
+  test('commit failure leaves no half-pair and forged transaction output is redacted', async () => {
+    const foundation = createMockDb();
+    await createBoundPlan(foundation);
+    const paths = providerSendPaths(providerPlanInput(foundation.db));
+    const commitFailure = createMockDb([...foundation.store], {
+      rejectCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+    });
+    const before = cloneStore(commitFailure.store);
+    nowMillis += 1;
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(commitFailure.db)),
+      'journal_unavailable',
+      [STRIPE_ACCOUNT_ID],
+    );
+    expect(commitFailure.store).toEqual(before);
+    expect(commitFailure.store.has(paths.providerSendPath)).toBe(false);
+    expect(commitFailure.store.has(paths.providerSendAuditPath)).toBe(false);
+
+    const forged = createMockDb([...foundation.store], {
+      returnedValue: Object.freeze({ outcome: HOSTILE_CANARY }),
+    });
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(forged.db)),
+      'journal_unavailable',
+    );
+  });
+
+  test('a retry-window timestamp overflow fails before Firestore', async () => {
+    const mock = createMockDb();
+    timestampNow.mockImplementationOnce(() => new Timestamp(253402300790, 0));
+    await expectSafeError(
+      () => recordInitialStripeSendEvidence(providerPlanInput(mock.db)),
+      'journal_unavailable',
+    );
+    expect(mock.db.runTransaction).not.toHaveBeenCalled();
+  });
+});
+
 describe('exact existing identity and partner validation', () => {
   beforeEach(() => {
     jest.spyOn(Timestamp, 'now').mockImplementation(() => Timestamp.fromMillis(NOW_MILLIS + 5000));
@@ -2472,10 +3050,11 @@ describe('fixed input and infrastructure failure boundary', () => {
 });
 
 describe('closed source and export boundary', () => {
-  test('exports only the unused journal APIs and no provider-send permission', () => {
+  test('exports only the unused journal APIs and the narrow pre-send evidence gate', () => {
     const api = require('./commerceCommandJournal');
     expect(journalSchemaVersion).toBe(1);
     expect(lifecycleSchemaVersion).toBe(1);
+    expect(providerSendEvidenceSchemaVersion).toBe(1);
     expect(Object.keys(api).sort()).toEqual([
       'CommerceCommandJournalError',
       'acquireCommerceCommandLease',
@@ -2484,28 +3063,49 @@ describe('closed source and export boundary', () => {
       'failCommerceCommand',
       'journalSchemaVersion',
       'lifecycleSchemaVersion',
+      'providerSendEvidenceSchemaVersion',
+      'recordInitialStripeSendEvidence',
       'registerCommerceCommand',
     ]);
     expect(Object.isFrozen(api)).toBe(true);
     expect(Object.isFrozen(CommerceCommandJournalError)).toBe(true);
     expect(Object.isFrozen(CommerceCommandJournalError.prototype)).toBe(true);
     expect(Object.keys(api).join(' ')).not.toMatch(
-      /execute|send|renew|release|reconcile|replay|advance|result/i,
+      /execute|renew|release|reconcile|replay|advance|result|outcome/i,
     );
   });
 
   test('has only the approved local, Firestore, and Node utility dependencies', () => {
     const source = fs.readFileSync(path.join(__dirname, 'commerceCommandJournal.js'), 'utf8');
-    const imports = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]);
+    const dynamicImportPattern = /\bimport\b/;
+    const ambientSideEffectPattern = /\b(?:fetch|XMLHttpRequest|console|logger|process)\b/;
+    const importMatches = [...source.matchAll(/\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g)];
+    const imports = importMatches.map((match) => match[2]);
     expect(imports.sort()).toEqual([
       './commerceCommandIdentity',
       'firebase-admin/firestore',
       'node:crypto',
       'node:util',
     ]);
+    expect((source.match(/\brequire\b/g) || [])).toHaveLength(importMatches.length);
+    expect(source).not.toMatch(dynamicImportPattern);
+    for (const probe of ['import("stripe")', "import ('axios')"]) {
+      expect(probe).toMatch(dynamicImportPattern);
+    }
+    expect(source).toMatch(
+      /^const \{ createHash \} = require\((?:'|")node:crypto(?:'|")\);$/m,
+    );
     expect(source).not.toMatch(/require\(['"]\.\/index|createCheckout|stripeWebhook/);
-    expect(source).not.toMatch(/\b(?:fetch|XMLHttpRequest|console|logger)\s*[.(]/);
-    expect(source).not.toMatch(/Math\.random|randomUUID|process\.env|node:fs|node:http|node:https|child_process/);
+    expect(source).not.toMatch(ambientSideEffectPattern);
+    for (const probe of [
+      'console?.log("unsafe")',
+      'console["log"]("unsafe")',
+      'process["env"]',
+      'globalThis["fetch"]("unsafe")',
+    ]) expect(probe).toMatch(ambientSideEffectPattern);
+    expect(source).not.toMatch(
+      /Math\.random|randomBytes|randomFill|randomInt|randomUUID|getRandomValues|process\.env|node:fs|node:http|node:https|child_process/,
+    );
     expect(source).toContain('maxAttempts: 10');
     expect((source.match(/Timestamp\.now\(\)/g) || [])).toHaveLength(1);
     expect(source.indexOf('Timestamp.now()')).toBeLessThan(source.indexOf('.runTransaction('));
