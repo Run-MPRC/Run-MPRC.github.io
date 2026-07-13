@@ -224,6 +224,31 @@ describe('Sentry environment and callback isolation', () => {
     expect(unsafeHint.attachments).toHaveLength(1);
   });
 
+  test('stabilizes the attachment-free hint before the SDK reads it again', () => {
+    initializeFor('production', '/events');
+
+    const options = mockInit.mock.calls[0][0];
+    const hint: Record<string, unknown> = {};
+    const event = { exception: { values: [{ type: 'TypeError' }] } };
+    const sanitized = options.beforeSend(event, hint);
+
+    expect(sanitized).toEqual(event);
+    // Mirrors BaseClient.sendEvent's later read after beforeSend returns.
+    expect(hint.attachments).toBeUndefined();
+    expect(Object.getOwnPropertyDescriptor(hint, 'attachments')).toEqual({
+      configurable: false,
+      enumerable: false,
+      value: undefined,
+      writable: false,
+    });
+    expect(() => {
+      Object.defineProperty(hint, 'attachments', {
+        value: [{ data: 'late-attachment-canary' }],
+      });
+    }).toThrow();
+    expect(hint.attachments).toBeUndefined();
+  });
+
   test('fails closed for malformed events, hints, and stack frames', () => {
     initializeFor('production', '/events');
 
@@ -258,11 +283,26 @@ describe('Sentry environment and callback isolation', () => {
     })).toBeNull();
     expect(noOpSplice).not.toHaveBeenCalled();
 
-    const throwingHint = {};
-    Object.defineProperty(throwingHint, 'attachments', {
-      get: () => { throw new Error('attachment-getter-canary'); },
+    const accessorHint = {};
+    let attachmentReadCount = 0;
+    const attachmentGetter = jest.fn(() => {
+      attachmentReadCount += 1;
+      return attachmentReadCount === 1
+        ? undefined
+        : [{ data: 'private-hint-toctou-canary' }];
     });
-    expect(options.beforeSend(validEvent, throwingHint)).toBeNull();
+    Object.defineProperty(accessorHint, 'attachments', {
+      get: attachmentGetter,
+    });
+    expect(options.beforeSend(validEvent, accessorHint)).toBeNull();
+    expect(attachmentGetter).not.toHaveBeenCalled();
+
+    const inheritedAttachmentGetter = jest.fn(() => undefined);
+    const inheritedHint = Object.create(Object.defineProperty({}, 'attachments', {
+      get: inheritedAttachmentGetter,
+    }));
+    expect(options.beforeSend(validEvent, inheritedHint)).toBeNull();
+    expect(inheritedAttachmentGetter).not.toHaveBeenCalled();
 
     const coercingIdentifier = {
       privateValue: 'coercion-canary',

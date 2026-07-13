@@ -205,12 +205,40 @@ export function sanitizeSentryEvent(event: Event): Event | null {
   }
 }
 
+function stabilizeAttachmentFreeHint(hint: EventHint): boolean {
+  if (!isRecord(hint)) return false;
+
+  const descriptor = Object.getOwnPropertyDescriptor(hint, 'attachments');
+  if (descriptor === undefined) {
+    // Reject inherited values/accessors. A new own, immutable data property
+    // below prevents a later SDK read from observing a changed prototype.
+    if ('attachments' in hint) return false;
+  } else if (!('value' in descriptor) || descriptor.value !== undefined) {
+    // Inspect the descriptor instead of reading the property so accessors
+    // cannot return a different value when Sentry reads the hint again.
+    return false;
+  }
+
+  Object.defineProperty(hint, 'attachments', {
+    configurable: false,
+    enumerable: descriptor?.enumerable ?? false,
+    value: undefined,
+    writable: false,
+  });
+
+  const stableDescriptor = Object.getOwnPropertyDescriptor(hint, 'attachments');
+  return stableDescriptor !== undefined
+    && 'value' in stableDescriptor
+    && stableDescriptor.value === undefined
+    && stableDescriptor.configurable === false
+    && stableDescriptor.writable === false;
+}
+
 function sanitizeSentryEventAndHint(event: Event, hint: EventHint): Event | null {
   try {
-    // Sentry serializes hint attachments after beforeSend. Do not trust input
-    // array methods or mutation here: any event carrying attachments is dropped.
-    const attachments = hint?.attachments;
-    if (attachments !== undefined) return null;
+    // Sentry reads hint attachments again after beforeSend. Stabilize that
+    // future read without invoking an attachment getter or input array method.
+    if (!stabilizeAttachmentFreeHint(hint)) return null;
     return sanitizeSentryEvent(event);
   } catch {
     return null;
