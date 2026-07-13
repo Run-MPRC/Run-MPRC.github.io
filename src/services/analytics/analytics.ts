@@ -1,31 +1,14 @@
-import { Analytics, logEvent } from 'firebase/analytics';
-import FirebaseResources from '../firebase/FirebaseResources';
-
 /**
- * Thin wrapper around Firebase Analytics that no-ops when analytics isn't
- * available (SSR, unsupported environments, users who disabled tracking).
+ * Compatibility wrapper for existing call sites.
  *
- * Call sites should fire these at key funnel points so we can see where
- * users drop off in the registration flow.
+ * Firebase Analytics is intentionally disabled until #110 records an
+ * approved purpose, consent, event schema, retention, access, and deletion
+ * policy. Keep this function transport-free so telemetry can never affect a
+ * member flow or silently resume collection from an SDK/config change.
  */
-
-function getAnalytics(): Analytics | null {
-  try {
-    return FirebaseResources.getInstance().analytics;
-  } catch {
-    return null;
-  }
-}
-
-export function track(eventName: string, params?: Record<string, unknown>): void {
-  const analytics = getAnalytics();
-  if (!analytics) return;
-  try {
-    logEvent(analytics, eventName as any, params as any);
-  } catch {
-    // swallow — analytics should never break the user flow
-  }
-}
+// Arguments stay source-compatible while the approved future API is undecided.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function track(eventName: string, params?: Record<string, unknown>): void {}
 
 export const events = {
   eventView: 'event_view',
