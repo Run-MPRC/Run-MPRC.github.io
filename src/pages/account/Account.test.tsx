@@ -1,0 +1,227 @@
+/* eslint-env jest */
+
+import React from 'react';
+import {
+  fireEvent, render, screen, waitFor,
+} from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { useServiceLocator } from '../../services/ServiceLocatorContext';
+import {
+  ensureMyProfile,
+  getMyProfile,
+  listMyRegistrations,
+  updateMyProfile,
+} from '../../services/account/accountService';
+import { AccountContent } from './Account';
+
+jest.mock('../../services/ServiceLocatorContext', () => ({
+  useServiceLocator: jest.fn(),
+}));
+
+jest.mock('../../services/account/accountService', () => {
+  const actual = jest.requireActual('../../services/account/accountService');
+  return {
+    ...actual,
+    ensureMyProfile: jest.fn(),
+    getMyProfile: jest.fn(),
+    listMyRegistrations: jest.fn(),
+    updateMyProfile: jest.fn(),
+  };
+});
+
+jest.mock('../../components/SEO', () => function SEO() {
+  return null;
+});
+
+jest.mock('./StravaSection', () => function StravaSection() {
+  return <div data-testid="strava-section" />;
+});
+
+const USER = {
+  uid: 'synthetic-user',
+  email: 'member@example.com',
+  role: 'unverified' as const,
+};
+
+const PROFILE = {
+  uid: USER.uid,
+  email: USER.email,
+  fullName: 'Synthetic Member',
+  role: 'unverified' as const,
+  phoneNumber: '555-0100',
+  emailVerified: false,
+  provider: 'password',
+  createdAt: null,
+  lastLogin: null,
+  updatedAt: null,
+};
+
+const app = { name: 'synthetic-app' };
+const firestore = { name: 'synthetic-firestore' };
+const signOut = jest.fn();
+
+function renderAccount() {
+  return render(
+    <MemoryRouter>
+      <AccountContent user={USER} />
+    </MemoryRouter>,
+  );
+}
+
+describe('Account profile recovery', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useServiceLocator as jest.Mock).mockReturnValue({
+      services: {
+        firebaseResources: { app, firestore },
+        identityService: { signOut, resendVerificationEmail: jest.fn() },
+      },
+      isReady: true,
+    });
+    (ensureMyProfile as jest.Mock).mockResolvedValue({ ready: true });
+    (getMyProfile as jest.Mock).mockResolvedValue(PROFILE);
+    (listMyRegistrations as jest.Mock).mockResolvedValue({
+      registrations: [],
+      events: {},
+    });
+    (updateMyProfile as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  test('ensures the caller profile before the first profile read', async () => {
+    const calls: string[] = [];
+    (ensureMyProfile as jest.Mock).mockImplementation(async () => {
+      calls.push('ensure');
+      return { ready: true };
+    });
+    (getMyProfile as jest.Mock).mockImplementation(async () => {
+      calls.push('read');
+      return PROFILE;
+    });
+
+    renderAccount();
+
+    expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+    expect(calls).toEqual(['ensure', 'read']);
+    expect(ensureMyProfile).toHaveBeenCalledWith(app);
+    expect(getMyProfile).toHaveBeenCalledWith(firestore, USER.uid);
+  });
+
+  test('shows a generic recovery state and disables editing when setup fails', async () => {
+    (ensureMyProfile as jest.Mock)
+      .mockRejectedValueOnce(new Error('Missing or insufficient permissions.'))
+      .mockResolvedValueOnce({ ready: true });
+
+    renderAccount();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your profile is temporarily unavailable.',
+    );
+    expect(screen.queryByText('Missing or insufficient permissions.'))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(getMyProfile).not.toHaveBeenCalled();
+    expect(listMyRegistrations).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try profile again' }));
+
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(ensureMyProfile).toHaveBeenCalledTimes(2);
+  });
+
+  test('treats an absent record after setup as unavailable and keeps Edit hidden', async () => {
+    (getMyProfile as jest.Mock).mockResolvedValue(null);
+
+    renderAccount();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your profile is temporarily unavailable.',
+    );
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+
+  test('shows the same name and phone limits as the Firestore rules', async () => {
+    renderAccount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByLabelText('Full name')).toHaveAccessibleDescription(
+      'Up to 200 characters.',
+    );
+    expect(screen.getByLabelText('Phone')).toHaveAccessibleDescription(
+      'Up to 40 characters.',
+    );
+    expect(screen.getByLabelText('Full name')).toHaveAttribute('autocomplete', 'name');
+    expect(screen.getByLabelText('Phone')).toHaveAttribute('autocomplete', 'tel');
+    expect(screen.getByLabelText('Full name')).toHaveAttribute('maxLength', '200');
+    expect(screen.getByLabelText('Phone')).toHaveAttribute('maxLength', '40');
+  });
+
+  test('uses a safe state when the profile read fails after setup', async () => {
+    (getMyProfile as jest.Mock).mockRejectedValue(
+      new Error('FirebaseError: wrong project or rules mismatch'),
+    );
+
+    renderAccount();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your profile is temporarily unavailable.',
+    );
+    expect(screen.queryByText(/wrong project|rules mismatch/i)).not.toBeInTheDocument();
+    expect(listMyRegistrations).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
+  });
+
+  test('keeps a validation error local and does not call Firestore', async () => {
+    renderAccount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Full name'), {
+      target: { value: '🏃'.repeat(101) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Full name must be 200 characters or fewer.',
+    );
+    expect(updateMyProfile).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  test('does not expose a raw save error or leave editing enabled after a failed write', async () => {
+    (updateMyProfile as jest.Mock).mockRejectedValue(
+      new Error('FirebaseError: Missing or insufficient permissions.'),
+    );
+    renderAccount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Full name'), {
+      target: { value: 'Updated Synthetic Member' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not confirm your profile change.',
+    );
+    expect(screen.queryByText(/FirebaseError|Missing or insufficient permissions/i))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalledWith(
+      firestore,
+      USER.uid,
+      { fullName: 'Updated Synthetic Member', phoneNumber: '555-0100' },
+    ));
+  });
+
+  test('fails closed when a save succeeds but the confirmation read is missing', async () => {
+    (getMyProfile as jest.Mock)
+      .mockResolvedValueOnce(PROFILE)
+      .mockResolvedValueOnce(null);
+    renderAccount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not confirm your profile change.',
+    );
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
+  });
+});

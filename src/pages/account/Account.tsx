@@ -6,9 +6,12 @@ import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import { Member } from '../../types/member';
 import {
+  ensureMyProfile,
   getMyProfile,
   updateMyProfile,
   listMyRegistrations,
+  MEMBER_PROFILE_LIMITS,
+  validateMemberProfileFields,
   MyRegistrationsResponse,
 } from '../../services/account/accountService';
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
@@ -112,10 +115,21 @@ function RegistrationRow({
   );
 }
 
-function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>['user']> }) {
+const PROFILE_UNAVAILABLE_MESSAGE = 'Your profile is temporarily unavailable. Sign out and try again later. No membership or payment status was changed.';
+const PROFILE_CHANGE_UNCONFIRMED_MESSAGE = 'We could not confirm your profile change. Try the profile again before making another change.';
+
+export function AccountContent({
+  user,
+}: {
+  user: NonNullable<ReturnType<typeof useAuth>['user']>;
+}) {
   const { services } = useServiceLocator();
   const [profile, setProfile] = useState<Member | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profileState, setProfileState] = useState<'loading' | 'ready' | 'unavailable'>(
+    'loading',
+  );
+  const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -127,39 +141,89 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
   const [regsError, setRegsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!services) return;
-    getMyProfile(services.firebaseResources.firestore, user.uid)
-      .then((p) => {
-        setProfile(p);
-        setFullName(p?.fullName || '');
-        setPhoneNumber(p?.phoneNumber || '');
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [services, user.uid]);
+    if (!services) return undefined;
+    const activeServices = services;
+    let active = true;
+
+    async function loadProfile() {
+      setProfileState('loading');
+      setProfile(null);
+      setProfileError(null);
+      setEditing(false);
+      setSaveError(null);
+
+      try {
+        await ensureMyProfile(activeServices.firebaseResources.app);
+        const nextProfile = await getMyProfile(
+          activeServices.firebaseResources.firestore,
+          user.uid,
+        );
+        if (!nextProfile) throw new Error('Profile unavailable after setup.');
+        if (!active) return;
+        setProfile(nextProfile);
+        setFullName(nextProfile.fullName || '');
+        setPhoneNumber(nextProfile.phoneNumber || '');
+        setProfileState('ready');
+      } catch {
+        if (!active) return;
+        setProfileError(PROFILE_UNAVAILABLE_MESSAGE);
+        setProfileState('unavailable');
+      }
+    }
+
+    loadProfile();
+    return () => { active = false; };
+  }, [services, user.uid, profileLoadAttempt]);
 
   useEffect(() => {
-    if (!services) return;
+    if (!services || profileState !== 'ready') return undefined;
+    let active = true;
+    setRegsData(null);
+    setRegsError(null);
+    setRegsLoading(true);
     listMyRegistrations(services.firebaseResources.app)
-      .then((r) => { setRegsData(r); setRegsLoading(false); })
-      .catch((err) => { setRegsError(err.message); setRegsLoading(false); });
-  }, [services]);
+      .then((result) => {
+        if (!active) return;
+        setRegsData(result);
+        setRegsLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRegsError('We could not load your registrations right now.');
+        setRegsLoading(false);
+      });
+    return () => { active = false; };
+  }, [services, profileState, user.uid]);
 
   async function handleSave() {
     if (!services) return;
+    const validation = validateMemberProfileFields({ fullName, phoneNumber });
+    if (!validation.valid) {
+      setSaveError(validation.message);
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
       await updateMyProfile(
         services.firebaseResources.firestore,
         user.uid,
-        { fullName, phoneNumber },
+        validation.fields,
       );
       const fresh = await getMyProfile(services.firebaseResources.firestore, user.uid);
+      if (!fresh) throw new Error('Profile unavailable after save.');
       setProfile(fresh);
+      setFullName(fresh.fullName || '');
+      setPhoneNumber(fresh.phoneNumber || '');
+      setProfileError(null);
+      setProfileState('ready');
       setEditing(false);
-    } catch (err: any) {
-      setSaveError(err?.message || 'Save failed');
+    } catch {
+      setProfile(null);
+      setEditing(false);
+      setSaveError(null);
+      setProfileError(PROFILE_CHANGE_UNCONFIRMED_MESSAGE);
+      setProfileState('unavailable');
     } finally {
       setSaving(false);
     }
@@ -170,7 +234,13 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
     await services.identityService.signOut();
   }
 
-  if (loading) return <div className="container mx-auto p-6">Loading profile...</div>;
+  if (profileState === 'loading') {
+    return (
+      <div role="status" className="container mx-auto p-6">
+        Loading profile...
+      </div>
+    );
+  }
 
   const upcoming = regsData?.registrations.filter((r) => {
     const ev = regsData.events[r.eventId];
@@ -200,7 +270,7 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
         <section className="border rounded-lg p-4 mt-4 bg-gray-50">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-lg font-semibold">Profile</h2>
-            {!editing && (
+            {!editing && profileState === 'ready' && profile && (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
@@ -210,7 +280,22 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
               </button>
             )}
           </div>
-          {!editing && profile && (
+          {profileError && (
+            <div
+              role="alert"
+              className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+            >
+              <p>{profileError}</p>
+              <button
+                type="button"
+                onClick={() => setProfileLoadAttempt((attempt) => attempt + 1)}
+                className="mt-2 text-blue-700 underline"
+              >
+                Try profile again
+              </button>
+            </div>
+          )}
+          {!editing && profileState === 'ready' && profile && (
             <dl className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm">
               <div>
                 <dt className="text-gray-500 text-xs">Name</dt>
@@ -243,25 +328,55 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
           )}
           {editing && (
             <div className="space-y-3">
-              <label className="block">
-                <span className="text-sm font-medium">Full name</span>
-                <input
-                  type="text"
-                  className="border rounded px-3 py-2 w-full"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium">Phone</span>
-                <input
-                  type="tel"
-                  className="border rounded px-3 py-2 w-full"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                />
-              </label>
-              {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+              <div>
+                <label htmlFor="profile-full-name" className="block">
+                  <span className="text-sm font-medium">Full name</span>
+                  <input
+                    id="profile-full-name"
+                    type="text"
+                    className="border rounded px-3 py-2 w-full"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    aria-describedby="full-name-limit"
+                    autoComplete="name"
+                    disabled={saving}
+                    maxLength={MEMBER_PROFILE_LIMITS.fullName}
+                  />
+                </label>
+                <span id="full-name-limit" className="text-xs text-gray-500">
+                  Up to
+                  {' '}
+                  {MEMBER_PROFILE_LIMITS.fullName}
+                  {' '}
+                  characters.
+                </span>
+              </div>
+              <div>
+                <label htmlFor="profile-phone" className="block">
+                  <span className="text-sm font-medium">Phone</span>
+                  <input
+                    id="profile-phone"
+                    type="tel"
+                    className="border rounded px-3 py-2 w-full"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    aria-describedby="phone-number-limit"
+                    autoComplete="tel"
+                    disabled={saving}
+                    maxLength={MEMBER_PROFILE_LIMITS.phoneNumber}
+                  />
+                </label>
+                <span id="phone-number-limit" className="text-xs text-gray-500">
+                  Up to
+                  {' '}
+                  {MEMBER_PROFILE_LIMITS.phoneNumber}
+                  {' '}
+                  characters.
+                </span>
+              </div>
+              {saveError && (
+                <p role="alert" className="text-sm text-red-600">{saveError}</p>
+              )}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -279,6 +394,7 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
                     setPhoneNumber(profile?.phoneNumber || '');
                     setSaveError(null);
                   }}
+                  disabled={saving}
                   className="border px-4 py-2 rounded hover:bg-gray-100"
                 >
                   Cancel
@@ -300,30 +416,32 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
           )}
         </section>
 
-        <section className="mt-6">
-          <h2 className="text-lg font-semibold mb-3">Upcoming events</h2>
-          {regsLoading && <p className="text-gray-500 text-sm">Loading...</p>}
-          {regsError && <p className="text-red-500 text-sm">{regsError}</p>}
-          {!regsLoading && upcoming.length === 0 && (
-            <p className="text-gray-500 text-sm">
-              You haven&apos;t registered for any upcoming events.
-              {' '}
-              <Link to="/events" className="text-blue-600 hover:underline">
-                Browse events
-              </Link>
-              .
-            </p>
-          )}
-          {upcoming.map((r) => (
-            <RegistrationRow
-              key={r.id}
-              reg={r}
-              event={regsData?.events[r.eventId]}
-            />
-          ))}
-        </section>
+        {profileState === 'ready' && (
+          <section className="mt-6">
+            <h2 className="text-lg font-semibold mb-3">Upcoming events</h2>
+            {regsLoading && <p className="text-gray-500 text-sm">Loading...</p>}
+            {regsError && <p role="alert" className="text-red-500 text-sm">{regsError}</p>}
+            {!regsLoading && upcoming.length === 0 && (
+              <p className="text-gray-500 text-sm">
+                You haven&apos;t registered for any upcoming events.
+                {' '}
+                <Link to="/events" className="text-blue-600 hover:underline">
+                  Browse events
+                </Link>
+                .
+              </p>
+            )}
+            {upcoming.map((r) => (
+              <RegistrationRow
+                key={r.id}
+                reg={r}
+                event={regsData?.events[r.eventId]}
+              />
+            ))}
+          </section>
+        )}
 
-        {past.length > 0 && (
+        {profileState === 'ready' && past.length > 0 && (
           <section className="mt-6">
             <h2 className="text-lg font-semibold mb-3">Past events</h2>
             {past.map((r) => (
@@ -336,7 +454,7 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
           </section>
         )}
 
-        <StravaSection uid={user.uid} />
+        {profileState === 'ready' && <StravaSection uid={user.uid} />}
       </div>
     </>
   );

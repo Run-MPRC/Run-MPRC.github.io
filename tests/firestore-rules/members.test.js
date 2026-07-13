@@ -97,6 +97,38 @@ describe('members collection', () => {
       }));
     });
 
+    test('profile Unicode boundaries match the browser validator', async () => {
+      await seed('members/u1', SAMPLE_MEMBER);
+      const me = await db({ uid: 'u1', role: 'unverified' });
+
+      await assertSucceeds(me.doc('members/u1').update({
+        // Firestore Rules and browser maxlength both count these astral
+        // symbols as two UTF-16 units. Keep the client validation aligned
+        // with the behavior proven by this emulator suite.
+        fullName: '🏃'.repeat(100),
+        phoneNumber: '📞'.repeat(20),
+        updatedAt: new Date(),
+      }));
+    });
+
+    test.each([
+      ['a Unicode name over the 200-unit limit', {
+        fullName: '🏃'.repeat(101),
+        phoneNumber: '',
+      }],
+      ['a Unicode phone over the 40-unit limit', {
+        fullName: '',
+        phoneNumber: '📞'.repeat(21),
+      }],
+    ])('user CANNOT set %s', async (_label, fields) => {
+      await seed('members/u1', SAMPLE_MEMBER);
+      const me = await db({ uid: 'u1', role: 'unverified' });
+      await assertFails(me.doc('members/u1').update({
+        ...fields,
+        updatedAt: new Date(),
+      }));
+    });
+
     test('user CANNOT update a missing profile document', async () => {
       const me = await db({ uid: 'u1', role: 'unverified' });
       await assertFails(me.doc('members/u1').update({
