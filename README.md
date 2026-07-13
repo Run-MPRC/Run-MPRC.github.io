@@ -61,11 +61,12 @@ After #99 merges, the runbook and this section must be updated from its merged t
 ```bash
 npm --prefix functions run lint
 npm --prefix functions run test:run -- --runInBand
+CI=true npm test -- --watchAll=false --runInBand
 npm run test:rules
 CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
 ```
 
-Rules tests require Java 17. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. The SPA navigation command belongs to queued #99, and a trustworthy frontend Jest baseline belongs to queued [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103); do not claim either from this documentation pull request.
+Rules tests require Java 17. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. The SPA navigation command remains queued under #99. The frontend Jest command now provides a deterministic local baseline, but current CI does not run it as a required gate; [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) owns that remaining workflow work.
 
 ## Working on the platform
 

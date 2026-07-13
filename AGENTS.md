@@ -93,6 +93,7 @@ npm ci --legacy-peer-deps
 npm --prefix functions ci
 npm --prefix functions run lint
 npm --prefix functions run test:run -- --runInBand
+CI=true npm test -- --watchAll=false --runInBand
 npm run test:rules
 CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
 ```
@@ -103,7 +104,8 @@ The following are **NOT AVAILABLE YET** on `main`:
 
 - `npm run emulators` and fail-closed Auth/Firestore/Functions isolation — owned by #99.
 - `npm run test:spa-navigation` — owned by #99.
-- A trustworthy frontend Jest baseline/quality gate — owned by #103.
+
+The deterministic frontend Jest baseline is available through the command above. It is not yet a required CI quality gate; workflow enforcement remains **NOT AVAILABLE YET** under #105.
 
 Do not run Firebase-backed local development against the current production-configured client. Do not describe queued working-tree commands as merged or available.
 
