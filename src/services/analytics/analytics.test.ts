@@ -30,6 +30,19 @@ function runtimeSourceFiles(directory: string): string[] {
   });
 }
 
+const FORBIDDEN_ANALYTICS_RUNTIME = [
+  /(?:@firebase|firebase(?:\/compat)?)\/analytics/,
+  /\bfirebase\s*\.\s*analytics\b/,
+  /\b(?:getAnalytics|initializeAnalytics|isSupported|logEvent|setAnalyticsCollectionEnabled)\s*\(/,
+  /\bgtag\s*\(/,
+  /\bdataLayer\b/,
+  /(?:google-analytics|googletagmanager)\.com/,
+];
+
+function hasAnalyticsRuntime(source: string): boolean {
+  return FORBIDDEN_ANALYTICS_RUNTIME.some((pattern) => pattern.test(source));
+}
+
 describe('Firebase Analytics containment', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -52,20 +65,31 @@ describe('Firebase Analytics containment', () => {
 
   test('has no application runtime import or call path to Firebase Analytics', () => {
     const sourceRoot = path.resolve(__dirname, '../..');
-    const forbidden = [
-      /firebase\/analytics/,
-      /\blogEvent\s*\(/,
-      /\bgetAnalytics\s*\(/,
-      /\bisSupported\s*\(/,
-    ];
     const offenders = runtimeSourceFiles(sourceRoot).flatMap((sourcePath) => {
       const source = fs.readFileSync(sourcePath, 'utf8');
-      return forbidden.some((pattern) => pattern.test(source))
+      return hasAnalyticsRuntime(source)
         ? [path.relative(sourceRoot, sourcePath)]
         : [];
     });
 
     expect(offenders).toEqual([]);
+  });
+
+  test.each([
+    ['modular import alias', "import { logEvent as emit } from '@firebase/analytics';"],
+    ['compat side-effect import', "import 'firebase/compat/analytics';"],
+    ['compat initializer', 'firebase.analytics();'],
+    ['modular initializer', 'initializeAnalytics(app);'],
+    ['collection enablement', 'setAnalyticsCollectionEnabled(analytics, true);'],
+    ['Google tag API', "window.gtag('event', 'signup');"],
+    ['Google data layer', "window.dataLayer.push({ event: 'signup' });"],
+    ['Google tag script', 'https://www.googletagmanager.com/gtag/js'],
+  ])('rejects the %s bypass', (_label, source) => {
+    expect(hasAnalyticsRuntime(source)).toBe(true);
+  });
+
+  test('allows inert public Firebase configuration without an Analytics runtime', () => {
+    expect(hasAnalyticsRuntime("measurementId: 'G-SYNTHETIC'")).toBe(false);
   });
 
   test('preserves the waiver confirmation behavior without telemetry', () => {
@@ -74,7 +98,7 @@ describe('Firebase Analytics containment', () => {
       'utf8',
     );
 
-    expect(waiverSource).not.toMatch(/firebase\/analytics|\blogEvent\s*\(/);
+    expect(hasAnalyticsRuntime(waiverSource)).toBe(false);
     expect(waiverSource).toContain("localStorage.setItem('waiverSigned', 'true')");
     expect(waiverSource).toMatch(/onWaiverSubmit\(\)/);
   });
