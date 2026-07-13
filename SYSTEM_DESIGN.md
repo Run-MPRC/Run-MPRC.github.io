@@ -278,6 +278,10 @@ These commitments are pseudonymous equality evidence, not authorization, configu
 
 The fixed C2 result is narrow retry-safety evidence. It is not caller authorization, configured-account proof, a claim that Stripe received the POST, a provider outcome, or response replay. Timeout, connection loss, `5xx`, a missing object reference, and incomplete search are deliberately not C2 inputs and cannot manufacture attempt `2`. B2C3 remains responsible for verified reconciliation evidence and safe later-attempt authorization. #173/#182 have no runtime/index import, Stripe/network call, Firebase deployment, provider configuration, production data, website, or live/officer effect.
 
+PAY-002B2C3A source/tests are tracked in live [#184](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/184). The unused pure policy accepts only one exact flat version-1 Stripe attempt-1 evidence record made from closed enums. It returns one of three frozen non-identifying results: `existing_attempt_found` with `do_not_advance`, `new_attempt_candidate` with `requires_persistence_and_authorization`, or `reconciliation_required` with `requires_reconciliation`. Only the matching complete tuple for trusted proof that endpoint execution never began, or the matching complete tuple for an exact verified expired/unpaid Session plus verified expiry and an explicitly eligible new logical generation, can be a candidate. The matching complete exact-open or verified-success tuple identifies an existing attempt. Every single-field difference, timeout, lost connection, provider error category, old/pruned key, missing reference, not-found result, empty/partial search, processing/unknown state, mismatch, or conflict requires reconciliation.
+
+C3A classification is not authorization or provider truth. The module accepts no IDs, keys, accounts, metadata, money, timestamps, business/member values, free text, URLs, or caller-selected status codes. It stores nothing, calls nothing, is imported by no runtime entry point, and cannot create attempt `2`. C3B must later persist immutable paired verified evidence; C3C must separately authorize and version any later attempt only after that proof, an allowed business transition, and a fresh lease. No Firebase/Stripe deployment, provider configuration, production read/write, website, or officer behavior changes in C3A.
+
 CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) runs the exact opt-in command-journal emulator suite as a named hosted release prerequisite; #169, #173, and #182 expand that same suite. These are synthetic source checks only. The current journal source remains unused and makes no endpoint, Firebase deployment, Stripe/provider configuration, production data, website, or live/officer change.
 
 ## 7. Business invariants
@@ -359,7 +363,7 @@ sequenceDiagram
     R->>W: Submit identity, waiver acceptance, request ID
     W->>F: Callable request + Auth/App Check when available
     F->>D: Transaction: validate event snapshot, reserve capacity, create pending registration
-    F->>S: Create Checkout Session with stable idempotency key and business metadata
+    F->>S: Create Session after command gate; later generation also needs reconciliation gate
     F->>D: Attach Session ID and expiry
     F-->>W: Stripe-hosted Checkout URL
     W->>S: Redirect to Checkout
@@ -372,7 +376,7 @@ sequenceDiagram
     F-->>W: Confirmed, processing, failed, or support-required state
 ```
 
-If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2C2 retries only the exact B2C1 plan/key inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing, and B2C3 reconciles stored/provider/webhook evidence because Stripe may have pruned the idempotency key. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
+If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2C2 retries only the exact B2C1 plan/key inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing. C3A can classify already-verified evidence but cannot retrieve, store, authorize, or advance anything; C3B/C3C must complete those gates before a later POST. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
 
 ### 8.2 Free or volunteer registration
 
@@ -395,7 +399,7 @@ The ingress verifies method, raw payload, signature, and secret. Relevant event 
 Stripe and Firestore cannot share a distributed transaction. Checkout and refunds are therefore explicit sagas:
 
 - A Firestore transaction protects local uniqueness and scarce-resource counters.
-- A stable PAY-002B1 Stripe key identifies one logical provider generation. A lease takeover or HTTP retry is not a new generation. PAY-002B2C1 binds the immutable attempt-1 plan; B2C2 may retry only that exact plan/key inside its conservative stored send window; after that window or with unknown send time, it stops automatic POST, and B2C3 reconciles because Stripe may have pruned the old key.
+- A stable PAY-002B1 Stripe key identifies one logical provider generation. A lease takeover or HTTP retry is not a new generation. PAY-002B2C1 binds the immutable attempt-1 plan; B2C2 may retry only that exact plan/key inside its conservative stored send window; after that window or with unknown send time, it stops automatic POST. C3A classifies only closed verified evidence, while C3B/C3C must persist proof and separately authorize any later generation because Stripe may have pruned the old key.
 - The business record stores the saga step and external ID.
 - A compensating transaction releases a reservation after a known failure.
 - A webhook advances successful external state.

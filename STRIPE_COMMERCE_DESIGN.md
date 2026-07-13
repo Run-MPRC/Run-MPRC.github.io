@@ -226,7 +226,7 @@ Launch with quantity `1` unless cart and multi-line inventory semantics are expl
 }
 ```
 
-Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries; PAY-002B2C3 must reconcile stored/provider/webhook evidence before returning a Session or allowing an explicit new attempt. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
+Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof and C3C must separately authorize/version any later attempt before returning a new Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
 
 ### Pure command identity and provider-key contract (PAY-002B1)
 
@@ -310,12 +310,32 @@ If both partners are absent, the exact current holder may create them atomically
 
 #182 remains unused source. It adds no endpoint/index import, provider adapter/call, Firebase deployment, Stripe account/key/domain configuration, production read/write, website change, or live behavior. Its mock, Firestore emulator, and browser-denial tests use synthetic demo-only data. A green test does not prove Firebase or Stripe configuration.
 
+### Closed reconciliation-decision target (PAY-002B2C3A)
+
+PAY-002B2C3A source/tests are tracked in live [#184](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/184). This first C3 child is a pure unused policy, not a reconciler. It accepts one exact flat version-1 record for provider `stripe` and attempt `1`. Every other field is a closed enum describing exact-plan binding, evidence source/completeness, dispatch/response/idempotency evidence, Checkout Session/payment/event/search evidence, and the business-transition gate. It accepts no provider or business identifier, key, account, metadata, amount, timestamp, URL, free text, or raw status code.
+
+Each positive row below is shorthand for the module's complete exact enum tuple across all of those fields. Every single-field difference—including a different source, completeness, dispatch/response/idempotency category, event/search fact, or business-transition gate—falls to `reconciliation_required`, except that the exact successful tuple accepts either `paid` or `no_payment_required`.
+
+| Complete verified evidence | Frozen classification | Fixed state | Meaning |
+| --- | --- | --- | --- |
+| Trusted dispatch history proves endpoint execution never began; exact plan; same logical operation explicitly eligible | `new_attempt_candidate` | `requires_persistence_and_authorization` | Attempt 1 stays bound; no provider request began and no later send is authorized |
+| Exact attempt-1 Session is `expired` and `unpaid`; exact plan; verified expiry; new logical generation explicitly eligible | `new_attempt_candidate` | `requires_persistence_and_authorization` | Attempt 1 stays immutable and terminal; no later generation or send is authorized |
+| Exact attempt-1 Session is `open` and `unpaid` | `existing_attempt_found` | `do_not_advance` | Preserve the existing attempt; this is not a result replay |
+| Exact attempt-1 Session is complete and `paid` or `no_payment_required`, with verified success evidence | `existing_attempt_found` | `do_not_advance` | Preserve the existing success; the caller still receives no provider result |
+| Every other valid combination | `reconciliation_required` | `requires_reconciliation` | Stop; do not advance, even when one provider fact is known |
+
+The final row includes timeout, connection loss, conflict, external-dependency failure, rate limit, provider server failure, old/pruned key, missing reference, a not-found result without an exact known object, empty/partial search, processing/unknown Session state, incomplete evidence, and every mismatch/conflict. Those facts may be useful to a later verifier but never prove non-execution by themselves. Stripe documents that idempotency results can be pruned after at least 24 hours and that a reused pruned key can start a new request; C2 therefore stops at 23 hours and C3A never uses key age as advancement proof.
+
+All three results are frozen and contain only the policy version, classification, and state. Invalid or hostile input produces one fixed non-identifying error. The module has no Firebase, Stripe, network, logger, environment, clock, random, filesystem, persistence, or runtime/index edge. It cannot return send/execute/advance permission, create an attempt-2 plan/key/document, replay a response, or apply a business transition.
+
+This child does not complete PAY-002B2C3. C3B must append immutable paired reconciliation evidence only after a trusted verifier can produce it. C3C must require that persisted proof, an allowed business transition, and a fresh lease before it can authorize and version a later provider attempt. Runtime adoption, Firebase/Stripe deployment, provider configuration, production data, and live behavior remain unchanged.
+
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
 
 1. Validate the request and read server-controlled catalog/event state.
-2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, and B2C2/B2C3 must complete their send/reconciliation gates before any provider call.
+2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, and C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence before any later provider generation.
 3. In one Firestore transaction:
    - Reuse a matching prior request or reject a conflicting reuse.
    - Lock/read the event capacity counter or SKU variant.
@@ -328,7 +348,7 @@ External Stripe calls cannot be part of a Firestore transaction. Use this sequen
 6. Store Session ID, URL, expiry, and attempt state.
 7. Return the URL.
 8. If Stripe definitively rejects creation, run a compensating transaction that marks the attempt failed and releases the hold once.
-9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing; B2C3 reconciles stored provider references plus verified webhook/metadata evidence before completing step 6.
+9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize any later generation before completing step 6.
 
 Create the local business record before calling Stripe. That lets a very fast webhook resolve metadata directly and eliminates the current record-not-found race.
 
