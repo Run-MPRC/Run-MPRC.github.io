@@ -15,6 +15,7 @@ const {
   Timestamp,
 } = require('./stripeHelpers');
 const { checkRateLimit, extractIp } = require('./rateLimit');
+const { loadCallableServerConfig } = require('./serverConfig');
 
 const HOUR_MS = 60 * 60 * 1000;
 const CHECKOUT_PER_IP_PER_HOUR = 20;
@@ -22,10 +23,6 @@ const CHECKOUT_PER_EMAIL_PER_HOUR = 10;
 
 const SUCCESS_PATH = '/register/success';
 const CANCEL_PATH_PREFIX = '/events/';
-
-function resolveSiteOrigin() {
-  return process.env.SITE_ORIGIN || 'https://runmprc.com';
-}
 
 function resolvePriceTier({ requestedTier, event, callerRole, now }) {
   const pricing = event.pricing || {};
@@ -77,6 +74,7 @@ exports.createCheckoutSession = functions
   .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
+    const serverConfig = loadCallableServerConfig({ requireStripeKey: true });
     const {
       eventId,
       runner,
@@ -233,7 +231,7 @@ exports.createCheckoutSession = functions
 
     const stripe = getStripe();
     const productId = await ensureStripeProduct(stripe, eventRef, event);
-    const origin = resolveSiteOrigin();
+    const origin = serverConfig.siteOrigin;
     const eventSlug = event.slug || eventId;
 
     const session = await stripe.checkout.sessions.create({

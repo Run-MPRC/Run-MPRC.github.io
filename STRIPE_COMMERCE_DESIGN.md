@@ -49,6 +49,8 @@ The issue sequence in [GITHUB_ISSUES.md](./GITHUB_ISSUES.md) closes these gaps i
 
 Never let a development build fall back to production Functions. Never share a webhook signing secret between endpoints or modes. A test-mode Event cannot mutate a production business record; the webhook processor must compare the incoming Stripe `livemode` flag to its environment configuration.
 
+CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) implements this matrix as an invocation-time source guard for the current Functions. Configuration parsing returns only the environment name, canonical site origin, and expected livemode; it never returns or stores the complete Stripe key. The two checkout creators and two admin action Functions validate only the documented test/live marker on their bound `sk_` or restricted `rk_` server key. Webhook and confirmation-mail Functions validate the non-secret matrix without receiving that key. Invalid configuration returns a fixed failure before any local business or outside-provider side effect. Provider parameters, secrets, account mode, deployment, and live behavior still require separate private evidence.
+
 ### Secret inventory
 
 | Name | Consumer | Storage | Notes |

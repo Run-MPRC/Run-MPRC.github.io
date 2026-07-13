@@ -91,6 +91,33 @@ COMMERCE_ENABLED
 ENVIRONMENT_NAME
 ```
 
+### Typed server configuration gate — source in #149, not deployed
+
+[CONFIG-001A / #149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) makes the current commerce and confirmation-mail Functions validate configuration at each invocation. Parsing happens at runtime, not while Firebase discovers Functions for deployment. The returned configuration is frozen and contains no Stripe key.
+
+| Environment | Accepted site origin | Expected Stripe mode | Accepted server-key mode |
+| --- | --- | --- | --- |
+| `local` | Exact loopback `http` or `https` origin | Test | Test |
+| `test` | Canonical HTTPS `.test` origin | Test | Test |
+| `staging` | `https://dev.runmprc.com` | Test | Test |
+| `production` | `https://runmprc.com` | Live | Live |
+
+An origin is only the scheme, host, and optional non-default port. Credentials, paths, trailing slashes, queries, fragments, padded values, and default-port aliases are rejected. Test/live compatibility uses only the documented `sk_` or restricted `rk_` mode marker. The complete key is never returned, logged, stored in configuration, or copied into evidence.
+
+```mermaid
+flowchart TD
+    Entry["Commerce or mail Function invoked"] --> First["Check caller, webhook signature, or whether mail work applies"]
+    First --> Parse{"Environment, origin, mode, and required key marker valid?"}
+    Parse -- "No" --> Stop["Fixed configuration error\nno rate-limit, business, mail, ledger, or Stripe write"]
+    Parse -- "Yes" --> Existing["Run existing validation and business logic"]
+```
+
+Text alternative: after identity, signature, or mail-eligibility checks, invalid server settings stop the invocation before any business, mail, event-ledger, or Stripe side effect.
+
+The webhook and confirmation-mail triggers validate environment, origin, and expected mode without receiving the Stripe API key. Only the two checkout creators and two admin action Functions bind and validate that key. `COMMERCE_ENABLED` and global/per-domain stop-switch behavior remain **NOT AVAILABLE YET** under CONFIG-001B.
+
+Source tests do not prove Firebase parameters, Secret Manager bindings, Stripe account mode, or production behavior. Before deployment, record only parameter names in public evidence. Store values and provider identifiers in the approved private continuity record. Use a protected staging release with made-up data; never discover configuration by trying a real payment or email.
+
 `functions.config()` is deprecated and scheduled for decommissioning in March 2027. The legacy member-sync API key must be retired or migrated as its own security issue, not copied into a new generic secret without redesign.
 
 ### Secret rotation record

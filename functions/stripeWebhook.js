@@ -7,6 +7,11 @@ const {
   auditEntry,
   Timestamp,
 } = require('./stripeHelpers');
+const {
+  CONFIGURATION_ERROR_MESSAGE,
+  ServerConfigError,
+  loadServerConfig,
+} = require('./serverConfig');
 
 const LEDGER_RETENTION_DAYS = 90;
 const CHECKOUT_EVENT_TYPES = new Set([
@@ -52,15 +57,7 @@ function isSupportedEventType(type) {
     || DISPUTE_EVENT_TYPES.has(type);
 }
 
-function validateExpectedLivemode(event) {
-  const configured = process.env.STRIPE_LIVEMODE_EXPECTED;
-  if (configured === undefined || configured === '') {
-    throw new Error('STRIPE_LIVEMODE_EXPECTED must be explicitly configured');
-  }
-  if (configured !== 'true' && configured !== 'false') {
-    throw new Error('STRIPE_LIVEMODE_EXPECTED must be true or false');
-  }
-  const expected = configured === 'true';
+function validateExpectedLivemode(event, expected) {
   if (event.livemode !== expected) {
     return { ok: false, expected, reason: 'livemode_mismatch' };
   }
@@ -1326,7 +1323,7 @@ function bindingMatchesTarget(snapshot, target) {
   return data.targetPath === target.ref.path && data.targetType === target.kind;
 }
 
-async function processEvent(event) {
+async function processEvent(event, expectedLivemode) {
   const db = admin.firestore();
   const eventRef = db.collection('stripeEvents').doc(event.id);
   const existing = await eventRef.get();
@@ -1334,7 +1331,7 @@ async function processEvent(event) {
     return { duplicate: true, outcome: existing.data().outcome };
   }
 
-  const modeValidation = validateExpectedLivemode(event);
+  const modeValidation = validateExpectedLivemode(event, expectedLivemode);
   const ownership = classifyMprcReference(event.data.object);
   const target = modeValidation.ok ? await resolveTarget(event) : null;
   if (target) await assertExclusiveProviderOwnership(event, target);
@@ -1425,13 +1422,24 @@ exports.stripeWebhook = functions
       return;
     }
 
+    let webhookSecret;
+    try {
+      webhookSecret = getWebhookSecret();
+    } catch {
+      console.error('Stripe webhook configuration unavailable', {
+        reason: 'webhook_secret_missing',
+      });
+      response.status(500).send(CONFIGURATION_ERROR_MESSAGE);
+      return;
+    }
+
     let event;
     try {
       const signature = request.get('stripe-signature');
       event = Stripe.webhooks.constructEvent(
         request.rawBody,
         signature,
-        getWebhookSecret(),
+        webhookSecret,
       );
       if (event.object !== 'event'
         || !isStripeId(event.id, 'evt_')
@@ -1447,8 +1455,21 @@ exports.stripeWebhook = functions
       return;
     }
 
+    let serverConfig;
     try {
-      const result = await processEvent(event);
+      serverConfig = loadServerConfig();
+    } catch (error) {
+      console.error('Stripe webhook configuration unavailable', {
+        reason: error instanceof ServerConfigError
+          ? error.reason
+          : 'configuration_failed',
+      });
+      response.status(500).send(CONFIGURATION_ERROR_MESSAGE);
+      return;
+    }
+
+    try {
+      const result = await processEvent(event, serverConfig.stripeLivemodeExpected);
       response.json({ received: true, ...result });
     } catch {
       console.error('Stripe webhook handler error', {

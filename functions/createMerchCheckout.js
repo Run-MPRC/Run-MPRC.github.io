@@ -10,14 +10,11 @@ const {
   Timestamp,
 } = require('./stripeHelpers');
 const { checkRateLimit, extractIp } = require('./rateLimit');
+const { loadCallableServerConfig } = require('./serverConfig');
 
 const HOUR_MS = 60 * 60 * 1000;
 const MERCH_PER_IP_PER_HOUR = 20;
 const MERCH_PER_EMAIL_PER_HOUR = 10;
-
-function resolveSiteOrigin() {
-  return process.env.SITE_ORIGIN || 'https://runmprc.com';
-}
 
 async function ensureStripeProduct(stripe, productRef, product) {
   if (product.stripeProductId) return product.stripeProductId;
@@ -37,6 +34,7 @@ exports.createMerchCheckout = functions
   .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
+    const serverConfig = loadCallableServerConfig({ requireStripeKey: true });
 
     const {
       productSlug,
@@ -136,7 +134,7 @@ exports.createMerchCheckout = functions
       ...product,
       slug: productSlug,
     });
-    const origin = resolveSiteOrigin();
+    const origin = serverConfig.siteOrigin;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',

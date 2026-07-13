@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { Timestamp } = require('firebase-admin/firestore');
+const { loadServerConfig } = require('./serverConfig');
 
 /**
  * Firestore trigger: writes an email doc to the `mail` collection when a
@@ -70,13 +71,13 @@ exports.sendConfirmationEmail = functions.firestore
 
     const email = after.runner?.email;
     if (!email) return;
+    const { siteOrigin } = loadServerConfig();
 
     const eventSnap = await admin.firestore()
       .collection('events').doc(context.params.eventId).get();
     if (!eventSnap.exists) return;
     const event = { id: eventSnap.id, ...eventSnap.data() };
 
-    const siteOrigin = process.env.SITE_ORIGIN || 'https://runmprc.com';
     const { html, text } = buildEmail({
       reg: { id: context.params.regId, ...after },
       event,
@@ -107,13 +108,13 @@ exports.sendConfirmationEmailOnCreate = functions.firestore
 
     const email = data.runner?.email;
     if (!email) return;
+    const { siteOrigin } = loadServerConfig();
 
     const eventSnap = await admin.firestore()
       .collection('events').doc(context.params.eventId).get();
     if (!eventSnap.exists) return;
     const event = { id: eventSnap.id, ...eventSnap.data() };
 
-    const siteOrigin = process.env.SITE_ORIGIN || 'https://runmprc.com';
     const { html, text } = buildEmail({
       reg: { id: context.params.regId, ...data },
       event,

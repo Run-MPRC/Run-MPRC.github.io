@@ -54,7 +54,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | partial: #103 baseline + #124 hosted Jest; #126 SPA gate and remaining gates open | SAFETY-001 |
 | 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | partial: SUPPLY-001A tracked by #127; remaining upgrade/scanning slices open | CI-001 baseline |
 | 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | source merged #123; Firebase live unproven | — |
-| 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | ready | CI-001A recommended |
+| 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | CONFIG-001A tracked in [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149); CONFIG-001B proposed; not deployed | CI-001A recommended |
 | 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; backend live unproven; parent open | SEC-001 recommended |
 | 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | ready | AUTH-001 |
 | 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P0 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SAFETY-001/#99; SEC-001 and AUTH-003 for A; staged deferral/cutover with ABUSE-001A for C |
@@ -274,12 +274,14 @@ Do not compensate by moving sensitive data into a different admin-readable docum
 ## CONFIG-001 — Fail closed on server environment and commerce configuration
 
 **Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:firebase`, `area:stripe`, `size:M`
-**Status:** Ready
+**Status:** CONFIG-001A source/tests are tracked in live issue [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149), which remains the status source for review and merge evidence. CONFIG-001B remains proposed. No Firebase/Stripe configuration or live behavior is proven by source.
 **Depends on:** CI-001A recommended
 
 ### Problem
 
 Several Functions default a missing `SITE_ORIGIN` to the production domain; until this pass the webhook accepted a missing expected Stripe mode. `ENVIRONMENT_NAME` and `COMMERCE_ENABLED` are documented but not validated or enforced. A missing/mistyped deployment variable can therefore create unsafe URLs, mix live/test behavior, or leave no operational kill switch.
+
+CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) owns only the typed invocation-time environment/origin/expected-mode boundary, server-key mode compatibility on the four key-bound Functions, removal of production-origin fallbacks, and fixed no-side-effect tests. Webhook and mail remain free of the Stripe API key. CONFIG-001B separately owns `COMMERCE_ENABLED`, global/per-domain switches, refund/incident continuity, and switch-race tests; do not combine the children.
 
 ### Scope
 
