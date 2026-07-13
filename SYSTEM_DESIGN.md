@@ -251,11 +251,15 @@ The first release may continue using `admin` in the UI, but server endpoints and
 | `products/{id}/variants/{variantId}` | SKU, option values, price, on-hand, reserved, and sold counts |
 | `orders.paymentStatus` and `orders.fulfillmentStatus` | Separate money state from physical fulfillment state |
 | `registrations.paymentStatus` and `registrations.registrationStatus` | Separate payment lifecycle from attendance/transfer/cancellation lifecycle |
+| `orders/registrations.stateSchemaVersion` and `refundStatus` | Version the split business-record state contract and keep confirmed refund status/total separate from payment/operational state |
+| server-only per-dispute records | Keep one state per Stripe dispute; never collapse multiple disputes into one canonical order/registration `disputeStatus` |
 | `retentionJobs/{jobId}` | Optional operational record of scheduled minimization/deletion work |
 | `systemConfig/commerce` | Versioned global/domain command admission; browser read/write denied; protected writer is not available yet |
 | `events/{id}.checkoutEnabled` and `products/{id}.checkoutEnabled` | Explicit server-owned resource admission; missing means disabled |
 
 Large `auditLog` arrays on registration and order documents should be replaced before they approach Firestore document-size and write-contention limits. New audit data should be append-oriented.
+
+PAY-002A1 is tracked in live [#161](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/161). Numeric local `stateSchemaVersion: 1` is distinct from string Stripe metadata `schemaVersion: "1"`, which only versions provider reference binding. The reducers and legacy classifier are a pure source/test target: they import no Firebase or Stripe code, make no call, and are not used by an endpoint. Current records, webhook behavior, compatibility writes, real migration, deployment, and live state remain unchanged until later PAY-002/PAY-003 children adopt the contract.
 
 ## 7. Business invariants
 
@@ -359,7 +363,7 @@ Merchandise uses the same checkout saga but reserves a specific SKU/variant. Str
 
 ### 8.4 Refund
 
-An authorized finance action creates a refund request with a stable idempotency key. Stripe executes the money movement; the webhook is the canonical confirmation. The local record may show `refund_pending` while waiting. Repeated clicks or network retries must return the original refund rather than create another one. A full registration refund may release capacity according to event policy; a merchandise refund does not modify inventory until the return/stock disposition is explicitly recorded.
+An authorized finance action creates a separate refund-operation record with a stable idempotency key. Stripe executes the money movement; the webhook is the canonical confirmation. That operation may show `refund_pending` while waiting, but the order/registration aggregate `refundStatus` remains at its last confirmed value. Repeated clicks or network retries must return the original refund rather than create another one. A full registration refund may release capacity according to event policy; a merchandise refund does not modify inventory until the return/stock disposition is explicitly recorded.
 
 ### 8.5 Webhook processing
 

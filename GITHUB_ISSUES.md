@@ -62,7 +62,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | partial: Enterprise browser source/tests tracked in [#159](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/159); provider config, native enforcement, rate limits, and live proof open | CI-001 baseline |
 | 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | partial: PAY-001A source/tests tracked in [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157); B/C/D and endpoint adoption open | ABUSE-001 interface agreed |
 | 12 | PROMO-001 | Disable unmodeled Stripe promotions until discounts are authoritative | P0 | S | source/tests complete under open GitHub issue #102; provider inventory and deployment remain owner action | PAY-001 for any future discount contract |
-| 13 | PAY-002 | Implement idempotent payment commands and explicit state machines | P0 | L | ready after PAY-001 | CONFIG-001, PAY-001 |
+| 13 | PAY-002 | Implement idempotent payment commands and explicit state machines | P0 | L | partial: PAY-002A1 pure source/tests tracked in [#161](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/161); runtime adoption, migration, and B-D open | CONFIG-001, PAY-001 |
 | 14 | PAY-003 | Build idempotent, async-aware Stripe webhook ingestion | P0 | L | PAY-003A source merged in #101; PAY-003B/C remain open; not deployed | CONFIG-001, PAY-001/PAY-002 target contract |
 | 15 | RACE-001 | Add transactional race-capacity reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 16 | MERCH-001 | Add SKU variants and transactional inventory reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
@@ -624,8 +624,14 @@ The local webhook/creator patch is a safety default, not a complete discount fea
 ## PAY-002 — Implement idempotent payment commands and explicit state machines
 
 **Labels:** `priority:P0`, `type:reliability`, `type:security`, `area:stripe`, `area:firebase`, `size:L`, `needs-migration`
-**Status:** Ready after PAY-001
+**Status:** Partial. PAY-002A1 pure source/tests are tracked in live [#161](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/161). Runtime adoption, real legacy inventory/migration, command identity, and checkout sagas remain open.
 **Depends on:** CONFIG-001 and PAY-001
+
+### Current atomic boundary
+
+PAY-002A1 defines only a dependency-free version-1 target: separate payment, registration, fulfillment, confirmed-refund, and per-dispute reducers; fixed cross-dimension validation; and a synthetic legacy classifier/redacted aggregate report. Orders/registrations have no canonical singular `disputeStatus`; each dispute is validated separately against paid payment context. Operational `fulfilled`, `transferred`, and `cancelled` legacy values require separate compatible payment evidence rather than manufacturing payment state. It does not import Firebase/Stripe, expose a Function, change the webhook, write a compatibility field, enumerate a real record, or deploy.
+
+The next boundaries remain separate. A later inventory/migration child must use #113-approved data categories and a dry-run before writes. PAY-002B owns caller-scoped command/attempt identity and idempotency journals. PAY-002C/D own persistence-first race/shop sagas. PAY-003B/#106 owns webhook adoption and Stripe API-version adaptation. PAY-004/PAY-005 own cancellation and refund operations.
 
 ### Problem
 
@@ -633,7 +639,7 @@ Checkout Session, Stripe Product/Price/Payment Link, and Refund creation have no
 
 ### Scope
 
-- Define separate `paymentStatus`, `registrationStatus`, `fulfillmentStatus`, `refundStatus`, and `disputeStatus` with an allowed transition matrix.
+- Define separate `paymentStatus`, `registrationStatus`, `fulfillmentStatus`, confirmed `refundStatus`, and one record/state per dispute with allowed structural transition matrices. Any singular dispute summary is derived compatibility only.
 - Keep/derive legacy `status` during an additive migration.
 - Require client/admin `commandId` UUIDs; hash caller scope + ID into `checkoutRequests`/`commands` records with payload fingerprint.
 - Reusing the same ID/payload returns the same result; different payload fails.
