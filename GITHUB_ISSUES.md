@@ -49,10 +49,10 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 
 | Order | ID | Title | Priority | Size | Status | Depends on |
 | ---: | --- | --- | --- | --- | --- | --- |
-| 1 | SAFETY-001 | Preserve commerce/OAuth callbacks and isolate local Firebase Functions | P0 | S | implemented_locally | — |
-| 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | partial: #103 baseline + #124 hosted Jest; remaining gates open | SAFETY-001 |
+| 1 | SAFETY-001 | Preserve commerce/OAuth callbacks and isolate local Firebase Functions | P0 | S | source/test complete under #99; provider/live callback unproven | — |
+| 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | partial: #103 baseline + #124 hosted Jest; #126 SPA gate and remaining gates open | SAFETY-001 |
 | 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | ready | CI-001 baseline |
-| 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | implemented_locally | — |
+| 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | source merged #123; Firebase live unproven | — |
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | ready | CI-001A recommended |
 | 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; backend live unproven; parent open | SEC-001 recommended |
 | 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | ready | AUTH-001 |
@@ -84,7 +84,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 ## SAFETY-001 — Preserve commerce/OAuth callbacks and isolate local Firebase Functions
 
 **Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:web`, `area:firebase`, `size:S`
-**Status:** `implemented_locally`; focused and integrated local checks pass, but review/merge/deploy evidence remains
+**Status:** Source/test outcome delivered under [#99](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/99); provider configuration and production callback behavior remain unproven
 **Depends on:** None
 
 ### Problem
@@ -95,8 +95,11 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 - Preserve same-origin pathname, search, and hash through the GitHub Pages root redirect.
 - Clear temporary redirect state before restoration and reject malformed, protocol-relative, or cross-origin targets.
-- Instantiate the shared Firebase Functions client and connect it to `127.0.0.1:5001` only in development.
-- Add focused tests for callback preservation/rejection and development-versus-production emulator connections.
+- Use a fully synthetic Firebase configuration in development/test.
+- Connect shared Auth, Firestore, and Functions clients to their loopback emulators and stop startup if connector setup fails.
+- Route the existing direct CSV Function URL through the same local/production resolver.
+- Keep App Check, Analytics, and Sentry off locally; do not initialize Sentry on an initial capability callback URL.
+- Add focused callback, environment, failure, direct-URL, and monitoring tests.
 
 ### Acceptance criteria
 
@@ -104,25 +107,33 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 - [x] `/account/strava/callback?code=x&state=y` restores query parameters.
 - [x] Cross-origin and protocol-relative stored targets are discarded.
 - [x] Auth, Firestore, and Functions all connect to emulators in development.
+- [x] Development/test Firebase configuration contains no production project identifiers.
+- [x] App Check, Analytics, and Sentry do not initialize locally, even when public config is present.
+- [x] Every Auth/Firestore/Functions connector failure stops local startup.
+- [x] The direct CSV export resolves to the local Functions emulator outside production.
 - [x] None connects to an emulator in a production build.
 - [x] Production build contains the bridge and passes without changing unrelated sitemap content.
+- [x] A demo-only CLI smoke reports Auth, Firestore, and Functions ready on the documented loopback ports.
 
 ### Verification
 
-- Focused SPA navigation tests.
-- Firebase resource environment tests with SDK calls mocked.
-- Production compile invoked without sitemap-generating prebuild when only diagnosing.
+- Node 20: 9/9 standalone SPA navigation tests.
+- Node 20: 16/16 focused Firebase/Sentry tests and 4 frontend suites / 32 tests.
+- Node 20: Functions lint and 17/17 Functions tests.
+- Java 17 + Firebase CLI: demo-only Auth/Firestore/Functions readiness and loopback-port smoke.
+- Diagnostic production compile invoked without the sitemap-generating prebuild.
+- No production callback, account, data, provider call, Firebase deployment, or profile repair was tested.
 
 ### Agent handoff
 
-Do not redesign routing or hosting in this issue; WEB-001 owns that. Do not include any real callback token in fixtures.
+Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
 
 ---
 
 ## CI-001 — Repair test gates and secure the deployment pipeline
 
 **Labels:** `priority:P0`, `type:security`, `type:testing`, `area:ci`, `size:L`, `needs-external-config`
-**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105). [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) merged the deterministic local frontend Jest baseline, and [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124) owns its named blocking hosted-CI step. Fail-closed lint, required branch protection, dependency/secret checks, and protected backend-first deployment remain open, so the delivery pipeline is still non-compliant overall.
+**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105). [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) merged the deterministic local frontend Jest baseline, and [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124) added its named blocking hosted-CI step. [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126) owns the separate standalone SPA test gate. Fail-closed lint, required branch protection, dependency/secret checks, and protected backend-first deployment remain open, so the delivery pipeline is still non-compliant overall.
 **Depends on:** SAFETY-001
 
 ### Problem
@@ -164,7 +175,7 @@ Before #103, frontend tests failed because the Jest environment lacked `TextEnco
 
 ### Agent handoff
 
-Repository changes can implement tests/workflow shape, but OIDC/IAM/environment protection requires an authorized owner. CI-001A/#103 owns test reliability, CI-001B1/#124 owns the hosted frontend-Jest step, and the remaining CI-001B2 deployment-identity/protection work must stay in separately claimed children.
+Repository changes can implement tests/workflow shape, but OIDC/IAM/environment protection requires an authorized owner. CI-001A/#103 owns test reliability, CI-001B1/#124 owns the hosted frontend-Jest step, CI-001B1A/#126 owns the standalone SPA step, and the remaining CI-001B2 deployment-identity/protection work must stay in separately claimed children.
 
 ---
 
@@ -214,7 +225,7 @@ Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewab
 ## SEC-001 — Replace the Firestore admin catch-all with resource-specific rules
 
 **Labels:** `priority:P0`, `type:security`, `area:firebase`, `size:M`
-**Status:** `implemented_locally`; rule and denial tests exist, with final review/deploy evidence still required
+**Status:** Source and tests merged through [PR #123](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/123) at `a7fc301e85b0aeabe396e771faea21d3fc8e7b2b`; Firebase deployment/live behavior remains unproven under #105
 **Depends on:** None
 
 ### Problem
@@ -234,19 +245,20 @@ Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewab
 
 ### Acceptance criteria
 
-- [ ] Admin client cannot read `members/{uid}/secrets/*`.
-- [ ] Admin client cannot create/update/delete registration/order payment state or audit data.
-- [ ] Admin client cannot read/write an unmatched arbitrary collection.
-- [ ] Admin client cannot create `mail`, modify rate limits, webhook ledgers, or authorization/audit records.
-- [ ] Current admin event/product list/editor and member/order/registration read views retain only required access.
-- [ ] Public, member, unverified, and owner/self-service behavior remains explicitly tested.
-- [ ] Rules deploy/compile and all emulator tests pass.
+- [x] Admin client cannot read `members/{uid}/secrets/*` in the tested source Rules.
+- [x] Admin client cannot create/update/delete registration/order payment state or audit data.
+- [x] Admin client cannot read/write an unmatched arbitrary collection.
+- [x] Admin client cannot create `mail`, modify rate limits, webhook ledgers, or authorization/audit records.
+- [x] Current admin event/product list/editor and member/order/registration read views retain only required access.
+- [x] Public, member, unverified, and owner/self-service behavior remains explicitly tested.
+- [x] Rules compile in the emulator and all 295 Rules tests pass on Node 20/Java 17.
+- [ ] #105 deploys the exact revision to protected staging and proves synthetic allow/deny plus rollback before production.
 
 ### Tests/evidence
 
-- Add deny tests for every protected collection and collection-group query.
-- Test admin read versus write separately.
-- Test legacy event drafts are not publicly readable.
+- [PR #123](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/123) contains protected collection/collection-group, admin read/write, hostile catalog, owner-profile, and legacy-draft coverage.
+- Two independent exact-commit reviews approved with no P0/P1/P2 findings.
+- The merge workflow explicitly skipped Firebase because deployment authority was absent; green CI is source evidence only.
 
 ### Agent handoff
 
@@ -1280,7 +1292,7 @@ The program is partially published. Treat unchecked rows as future governance wo
 - [ ] Create labels and milestones above.
 - [ ] Create only dependency-ready, non-duplicate issues after searching the live milestone; never bulk-publish the snapshot.
 - [ ] Add dependency links and project-board status.
-- [x] Mark SAFETY-001, SEC-001, PAY-003, and PROMO-001 according to the verified working-tree result while keeping merge/deploy/full-acceptance gaps open.
+- [x] Mark SAFETY-001, SEC-001, PAY-003, and PROMO-001 with distinct source, review, merge, deployment, provider, and live-verification states.
 - [ ] Assign business-owner issues to humans; do not assign LEGAL-001/OPS-001 solely to a coding agent.
 - [ ] Link root design documents from every issue and link GitHub issue URLs back into this file.
 - [ ] Do not include secrets, private account IDs, customer data, or confidential legal advice in issue bodies/evidence.

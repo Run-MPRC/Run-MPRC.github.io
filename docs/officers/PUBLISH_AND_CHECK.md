@@ -18,6 +18,7 @@ As of **2026-07-13**:
 - The GitHub repository currently opens stale, unprotected `dev` by default; use the explicit `main` branch and do not merge `dev` into `main` as a shortcut.
 - GitHub Pages builds a copy of the website.
 - `runmprc.com` is currently served by Netlify, not that Pages copy.
+- Current previews are optimized production-mode builds and can point at production Firebase. They are safe only for public, read-only page review.
 - The Firebase step can say success while skipping deployment when its service-account secret is absent.
 - Therefore, a green workflow does not prove the public site or backend changed.
 
@@ -29,12 +30,13 @@ As of **2026-07-13**:
 4. Open the `Frontend lint + build` job.
 5. Confirm `Run frontend Jest tests` is present and green. Stop if it is missing, skipped, or failed.
 6. Confirm the other required test steps are green.
-7. Ask the platform maintainer for separate non-mutating lint evidence when lint applies. Do not use the green job as lint proof.
-8. Confirm the officer guide was updated when needed.
-9. Read the rollback note.
-10. Confirm you understand that a merge automatically publishes the GitHub Pages copy.
-11. Ask the platform maintainer whether any outside automation may also publish from the merge.
-12. Do not merge if either automatic publication is unacceptable or unknown.
+7. If you open a preview, review only public pages. Do not sign in, open a private/admin page, submit a form, or test a signup, checkout, refund, email, or Strava action.
+8. Ask the platform maintainer for separate non-mutating lint evidence when lint applies. Do not use the green job as lint proof.
+9. Confirm the officer guide was updated when needed.
+10. Read the rollback note.
+11. Confirm you understand that a merge automatically publishes the GitHub Pages copy.
+12. Ask the platform maintainer whether any outside automation may also publish from the merge.
+13. Do not merge if either automatic publication is unacceptable or unknown.
 
 ## Netlify publication — NOT AVAILABLE YET
 
@@ -45,7 +47,7 @@ Before a backup officer can publish independently, a claimed hosting issue must 
 3. The connected GitHub repository and branch.
 4. The event that starts a production deploy.
 5. The build command and public configuration names.
-6. A safe preview URL for the intended commit.
+6. A safe preview URL for the intended commit, plus proof that private/Firebase actions use staging before anyone signs in.
 7. Where Netlify displays the deployed commit.
 8. How to restore the previous known-good deploy.
 9. Which DNS records point `runmprc.com` to Netlify.
@@ -73,7 +75,7 @@ The named Jest step is green for both the pull-request commit and the merged com
 
 ## Stop conditions
 
-Stop and ask the platform maintainer if the pull request does not target `main`; approval or the rollback note is missing; the named Jest step is missing, skipped, or failed; publication is unexpected; the deployed commit is unknown; or any live surface disagrees with the merged change.
+Stop and ask the platform maintainer if the pull request does not target `main`; approval or the rollback note is missing; the named Jest step is missing, skipped, or failed; a preview asks you to sign in or use private/Firebase behavior; publication is unexpected; the deployed commit is unknown; or any live surface disagrees with the merged change.
 
 ## Success proof
 

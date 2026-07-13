@@ -39,13 +39,13 @@ Historical developer/content/LLM guides remain under [`docs/`](./docs/README.md)
 - `firestore.rules` and `firestore.indexes.json`: browser data boundary and query indexes.
 - `tests/firestore-rules/`: emulator-based allow/deny coverage.
 - `.github/workflows/`: frontend, Functions, Rules CI and deployment automation.
-- `public/404.html`: current GitHub Pages SPA fallback. The safer shared callback helper and its tests are **NOT AVAILABLE YET** and belong to #99.
+- `public/404.html`, `public/index.html`, and `public/spa-navigation.js`: current tested GitHub Pages callback handoff. It preserves safe same-origin path, query, and fragment state.
 
 **Deployment reality checked 2026-07-12:** the repository publishes a GitHub Pages copy, while `runmprc.com` is currently served by a separate Netlify deployment. The Firebase workflow can remain green while skipping backend deployment when its service-account secret is absent. Treat website, Firebase, and provider deployment as separate states until CI-001 and hosting consolidation are complete.
 
 ## Local setup status
 
-**Firebase-backed local development is NOT AVAILABLE YET on `main`.** Issue [#99](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/99) owns the missing demo-project emulator script, Auth/Firestore/Functions wiring, and fail-closed startup. Until #99 merges, `npm start` can use production Firebase configuration; do not use it for account, admin, member, event, shop, payment, or private-data testing.
+The #99 local Firebase boundary is available for synthetic source development. It uses a non-addressable `demo-mprc-local` configuration and loopback Auth, Firestore, and Functions emulators. It stops startup when an emulator connection cannot be configured. App Check, Analytics, and Sentry stay off locally.
 
 Node.js 20 lockfile installation remains the baseline for maintainers preparing isolated, non-Firebase checks:
 
@@ -54,7 +54,19 @@ npm ci --legacy-peer-deps
 npm --prefix functions ci
 ```
 
-After #99 merges, the runbook and this section must be updated from its merged tests rather than from the pre-merge working tree.
+Start it in two terminals:
+
+```bash
+# Terminal 1
+npm run emulators
+
+# Terminal 2 — only after all three emulators report ready
+npm start
+```
+
+Open only `http://localhost:3000`. Stop if Firebase traffic uses a non-loopback host. Use synthetic records only. This does **not** make checkout, refunds, email, Strava, or other outside-provider calls safe; follow [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) before any provider test.
+
+Do not use a Netlify preview or locally served optimized `build/` for sign-in, private pages, admin work, or Firebase testing. Those production-mode builds still target production Firebase until #105/CONFIG establishes staging.
 
 ## Verification
 
@@ -62,11 +74,14 @@ After #99 merges, the runbook and this section must be updated from its merged t
 npm --prefix functions run lint
 npm --prefix functions run test:run -- --runInBand
 CI=true npm test -- --watchAll=false --runInBand
+npm run test:spa-navigation
 npm run test:rules
 CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
 ```
 
-Rules tests require Java 17. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. The SPA navigation command remains queued under #99. The frontend Jest command provides the deterministic local baseline and runs as the blocking `Run frontend Jest tests` step in hosted CI under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) still owns non-mutating lint, branch/deployment protection, credentials, staging, and the other incomplete delivery gates.
+Rules tests require Java 17. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. The frontend Jest command runs as the blocking `Run frontend Jest tests` step in hosted CI under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). The separate SPA callback command is locally available; [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126) owns adding it to hosted CI. [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) still owns non-mutating lint, branch/deployment protection, credentials, staging, and the other incomplete delivery gates.
+
+These safety changes do not repair a missing member profile or prove deployed Firebase Rules/Functions. The reported profile-save failure remains [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118).
 
 ## Working on the platform
 
