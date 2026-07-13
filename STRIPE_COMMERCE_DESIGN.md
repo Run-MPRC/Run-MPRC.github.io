@@ -51,6 +51,8 @@ Never let a development build fall back to production Functions. Never share a w
 
 CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) implements this matrix as an invocation-time source guard for the current Functions. Configuration parsing returns only the environment name, canonical site origin, and expected livemode; it never returns or stores the complete Stripe key. The two checkout creators and two admin action Functions validate only the documented test/live marker on their bound `sk_` or restricted `rk_` server key. Webhook and confirmation-mail Functions validate the non-secret matrix without receiving that key. Invalid configuration returns a fixed failure before any local business or outside-provider side effect. Provider parameters, secrets, account mode, deployment, and live behavior still require separate private evidence.
 
+PAY-002B1 applies the same closed pairing to Stripe idempotency keys: `production` requires `live`; `local`, `test`, and `staging` require `test`; every other pair fails. The environment remains bound into the idempotency-key digest rather than being treated as an unverified label.
+
 ### Commerce admission and incident continuity
 
 CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds a source-only command admission matrix. It does not create an officer control or enable commerce.
@@ -224,14 +226,28 @@ Launch with quantity `1` unless cart and multi-line inventory semantics are expl
 }
 ```
 
-Returning the same request returns the same active Session. If the Session expired, a versioned new attempt can be created against the same business record under an explicit transition.
+Within PAY-002B2's conservative stored safe-send window, returning the same request reuses the same parameters and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries and reconcile stored/provider/webhook evidence before returning a Session or allowing an explicit new attempt. If a Session is proven expired, a versioned new attempt can be created against the same business record under an explicit transition.
+
+### Pure command identity and provider-key contract (PAY-002B1)
+
+PAY-002B1 is tracked in live [#163](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/163). It defines three pure values for later server commands:
+
+1. A command key hashes contract version, environment, server-derived caller-scope kind/value, and one canonical lowercase UUID v4. It deliberately excludes command type, so reusing the same caller command ID for a different operation reaches the same future journal record and can be rejected.
+2. A separate payload fingerprint hashes contract version, trusted command type, and the endpoint-schema-validated canonical payload. Object key order is normalized; array order remains meaningful; only deeply frozen, accessor-free, proxy-free, bounded JSON-like data with integer numbers is accepted.
+3. A Stripe idempotency key hashes expected provider mode, bounded provider operation, command key, and immutable provider-attempt number. It exposes no raw caller, UUID, payload, business/provider ID, or personal value and stays below Stripe's 255-character limit.
+
+Version 1 supports only the closed caller scopes `firebase_uid`, `anonymous_principal`, and the fixed `internal_system` principal. It does not support multi-tenant Firebase Auth. A future multi-tenant version must bind the verified tenant identity into the command key rather than treating a UID alone as globally unique.
+
+A Firestore worker-lease takeover is not a new provider attempt. Here, provider attempt means one logical provider generation, not an HTTP retry count. A network error, timeout, Stripe `5xx`, or unknown outcome never advances it. Before a conservative stored first-send deadline, retry uses the exact same parameters, attempt, and key. Stripe may prune a key after at least 24 hours; after the safe deadline—or when first-send time is unknown—PAY-002B2 must stop automatic POST retries and reconcile stored provider references plus verified webhook/metadata or authorized operator evidence. A later provider attempt is allowed only after separately proven non-execution or an explicitly safe corrected/new logical operation. PAY-002B2 owns that journal, timestamps, stored fingerprint comparison, leases/fencing, safe result replay, fixed failures, reconciliation, and append-oriented audit.
+
+Command hashes and fingerprints are pseudonymous server-only identifiers, not anonymization. They must not be returned to browsers or placed in logs, URLs, analytics, screenshots, or public evidence. This source contract performs no authorization, Firestore/Stripe call, clock/random operation, deployment, or provider configuration. No endpoint imports it yet, so it does not currently prevent a duplicate payment operation.
 
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
 
 1. Validate the request and read server-controlled catalog/event state.
-2. Derive the idempotency-record key and payload fingerprint.
+2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2 must persist and compare them before any provider call.
 3. In one Firestore transaction:
    - Reuse a matching prior request or reject a conflicting reuse.
    - Lock/read the event capacity counter or SKU variant.
@@ -239,12 +255,12 @@ External Stripe calls cannot be part of a Firestore transaction. Use this sequen
    - Increment `reserved` exactly once when applicable.
    - Create the registration/order in `checkout_creating` with an immutable expected-price snapshot.
    - Store `capacityHeld` or `inventoryHeld` so release is idempotent.
-4. Create the Stripe Checkout Session with an idempotency key such as `registration:{id}:session:{attempt}` or `order:{id}:session:{attempt}`.
+4. Create the Stripe Checkout Session with the PAY-002B1 versioned mode/operation/command-hash/provider-attempt key. Do not put a raw registration, order, caller, or provider ID in that key.
 5. Include `client_reference_id`, `metadata.type`, `metadata.schemaVersion`, and the opaque local ID(s).
 6. Store Session ID, URL, expiry, and attempt state.
 7. Return the URL.
 8. If Stripe definitively rejects creation, run a compensating transaction that marks the attempt failed and releases the hold once.
-9. If the function loses its response after Stripe creates the Session, a retry uses the same Stripe key, receives the same Session, and completes step 6.
+9. If the function loses its response after Stripe creates the Session, PAY-002B2 retries the exact POST only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing and reconciles stored provider references plus verified webhook/metadata evidence before completing step 6.
 
 Create the local business record before calling Stripe. That lets a very fast webhook resolve metadata directly and eliminates the current record-not-found race.
 
@@ -381,7 +397,7 @@ stateDiagram-v2
     processing --> failed
 ```
 
-Text alternative: one Checkout attempt moves forward from creating to open, then to processing or one terminal result. A raw state regression never starts a second attempt; PAY-002B must give that attempt its own command identity.
+Text alternative: one Checkout attempt moves forward from creating to open, then to processing or one terminal result. A raw state regression never starts a second attempt; PAY-002B2 must persist the B1 identity and fence that attempt.
 
 ### Registration state
 
@@ -409,7 +425,7 @@ Each Stripe dispute has its own state. An order or registration never stores one
 
 The server's Stripe client requests select `2023-10-16`, but [webhook endpoint Event versioning](https://docs.stripe.com/webhooks/versioning) is independent and the provider setting is unverified. Current webhook source neither accepts `prevented` nor validates `event.api_version`. PAY-003B must inventory and pin/validate the endpoint Event contract, then add fixtures before adopting any newer value.
 
-A same-state observation is `unchanged`, not proven duplicate. A different Event can carry a higher confirmed partial-refund total or new dispute evidence without changing the enum. PAY-003's Event inbox and PAY-002B/PAY-005 command IDs—not this reducer—prove replay. Because Stripe can deliver the first observed Event out of order, the pure reducer can accept a structurally supported first observation while the provider adapter remains responsible for signature, object, version, ownership, amount, currency, environment, and evidence checks.
+A same-state observation is `unchanged`, not proven duplicate. A different Event can carry a higher confirmed partial-refund total or new dispute evidence without changing the enum. PAY-003's Event inbox and persisted PAY-002B2/PAY-005 command records—not this reducer or a B1 digest alone—prove replay. Because Stripe can deliver the first observed Event out of order, the pure reducer can accept a structurally supported first observation while the provider adapter remains responsible for signature, object, version, ownership, amount, currency, environment, and evidence checks.
 
 Every allowed edge is only a structurally possible change. It never authorizes a caller or proves a waiver, refund decision, Session state, return/write-off decision, or provider fact. PAY-004, PAY-005, MERCH-002, LEGAL-001, scoped authorization, and provider validation must supply those gates before runtime adoption.
 
