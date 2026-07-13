@@ -59,6 +59,33 @@ If any proof is missing, report the change as **not live**.
 
 Admin event and product editors exist in source, but their live permissions, backup, preview, and rollback behavior have not been approved. Saving can write directly to production Firestore. Officers must not use these screens as a continuity procedure yet.
 
+### Source protection in #100 — NOT LIVE YET
+
+Issue [#100](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/100) narrows the source rules for these screens. It does not prove that Firebase received those rules.
+
+After that source change merges:
+
+- A browser can create only an inactive event or product draft with no live price, capacity, sale, registration, waiver, volunteer, or custom-field setup.
+- A browser can edit ordinary display text and approved HTTPS image/result links.
+- A browser cannot change event price, capacity, registration state, member visibility, waiver setup, volunteer setup, or collected registration fields.
+- A browser cannot change product price, sale status, sizes, colors, inventory, orders, or payment state.
+- A browser admin cannot directly change a member role or read stored connection secrets.
+
+Those protected changes need a small, reviewed server action. That action is **NOT AVAILABLE YET**. Until it exists and is tested, use [Request a change](./REQUEST_A_CHANGE.md).
+
+```mermaid
+flowchart LR
+    A["Officer browser"] --> B["Display-only draft details"]
+    B --> C["Firestore rules"]
+    C --> D["Event or product draft"]
+    A -. "blocked" .-> E["Price, capacity, access, waiver, sale, or payment state"]
+    F["Scoped server action — NOT AVAILABLE YET"] -. "future approved path" .-> E
+```
+
+Text alternative: the officer browser may send display-only draft details through Firestore rules. Operational, access, legal, and money fields stay blocked until a future approved server action exists.
+
+**Proof state:** source and emulator tests may pass in #100. Firebase deployment, the live rule version, the Admin screens, and production behavior remain unproven until #105 records each state separately.
+
 Before an officer click guide may be added, a claimed issue must prove all of the following with made-up data in an isolated staging project:
 
 1. Only the intended officer role can open and save each screen.

@@ -3,41 +3,286 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------------------------------------------------------
-    // Admin has full access to everything via this catch-all rule.
-    // Specific allow rules below EXTEND access for other roles;
-    // they do not restrict admin access (Firestore rules are additive).
-    // ---------------------------------------------------------------
-    match /{document=**} {
-      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == 'admin';
+    }
+
+    function isNonEmptyString(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function isBoundedString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function isNullableBoundedString(value, maxLength) {
+      return value == null || isBoundedString(value, maxLength);
+    }
+
+    function isNullableHttpsUrl(value) {
+      return value == null
+        || (isBoundedString(value, 2048)
+            && value.matches('https://[^ ]+'));
+    }
+
+    function isValidSlug(value) {
+      return isNonEmptyString(value, 200)
+        && value.matches('[a-z0-9-]+');
+    }
+
+    function isNullableTimestamp(value) {
+      return value == null || value is timestamp;
+    }
+
+    function isNonNegativeInteger(value) {
+      return value is int && value >= 0;
+    }
+
+    function isPublishedEventStatus(data) {
+      return 'status' in data
+        && data.status in ['open', 'closed', 'cancelled'];
+    }
+
+    function hasLegacyPublishedStatus(data) {
+      return !('status' in data) || isPublishedEventStatus(data);
+    }
+
+    function hasValidEventCreateFields(data) {
+      return data.keys().hasAll([
+        'slug',
+        'title',
+        'description',
+        'startAt',
+        'endAt',
+        'location',
+        'locationDetails',
+        'capacity',
+        'registeredCount',
+        'status',
+        'visibility',
+        'pricing',
+        'stripePriceIds',
+        'waiverText',
+        'waiverVersion',
+        'customFields',
+        'resultsUrl',
+        'resultsText',
+        'resultsPublishedAt',
+        'registrationOpensAt',
+        'registrationClosesAt',
+        'heroImageUrl',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ]) && data.keys().hasOnly([
+        'slug',
+        'title',
+        'description',
+        'startAt',
+        'endAt',
+        'location',
+        'locationDetails',
+        'capacity',
+        'registeredCount',
+        'status',
+        'visibility',
+        'pricing',
+        'stripePriceIds',
+        'waiverText',
+        'waiverVersion',
+        'customFields',
+        'volunteerEnabled',
+        'volunteerFields',
+        'resultsUrl',
+        'resultsText',
+        'resultsPublishedAt',
+        'registrationOpensAt',
+        'registrationClosesAt',
+        'heroImageUrl',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function hasOnlyEventUpdateFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'title',
+        'description',
+        'startAt',
+        'endAt',
+        'location',
+        'locationDetails',
+        'resultsUrl',
+        'resultsText',
+        'resultsPublishedAt',
+        'heroImageUrl',
+        'updatedAt'
+      ]);
+    }
+
+    function hasValidEventPricing(pricing) {
+      return pricing is map
+        && pricing.keys().hasAll(['memberCents', 'nonMemberCents'])
+        && pricing.keys().hasOnly([
+          'memberCents',
+          'nonMemberCents',
+          'earlyBirdCents',
+          'earlyBirdUntil'
+        ])
+        && isNonNegativeInteger(pricing.memberCents)
+        && isNonNegativeInteger(pricing.nonMemberCents)
+        && (!('earlyBirdCents' in pricing)
+            || isNonNegativeInteger(pricing.earlyBirdCents))
+        && (!('earlyBirdUntil' in pricing)
+            || isNullableTimestamp(pricing.earlyBirdUntil));
+    }
+
+    function hasInertEventOperationalConfig(data) {
+      return data.capacity == null
+        && data.status == 'draft'
+        // The current client submits visibility=public on a new form. Draft
+        // status keeps it unreadable and unregistrable; visibility is then
+        // immutable in browser updates until a server approves publication.
+        && data.visibility == 'public'
+        && data.pricing is map
+        && data.pricing.keys().hasAll(['memberCents', 'nonMemberCents'])
+        && data.pricing.keys().hasOnly(['memberCents', 'nonMemberCents'])
+        && data.pricing.memberCents == 0
+        && data.pricing.nonMemberCents == 0
+        // Volunteer signup currently takes a zero-charge comp path. Browser
+        // creation therefore starts with volunteering disabled, and the update
+        // allowlist keeps these values server-owned.
+        && data.volunteerEnabled == false
+        && data.volunteerFields is list
+        && data.volunteerFields.size() == 0
+        && data.customFields is list
+        && data.customFields.size() == 0
+        && data.waiverText == ''
+        && data.waiverVersion == '1'
+        && data.registrationOpensAt == null
+        && data.registrationClosesAt == null;
+    }
+
+    function hasValidEventEditorValues(data) {
+      return isNonEmptyString(data.title, 200)
+        && isBoundedString(data.description, 20000)
+        && data.startAt is timestamp
+        && isNullableTimestamp(data.endAt)
+        && isBoundedString(data.location, 500)
+        && isBoundedString(data.locationDetails, 2000)
+        // `null` is the only unlimited-capacity sentinel. Zero would be
+        // falsey in the current checkout code and could silently disable the
+        // capacity check, so every configured capacity must be positive.
+        && (data.capacity == null
+            || (isNonNegativeInteger(data.capacity) && data.capacity > 0))
+        && data.status in ['draft', 'open', 'closed', 'cancelled']
+        && data.visibility in ['public', 'members_only', 'draft']
+        && hasValidEventPricing(data.pricing)
+        && isBoundedString(data.waiverText, 50000)
+        && isNonEmptyString(data.waiverVersion, 200)
+        && data.customFields is list
+        && data.customFields.size() <= 50
+        && data.volunteerEnabled is bool
+        && data.volunteerFields is list
+        && data.volunteerFields.size() <= 50
+        && isNullableHttpsUrl(data.resultsUrl)
+        && isNullableBoundedString(data.resultsText, 10000)
+        && (!('resultsPublishedAt' in data)
+            || isNullableTimestamp(data.resultsPublishedAt))
+        && isNullableTimestamp(data.registrationOpensAt)
+        && isNullableTimestamp(data.registrationClosesAt)
+        && isNullableHttpsUrl(data.heroImageUrl)
+        && data.updatedAt is timestamp;
+    }
+
+    function hasValidProductCreateFields(data) {
+      return data.keys().hasAll([
+        'slug',
+        'title',
+        'description',
+        'priceCents',
+        'imageUrl',
+        'sizes',
+        'colors',
+        'status',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ]) && data.keys().hasOnly([
+        'slug',
+        'title',
+        'description',
+        'priceCents',
+        'imageUrl',
+        'sizes',
+        'colors',
+        'status',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function hasOnlyProductUpdateFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'title',
+        'description',
+        'imageUrl',
+        'updatedAt'
+      ]);
+    }
+
+    function hasValidProductEditorValues(data) {
+      return isNonEmptyString(data.title, 200)
+        && isBoundedString(data.description, 20000)
+        && isNonNegativeInteger(data.priceCents)
+        && isNullableHttpsUrl(data.imageUrl)
+        && data.sizes is list
+        && data.sizes.size() <= 100
+        && data.colors is list
+        && data.colors.size() <= 100
+        && data.status in ['draft', 'active', 'sold_out', 'archived']
+        // Active products reach Stripe Checkout and therefore cannot use the
+        // zero-price draft sentinel.
+        && (data.status != 'active' || data.priceCents > 0)
+        && data.updatedAt is timestamp;
     }
 
     // Members-only legacy collection
     match /members_only/{document} {
-      allow read: if request.auth != null && request.auth.token.role == 'member';
+      allow read: if request.auth != null
+        && (request.auth.token.role == 'member' || isAdmin());
     }
 
     // A signed-in user can read and update their own member doc.
     // Member docs are CREATED only by the onSignUp Cloud Function (Admin SDK);
     // there is intentionally no client `create` rule.
     match /members/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      // Admin screens may enumerate profiles, but role and profile creation
+      // remain server-managed. In particular, an admin claim in a browser is
+      // not authority to change another user's role mirror.
+      allow read: if request.auth != null
+        && (request.auth.uid == uid || isAdmin());
 
       // Self-service edits are restricted to an explicit field allowlist.
       // An allowlist (rather than pinning each protected field individually)
       // blocks BOTH tampering with managed fields — role, email, createdAt,
       // emailVerified, provider — AND injection of arbitrary new fields (e.g.
       // a planted `isAdmin` flag or a multi-MB blob). Managed fields are set
-      // only by Cloud Functions (Admin SDK) or by admins via the catch-all.
+      // only by Cloud Functions (Admin SDK).
       allow update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['fullName', 'phoneNumber', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasAll(['updatedAt'])
         && (request.resource.data.fullName == null
             || (request.resource.data.fullName is string
                 && request.resource.data.fullName.size() <= 200))
         && request.resource.data.phoneNumber is string
-        && request.resource.data.phoneNumber.size() <= 40;
+        && request.resource.data.phoneNumber.size() <= 40
+        && request.resource.data.updatedAt is timestamp;
 
       // Third-party connections (Strava, etc). Users can read *whether*
       // a connection exists and basic metadata, but CANNOT read tokens —
@@ -63,36 +308,70 @@ service cloud.firestore {
     //   - status:     'draft' | 'open' | 'closed' | 'cancelled'
     //   - member_only: legacy boolean (pre-stripe schema)
     //
-    // Writes flow only through admin (catch-all) or Cloud Functions
-    // (Admin SDK bypasses rules). No direct client writes.
+    // The current admin editor reads and writes non-financial event catalog
+    // fields directly. Price and capacity are fixed to inert values on browser
+    // creation and immutable from browser updates. Registration, payment, and
+    // capacity configuration remains server-owned.
     // ---------------------------------------------------------------
     match /events/{eventId} {
+      allow read: if isAdmin();
+
+      // The editor initializes server-owned fields only to inert values. Any
+      // Stripe reference, payment/audit field, non-zero counter, or unknown
+      // field must be created by trusted server code instead.
+      allow create: if isAdmin()
+        && hasValidEventCreateFields(request.resource.data)
+        && isValidSlug(request.resource.data.slug)
+        && request.resource.data.slug == eventId
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.registeredCount is int
+        && request.resource.data.registeredCount == 0
+        && request.resource.data.stripePriceIds is map
+        && request.resource.data.stripePriceIds.keys().hasOnly([])
+        && hasInertEventOperationalConfig(request.resource.data)
+        && hasValidEventEditorValues(request.resource.data);
+
+      // Updates are limited to display-only editor fields. In particular,
+      // slug/ownership, status/visibility, pricing/capacity, registration and
+      // waiver configuration, Stripe references, payment/inventory state, and
+      // audit data are immutable from a browser. Delete is intentionally absent.
+      allow update: if isAdmin()
+        && hasOnlyEventUpdateFields()
+        && hasValidEventEditorValues(request.resource.data);
+
       // Public read: new-schema event with public visibility and not draft
       allow read: if resource.data.visibility == 'public'
-        && resource.data.status != 'draft';
+        && isPublishedEventStatus(resource.data);
 
       // Public read: legacy event (no visibility field) not flagged member_only
       allow read: if !('visibility' in resource.data)
-        && resource.data.member_only != true;
+        && resource.data.member_only != true
+        && hasLegacyPublishedStatus(resource.data);
 
       // Authenticated member/admin read: members-only events
       allow read: if request.auth != null
         && (request.auth.token.role == 'member' || request.auth.token.role == 'admin')
-        && (resource.data.visibility == 'members_only' || resource.data.member_only == true);
+        && ((resource.data.visibility == 'members_only'
+             && isPublishedEventStatus(resource.data))
+            || (!('visibility' in resource.data)
+                && resource.data.member_only == true
+                && hasLegacyPublishedStatus(resource.data)));
 
-      // Registrations subcollection — clients CANNOT read or write directly.
-      // Creation, updates, refunds, and substitutions all go through
-      // Cloud Functions which use the Admin SDK. Admins still get access
-      // via the top-level catch-all rule.
+      // Registrations subcollection — browser admins may read rosters for the
+      // current admin UI, but no client may write lifecycle or financial
+      // fields directly. Creation, updates, refunds, and substitutions all go
+      // through Cloud Functions which use the Admin SDK.
       match /registrations/{regId} {
-        allow read, write: if false;
+        allow read: if isAdmin();
+        allow write: if false;
       }
     }
 
     // ---------------------------------------------------------------
-    // Promo codes — admin-only via catch-all. Clients may not read,
-    // even to validate: validation happens in the Cloud Function
-    // that creates the Stripe Checkout Session.
+    // Promo codes — server-only. Clients may not read or mutate discount
+    // authority; validation happens in the Cloud Function that creates the
+    // Stripe Checkout Session.
     // ---------------------------------------------------------------
     match /promoCodes/{codeId} {
       allow read, write: if false;
@@ -107,17 +386,68 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
-    // Shop products — publicly readable when active or sold_out.
-    // Drafts and archived are hidden from clients. Writes via admin.
+    // Shop products — publicly readable when active or sold_out. The current
+    // admin editor may manage non-financial product catalog fields directly.
+    // Browser creation is an inert zero-price draft and browser updates cannot
+    // change price. Drafts and archived products remain hidden from others.
     // ---------------------------------------------------------------
     match /products/{productId} {
-      allow read: if resource.data.status == 'active'
-        || resource.data.status == 'sold_out';
+      allow read: if isAdmin();
+
+      allow create: if isAdmin()
+        && hasValidProductCreateFields(request.resource.data)
+        && isValidSlug(request.resource.data.slug)
+        && request.resource.data.slug == productId
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.status == 'draft'
+        && request.resource.data.priceCents == 0
+        && request.resource.data.sizes is list
+        && request.resource.data.sizes.size() == 0
+        && request.resource.data.colors is list
+        && request.resource.data.colors.size() == 0
+        && hasValidProductEditorValues(request.resource.data);
+
+      // Price, availability status, variants, Stripe references, inventory,
+      // payment fields, and audit data are not browser editor fields. Delete
+      // is intentionally absent.
+      allow update: if isAdmin()
+        && hasOnlyProductUpdateFields()
+        && hasValidProductEditorValues(request.resource.data);
+
+      allow read: if (resource.data.status == 'active'
+          || resource.data.status == 'sold_out');
     }
 
-    // Orders — client-inaccessible. All reads/writes via Cloud Functions.
-    // Admin gets access via the top-level catch-all.
+    // Orders contain financial state and PII. Browser admins may read them for
+    // the current admin UI; every mutation goes through Cloud Functions.
     match /orders/{orderId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // Server-owned operational boundaries. Explicit deny rules document the
+    // known sensitive collections; unmatched/future collections are denied by
+    // default because there is intentionally no recursive admin catch-all.
+    // ---------------------------------------------------------------
+    match /mail/{messageId} {
+      allow read, write: if false;
+    }
+
+    match /stripeEvents/{stripeEventId} {
+      allow read, write: if false;
+    }
+
+    match /checkoutRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /auditEvents/{auditEventId} {
+      allow read, write: if false;
+    }
+
+    match /retentionJobs/{jobId} {
       allow read, write: if false;
     }
   }
