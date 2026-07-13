@@ -42,11 +42,16 @@ const AdminFallback = (
   <div className="container mx-auto p-6 text-sm text-gray-500">Loading admin...</div>
 );
 
+const ROUTER_FUTURE_FLAGS = Object.freeze({
+  v7_relativeSplatPath: true,
+  v7_startTransition: true,
+});
+
 function App() {
   return (
     <HelmetProvider>
       <ServiceLocatorProvider>
-        <BrowserRouter>
+        <BrowserRouter future={ROUTER_FUTURE_FLAGS}>
           <a href="#main-content" className="skip-to-content">Skip to content</a>
           <Navbar />
           <AnnouncementBanner />

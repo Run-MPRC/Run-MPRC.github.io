@@ -64,7 +64,12 @@ const resendVerificationEmail = jest.fn();
 
 function accountView(user = USER) {
   return (
-    <MemoryRouter>
+    <MemoryRouter
+      future={{
+        v7_relativeSplatPath: true,
+        v7_startTransition: true,
+      }}
+    >
       <AccountContent user={user} />
     </MemoryRouter>
   );
