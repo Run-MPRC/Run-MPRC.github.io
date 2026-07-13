@@ -15,6 +15,7 @@ const CHECKOUT_EVENT_TYPES = new Set([
   'checkout.session.async_payment_failed',
   'checkout.session.expired',
 ]);
+const CHECKOUT_PAYMENT_STATUSES = new Set(['paid', 'unpaid', 'no_payment_required']);
 const DISPUTE_EVENT_TYPES = new Set([
   'charge.dispute.created',
   'charge.dispute.updated',
@@ -587,6 +588,9 @@ function successfulPaymentTransition({ event, session, target, record }) {
 
   const money = validateSessionMoney(session, record);
   if (!money.ok) return reviewTransition({ target, event, reason: money.reason });
+  if (!CHECKOUT_PAYMENT_STATUSES.has(session.payment_status)) {
+    return reviewTransition({ target, event, reason: 'invalid_checkout_payment_status' });
+  }
 
   const paymentIntentId = objectId(session.payment_intent);
   const isPaid = session.payment_status === 'paid'
@@ -731,6 +735,12 @@ function successfulPaymentTransition({ event, session, target, record }) {
 function unsuccessfulSessionTransition({ event, session, target, record, reason }) {
   const binding = validateSessionBinding(session, record);
   if (!binding.ok) return reviewTransition({ target, event, reason: binding.reason });
+  if (!CHECKOUT_PAYMENT_STATUSES.has(session.payment_status)) {
+    return reviewTransition({ target, event, reason: 'invalid_checkout_payment_status' });
+  }
+  if (session.payment_status !== 'unpaid') {
+    return reviewTransition({ target, event, reason: 'unsuccessful_event_reports_paid' });
+  }
   if (record.status !== 'pending') {
     return { outcome: `${reason}_ignored:${record.status}`, patch: null };
   }
@@ -824,7 +834,16 @@ function refundTransition({ event, charge, target, record }) {
     return { outcome: 'stale_refund_ignored', patch: null };
   }
 
-  const previouslyRefunded = nonNegativeInteger(record.stripeAmountRefundedCents);
+  const storedRefundCounter = record.stripeAmountRefundedCents;
+  const hasUnknownPartialBaseline = (
+    record.status === 'partially_refunded'
+      || record.paymentStatus === 'partially_refunded'
+  ) && (!Number.isSafeInteger(storedRefundCounter) || storedRefundCounter <= 0);
+  if (hasUnknownPartialBaseline && amountRefunded < totalAmount) {
+    return reviewTransition({ target, event, reason: 'unknown_refund_baseline' });
+  }
+
+  const previouslyRefunded = nonNegativeInteger(storedRefundCounter);
   if (amountRefunded < previouslyRefunded) {
     const staleRefundIds = refundIdsFromCharge(charge);
     return {

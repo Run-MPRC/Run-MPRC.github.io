@@ -743,6 +743,21 @@ describe('stripeWebhook', () => {
     expect(registration.paidAt).toBeUndefined();
   });
 
+  test('quarantines an unknown Checkout payment status', async () => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      'evt_unknown_payment_status',
+      'checkout.session.completed',
+      registrationSession({ payment_status: 'mystery' }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewRequired: true,
+      paymentReviewReason: 'invalid_checkout_payment_status',
+    });
+  });
+
   test('confirms a delayed payment only after async success', async () => {
     seedRegistration();
     await deliver(stripeEvent(
@@ -795,6 +810,24 @@ describe('stripeWebhook', () => {
     expect(order.status).toBe('cancelled');
     expect(order.paymentStatus).toBe('failed');
     expect(order.cancelledAt).toBeDefined();
+  });
+
+  test.each([
+    ['failure', 'checkout.session.async_payment_failed'],
+    ['expiry', 'checkout.session.expired'],
+  ])('quarantines an async %s event whose Session reports paid', async (_label, type) => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      `evt_paid_${_label}`,
+      type,
+      registrationSession({ payment_status: 'paid' }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewRequired: true,
+      paymentReviewReason: 'unsuccessful_event_reports_paid',
+    });
   });
 
   test.each([
@@ -1315,6 +1348,62 @@ describe('stripeWebhook', () => {
     expect(admin.__get('orders/order-1').stripeAmountRefundedCents).toBeUndefined();
     expect(admin.__get('stripeEvents/evt_legacy_refunded_partial')).toMatchObject({
       outcome: 'stale_refund_ignored',
+    });
+  });
+
+  test('quarantines a legacy partial refund with an unknown cumulative baseline', async () => {
+    seedOrder({
+      status: 'partially_refunded',
+      paymentStatus: 'partially_refunded',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeChargeId: 'ch_order_1',
+      stripeAmountRefundedCents: undefined,
+    });
+    await deliver(stripeEvent('evt_unknown_partial_baseline', 'charge.refunded', {
+      id: 'ch_order_1',
+      object: 'charge',
+      payment_intent: 'pi_order_1',
+      amount: 2000,
+      amount_refunded: 500,
+      currency: 'usd',
+      metadata: { type: 'merch', orderId: 'order-1' },
+    }));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'partially_refunded',
+      paymentStatus: 'partially_refunded',
+      paymentReviewRequired: true,
+      paymentReviewReason: 'unknown_refund_baseline',
+    });
+    expect(admin.__get('orders/order-1').stripeAmountRefundedCents).toBeUndefined();
+    expect(admin.__get('stripeEvents/evt_unknown_partial_baseline')).toMatchObject({
+      outcome: 'needs_review:unknown_refund_baseline',
+      requiresReview: true,
+    });
+  });
+
+  test('can safely advance an unknown legacy partial baseline to fully refunded', async () => {
+    seedOrder({
+      status: 'partially_refunded',
+      paymentStatus: 'partially_refunded',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeChargeId: 'ch_order_1',
+      stripeAmountRefundedCents: undefined,
+    });
+    await deliver(stripeEvent('evt_unknown_partial_to_full', 'charge.refunded', {
+      id: 'ch_order_1',
+      object: 'charge',
+      payment_intent: 'pi_order_1',
+      amount: 2000,
+      amount_refunded: 2000,
+      currency: 'usd',
+      metadata: { type: 'merch', orderId: 'order-1' },
+    }));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'refunded',
+      paymentStatus: 'refunded',
+      stripeAmountRefundedCents: 2000,
     });
   });
 
