@@ -1091,16 +1091,32 @@ function transitionForEvent(event, target, targetSnap, modeValidation, ownership
   }
 }
 
-function providerBindingIsVerified(event, record) {
+function providerBindingCanBeRecorded(event, record, result) {
   const object = event.data.object;
   if (CHECKOUT_EVENT_TYPES.has(event.type)) {
     return validateSessionBinding(object, record).ok;
   }
   if (event.type === 'charge.refunded') {
-    return validateRefundBinding(object, record).ok;
+    const binding = validateRefundBinding(object, record);
+    if (!binding.ok) return false;
+    const anchored = !!record.stripePaymentIntentId || !!record.stripeChargeId;
+    const accepted = result.outcome === 'partially_refunded'
+      || result.outcome === 'refunded'
+      || result.outcome === 'already_partially_refunded'
+      || result.outcome === 'already_refunded'
+      || result.outcome === 'stale_refund_ignored';
+    return anchored || accepted;
   }
   if (DISPUTE_EVENT_TYPES.has(event.type)) {
-    return validateDisputeBinding(object, record).ok;
+    const binding = validateDisputeBinding(object, record);
+    if (!binding.ok) return false;
+    const anchored = !!record.stripePaymentIntentId
+      || !!record.stripeChargeId
+      || !!binding.existingDispute;
+    const accepted = result.outcome.startsWith('dispute_')
+      || result.outcome.startsWith('already_dispute_')
+      || result.outcome === 'stale_dispute_ignored';
+    return anchored || accepted;
   }
   return false;
 }
@@ -1184,8 +1200,6 @@ async function processEvent(event) {
     const hasBindingConflict = bindingSnaps.some(
       (snapshot) => !bindingMatchesTarget(snapshot, target),
     );
-    const providerBindingVerified = targetSnap?.exists
-      && providerBindingIsVerified(event, targetSnap.data());
     const result = hasBindingConflict
       ? {
         outcome: 'needs_review:provider_binding_conflict',
@@ -1199,6 +1213,8 @@ async function processEvent(event) {
         modeValidation,
         ownership,
       );
+    const providerBindingVerified = targetSnap?.exists
+      && providerBindingCanBeRecorded(event, targetSnap.data(), result);
     if (result.patch && targetSnap?.exists) tx.update(target.ref, result.patch);
     if (target && !hasBindingConflict && providerBindingVerified) {
       bindingSnaps.forEach((snapshot, index) => {

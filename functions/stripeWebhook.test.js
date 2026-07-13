@@ -1389,6 +1389,34 @@ describe('stripeWebhook', () => {
     expect(admin.__get('stripeEvents/evt_completion_after_refund')).toMatchObject({
       outcome: 'payment_observed_after_partially_refunded',
     });
+    expect(admin.__get('stripeObjectBindings/charge:ch_reg_1')).toMatchObject({
+      targetPath: 'events/race-1/registrations/reg-1',
+    });
+    expect(admin.__get('stripeObjectBindings/payment_intent:pi_reg_1')).toMatchObject({
+      targetPath: 'events/race-1/registrations/reg-1',
+    });
+  });
+
+  test('does not bind an unanchored refund that fails money validation', async () => {
+    seedOrder({ status: 'paid', paymentStatus: 'paid' });
+    await deliver(stripeEvent('evt_unanchored_bad_refund', 'charge.refunded', {
+      id: 'ch_unanchored_bad',
+      object: 'charge',
+      payment_intent: 'pi_unanchored_bad',
+      amount: 1999,
+      amount_refunded: 500,
+      currency: 'usd',
+      metadata: { type: 'merch', orderId: 'order-1' },
+    }));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'paid',
+      paymentReviewReason: 'refund_total_mismatch',
+    });
+    expect(admin.__get('stripeObjectBindings/charge:ch_unanchored_bad')).toBeUndefined();
+    expect(admin.__get(
+      'stripeObjectBindings/payment_intent:pi_unanchored_bad',
+    )).toBeUndefined();
   });
 
   test('records merchandise disputes without overwriting order status', async () => {
