@@ -1,24 +1,29 @@
 # Officer Website Handbook
 
 **Audience:** MPRC officers and backup maintainers with little or no coding experience
-**Last checked:** 2026-07-12
+**Last checked:** 2026-07-13
 **Start page:** [OFFICER_START_HERE.md](../../OFFICER_START_HERE.md)
 
 The safe pattern is always the same:
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["Officer describes the result"] --> B["AI opens one tracked change"]
     B --> C["AI shows preview and checks"]
-    C --> D{"Approve merge and its automatic deployment attempt?"}
+    C --> D{"Approve merge?"}
     D -- "No" --> B
-    D -- "Yes" --> E["Merged to main"]
-    E --> P["Automatic Pages publication and Firebase attempt"]
-    P --> F["Check the real site and services"]
+    D -- "Yes" --> E["Merged to main — not released"]
+    E --> R{"Approve exact commit and environment?"}
+    R -- "No" --> E
+    R -- "Yes" --> P["Preflight checks"]
+    P --> H{"Firebase deployed and verified?"}
+    H -- "No" --> S["Stop — website is not published"]
+    H -- "Yes" --> W["Publish GitHub Pages copy"]
+    W --> F["Check Pages, Netlify, runmprc.com, and providers"]
     F --> G["Record proof and close"]
 ```
 
-In words: ask and preview first; approving a merge also authorizes today's automatic deployment attempt; then check the real result on every affected service.
+In words: approve the merge and exact release separately; Firebase must finish before the Pages copy; then check every affected service.
 
 ## Short guides
 
@@ -35,7 +40,7 @@ In words: ask and preview first; approving a merge also authorizes today's autom
 
 1. Describe the result. Do not guess which file or service to edit.
 2. Ask for a preview. Do not approve a change you cannot see.
-3. Approve one step at a time. A `main` merge automatically publishes GitHub Pages today; live Netlify and Firebase still need separate proof.
+3. Approve one step at a time. Merge is separate from release. Firebase, Pages, Netlify, and `runmprc.com` each need separate proof.
 4. Check the real website or service. A green check is not the same as “live.”
 5. Stop when money, private data, account access, legal wording, or security is involved.
 
@@ -45,8 +50,10 @@ In words: ask and preview first; approving a merge also authorizes today's autom
 | --- | --- |
 | Drafted | A change exists only in a working copy. |
 | Tests passed | Automated checks passed for the named change. |
-| Merged | GitHub accepted the code into `main`. |
-| Pages published | GitHub automatically built its website copy after merge. |
+| Merged | GitHub accepted the code into `main`; it is not released. |
+| Release approved | A named approver accepted one exact commit and environment. |
+| Backend verified | The fixed Firebase deployment and checks finished successfully. |
+| Pages published | GitHub published its website copy after backend verification. |
 | Netlify commit verified | The live host identifies the intended merged commit. |
 | Website verified | The exact result was seen on `runmprc.com`. |
 | Firebase deployed | The backend deployment actually ran; it did not skip. |
@@ -55,6 +62,8 @@ In words: ask and preview first; approving a merge also authorizes today's autom
 Never shorten several of these states to “done.”
 
 Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
+
+The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures the environment approvers and short-lived cloud identity. Missing authority stops the release with a red failure before Firebase or website publication.
 
 ## Current safety warning
 

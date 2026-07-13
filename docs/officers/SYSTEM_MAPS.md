@@ -41,23 +41,24 @@ flowchart LR
 
 In words: public content comes from GitHub; private accounts and operational records use Firebase; Google Forms are separate; Stripe must remain test-only until approved.
 
-## How a change reaches people today
+## How a change reaches people through the protected gate
 
 ```mermaid
 flowchart TD
-    PR["Approved pull request"] --> Main["Merge to main"]
-    Main --> Workflow["GitHub workflow"]
-    Workflow --> Pages["GitHub Pages copy"]
-    Workflow --> Firebase{"Firebase credential present?"}
-    Firebase -- "No" --> Skip["Backend deploy skipped"]
-    Firebase -- "Yes and job succeeds" --> Backend["Firebase deployed"]
-    Main -. "connection and trigger not verified" .-> Netlify
-    Netlify["Netlify deployment — current live host"] --> Live["runmprc.com"]
+    PR["Approved pull request"] --> Main["Merge to main — checks only"]
+    Main --> Approval["Separate exact-commit environment approval"]
+    Approval --> Preflight{"Commit, checks, project, scope, and authority valid?"}
+    Preflight -- "No" --> Stop["Red failure — publish nothing"]
+    Preflight -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
+    Rules --> Functions["Deploy and verify named Functions"]
+    Functions --> Pages["GitHub Pages copy"]
+    Main -. "Git-triggered production build paused" .-> Netlify
+    Netlify["Netlify — current live host; protected publication unavailable"] --> Live["runmprc.com"]
     Pages -. "currently not the live custom-domain copy" .-> Live
-    Dev["dev — stale default branch"] -. "do not use for new release work" .-> PR
+    Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: GitHub can report success while the live Netlify site stays old or Firebase is skipped, so each surface needs separate proof.
+In words: merge and release are separate; a missing or failed Firebase gate publishes nothing; the Pages copy and live Netlify site still need separate proof.
 
 ## Account and permission ownership
 

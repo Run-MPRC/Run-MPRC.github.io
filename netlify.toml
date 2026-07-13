@@ -1,6 +1,9 @@
 [build]
   command = "npm run build"
   publish = "build"
+  # Git-triggered production publication is paused until WEB-001 records the
+  # Netlify owners, protected trigger, exact commit, and rollback path.
+  ignore = "node ./scripts/netlify-ignore-build.js"
 
 [build.environment]
   NODE_VERSION = "20"

@@ -1,116 +1,183 @@
-# Review, Merge, and Check a Change
+# Review, Merge, Release, and Check a Change
 
-**Purpose:** Review one approved change, merge it safely, and record what did or did not become live.
-**Approver:** content owner for ordinary content; specialist owners listed in [Events, shop, members, and money](./EVENTS_SHOP_MEMBERS.md) for higher-risk work.
-**Prerequisites:** an approved pull request aimed at `main`, its rollback note, access to its GitHub job details, and a platform maintainer available for merge and live verification.
+**Purpose:** review one change, merge it, approve one exact release, and record what did or did not become live.
 
-**Independent officer publication status:** **NOT AVAILABLE YET.** A platform maintainer must own the merge and live verification until the Netlify repository, branch, owner, build, preview, and rollback path are recorded and tested.
+**Merge approver:** the content or business owner named in the change request.
 
-## Current deployment truth
+**Production release approver:** Dave Liu as platform owner until the board records a replacement, plus the required service/security reviewer for a high-risk change. Two named backup officers are still required under #133 before continuity is complete.
+
+**Prerequisites:** one approved pull request aimed at `main`; green required checks; an exact 40-character merged commit; a rollback or safe roll-forward note; and a named observer.
+
+**Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, public build values, and a short-lived cloud identity. Do not add a long-lived Firebase key as a shortcut.
+
+**Live Netlify publication status:** **NOT AVAILABLE YET.** Git-triggered production builds are paused by repository configuration. The Netlify owner, build hooks, manual trigger, exact-commit proof, and rollback path remain unverified provider work. The GitHub release publishes only the separate GitHub Pages copy.
+
+## The release gate
+
+```mermaid
+flowchart TD
+    Review["Preview and checks"] --> Merge{"Approve merge?"}
+    Merge -- "No" --> Review
+    Merge -- "Yes" --> Merged["Merged to main — not released"]
+    Merged --> Release{"Approve exact commit and environment?"}
+    Release -- "No" --> Merged
+    Release -- "Yes" --> Preflight{"Commit, checks, project, scope, and authority valid?"}
+    Preflight -- "No" --> Stop["Red failure — publish nothing"]
+    Preflight -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
+    Rules --> Functions["Deploy two named Functions"]
+    Functions --> VerifyBackend{"Both Functions verified?"}
+    VerifyBackend -- "No" --> Stop
+    VerifyBackend -- "Yes" --> Pages["Publish prebuilt GitHub Pages copy"]
+    Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
+```
+
+In words: merging does not release; the protected gate checks one exact commit, deploys and verifies Firebase first, and only then may publish the GitHub Pages copy.
+
+## Current facts
 
 As of **2026-07-13**:
 
-- Merging to `main` starts GitHub workflows.
-- The `Frontend lint + build` job includes a job-failing step named `Run frontend Jest tests`. A failed step fails that job.
-- Required branch protection is not proven. The Jest step does not by itself prevent someone with merge access from merging a failed change.
-- The same job still has a lint command that can rewrite files and ignore failure. A green job is not proof that lint passed.
-- Merging therefore also authorizes an automatic GitHub Pages publication; there is no separate Pages approval today.
-- The GitHub repository currently opens stale, unprotected `dev` by default; use the explicit `main` branch and do not merge `dev` into `main` as a shortcut.
-- GitHub Pages builds a copy of the website.
-- `runmprc.com` is currently served by Netlify, not that Pages copy.
-- Current previews are optimized production-mode builds and can point at production Firebase. They are safe only for public, read-only page review.
-- The Firebase step can say success while skipping deployment when its service-account secret is absent.
-- Therefore, a green workflow does not prove the public site or backend changed.
+- `main` is the canonical branch.
+- A merge starts CI checks. It does not start `.github/workflows/deploy.yml`.
+- The release workflow accepts only a full commit already merged into `main`.
+- It requires successful frontend, Functions, and Firestore Rules checks for that commit.
+- Its only current release plan is the reviewed profile-recovery set: Firestore Rules, `createMemberOnSignUp`, and `ensureMemberProfile`.
+- A caller cannot type a Firebase project or deployment target into the release form.
+- Missing environment configuration or cloud authority makes the release red before backend dependencies, cloud authentication, or deployment. A public website artifact may be prepared without cloud authority, but it cannot be published.
+- The backend uses a short-lived cloud identity when #133 configures it. The website job receives public browser values only.
+- The Firebase CLI comes from the committed lockfile. The release does not install `latest`.
+- A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
+- The `staging` option deliberately stops before deployment until #113/#133 name one exact approved staging Firebase project. A future staging release remains backend-only until a separate staging browser configuration and host exist.
+- `runmprc.com` is served by Netlify, not GitHub Pages.
+- Git-triggered Netlify production builds are paused. Netlify build hooks are not controlled by that repository rule and remain unverified.
+- Live race signup, merchandise payments, and refunds remain unavailable.
 
 ## Before merge
 
-1. Open the pull request and confirm its destination says `main`.
-2. Confirm it names one issue and one outcome.
-3. Confirm another person or review agent approved it.
-4. Open the `Frontend lint + build` job.
-5. Confirm `Run frontend Jest tests` is present and green. Stop if it is missing, skipped, or failed.
-6. Confirm the other required test steps are green.
-7. If you open a preview, review only public pages. Do not sign in, open a private/admin page, submit a form, or test a signup, checkout, refund, email, or Strava action.
-8. Ask the platform maintainer for separate non-mutating lint evidence when lint applies. Do not use the green job as lint proof.
-9. Confirm the officer guide was updated when needed.
-10. Read the rollback note.
-11. Confirm you understand that a merge automatically publishes the GitHub Pages copy.
-12. Ask the platform maintainer whether any outside automation may also publish from the merge.
-13. Do not merge if either automatic publication is unacceptable or unknown.
-
-## Netlify publication — NOT AVAILABLE YET
-
-Before a backup officer can publish independently, a claimed hosting issue must record and test:
-
-1. The exact Netlify team and site name.
-2. The two officer accounts that own it.
-3. The connected GitHub repository and branch.
-4. The event that starts a production deploy.
-5. The build command and public configuration names.
-6. A safe preview URL for the intended commit, plus proof that private/Firebase actions use staging before anyone signs in.
-7. Where Netlify displays the deployed commit.
-8. How to restore the previous known-good deploy.
-9. Which DNS records point `runmprc.com` to Netlify.
-10. A dated drill proving the procedure without changing member or payment data.
+1. Open the pull request.
+2. Confirm its destination is `main`.
+3. Confirm it names one issue and one outcome.
+4. Confirm another person or review agent approved it.
+5. Open the `Frontend lint + build` job.
+6. Confirm `Run frontend Jest tests` is present and green.
+7. Confirm `Run SPA callback safety tests` is present and green.
+8. Confirm the Functions and Firestore Rules jobs are green.
+9. Use a preview only for public, read-only pages.
+10. Do not sign in, open private/admin pages, submit forms, or test signup, checkout, refund, email, or Strava in a preview.
+11. Confirm the officer guide and undo note are present.
+12. Approve or reject the merge. Do not describe merge approval as release approval.
 
 ## After merge
 
-1. Record the pull request number and merged commit.
-2. Wait for the GitHub workflow to finish.
-3. Read the job details, not only the green summary.
-4. Confirm the merged commit's `Run frontend Jest tests` step is green. Stop and escalate if it is missing, skipped, or failed.
-5. Look for “skipping Firebase deploy.” If present, mark the backend **not deployed**.
-6. Ask the platform maintainer which commit Netlify says it deployed.
-7. Open [runmprc.com](https://runmprc.com) in a private/incognito window.
-8. Visit the exact changed page directly.
-9. Check the requested text, link, image, or behavior.
-10. Check one phone-sized view.
-11. Check one normal computer view.
-12. If Firebase or an outside service changed, ask its owner for separate dated proof.
-13. Record the result using the checklist below.
+1. Record the pull request number.
+2. Record the full merged commit.
+3. Wait for that commit's CI jobs.
+4. Confirm the required jobs are green again.
+5. Mark the result **merged — not released**.
+6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from the merge.
+7. If Netlify unexpectedly publishes the merge, stop and treat it as a hosting incident.
+
+## Before a protected release — NOT AVAILABLE YET
+
+Do not use this section until #133 records that both GitHub environments are protected and tested.
+
+1. Choose `staging` or `production`.
+2. Copy the exact 40-character merged commit. Do not use a branch name.
+3. Choose the fixed release plan. Do not type a project or Function name.
+4. Confirm the environment's Firebase project is the approved one.
+5. Confirm the required checks belong to the same exact commit.
+6. Confirm the rollback or safe roll-forward commit.
+7. Confirm the named observer is available.
+8. For production, obtain the named protected-environment approval.
+9. Record the release-run link before approval.
+
+## Watch the release — NOT AVAILABLE YET
+
+1. Confirm preflight says the exact commit is merged and its checks passed.
+2. Confirm protected configuration is present and environment-matched.
+3. Confirm short-lived cloud authentication succeeds.
+4. Confirm Firestore Rules deploy first.
+5. Confirm only `createMemberOnSignUp` and `ensureMemberProfile` deploy next.
+6. Confirm both Functions are found by the verification step.
+7. Stop if any backend step is missing, skipped, failed, partial, or mismatched.
+8. Confirm the GitHub Pages publication job starts only after backend success.
+9. Confirm the Pages build uses the same exact commit.
+10. Never call an overall green run proof that `runmprc.com` changed.
+
+## Verify every affected surface
+
+1. Record whether the GitHub Pages copy published.
+2. Ask the Netlify owner which commit, if any, Netlify published.
+3. Open [runmprc.com](https://runmprc.com) in a private window.
+4. Visit the exact changed public page.
+5. Check one phone-sized view.
+6. Check one normal computer view.
+7. If Firebase changed, obtain dated proof for the exact project, Rules release, and named Functions.
+8. If an outside provider changed, obtain separate dated proof from its owner.
+9. Use made-up data only. Do not inspect or change a real member record.
+10. Complete the delivery record.
 
 ## Expected result
 
-The named Jest step is green for both the pull-request commit and the merged commit. The delivery record separately says whether GitHub Pages, Netlify, `runmprc.com`, Firebase, and any outside provider were verified.
+Merge, release approval, Firebase deployment, backend verification, Pages publication, Netlify publication, `runmprc.com`, and provider verification are recorded as separate states. A backend failure or missing authority leaves the website unpublished.
 
 ## Stop conditions
 
-Stop and ask the platform maintainer if the pull request does not target `main`; approval or the rollback note is missing; the named Jest step is missing, skipped, or failed; a preview asks you to sign in or use private/Firebase behavior; publication is unexpected; the deployed commit is unknown; or any live surface disagrees with the merged change.
+Stop and contact the platform owner if:
+
+- The pull request does not target `main`.
+- Approval, required checks, or the undo note is missing.
+- The release uses a branch name or short commit.
+- The commit is not merged into `main`.
+- The environment, project, or fixed scope is missing or wrong.
+- Anyone asks for a service-account key, token, password, or recovery code.
+- Firebase is skipped, partial, failed, or unverified.
+- A website publication job starts before backend verification.
+- A project or deployment target can be typed freely.
+- Netlify publishes unexpectedly or its live commit is unknown.
+- A test needs real member, payment, or private data.
 
 ## Success proof
 
-Keep the completed delivery record with links to the pull request, merged commit, and exact GitHub job details. Add dated, separately obtained proof for each live website, Firebase, or outside-provider surface that the change affected.
+Keep the completed record with links to the issue, pull request, merged commit, exact CI jobs, release run, and each affected live service. Keep provider identifiers, private links, logs, credentials, and member data out of public evidence.
 
 ## Delivery record
 
 ```text
 Issue:
 Pull request:
-Merged commit:
-Hosted frontend Jest step: pass / fail / missing
-Other tests passed:
-GitHub Pages published: yes / no / not relevant
+Merged commit (40 characters):
+Required checks passed:
+Release requested by:
+Release approved by:
+Environment: staging / production / not released
+Release plan:
+Preflight: pass / fail / not run
+Firebase Rules deployed: yes / no / not run
+Named Functions deployed and verified: yes / no / not run
+GitHub Pages published: yes / no / not run
 Netlify intended commit verified: yes / no / unknown
 runmprc.com verified: yes / no
-Firebase deployed: yes / no / not relevant
 Outside provider configured: yes / no / not relevant
 Outside provider verified: yes / no / not relevant
 Production behavior verified: yes / no
 Checked by:
 Checked at (date and time):
+Undo or safe roll-forward commit:
 Known remaining problem:
 ```
 
-## If the change is not on the live site
+## If anything fails
 
-1. Do not repeatedly merge or redeploy.
-2. Save the live URL, time, and a redacted screenshot.
-3. Ask AI to compare the merged version, GitHub Pages copy, and Netlify copy.
-4. Treat the problem as a hosting/deployment issue.
-5. Do not change DNS until the Netlify site, owner, branch, environment, and rollback are confirmed.
+1. Do not rerun blindly.
+2. Do not approve the Pages job after a backend failure.
+3. Save the run link, exact commit, time, and a redacted screenshot.
+4. If Rules changed but Functions failed, treat the backend as partial.
+5. Ask the platform owner to restore the reviewed compatible backend set or safely roll forward.
+6. Do not force-push, reset branches, delete data, edit Firestore by hand, or change DNS.
 
 ## Undo
 
-Ask for a revert pull request. Do not force-push, reset shared branches, delete data, or make a second unrelated change while the first problem is being investigated.
+Use one reviewed rollback or safe roll-forward commit through the same protected, backend-first gate. Restore a compatible Firebase set before publishing a dependent website. A Netlify rollback remains a provider-owner procedure and is **NOT AVAILABLE YET** for backup officers.
 
-**Escalation:** platform owner and backup for website hosting; Firebase owner for backend changes; treasurer plus platform owner for commerce.
+**Escalation:** platform owner plus backup for release/hosting; Firebase owner for backend; treasurer plus platform owner for commerce; privacy owner for member data.

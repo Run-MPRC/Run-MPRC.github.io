@@ -48,7 +48,7 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 - Tests used fake people and test-mode payments.
 - The exact commit and pull request are named.
 - The website deployment is verified separately.
-- Firebase logs prove Functions/rules/indexes deployed; no step says “skipping Firebase deploy.”
+- The protected release proves the exact Rules and named Functions deployed first. Missing authority or a skipped/partial backend is a red stop, and the website is not published.
 - Stripe or another provider is verified directly when involved.
 - Counts and money reconcile after the change.
 - The named officer signs off.

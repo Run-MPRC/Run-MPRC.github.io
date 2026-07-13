@@ -38,6 +38,24 @@ Until those six steps are recorded, this guide does not claim incapacitation cov
 | Club email provider | Notices and password recovery | Communications owner plus backup |
 | Social/community accounts | Public communication and member groups | Named owner plus backup |
 
+## Release access to record privately
+
+Record these facts without copying a credential or private provider identifier:
+
+1. Dave Liu is the current primary production release approver.
+2. Name the backup/security reviewer who can approve when Dave is unavailable.
+3. Name two reviewers for the protected `staging` environment.
+4. Name two reviewers for the protected `production` environment.
+5. Record that `Protected release` is the approved GitHub workflow.
+6. Record the fixed environment-to-Firebase-project map.
+7. Record the fixed release plans and named resources.
+8. Record the owner of the short-lived cloud identity and its revocation procedure.
+9. Record the latest missing-authority failure drill.
+10. Record the latest backend-first rollback or safe roll-forward drill.
+11. Record the Netlify team owner, live site, protected trigger, and rollback location.
+
+The repository stores none of the cloud identity value, provider path, access token, password, or recovery code. The protected release is **NOT AVAILABLE YET** until #133 completes these records and tests the environment approvals.
+
 ## Private service record
 
 For each system, record only:
@@ -63,6 +81,10 @@ For each system, record only:
 7. Have two owners approve any removal.
 8. Test the service-specific recovery or rollback procedure before removing access.
 9. Confirm GitHub, Netlify, DNS, and Firebase agree on the intended production path.
+10. Confirm a normal merge does not start the GitHub release.
+11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
+12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
+13. Confirm Netlify Git-triggered production builds remain paused until a protected live-host path exists.
 
 ## Expected result and success proof
 
@@ -73,7 +95,7 @@ For each system, record only:
 
 ## Stop conditions
 
-Stop if a service has only one owner, uses Dave's personal recovery channel, has no tested rollback, or asks for a password/code in a shared document. Do not remove an account, token, integration, fork, or billing method until two owners complete a dependency check.
+Stop if a service has only one owner, uses Dave's personal recovery channel, has no tested rollback, or asks for a password/code in a shared document. Also stop if a merge can publish unexpectedly, a server credential reaches a website job, a project/scope can be typed freely, a green backend skip is possible, or a website can publish before backend verification. Do not remove an account, token, integration, fork, or billing method until two owners complete a dependency check.
 
 ## Undo and recovery
 
@@ -88,7 +110,7 @@ If an access change blocks a valid officer, stop further removals. Use the servi
 
 ## Special GitHub note
 
-`Run-MPRC` is the club organization. `runmprc` is a separate personal user and stale fork owner. Do not retire it from this guide alone. First open a claimed cleanup issue, inventory outside dependencies, prepare rollback, and obtain two-owner approval.
+`Run-MPRC` is the club organization, and `main` is now the canonical default branch. `runmprc` is a separate personal user and stale fork owner. Do not retire it from this guide alone. First open a claimed cleanup issue, inventory outside dependencies, prepare rollback, and obtain two-owner approval.
 
 ## Annual tabletop exercise
 
