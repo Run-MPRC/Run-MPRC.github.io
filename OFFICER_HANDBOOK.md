@@ -15,17 +15,19 @@ flowchart TD
     Preview --> Approve{"Approve merge?"}
     Approve -- "No" --> Track
     Approve -- "Yes" --> Merged["Merged to main — not released"]
-    Merged --> Release{"Approve exact commit and environment?"}
+    Merged --> Request["Request one exact-commit release"]
+    Request --> Preflight["Check commit and tests; prepare public artifact"]
+    Preflight --> Release{"Approve protected environment?"}
     Release -- "No" --> Merged
-    Release -- "Yes" --> Preflight["Check commit, tests, project, scope, and authority"]
-    Preflight --> Backend{"Firebase deployed and verified?"}
+    Release -- "Yes" --> Gate["Check project, scope, and authority"]
+    Gate --> Backend{"Firebase deployed and verified?"}
     Backend -- "No" --> Stop["Stop — website is not published"]
     Backend -- "Yes" --> Pages["Publish GitHub Pages copy"]
     Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
     Verify --> Record["Record proof and undo plan"]
 ```
 
-In words: approve the merge first; approve the exact release separately; Firebase must finish before the Pages copy; then check every real service separately.
+In words: approve the merge first; request one exact release; approve its protected environment after the source checks; Firebase must finish before the Pages copy; then check every real service separately.
 
 ## One-line request for AI
 

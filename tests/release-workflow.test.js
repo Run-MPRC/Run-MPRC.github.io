@@ -43,6 +43,8 @@ test('release workflow is manual, exact-commit, and fixed-scope', () => {
   assert.match(workflow, /Cloud Functions lint \+ test/);
   assert.match(workflow, /Firestore security-rules tests/);
   assert.match(workflow, /options:\n          - profile-recovery/);
+  assert.match(workflow, /RELEASE_PLAN: \$\{\{ inputs\.release_plan \}\}/);
+  assert.match(workflow, /Unsupported release plan/);
   assert.match(
     workflow,
     /--only firestore:rules,functions:createMemberOnSignUp,functions:ensureMemberProfile/,

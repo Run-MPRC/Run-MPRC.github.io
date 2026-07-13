@@ -13,17 +13,19 @@ flowchart TD
     C --> D{"Approve merge?"}
     D -- "No" --> B
     D -- "Yes" --> E["Merged to main — not released"]
-    E --> R{"Approve exact commit and environment?"}
+    E --> Q["Request one exact-commit release"]
+    Q --> P["Check source; prepare public artifact"]
+    P --> R{"Approve protected environment?"}
     R -- "No" --> E
-    R -- "Yes" --> P["Preflight checks"]
-    P --> H{"Firebase deployed and verified?"}
+    R -- "Yes" --> V["Check project, scope, and authority"]
+    V --> H{"Firebase deployed and verified?"}
     H -- "No" --> S["Stop — website is not published"]
     H -- "Yes" --> W["Publish GitHub Pages copy"]
     W --> F["Check Pages, Netlify, runmprc.com, and providers"]
     F --> G["Record proof and close"]
 ```
 
-In words: approve the merge and exact release separately; Firebase must finish before the Pages copy; then check every affected service.
+In words: approve the merge, request one exact release, and approve its protected environment separately; Firebase must finish before the Pages copy; then check every affected service.
 
 ## Short guides
 

@@ -19,11 +19,15 @@ flowchart TD
     Review["Preview and checks"] --> Merge{"Approve merge?"}
     Merge -- "No" --> Review
     Merge -- "Yes" --> Merged["Merged to main — not released"]
-    Merged --> Release{"Approve exact commit and environment?"}
-    Release -- "No" --> Merged
-    Release -- "Yes" --> Preflight{"Commit, checks, project, scope, and authority valid?"}
+    Merged --> Request["Request one exact-commit release"]
+    Request --> Preflight{"Commit and required checks valid?"}
     Preflight -- "No" --> Stop["Red failure — publish nothing"]
-    Preflight -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
+    Preflight -- "Yes" --> Prepare["Prepare credential-free website artifact"]
+    Prepare --> Release{"Approve protected environment?"}
+    Release -- "No" --> Stop
+    Release -- "Yes" --> Gate{"Project, scope, and authority valid?"}
+    Gate -- "No" --> Stop
+    Gate -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
     Rules --> Functions["Deploy two named Functions"]
     Functions --> VerifyBackend{"Both Functions verified?"}
     VerifyBackend -- "No" --> Stop
@@ -31,7 +35,7 @@ flowchart TD
     Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
 ```
 
-In words: merging does not release; the protected gate checks one exact commit, deploys and verifies Firebase first, and only then may publish the GitHub Pages copy.
+In words: merging does not release; a request checks one exact commit and may prepare a credential-free artifact; protected approval unlocks Firebase; only verified Firebase permits Pages publication.
 
 ## Current facts
 
@@ -88,21 +92,25 @@ Do not use this section until #133 records that both GitHub environments are pro
 5. Confirm the required checks belong to the same exact commit.
 6. Confirm the rollback or safe roll-forward commit.
 7. Confirm the named observer is available.
-8. For production, obtain the named protected-environment approval.
-9. Record the release-run link before approval.
+8. Ask the platform maintainer to request the manual release.
+9. Record the release-run link.
+10. Wait for the exact-commit checks and credential-free artifact preparation.
+11. Have the named reviewer confirm the environment, commit, fixed plan, and undo note before approving the protected environment.
 
 ## Watch the release — NOT AVAILABLE YET
 
 1. Confirm preflight says the exact commit is merged and its checks passed.
-2. Confirm protected configuration is present and environment-matched.
-3. Confirm short-lived cloud authentication succeeds.
-4. Confirm Firestore Rules deploy first.
-5. Confirm only `createMemberOnSignUp` and `ensureMemberProfile` deploy next.
-6. Confirm both Functions are found by the verification step.
-7. Stop if any backend step is missing, skipped, failed, partial, or mismatched.
-8. Confirm the GitHub Pages publication job starts only after backend success.
-9. Confirm the Pages build uses the same exact commit.
-10. Never call an overall green run proof that `runmprc.com` changed.
+2. For production, confirm the credential-free website artifact was prepared from that commit.
+3. Confirm the named protected-environment approval is recorded before the backend job.
+4. Confirm protected configuration is present and environment-matched.
+5. Confirm short-lived cloud authentication succeeds.
+6. Confirm Firestore Rules deploy first.
+7. Confirm only `createMemberOnSignUp` and `ensureMemberProfile` deploy next.
+8. Confirm both Functions are found by the verification step.
+9. Stop if any backend step is missing, skipped, failed, partial, or mismatched.
+10. Confirm the GitHub Pages publication job starts only after backend success.
+11. Confirm the Pages artifact uses the same exact commit.
+12. Never call an overall green run proof that `runmprc.com` changed.
 
 ## Verify every affected surface
 

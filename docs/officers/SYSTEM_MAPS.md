@@ -46,10 +46,15 @@ In words: public content comes from GitHub; private accounts and operational rec
 ```mermaid
 flowchart TD
     PR["Approved pull request"] --> Main["Merge to main — checks only"]
-    Main --> Approval["Separate exact-commit environment approval"]
-    Approval --> Preflight{"Commit, checks, project, scope, and authority valid?"}
+    Main --> Request["Request one exact-commit release"]
+    Request --> Preflight{"Commit and required checks valid?"}
     Preflight -- "No" --> Stop["Red failure — publish nothing"]
-    Preflight -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
+    Preflight -- "Yes" --> Prepare["Prepare credential-free artifact"]
+    Prepare --> Approval{"Protected environment approved?"}
+    Approval -- "No" --> Stop
+    Approval -- "Yes" --> Gate{"Project, scope, and authority valid?"}
+    Gate -- "No" --> Stop
+    Gate -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
     Rules --> Functions["Deploy and verify named Functions"]
     Functions --> Pages["GitHub Pages copy"]
     Main -. "Git-triggered production build paused" .-> Netlify
@@ -58,7 +63,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge and release are separate; a missing or failed Firebase gate publishes nothing; the Pages copy and live Netlify site still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; the Pages copy and live Netlify site still need separate proof.
 
 ## Account and permission ownership
 

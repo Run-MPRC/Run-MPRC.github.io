@@ -218,6 +218,7 @@ jobs:
       id-token: write
     env:
       DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment_environment }}
+      RELEASE_PLAN: ${{ inputs.release_plan }}
       TARGET_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
@@ -234,6 +235,10 @@ jobs:
           fi
           if [[ "$DEPLOYMENT_ENVIRONMENT" != "production" ]]; then
             echo "Unsupported release environment." >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_PLAN" != "profile-recovery" ]]; then
+            echo "Unsupported release plan." >&2
             exit 1
           fi
           if [[ "$TARGET_PROJECT_ID" != "mid-peninsula-running-club" ]]; then
