@@ -49,6 +49,7 @@ describe('adminRegistrationAction authorization', () => {
     process.env.ENVIRONMENT_NAME = 'test';
     process.env.SITE_ORIGIN = 'https://runmprc.test';
     process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
+    process.env.COMMERCE_ENABLED = 'true';
     process.env.STRIPE_SECRET_KEY = [
       'sk', 'test', 'synthetic_admin_registration',
     ].join('_');
@@ -61,6 +62,7 @@ describe('adminRegistrationAction authorization', () => {
     delete process.env.ENVIRONMENT_NAME;
     delete process.env.SITE_ORIGIN;
     delete process.env.STRIPE_LIVEMODE_EXPECTED;
+    delete process.env.COMMERCE_ENABLED;
     delete process.env.STRIPE_SECRET_KEY;
   });
 

@@ -51,6 +51,22 @@ Never let a development build fall back to production Functions. Never share a w
 
 CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) implements this matrix as an invocation-time source guard for the current Functions. Configuration parsing returns only the environment name, canonical site origin, and expected livemode; it never returns or stores the complete Stripe key. The two checkout creators and two admin action Functions validate only the documented test/live marker on their bound `sk_` or restricted `rk_` server key. Webhook and confirmation-mail Functions validate the non-secret matrix without receiving that key. Invalid configuration returns a fixed failure before any local business or outside-provider side effect. Provider parameters, secrets, account mode, deployment, and live behavior still require separate private evidence.
 
+### Commerce admission and incident continuity
+
+CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds a source-only command admission matrix. It does not create an officer control or enable commerce.
+
+| Operation | Deploy ceiling | Runtime control | Resource control | Continues during new-commerce pause |
+| --- | --- | --- | --- | --- |
+| Race paid/free/volunteer, comp, late registration | `COMMERCE_ENABLED=true` | global + race on | event `checkoutEnabled=true` | No |
+| Merchandise checkout | `COMMERCE_ENABLED=true` | global + merchandise on | product `checkoutEnabled=true` | No |
+| Registration/order refund | valid typed config; ceiling may be false | incident refunds on | Existing record rules remain | Yes |
+| Signed Stripe webhook | None from this switch | None | Existing verified transition rules | Yes |
+| Confirmation mail | None from this switch | None | Existing eligibility rules | Yes |
+
+The runtime document is the exact versioned server-only `systemConfig/commerce` record. A false deploy ceiling denies new commerce before a Firestore read. New-commerce commands that pass that ceiling, and every refund command, read the runtime record fresh. Missing/malformed control or a missing resource flag means disabled; no browser role can read/write the control or set the resource flag. Unknown future command domains deny until explicitly integrated.
+
+The read is the admission point. It cannot cancel a Stripe request already in flight or make an existing Session/Payment Link unpayable. PAY-002/PAY-004 own command journals and provider-object expiry. The current local `cancel` action also does not expire Stripe. CONFIG-001B2 must add the protected audited writer and a private staging drill before this can be called an operational kill switch.
+
 ### Secret inventory
 
 | Name | Consumer | Storage | Notes |
@@ -58,6 +74,7 @@ CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) im
 | `STRIPE_SECRET_KEY` | Checkout, refund, reconciliation functions | Google Secret Manager, bound only to those functions | Prefer the narrowest key Stripe supports for the required API resources; never expose it to React. |
 | `STRIPE_WEBHOOK_SECRET` | Webhook ingress only | Google Secret Manager | Unique per event destination and environment. |
 | `STRIPE_LIVEMODE_EXPECTED` | Webhook/reconciler | Non-secret environment parameter | Explicit `true` or `false`; fail deployment/startup if absent. |
+| `COMMERCE_ENABLED` | Current checkout/admin commerce commands | Non-secret environment parameter | Exact deploy-time ceiling; not the no-deploy runtime switch and never consulted by webhook/mail. |
 | `SITE_ORIGIN` | Checkout and email links | Validated environment parameter | Exact allowlisted HTTPS origin in hosted environments. |
 | `REACT_APP_RECAPTCHA_SITE_KEY` | Browser App Check | Build environment | Public site key; not a secret. Use a separate key per environment. |
 | `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | Strava functions | Secret Manager | Separate from Stripe and bound only to Strava functions. |

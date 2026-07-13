@@ -160,6 +160,7 @@ flowchart TB
 
     subgraph Data["Data boundary"]
       Firestore["Firestore domain records"]
+      CommerceControl["Server-only commerce admission\nsystemConfig/commerce"]
       EventInbox["Stripe event inbox"]
       Audit["Append-oriented audit events"]
       Secrets["Google Secret Manager"]
@@ -177,6 +178,8 @@ flowchart TB
     Web --> AdminAPI
     PublicAPI --> Firestore
     AdminAPI --> Firestore
+    PublicAPI --> CommerceControl
+    AdminAPI --> CommerceControl
     PublicAPI --> StripeAPI
     AdminAPI --> StripeAPI
     StripeAPI --> Checkout
@@ -191,6 +194,8 @@ flowchart TB
     Webhook --> Secrets
     FirebaseAuth --> Claims
 ```
+
+Text alternative: checkout and refund commands read both domain records and the server-only commerce control; the signed webhook path does not depend on that control and continues processing payment evidence.
 
 ## 5. Trust boundaries and authorization
 
@@ -247,6 +252,8 @@ The first release may continue using `admin` in the UI, but server endpoints and
 | `orders.paymentStatus` and `orders.fulfillmentStatus` | Separate money state from physical fulfillment state |
 | `registrations.paymentStatus` and `registrations.registrationStatus` | Separate payment lifecycle from attendance/transfer/cancellation lifecycle |
 | `retentionJobs/{jobId}` | Optional operational record of scheduled minimization/deletion work |
+| `systemConfig/commerce` | Versioned global/domain command admission; browser read/write denied; protected writer is not available yet |
+| `events/{id}.checkoutEnabled` and `products/{id}.checkoutEnabled` | Explicit server-owned resource admission; missing means disabled |
 
 Large `auditLog` arrays on registration and order documents should be replaced before they approach Firestore document-size and write-contention limits. New audit data should be append-oriented.
 
@@ -403,7 +410,11 @@ Optimized builds—including current Netlify previews and a locally served `buil
 
 `SITE_ORIGIN`, Firebase project IDs, App Check keys, Stripe keys, webhook endpoints, Sentry environments, and email providers must be environment-scoped. Live and test webhook secrets are never interchangeable. The repository still needs an explicit staging project before end-to-end rollout.
 
-CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) adds the source boundary for current commerce and confirmation-mail Functions: local is exact loopback, tests use HTTPS `.test`, staging is exactly `https://dev.runmprc.com`, and production is exactly `https://runmprc.com`. Test/live expected mode must match the server-key marker on the four key-bound Functions. Webhook and mail receive no Stripe API key, and invalid settings stop before rate-limit, business, mail, event-ledger, or Stripe writes. This source boundary does not create staging, configure Secret Manager or Stripe, deploy Firebase, enable commerce, or prove live behavior; CONFIG-001B and #105/#133/#136 retain those responsibilities.
+CONFIG-001A [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) adds the source boundary for current commerce and confirmation-mail Functions: local is exact loopback, tests use HTTPS `.test`, staging is exactly `https://dev.runmprc.com`, and production is exactly `https://runmprc.com`. Test/live expected mode must match the server-key marker on the four key-bound Functions. Webhook and mail receive no Stripe API key, and invalid settings stop before rate-limit, business, mail, event-ledger, or Stripe writes. This source boundary does not create staging, configure Secret Manager or Stripe, deploy Firebase, enable commerce, or prove live behavior.
+
+CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds a second source boundary for current commands. A false deploy ceiling denies new race, free/volunteer, merchandise, comp, and late-registration work before Firestore. Commands that pass it then require the fresh versioned `systemConfig/commerce` global/domain decision and an explicit resource flag. Registration/order refunds always read the separate incident-refund decision, so disabling new commerce does not silently disable response work. Missing or malformed controls mean disabled. Browser clients cannot read the global document or set resource admission fields. Webhook and confirmation mail deliberately have no edge to this control.
+
+The admission read is a clear linearization point, not a distributed lock. A command admitted on revision N can finish after revision N+1 disables new work, and an already-open Stripe Session or Payment Link can remain payable. PAY-002/PAY-004 own command journals, drain/expiry, and provider-object recovery. CONFIG-001B2 and #105/#133/#136 own the protected writer, drill, deployment, and provider evidence; none is made live by B1 source.
 
 ## 11. Security, privacy, and compliance posture
 

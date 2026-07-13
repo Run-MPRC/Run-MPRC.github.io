@@ -14,7 +14,7 @@ Complete this table in the private operations system before live payments. Do no
 
 | Area | Primary role | Backup role | Required access |
 | --- | --- | --- | --- |
-| Incident commander | Platform lead | Club president/designee | Checkout kill switch, status communication |
+| Incident commander | Platform lead | Club president/designee | Commerce containment coordination and status communication; officer switch not available yet |
 | Stripe account and payouts | Treasurer | Finance backup | Stripe finance/admin with MFA |
 | Refunds and disputes | Finance admin | Treasurer | Stripe refunds/disputes; scoped MPRC finance capability |
 | Race operations | Race director | Registrar backup | Event/roster capability; no payout settings |
@@ -30,15 +30,30 @@ Review access quarterly, when an officer changes, and after every incident. Remo
 
 ## 2. Emergency controls
 
-Before launch, implement and test a checkout kill switch that does not require a code deployment. Recommended controls:
+### Commerce pause — B1 source only, operator control NOT AVAILABLE YET
 
-- `commerceEnabled=false` globally in server-controlled configuration.
-- Per-event `checkoutEnabled=false` and per-product/variant non-sellable status.
-- Server functions check the switch before reserving capacity/inventory or calling Stripe.
-- The public site displays a neutral maintenance message and support path.
-- Existing paid records and webhook/reconciliation processing continue while new Sessions are disabled.
+CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds the read-only server enforcement layer. It does not deploy that layer, create its runtime record, or provide a safe way for an officer to change it.
 
-Changing only the UI is not a kill switch. Existing Checkout Sessions may remain payable; incident procedures must also expire active Sessions when required.
+```mermaid
+flowchart LR
+    Command["New signup, shop, comp, late add, or refund"] --> Typed["Check typed deploy settings"]
+    Typed --> Runtime["Read server-only runtime control fresh"]
+    Runtime --> Resource["Check event or product when required"]
+    Resource --> Decision{"This command admitted?"}
+    Decision -- "No" --> Stop["Stop before command side effects"]
+    Decision -- "Yes" --> Existing["Continue existing validation and command logic"]
+    Webhook["Signed Stripe webhook"] --> Continue["Continue payment evidence processing"]
+```
+
+Text alternative: new commerce and incident refunds use separate server decisions; a pause stops newly denied commands, while signed webhook processing continues without reading the pause control.
+
+The exact server-only `systemConfig/commerce` version-1 record contains a safe integer revision plus four booleans: global new commerce, race registration, merchandise checkout, and incident refunds. New race work also requires `events/{id}.checkoutEnabled=true`. New shop work also requires `products/{id}.checkoutEnabled=true`. Missing/malformed documents or missing resource fields mean disabled. Browser visitors, members, and browser admins cannot read/write this control or set those resource fields.
+
+`COMMERCE_ENABLED` is a deploy-time ceiling. It is not the no-deploy emergency switch. Keep it false during rollout. A false ceiling denies new commerce before a Firestore read. New-commerce requests that pass the ceiling, and every refund request, read the runtime record fresh without caching.
+
+Changing only the UI is never a kill switch. A request admitted immediately before a pause can finish, and an existing Stripe Session or Payment Link can remain payable. The current local Cancel action does not expire Stripe. PAY-002/PAY-004 must add command drain and provider-object expiry. No reconciliation job exists yet; PAY-005/#106 own it.
+
+CONFIG-001B2 must add a capability-protected, recent-auth, audited operator path and a private staging disable/restore drill. Until then, officers must use the stop-and-escalate steps below. Do not edit Firebase data, environment values, or Stripe objects from this guide.
 
 ## 3. Environment inventory
 
@@ -114,7 +129,7 @@ flowchart TD
 
 Text alternative: after identity, signature, or mail-eligibility checks, invalid server settings stop the invocation before any business, mail, event-ledger, or Stripe side effect.
 
-The webhook and confirmation-mail triggers validate environment, origin, and expected mode without receiving the Stripe API key. Only the two checkout creators and two admin action Functions bind and validate that key. `COMMERCE_ENABLED` and global/per-domain stop-switch behavior remain **NOT AVAILABLE YET** under CONFIG-001B.
+The webhook and confirmation-mail triggers validate environment, origin, and expected mode without receiving the Stripe API key. Only the two checkout creators and two admin action Functions bind and validate that key. CONFIG-001B1 requires exact `COMMERCE_ENABLED` only on those four command handlers and keeps webhook/mail independent. Its runtime enforcement remains source-only; the CONFIG-001B2 operator control and drill are **NOT AVAILABLE YET**.
 
 Source tests do not prove Firebase parameters, Secret Manager bindings, Stripe account mode, or production behavior. Before deployment, record only parameter names in public evidence. Store values and provider identifiers in the approved private continuity record. Use a protected staging release with made-up data; never discover configuration by trying a real payment or email.
 

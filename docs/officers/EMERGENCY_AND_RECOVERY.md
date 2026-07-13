@@ -31,10 +31,49 @@
 | Account exists but verification email request failed | Ask the member to stop resending. Record only the time, public `/login` URL, and plain status. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
 | Profile Save says permission is missing | Ask the member to stop, sign out, and wait. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
 | Private member information is visible | Contact platform and privacy owners immediately; they choose containment through an approved service procedure. Do not change permissions yourself. |
-| Unexpected payment, refund, order, or signup | Contact treasurer and platform owners. There is no proven no-code payment kill switch. Do not test with real money. |
+| Unexpected payment, refund, order, or signup | Contact treasurer and platform owners. The new source guard is not deployed and its officer control is NOT AVAILABLE YET. Do not test with real money. |
 | Password, secret, or recovery code exposed | Contact the owning service's two approved owners. They revoke/rotate through the service-specific procedure and record evidence. Do not rotate it from this generic guide. |
 
 Live commerce is not approved as of 2026-07-12. If the public site appears to accept a real payment, do not test it with a real card.
+
+### Pause new commerce — NOT AVAILABLE YET
+
+**Status:** [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source checks only. There is no approved officer button or procedure for changing the server control. Do not edit Firebase, Stripe, or release settings yourself.
+
+**Purpose:** stop unsafe retries and reach the money and platform owners without making the incident larger.
+
+**Approver:** treasurer plus platform owner. A future control change also needs the protected approver named by CONFIG-001B2.
+
+**Prerequisites:** the public page, the time, and a plain description with names, emails, order details, payment details, and codes removed.
+
+```mermaid
+flowchart LR
+    Seen["Unexpected signup, shop, or refund result"] --> Stop["Stop clicking and do not use real money"]
+    Stop --> Record["Record public page, time, and plain symptom"]
+    Record --> Owners["Contact treasurer and platform owner"]
+    Owners --> Wait["Wait for protected source, Firebase, and Stripe proof"]
+```
+
+In words: stop, record only safe public facts, contact both owners, and wait for separate system checks.
+
+1. Stop checkout, signup, late-add, comp, and refund attempts.
+2. Do not retry with a real card or real member account.
+3. Record the public page and time.
+4. Record only the plain symptom.
+5. Contact the treasurer.
+6. Contact the platform owner.
+7. Tell them whether the page showed **Commerce is temporarily unavailable**.
+8. Wait for separate Firebase and Stripe checks.
+
+**Expected result:** no new officer-initiated command is attempted, no private or payment data is copied, and both owners coordinate containment.
+
+**Stop conditions:** anyone asks you to edit a database record, environment value, Stripe Session, Payment Link, payment state, or secret; anyone suggests a real payment test; either owner is unavailable; or the affected Stripe objects are unknown.
+
+**Success proof:** exact source commit, exact protected Firebase release, readback of the server control without its values in public evidence, a made-up staging command that is denied, signed webhook continuity, and separate Stripe confirmation about any already-open test objects. A green workflow alone is not proof.
+
+**Undo:** do not restore commerce because one page looks normal. The same owners must approve a protected restore after reconciliation and observation. Use a reviewed safe roll-forward; never revert to code without the server guard while the deploy ceiling is on.
+
+**Escalation:** treasurer plus platform owner; add the security owner for an unauthorized command and the privacy owner if member information appeared.
 
 ### Account created but verification request failed
 

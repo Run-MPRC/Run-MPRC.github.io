@@ -12,7 +12,10 @@ const STRIPE_API_VERSION = '2023-10-16';
 
 let _stripeClient = null;
 function getStripe() {
-  loadCallableServerConfig({ requireStripeKey: true });
+  loadCallableServerConfig({
+    requireStripeKey: true,
+    requireCommerceCeiling: true,
+  });
   if (_stripeClient) return _stripeClient;
   const secretKey = process.env.STRIPE_SECRET_KEY;
   _stripeClient = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });

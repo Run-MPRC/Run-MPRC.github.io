@@ -334,6 +334,7 @@ describe('stripeWebhook', () => {
 
   beforeEach(() => {
     admin.__clear();
+    delete process.env.COMMERCE_ENABLED;
     process.env.ENVIRONMENT_NAME = 'test';
     process.env.SITE_ORIGIN = 'https://runmprc.test';
     process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
@@ -384,6 +385,7 @@ describe('stripeWebhook', () => {
     delete process.env.STRIPE_LIVEMODE_EXPECTED;
     delete process.env.STRIPE_SECRET_KEY;
     delete process.env.STRIPE_WEBHOOK_SECRET;
+    delete process.env.COMMERCE_ENABLED;
   });
 
   test('rejects a missing or invalid signature', async () => {
@@ -443,6 +445,28 @@ describe('stripeWebhook', () => {
       duplicate: true,
       outcome: 'payment_confirmed',
     }));
+  });
+
+  test('signed payment evidence continues while the new-commerce ceiling is off', async () => {
+    process.env.COMMERCE_ENABLED = 'false';
+    seedRegistration();
+    const event = stripeEvent(
+      'evt_payment_during_pause',
+      'checkout.session.completed',
+      registrationSession(),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      outcome: 'payment_confirmed',
+    }));
+    expect(admin.__get('events/race-1/registrations/reg-1').status).toBe('paid');
+    expect(admin.__get('stripeEvents/evt_payment_during_pause')).toMatchObject({
+      status: 'processed',
+      outcome: 'payment_confirmed',
+    });
   });
 
   test('acknowledges and deduplicates unsupported event types', async () => {
