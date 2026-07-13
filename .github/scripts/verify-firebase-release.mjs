@@ -17,7 +17,8 @@ const FUNCTION_SPECS = Object.freeze({
 
 const REGION = 'us-central1';
 const RUNTIME = 'nodejs20';
-const FIRESTORE_RELEASE = 'cloud.firestore/(default)';
+const FIRESTORE_RELEASE_REQUEST = 'cloud.firestore/(default)';
+const FIRESTORE_RELEASE_CANONICAL = 'cloud.firestore';
 const PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const VERSION_PATTERN = /^\d+$/;
 
@@ -27,6 +28,13 @@ export function normalizeRulesSource(source) {
 
 export function digestRulesSource(source) {
   return createHash('sha256').update(normalizeRulesSource(source)).digest('hex');
+}
+
+export function firestoreReleaseNames(project) {
+  return {
+    requestName: `projects/${project}/releases/${FIRESTORE_RELEASE_REQUEST}`,
+    canonicalName: `projects/${project}/releases/${FIRESTORE_RELEASE_CANONICAL}`,
+  };
 }
 
 function summarizeFunction(id, value) {
@@ -65,7 +73,7 @@ export function validateBackendState(before, after, expectedRulesDigest) {
   const errors = [];
   const previousFunctions = before?.functions ?? {};
   const currentFunctions = after?.functions ?? {};
-  const expectedReleaseName = `projects/${after?.project}/releases/${FIRESTORE_RELEASE}`;
+  const { canonicalName: expectedReleaseName } = firestoreReleaseNames(after?.project);
   const expectedRulesetPrefix = `projects/${after?.project}/rulesets/`;
 
   const hasExpectedRulesIdentity = (rules) => {
@@ -168,7 +176,7 @@ async function getJson(url, token, { allowNotFound = false } = {}) {
 }
 
 async function readBackendState(project, token) {
-  const releaseName = `projects/${project}/releases/${FIRESTORE_RELEASE}`;
+  const { requestName: releaseName } = firestoreReleaseNames(project);
   const release = await getJson(
     `https://firebaserules.googleapis.com/v1/${releaseName}`,
     token,

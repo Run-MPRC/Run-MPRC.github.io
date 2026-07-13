@@ -31,12 +31,20 @@ function functionState(project, id, overrides = {}) {
 
 function rulesState(project, rulesetId, files, overrides = {}) {
   return {
-    releaseName: `projects/${project}/releases/cloud.firestore/(default)`,
+    releaseName: `projects/${project}/releases/cloud.firestore`,
     rulesetName: `projects/${project}/rulesets/${rulesetId}`,
     files,
     ...overrides,
   };
 }
+
+test('requests the default database path but expects its canonical release name', async () => {
+  const { firestoreReleaseNames } = await import(SCRIPT_URL);
+  assert.deepEqual(firestoreReleaseNames('demo-approved-project'), {
+    requestName: 'projects/demo-approved-project/releases/cloud.firestore/(default)',
+    canonicalName: 'projects/demo-approved-project/releases/cloud.firestore',
+  });
+});
 
 test('accepts an advanced exact Rules source and both expected Functions', async () => {
   const { digestRulesSource, validateBackendState } = await import(SCRIPT_URL);
@@ -215,7 +223,7 @@ test('rejects readback from a different backend project', async () => {
   ));
 });
 
-test('rejects unsuffixed and non-default Firestore release identities', async () => {
+test('rejects noncanonical and non-default Firestore response identities', async () => {
   const { validateBackendState } = await import(SCRIPT_URL);
   const project = 'demo-approved-project';
   const digest = 'expected';
@@ -225,7 +233,7 @@ test('rejects unsuffixed and non-default Firestore release identities', async ()
   };
 
   for (const releaseName of [
-    `projects/${project}/releases/cloud.firestore`,
+    `projects/${project}/releases/cloud.firestore/(default)`,
     `projects/${project}/releases/cloud.firestore/other`,
   ]) {
     const after = {
