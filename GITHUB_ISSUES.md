@@ -405,6 +405,7 @@ SEC-001 removes browser access to stored OAuth secrets, but that does not comple
 ### Scope
 
 - Keep authorization code exchange, access token use, refresh, and disconnect entirely server-side with strict owner/capability checks.
+- Create the OAUTH-001C callback handoff before App Check is enforced on `stravaExchangeCode`; keep `code`/`state` out of third-party startup while preserving state verification and server-only exchange.
 - Store token version/provider athlete reference, scope set, expiry, last refresh outcome, and minimum operational metadata separately from public member profile.
 - Use transaction/compare-and-set or a lease/version protocol so concurrent refresh cannot lose a rotated refresh token.
 - Minimize approved Strava scopes and reject unexpected returned scope/account binding.
@@ -417,6 +418,7 @@ SEC-001 removes browser access to stored OAuth secrets, but that does not comple
 - [ ] No browser/admin rule can read or write token material.
 - [ ] Concurrent refresh preserves the newest valid rotated token and returns one coherent result.
 - [ ] Exchange/refresh verifies account binding and exact allowed scopes.
+- [ ] `stravaExchangeCode` remains excluded from App Check enforcement until OAUTH-001C proves the protected callback handoff; after cutover, missing/invalid/valid App Check behavior is tested.
 - [ ] Disconnect revokes provider access when possible and makes local reuse impossible.
 - [ ] Logs/audit contain no authorization code, access token, refresh token, or full secret document.
 - [ ] Service IAM and encryption decision have named owner, rationale, and review date.
@@ -424,11 +426,12 @@ SEC-001 removes browser access to stored OAuth secrets, but that does not comple
 ### Tests/evidence
 
 - Concurrent refresh, stale-version, rotated-token, retry, provider rejection, scope mismatch, wrong-user, disconnect/reconnect, and redacted-log tests.
+- OAUTH-001C encoded/case/trailing callback, wrong/replayed state, and App Check handoff tests without a real member token.
 - Test-provider or mocked revocation evidence; private IAM/encryption review for hosted closure.
 
 ### Agent handoff
 
-Use OAUTH-001A/B from the atomic slices. Never call the real Strava API with a member token in tests and never migrate/export production token documents into the workspace.
+Use OAUTH-001A/B/C from the atomic slices. A owns refresh concurrency, B owns scopes/revocation/governance, and C owns the initial protected callback handoff. Never call the real Strava API with a member token in tests and never migrate/export production token documents into the workspace.
 
 ---
 
