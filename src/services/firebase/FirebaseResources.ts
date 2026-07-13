@@ -1,6 +1,6 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
 import {
-  AppCheck, initializeAppCheck, ReCaptchaV3Provider,
+  AppCheck, initializeAppCheck, ReCaptchaEnterpriseProvider,
 } from 'firebase/app-check';
 import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
 import {
@@ -77,7 +77,7 @@ class FirebaseResources {
   private initAppCheck(): void {
     // App Check has no local Emulator Suite target. Do not initialize a
     // provider or exchange a debug token from development or tests.
-    // Its reCAPTCHA provider is also an outside script, so do not start it
+    // Its reCAPTCHA Enterprise provider is also an outside script, so do not start it
     // while an initial OAuth/checkout capability remains in the page URL.
     if (
       isLocalRuntime
@@ -91,7 +91,7 @@ class FirebaseResources {
     }
     try {
       this._appCheck = initializeAppCheck(this.app, {
-        provider: new ReCaptchaV3Provider(siteKey),
+        provider: new ReCaptchaEnterpriseProvider(siteKey),
         isTokenAutoRefreshEnabled: true,
       });
     } catch {

@@ -20,6 +20,10 @@ const mockConnectFunctionsEmulator = jest.fn();
 const mockGetAnalytics = jest.fn(() => ({ name: 'test-analytics' }));
 const mockIsAnalyticsSupported = jest.fn(() => Promise.resolve(false));
 const mockInitializeAppCheck = jest.fn();
+const mockReCaptchaEnterpriseProvider = jest.fn((siteKey: string) => ({
+  kind: 'enterprise',
+  siteKey,
+}));
 const mockReCaptchaV3Provider = jest.fn((siteKey: string) => ({ siteKey }));
 
 jest.mock('firebase/app', () => ({ initializeApp: mockInitializeApp }));
@@ -29,6 +33,7 @@ jest.mock('firebase/analytics', () => ({
 }));
 jest.mock('firebase/app-check', () => ({
   initializeAppCheck: mockInitializeAppCheck,
+  ReCaptchaEnterpriseProvider: mockReCaptchaEnterpriseProvider,
   ReCaptchaV3Provider: mockReCaptchaV3Provider,
 }));
 jest.mock('firebase/auth', () => ({
@@ -93,6 +98,10 @@ describe('FirebaseResources environment isolation', () => {
     mockGetFunctions.mockReturnValue(mockFunctions);
     mockGetAnalytics.mockReturnValue({ name: 'test-analytics' });
     mockInitializeAppCheck.mockReturnValue({ name: 'test-app-check' });
+    mockReCaptchaEnterpriseProvider.mockImplementation((siteKey: string) => ({
+      kind: 'enterprise',
+      siteKey,
+    }));
     mockReCaptchaV3Provider.mockImplementation((siteKey: string) => ({ siteKey }));
     mockConnectAuthEmulator.mockImplementation(() => undefined);
     mockConnectFirestoreEmulator.mockImplementation(() => undefined);
@@ -133,6 +142,7 @@ describe('FirebaseResources environment isolation', () => {
       5001,
     );
     expect(mockInitializeAppCheck).not.toHaveBeenCalled();
+    expect(mockReCaptchaEnterpriseProvider).not.toHaveBeenCalled();
     expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
     expect(mockGetAnalytics).not.toHaveBeenCalled();
@@ -163,19 +173,36 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockConnectFirestoreEmulator).toHaveBeenCalled();
     expect(mockConnectFunctionsEmulator).toHaveBeenCalled();
     expect(mockInitializeAppCheck).not.toHaveBeenCalled();
+    expect(mockReCaptchaEnterpriseProvider).not.toHaveBeenCalled();
     expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
   });
 
-  test('production retains its project without starting Analytics', async () => {
+  test('production uses only the Enterprise App Check provider without Analytics', async () => {
+    const enterpriseProvider = {
+      kind: 'enterprise',
+      siteKey: 'configured-public-site-key',
+    };
+    mockReCaptchaEnterpriseProvider.mockReturnValueOnce(enterpriseProvider);
     const resources = createResourcesFor('production', 'configured-public-site-key');
 
     expect(resources.app.options.projectId).toBe('mid-peninsula-running-club');
     expect(mockConnectAuthEmulator).not.toHaveBeenCalled();
     expect(mockConnectFirestoreEmulator).not.toHaveBeenCalled();
     expect(mockConnectFunctionsEmulator).not.toHaveBeenCalled();
-    expect(mockReCaptchaV3Provider).toHaveBeenCalledWith('configured-public-site-key');
-    expect(mockInitializeAppCheck).toHaveBeenCalled();
+    expect(mockReCaptchaEnterpriseProvider).toHaveBeenCalledTimes(1);
+    expect(mockReCaptchaEnterpriseProvider).toHaveBeenCalledWith(
+      'configured-public-site-key',
+    );
+    expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
+    expect(mockInitializeAppCheck).toHaveBeenCalledTimes(1);
+    expect(mockInitializeAppCheck).toHaveBeenCalledWith(
+      resources.app,
+      {
+        provider: enterpriseProvider,
+        isTokenAutoRefreshEnabled: true,
+      },
+    );
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
     expect(mockGetAnalytics).not.toHaveBeenCalled();
     expect(resources.analytics).toBeNull();
@@ -195,7 +222,10 @@ describe('FirebaseResources environment isolation', () => {
       expect(resources.auth).toBe(mockAuth);
       expect(resources.firestore).toBe(mockFirestore);
       expect(resources.functions).toBe(mockFunctions);
+      expect(mockReCaptchaEnterpriseProvider).not.toHaveBeenCalled();
+      expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
       expect(mockInitializeAppCheck).not.toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
       expect(consoleWarn).toHaveBeenCalledWith('[MPRC client] app_check_disabled');
     } finally {
       consoleWarn.mockRestore();
@@ -224,8 +254,33 @@ describe('FirebaseResources environment isolation', () => {
       expect(consoleWarn).toHaveBeenCalledWith(
         '[MPRC client] app_check_initialization_failed',
       );
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
       const serializedConsole = JSON.stringify(consoleWarn.mock.calls);
       canaries.forEach((canary) => expect(serializedConsole).not.toContain(canary));
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
+  test('Enterprise provider failure continues without logging provider details', () => {
+    const canary = 'enterprise-provider-private-canary';
+    mockReCaptchaEnterpriseProvider.mockImplementationOnce(() => {
+      throw new Error(canary);
+    });
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const resources = createResourcesFor('production', 'configured-public-site-key');
+
+      expect(resources.auth).toBe(mockAuth);
+      expect(resources.firestore).toBe(mockFirestore);
+      expect(resources.functions).toBe(mockFunctions);
+      expect(mockInitializeAppCheck).not.toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[MPRC client] app_check_initialization_failed',
+      );
+      expect(JSON.stringify(consoleWarn.mock.calls)).not.toContain(canary);
     } finally {
       consoleWarn.mockRestore();
     }
@@ -244,6 +299,7 @@ describe('FirebaseResources environment isolation', () => {
   ])('production keeps App Check and Analytics off a capability callback: %s', (pathName) => {
     createResourcesFor('production', 'configured-public-site-key', pathName);
 
+    expect(mockReCaptchaEnterpriseProvider).not.toHaveBeenCalled();
     expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
     expect(mockInitializeAppCheck).not.toHaveBeenCalled();
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
@@ -265,6 +321,13 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
     expect(mockGetAnalytics).not.toHaveBeenCalled();
     expect(resources.analytics).toBeNull();
+  });
+
+  test('production source contains no legacy v3 App Check provider', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'FirebaseResources.ts'), 'utf8');
+
+    expect(source).toContain('ReCaptchaEnterpriseProvider');
+    expect(source).not.toContain('ReCaptchaV3Provider');
   });
 
   test('rejects malformed direct Function names before building a URL', () => {

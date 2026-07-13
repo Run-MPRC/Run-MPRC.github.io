@@ -59,7 +59,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | ready | AUTH-001 |
 | 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P0 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SAFETY-001/#99; SEC-001 and AUTH-003 for A; staged deferral/cutover with ABUSE-001A for C |
 | 9 | AUTH-003 | Introduce scoped admin capabilities, MFA, and recent authentication | P1 | L | proposed | AUTH-001, AUTH-002, SEC-001 |
-| 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | ready | CI-001 baseline |
+| 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | partial: Enterprise browser source/tests tracked in [#159](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/159); provider config, native enforcement, rate limits, and live proof open | CI-001 baseline |
 | 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | partial: PAY-001A source/tests tracked in [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157); B/C/D and endpoint adoption open | ABUSE-001 interface agreed |
 | 12 | PROMO-001 | Disable unmodeled Stripe promotions until discounts are authoritative | P0 | S | source/tests complete under open GitHub issue #102; provider inventory and deployment remain owner action | PAY-001 for any future discount contract |
 | 13 | PAY-002 | Implement idempotent payment commands and explicit state machines | P0 | L | ready after PAY-001 | CONFIG-001, PAY-001 |
@@ -488,8 +488,14 @@ Split claim migration, MFA/recent-auth, and UI route projection into separate PR
 ## ABUSE-001 — Enforce native App Check and privacy-preserving abuse limits
 
 **Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:firebase`, `size:L`, `needs-external-config`
-**Status:** Ready
+**Status:** Partial. ABUSE-001A1 browser Enterprise source/tests are tracked in live [#159](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/159). Provider configuration, native callable enforcement, rate limits, alerts, deployment, and live proof remain open.
 **Depends on:** CI-001A recommended
+
+### Current atomic boundary
+
+ABUSE-001A1 changes only the browser provider class from reCAPTCHA v3 to `ReCaptchaEnterpriseProvider`. It preserves local/test and initial capability-callback shutdown, requires the existing public build variable, keeps token auto-refresh, and retains fixed redacted diagnostics. Its tests use a synthetic key and no provider network call.
+
+This source slice does not configure an Enterprise key/domain policy, set a build variable, publish the website, exchange a live token, or enforce App Check on a Function. ABUSE-001A2 must separately inventory safe callables, preserve the DATA-001A/OAUTH-001C callback deferrals, add native runtime enforcement with emulator behavior, observe staged metrics, and prove missing/invalid/valid requests. #113/#133/#136/WEB-001 retain project, protected configuration, deployment, provider readback, and live verification.
 
 ### Problem
 
