@@ -247,7 +247,8 @@ The first release may continue using `admin` in the UI, but server endpoints and
 | `stripeEvents/{stripeEventId}` | Durable, non-PII webhook inbox/deduplication record with processing status and business reference |
 | `checkoutRequests/{commandKeyHash}` | Immutable server-only command registration. PAY-002B2A/#165 owns the exact `registered` revision-1 record. |
 | `checkoutRequests/{commandKeyHash}/lifecycle/current` | PAY-002B2B/#169 server-only lease, monotonic fence, and terminal commitment source. It is unused and is not provider-send permission. |
-| `auditEvents/{eventId}` or bounded per-record audit subcollections | Append-oriented operational and security audit trail. B2A's first event is exactly `auditEvents/commerce_command_{commandKeyHash}_0000000001`; B2B targets one deterministic event for each real lifecycle change. |
+| `checkoutRequests/{commandKeyHash}/providerAttempts/0000000001` | PAY-002B2C1/#173 immutable lease-bound initial Stripe plan. It stores command-bound commitments, is unused, and is not account proof or provider-send permission. |
+| `auditEvents/{eventId}` or bounded per-record audit subcollections | Append-oriented operational and security audit trail. B2A's first event is `commerce_command_{commandKeyHash}_0000000001`; B2B appends one deterministic event for each real lifecycle change; C1 binds the first plan with `commerce_provider_attempt_{commandKeyHash}_0000000001`. |
 | `events/{id}.capacityCounters` | Transactionally maintained participant reservations, paid seats, and released seats |
 | `products/{id}/variants/{variantId}` | SKU, option values, price, on-hand, reserved, and sold counts |
 | `orders.paymentStatus` and `orders.fulfillmentStatus` | Separate money state from physical fulfillment state |
@@ -268,9 +269,13 @@ PAY-002B2A is tracked in live [#165](https://github.com/Run-MPRC/Run-MPRC.github
 
 B2A has no endpoint/index export, lease, fence, terminal commitment, result replay, provider plan/key/object, Stripe call, provider attempt transition, safe-send clock, or reconciliation behavior. PAY-002B2B source/tests are tracked in live [#169](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/169). They keep the B2A root and revision-1 audit immutable and store mutable state at `checkoutRequests/{commandKeyHash}/lifecycle/current`. The source uses a fixed 60-second server lease, a command-bound fingerprint of a trusted UUID v4 holder, and a monotonic fence so stale or expired workers cannot finish. Each real lease or terminal change gets one deterministic audit event.
 
-B2B terminal success stores only a command-bound commitment to a later server-only business result. That commitment is not the result itself, proof that Stripe or Firestore work happened, or response replay. The lease/fence is concurrency evidence, not authorization or provider-send permission. PAY-002B2C still owns immutable provider-plan binding, pre-send evidence, conservative retry cutoff, ambiguous outcome, verified reconciliation, and safe attempt advancement. No TTL is safe yet: [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110) must approve retention and a server-only tombstone or equivalent durable duplicate barrier before a command pair can be deleted.
+B2B terminal success stores only a command-bound commitment to a later server-only business result. That commitment is not the result itself, proof that Stripe or Firestore work happened, or response replay. The lease/fence is concurrency evidence, not authorization or provider-send permission. PAY-002B2C1/#173 owns immutable initial-plan binding; B2C2/B2C3 still own pre-send evidence, conservative retry cutoff, ambiguous outcome, verified reconciliation, and safe attempt advancement. No TTL is safe yet: [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110) must approve retention and a server-only tombstone or equivalent durable duplicate barrier before a command pair can be deleted.
 
-CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) runs the exact opt-in command-journal emulator suite as a named hosted release prerequisite; #169 expands that same suite. These are synthetic source checks only. #169's source remains unused and makes no endpoint, Firebase deployment, Stripe/provider configuration, production data, website, or live/officer change.
+PAY-002B2C1 source/tests are tracked in live [#173](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/173). With the exact current unexpired lease/fence, the unused journal can atomically create the immutable attempt-1 plan plus `auditEvents/commerce_provider_attempt_{commandKeyHash}_0000000001`. The first version accepts only the static `checkout_session_create` → `/v1/checkout/sessions` mapping, so an object ID or capability cannot enter the stored path. The plan also fixes Stripe mode, API version, original binding fence, and command-bound commitments to the account, canonical parameters, and deterministic B1 key. Raw account/parameters/key are absent. An existing plan is accepted only when its binding time fits the deterministic lifecycle audit for its original fence. An exact active-lease retry is read-only; a valid takeover may observe but cannot rewrite the plan; conflicts and malformed or missing partners fail closed.
+
+These commitments are pseudonymous equality evidence, not authorization, configured-account proof, a pre-POST marker, provider-execution proof, or response replay. PAY-002B2C2 remains responsible for first-send evidence, exact resend limits, and the old/unknown-send ambiguity cutoff. B2C3 remains responsible for verified reconciliation evidence and safe later-attempt authorization. #173 has no endpoint/index export and no Firebase deployment, Stripe/provider configuration, production data, website, or live/officer effect.
+
+CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) runs the exact opt-in command-journal emulator suite as a named hosted release prerequisite; #169 and #173 expand that same suite. These are synthetic source checks only. #173's source remains unused and makes no endpoint, Firebase deployment, Stripe/provider configuration, production data, website, or live/officer change.
 
 ## 7. Business invariants
 
@@ -362,7 +367,7 @@ sequenceDiagram
     F-->>W: Confirmed, processing, failed, or support-required state
 ```
 
-If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2C retries the exact POST only inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing and reconciles stored/provider/webhook evidence because Stripe may have pruned the idempotency key. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
+If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2C2 retries only the exact B2C1 plan/key inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing, and B2C3 reconciles stored/provider/webhook evidence because Stripe may have pruned the idempotency key. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
 
 ### 8.2 Free or volunteer registration
 
@@ -385,7 +390,7 @@ The ingress verifies method, raw payload, signature, and secret. Relevant event 
 Stripe and Firestore cannot share a distributed transaction. Checkout and refunds are therefore explicit sagas:
 
 - A Firestore transaction protects local uniqueness and scarce-resource counters.
-- A stable PAY-002B1 Stripe key identifies one logical provider generation. A lease takeover or HTTP retry is not a new generation. PAY-002B2C may retry exact parameters/key only inside its conservative stored send window; after that window or with unknown send time, it stops automatic POST and reconciles because Stripe may have pruned the old key.
+- A stable PAY-002B1 Stripe key identifies one logical provider generation. A lease takeover or HTTP retry is not a new generation. PAY-002B2C1 binds the immutable attempt-1 plan; B2C2 may retry only that exact plan/key inside its conservative stored send window; after that window or with unknown send time, it stops automatic POST, and B2C3 reconciles because Stripe may have pruned the old key.
 - The business record stores the saga step and external ID.
 - A compensating transaction releases a reservation after a known failure.
 - A webhook advances successful external state.

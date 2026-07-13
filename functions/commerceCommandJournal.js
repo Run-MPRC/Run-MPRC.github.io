@@ -7,12 +7,15 @@ const {
   CommandIdentityError,
   createCommandKey,
   createPayloadFingerprint,
+  createStripeIdempotencyKey,
 } = require('./commerceCommandIdentity');
 
 const journalSchemaVersion = 1;
 const auditSchemaVersion = 1;
 const lifecycleSchemaVersion = 1;
 const lifecycleAuditSchemaVersion = 2;
+const providerPlanSchemaVersion = 1;
+const providerPlanAuditSchemaVersion = 1;
 const MAXIMUM_ENDPOINT_SCHEMA_VERSION = 1000000;
 const MAXIMUM_LIFECYCLE_NUMBER = 9999999999;
 const LEASE_DURATION_SECONDS = 60;
@@ -21,18 +24,31 @@ const COMMAND_COLLECTION = 'checkoutRequests';
 const AUDIT_COLLECTION = 'auditEvents';
 const LIFECYCLE_COLLECTION = 'lifecycle';
 const LIFECYCLE_DOCUMENT = 'current';
+const PROVIDER_ATTEMPTS_COLLECTION = 'providerAttempts';
+const INITIAL_PROVIDER_ATTEMPT_DOCUMENT = '0000000001';
 const COMMAND_STATE = 'registered';
 const COMMAND_REVISION = 1;
+const INITIAL_PROVIDER_ATTEMPT = 1;
+const PROVIDER_PARAMETERS_COMMAND_TYPE = 'stripe.provider.parameters';
 const LOWERCASE_SHA256 = /^[0-9a-f]{64}$/;
 const CANONICAL_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SAFE_COMMAND_TYPE = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+const SAFE_STRIPE_ACCOUNT_ID = /^acct_[A-Za-z0-9]{16,64}$/;
+const SAFE_STRIPE_API_VERSION = /^(20\d{2})-(0[1-9]|1[0-2])-([0-2]\d|3[01])(?:\.([a-z][a-z0-9]{0,31}))?$/;
 const LIFECYCLE_STATES = new Set(['leased', 'succeeded', 'failed_final']);
 const HASH_MAGIC = 'mprc-commerce-command-journal-sha256';
 const HASH_DOMAINS = Object.freeze({
   leaseOwner: 'mprc.command-lease-owner.v1',
   terminalCommitment: 'mprc.command-terminal-commitment.v1',
+  stripeAccount: 'mprc.command-provider-plan-stripe-account.v1',
+  stripeParameters: 'mprc.command-provider-plan-stripe-parameters.v1',
+  stripeIdempotencyKey: 'mprc.command-provider-plan-stripe-idempotency-key.v1',
 });
 const ENVIRONMENTS = new Set(['local', 'test', 'staging', 'production']);
+const STRIPE_MODES = new Set(['test', 'live']);
+const STRIPE_ENDPOINT_BY_OPERATION = Object.freeze({
+  checkout_session_create: '/v1/checkout/sessions',
+});
 const CALLER_SCOPE_KINDS = new Set([
   'firebase_uid',
   'anonymous_principal',
@@ -57,6 +73,16 @@ const COMPLETE_INPUT_FIELDS = Object.freeze([
 const FAIL_INPUT_FIELDS = Object.freeze([
   ...ACQUIRE_INPUT_FIELDS,
   'expectedFenceEpoch',
+]);
+const BIND_PROVIDER_PLAN_INPUT_FIELDS = Object.freeze([
+  ...ACQUIRE_INPUT_FIELDS,
+  'expectedFenceEpoch',
+  'stripeAccountId',
+  'stripeMode',
+  'stripeApiVersion',
+  'endpointPath',
+  'providerOperation',
+  'providerParameters',
 ]);
 const CALLER_SCOPE_FIELDS = Object.freeze(['kind', 'value']);
 const COMMAND_FIELDS = Object.freeze([
@@ -112,6 +138,37 @@ const LIFECYCLE_AUDIT_FIELDS = Object.freeze([
   'commandType',
   'fenceEpoch',
   'leaseExpiresAt',
+  'occurredAt',
+]);
+const PROVIDER_PLAN_FIELDS = Object.freeze([
+  'providerPlanSchemaVersion',
+  'commandIdentityVersion',
+  'commandKeyHash',
+  'environment',
+  'provider',
+  'providerAttempt',
+  'providerOperation',
+  'stripeMode',
+  'stripeAccountFingerprint',
+  'stripeApiVersion',
+  'httpMethod',
+  'endpointPath',
+  'parametersFingerprint',
+  'idempotencyKeyFingerprint',
+  'boundFenceEpoch',
+  'boundAt',
+]);
+const PROVIDER_PLAN_AUDIT_FIELDS = Object.freeze([
+  'providerPlanAuditSchemaVersion',
+  'aggregateType',
+  'commandKeyHash',
+  'providerAttempt',
+  'eventType',
+  'provider',
+  'environment',
+  'stripeMode',
+  'providerOperation',
+  'boundFenceEpoch',
   'occurredAt',
 ]);
 
@@ -339,6 +396,44 @@ function createTerminalCommitment(commandKeyHash, terminalReferenceFingerprint) 
   ]);
 }
 
+function createProviderCommitment(domain, commandKeyHash, valueName, value) {
+  return digest(domain, [
+    ['version', String(providerPlanSchemaVersion)],
+    ['commandKeyHash', commandKeyHash],
+    [valueName, value],
+  ]);
+}
+
+function validStripeAccountId(value) {
+  return typeof value === 'string' && SAFE_STRIPE_ACCOUNT_ID.test(value);
+}
+
+function validStripeModeForEnvironment(stripeMode, environment) {
+  if (typeof stripeMode !== 'string' || !STRIPE_MODES.has(stripeMode)) return false;
+  return stripeMode === (environment === 'production' ? 'live' : 'test');
+}
+
+function validStripeApiVersion(value) {
+  if (typeof value !== 'string' || value.length > 64) return false;
+  const match = SAFE_STRIPE_API_VERSION.exec(value);
+  if (match === null) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysByMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return year >= 2011 && year <= 2099 && day <= daysByMonth[month - 1];
+}
+
+function validStripeOperationEndpoint(providerOperation, endpointPath) {
+  return typeof providerOperation === 'string'
+    && Object.prototype.hasOwnProperty.call(
+      STRIPE_ENDPOINT_BY_OPERATION,
+      providerOperation,
+    )
+    && endpointPath === STRIPE_ENDPOINT_BY_OPERATION[providerOperation];
+}
+
 function validLifecycleNumber(value) {
   return Number.isSafeInteger(value)
     && value >= 1
@@ -549,6 +644,13 @@ function auditDocumentId(commandKeyHash, revision) {
   return `commerce_command_${commandKeyHash}_${String(revision).padStart(10, '0')}`;
 }
 
+function providerPlanAuditDocumentId(commandKeyHash) {
+  if (typeof commandKeyHash !== 'string' || !LOWERCASE_SHA256.test(commandKeyHash)) {
+    reject('journal_record_invalid');
+  }
+  return `commerce_provider_attempt_${commandKeyHash}_${INITIAL_PROVIDER_ATTEMPT_DOCUMENT}`;
+}
+
 function prepareIdentity(input, fields) {
   let values;
   let commandKey;
@@ -649,6 +751,136 @@ function prepareLifecycleOperation(input, fields, operation) {
     proposedLeaseExpiresAt: operation === 'acquire' ? addLeaseDuration(occurredAt) : null,
     leaseOwnerFingerprint,
     terminalCommitmentHash,
+  });
+}
+
+function prepareProviderPlanOperation(input) {
+  const identity = prepareIdentity(input, BIND_PROVIDER_PLAN_INPUT_FIELDS);
+  const { values } = identity;
+
+  if (typeof values.leaseId !== 'string'
+    || !CANONICAL_UUID_V4.test(values.leaseId)
+    || values.leaseId === values.commandId
+    || !validLifecycleNumber(values.expectedFenceEpoch)
+    || !validStripeAccountId(values.stripeAccountId)
+    || !validStripeModeForEnvironment(values.stripeMode, values.environment)
+    || !validStripeApiVersion(values.stripeApiVersion)
+    || !validStripeOperationEndpoint(values.providerOperation, values.endpointPath)) {
+    reject('invalid_command_input');
+  }
+
+  let canonicalParametersFingerprint;
+  let stripeIdempotencyKey;
+  try {
+    canonicalParametersFingerprint = createPayloadFingerprint({
+      commandType: PROVIDER_PARAMETERS_COMMAND_TYPE,
+      payload: values.providerParameters,
+    }).payloadFingerprint;
+    stripeIdempotencyKey = createStripeIdempotencyKey({
+      stripeMode: values.stripeMode,
+      environment: values.environment,
+      providerOperation: values.providerOperation,
+      commandKeyHash: identity.commandKeyHash,
+      providerAttempt: INITIAL_PROVIDER_ATTEMPT,
+    }).stripeIdempotencyKey;
+  } catch (error) {
+    if (error instanceof CommandIdentityError) reject('invalid_command_input');
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+
+  let commandRef;
+  let registrationAuditRef;
+  let lifecycleRef;
+  let providerPlanRef;
+  let providerPlanAuditRef;
+  try {
+    commandRef = values.db.collection(COMMAND_COLLECTION).doc(identity.commandKeyHash);
+    registrationAuditRef = values.db.collection(AUDIT_COLLECTION).doc(
+      auditDocumentId(identity.commandKeyHash, COMMAND_REVISION),
+    );
+    lifecycleRef = commandRef.collection(LIFECYCLE_COLLECTION).doc(LIFECYCLE_DOCUMENT);
+    providerPlanRef = commandRef.collection(PROVIDER_ATTEMPTS_COLLECTION).doc(
+      INITIAL_PROVIDER_ATTEMPT_DOCUMENT,
+    );
+    providerPlanAuditRef = values.db.collection(AUDIT_COLLECTION).doc(
+      providerPlanAuditDocumentId(identity.commandKeyHash),
+    );
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+
+  const occurredAt = captureTrustedTimestamp();
+  const leaseOwnerFingerprint = createLeaseOwnerFingerprint(
+    identity.commandKeyHash,
+    values.leaseId,
+  );
+  const stripeAccountFingerprint = createProviderCommitment(
+    HASH_DOMAINS.stripeAccount,
+    identity.commandKeyHash,
+    'stripeAccountId',
+    values.stripeAccountId,
+  );
+  const parametersFingerprint = createProviderCommitment(
+    HASH_DOMAINS.stripeParameters,
+    identity.commandKeyHash,
+    'canonicalParametersFingerprint',
+    canonicalParametersFingerprint,
+  );
+  const idempotencyKeyFingerprint = createProviderCommitment(
+    HASH_DOMAINS.stripeIdempotencyKey,
+    identity.commandKeyHash,
+    'stripeIdempotencyKey',
+    stripeIdempotencyKey,
+  );
+  const providerPlanRecord = Object.freeze({
+    providerPlanSchemaVersion,
+    commandIdentityVersion,
+    commandKeyHash: identity.commandKeyHash,
+    environment: values.environment,
+    provider: 'stripe',
+    providerAttempt: INITIAL_PROVIDER_ATTEMPT,
+    providerOperation: values.providerOperation,
+    stripeMode: values.stripeMode,
+    stripeAccountFingerprint,
+    stripeApiVersion: values.stripeApiVersion,
+    httpMethod: 'POST',
+    endpointPath: values.endpointPath,
+    parametersFingerprint,
+    idempotencyKeyFingerprint,
+    boundFenceEpoch: values.expectedFenceEpoch,
+    boundAt: occurredAt,
+  });
+  const providerPlanAuditRecord = Object.freeze({
+    providerPlanAuditSchemaVersion,
+    aggregateType: 'commerce_provider_attempt',
+    commandKeyHash: identity.commandKeyHash,
+    providerAttempt: INITIAL_PROVIDER_ATTEMPT,
+    eventType: 'provider_plan_bound',
+    provider: 'stripe',
+    environment: values.environment,
+    stripeMode: values.stripeMode,
+    providerOperation: values.providerOperation,
+    boundFenceEpoch: values.expectedFenceEpoch,
+    occurredAt,
+  });
+
+  return Object.freeze({
+    db: values.db,
+    expected: identity.expected,
+    commandKeyHash: identity.commandKeyHash,
+    expectedFenceEpoch: values.expectedFenceEpoch,
+    leaseOwnerFingerprint,
+    occurredAt,
+    occurredAtParts: readTimestamp(occurredAt),
+    commandRef,
+    registrationAuditRef,
+    lifecycleRef,
+    providerPlanRef,
+    providerPlanAuditRef,
+    providerPlanRecord,
+    providerPlanAuditRecord,
   });
 }
 
@@ -878,6 +1110,346 @@ function writeLifecycleTransition(transaction, prepared, context, lifecycleRecor
   transaction.create(context.nextAuditRef, auditRecord);
 }
 
+function validateProviderLeaseAudit(value, expectedFenceEpoch, prepared) {
+  const audit = readExactOwnDataObject(
+    value,
+    LIFECYCLE_AUDIT_FIELDS,
+    'journal_record_invalid',
+  );
+  const leaseExpiresAt = readTimestamp(audit.leaseExpiresAt);
+  const occurredAt = readTimestamp(audit.occurredAt);
+  const expectedRevision = expectedFenceEpoch + 1;
+  const firstLease = expectedFenceEpoch === 1;
+
+  if (!validLifecycleNumber(expectedFenceEpoch)
+    || !validLifecycleNumber(expectedRevision)
+    || audit.auditSchemaVersion !== lifecycleAuditSchemaVersion
+    || audit.aggregateType !== 'commerce_command'
+    || audit.commandKeyHash !== prepared.commandKeyHash
+    || audit.commandRevision !== expectedRevision
+    || audit.eventType !== (firstLease ? 'command_lease_acquired' : 'command_lease_taken_over')
+    || audit.fromState !== (firstLease ? 'registered' : 'leased')
+    || audit.toState !== 'leased'
+    || audit.environment !== prepared.expected.environment
+    || audit.callerScopeKind !== prepared.expected.callerScopeKind
+    || audit.commandType !== prepared.expected.commandType
+    || audit.fenceEpoch !== expectedFenceEpoch
+    || leaseExpiresAt === null
+    || occurredAt === null
+    || !timestampExactlySecondsAfter(
+      leaseExpiresAt,
+      occurredAt,
+      LEASE_DURATION_SECONDS,
+    )) {
+    reject('journal_record_invalid');
+  }
+  return Object.freeze({
+    fenceEpoch: expectedFenceEpoch,
+    leaseExpiresAt,
+    occurredAt,
+  });
+}
+
+function validateProviderLeaseChronology(leaseAudit, predecessorAudit, lifecycle) {
+  if (leaseAudit.fenceEpoch === 1) {
+    if (predecessorAudit !== null
+      || !timestampsEqual(leaseAudit.occurredAt, lifecycle.createdAt)) {
+      reject('journal_record_invalid');
+    }
+    return;
+  }
+
+  if (predecessorAudit === null
+    || predecessorAudit.fenceEpoch !== leaseAudit.fenceEpoch - 1
+    || (predecessorAudit.fenceEpoch === 1
+      ? !timestampsEqual(predecessorAudit.occurredAt, lifecycle.createdAt)
+      : compareTimestamps(predecessorAudit.occurredAt, lifecycle.createdAt) <= 0)
+    || compareTimestamps(leaseAudit.occurredAt, predecessorAudit.leaseExpiresAt) < 0) {
+    reject('journal_record_invalid');
+  }
+}
+
+function validateProviderPlanPair(
+  plan,
+  audit,
+  bindingAudit,
+  prepared,
+  registration,
+  lifecycle,
+) {
+  const boundAt = readTimestamp(plan.boundAt);
+  const occurredAt = readTimestamp(audit.occurredAt);
+
+  if (plan.providerPlanSchemaVersion !== providerPlanSchemaVersion
+    || plan.commandIdentityVersion !== commandIdentityVersion
+    || plan.commandKeyHash !== prepared.commandKeyHash
+    || plan.environment !== prepared.expected.environment
+    || plan.provider !== 'stripe'
+    || plan.providerAttempt !== INITIAL_PROVIDER_ATTEMPT
+    || !validStripeOperationEndpoint(plan.providerOperation, plan.endpointPath)
+    || !validStripeModeForEnvironment(plan.stripeMode, plan.environment)
+    || typeof plan.stripeAccountFingerprint !== 'string'
+    || !LOWERCASE_SHA256.test(plan.stripeAccountFingerprint)
+    || !validStripeApiVersion(plan.stripeApiVersion)
+    || plan.httpMethod !== 'POST'
+    || typeof plan.parametersFingerprint !== 'string'
+    || !LOWERCASE_SHA256.test(plan.parametersFingerprint)
+    || typeof plan.idempotencyKeyFingerprint !== 'string'
+    || !LOWERCASE_SHA256.test(plan.idempotencyKeyFingerprint)
+    || !validLifecycleNumber(plan.boundFenceEpoch)
+    || boundAt === null) {
+    reject('journal_record_invalid');
+  }
+
+  let storedStripeIdempotencyKey;
+  try {
+    storedStripeIdempotencyKey = createStripeIdempotencyKey({
+      stripeMode: plan.stripeMode,
+      environment: plan.environment,
+      providerOperation: plan.providerOperation,
+      commandKeyHash: plan.commandKeyHash,
+      providerAttempt: plan.providerAttempt,
+    }).stripeIdempotencyKey;
+  } catch {
+    reject('journal_record_invalid');
+  }
+  const storedKeyFingerprint = createProviderCommitment(
+    HASH_DOMAINS.stripeIdempotencyKey,
+    plan.commandKeyHash,
+    'stripeIdempotencyKey',
+    storedStripeIdempotencyKey,
+  );
+
+  if (plan.idempotencyKeyFingerprint !== storedKeyFingerprint
+    || audit.providerPlanAuditSchemaVersion !== providerPlanAuditSchemaVersion
+    || audit.aggregateType !== 'commerce_provider_attempt'
+    || audit.commandKeyHash !== plan.commandKeyHash
+    || audit.providerAttempt !== plan.providerAttempt
+    || audit.eventType !== 'provider_plan_bound'
+    || audit.provider !== plan.provider
+    || audit.environment !== plan.environment
+    || audit.stripeMode !== plan.stripeMode
+    || audit.providerOperation !== plan.providerOperation
+    || audit.boundFenceEpoch !== plan.boundFenceEpoch
+    || !timestampsEqual(occurredAt, boundAt)
+    || compareTimestamps(bindingAudit.occurredAt, registration.createdAt) < 0
+    || compareTimestamps(boundAt, registration.createdAt) < 0
+    || plan.boundFenceEpoch > lifecycle.record.fenceEpoch
+    || compareTimestamps(boundAt, bindingAudit.occurredAt) < 0
+    || compareTimestamps(boundAt, bindingAudit.leaseExpiresAt) >= 0) {
+    reject('journal_record_invalid');
+  }
+
+  if (plan.boundFenceEpoch === lifecycle.record.fenceEpoch) {
+    if (!timestampsEqual(bindingAudit.occurredAt, lifecycle.leaseAcquiredAt)
+      || !timestampsEqual(bindingAudit.leaseExpiresAt, lifecycle.leaseExpiresAt)) {
+      reject('journal_record_invalid');
+    }
+  } else if (compareTimestamps(bindingAudit.leaseExpiresAt, lifecycle.leaseAcquiredAt) > 0) {
+    reject('journal_record_invalid');
+  }
+
+  const expected = prepared.providerPlanRecord;
+  if (plan.providerOperation !== expected.providerOperation
+    || plan.stripeMode !== expected.stripeMode
+    || plan.stripeAccountFingerprint !== expected.stripeAccountFingerprint
+    || plan.stripeApiVersion !== expected.stripeApiVersion
+    || plan.endpointPath !== expected.endpointPath
+    || plan.parametersFingerprint !== expected.parametersFingerprint
+    || plan.idempotencyKeyFingerprint !== expected.idempotencyKeyFingerprint) {
+    reject('command_conflict');
+  }
+
+  return Object.freeze({ record: plan, boundAt });
+}
+
+async function readProviderPlanContext(transaction, prepared) {
+  const commandSnapshot = await transaction.get(prepared.commandRef);
+  const registrationAuditSnapshot = await transaction.get(prepared.registrationAuditRef);
+  const lifecycleSnapshot = await transaction.get(prepared.lifecycleRef);
+  const command = readSnapshot(commandSnapshot);
+  const registrationAudit = readSnapshot(registrationAuditSnapshot);
+  const lifecycleDocument = readSnapshot(lifecycleSnapshot);
+
+  let lifecycle = null;
+  let currentAudit = Object.freeze({ exists: false, value: null });
+  const lifecycleAuditsByRevision = new Map();
+  if (lifecycleDocument.exists) {
+    lifecycle = parseLifecycle(lifecycleDocument.value, prepared.expected);
+    const currentAuditRef = prepared.db.collection(AUDIT_COLLECTION).doc(
+      auditDocumentId(prepared.commandKeyHash, lifecycle.record.commandRevision),
+    );
+    currentAudit = readSnapshot(await transaction.get(currentAuditRef));
+    lifecycleAuditsByRevision.set(lifecycle.record.commandRevision, currentAudit);
+  }
+
+  const providerPlanSnapshot = await transaction.get(prepared.providerPlanRef);
+  const providerPlanAuditSnapshot = await transaction.get(prepared.providerPlanAuditRef);
+  const providerPlanDocument = readSnapshot(providerPlanSnapshot);
+  const providerPlanAudit = readSnapshot(providerPlanAuditSnapshot);
+
+  async function readRequiredLifecycleAudit(revision) {
+    if (!validLifecycleNumber(revision)) reject('journal_record_invalid');
+    let audit = lifecycleAuditsByRevision.get(revision);
+    if (audit === undefined) {
+      const auditRef = prepared.db.collection(AUDIT_COLLECTION).doc(
+        auditDocumentId(prepared.commandKeyHash, revision),
+      );
+      audit = readSnapshot(await transaction.get(auditRef));
+      lifecycleAuditsByRevision.set(revision, audit);
+    }
+    if (!audit.exists) reject('journal_record_invalid');
+    return audit;
+  }
+
+  if (command.exists !== registrationAudit.exists) reject('journal_record_invalid');
+  if (!command.exists) {
+    if (lifecycleDocument.exists || providerPlanDocument.exists || providerPlanAudit.exists) {
+      reject('journal_record_invalid');
+    }
+    reject('command_not_registered');
+  }
+  const registration = validateExistingPair(
+    command.value,
+    registrationAudit.value,
+    prepared.expected,
+  );
+
+  if (lifecycle === null) {
+    if (providerPlanDocument.exists || providerPlanAudit.exists) {
+      reject('journal_record_invalid');
+    }
+    reject('lease_stale');
+  }
+  if (compareTimestamps(lifecycle.createdAt, registration.createdAt) < 0
+    || !currentAudit.exists) {
+    reject('journal_record_invalid');
+  }
+  validateLifecycleAudit(currentAudit.value, lifecycle, prepared.expected);
+  const mayCreate = validateActiveProviderPlanLease(prepared, lifecycle);
+  const currentLeaseAudit = validateProviderLeaseAudit(
+    currentAudit.value,
+    lifecycle.record.fenceEpoch,
+    prepared,
+  );
+  let currentPredecessorAudit = null;
+  if (lifecycle.record.fenceEpoch > 1) {
+    const predecessorDocument = await readRequiredLifecycleAudit(
+      lifecycle.record.fenceEpoch,
+    );
+    currentPredecessorAudit = validateProviderLeaseAudit(
+      predecessorDocument.value,
+      lifecycle.record.fenceEpoch - 1,
+      prepared,
+    );
+  }
+  // The current/binding lease and its immediate predecessor are a fixed read
+  // budget. Earlier server-only append history remains a trust boundary; a
+  // recursive scan would make transaction reads grow without a bound.
+  validateProviderLeaseChronology(currentLeaseAudit, currentPredecessorAudit, lifecycle);
+
+  if (providerPlanDocument.exists !== providerPlanAudit.exists) {
+    reject('journal_record_invalid');
+  }
+  let providerPlan = null;
+  if (providerPlanDocument.exists) {
+    const plan = readExactOwnDataObject(
+      providerPlanDocument.value,
+      PROVIDER_PLAN_FIELDS,
+      'journal_record_invalid',
+    );
+    const planAudit = readExactOwnDataObject(
+      providerPlanAudit.value,
+      PROVIDER_PLAN_AUDIT_FIELDS,
+      'journal_record_invalid',
+    );
+    if (!validLifecycleNumber(plan.boundFenceEpoch)
+      || !validLifecycleNumber(plan.boundFenceEpoch + 1)
+      || plan.boundFenceEpoch > lifecycle.record.fenceEpoch) {
+      reject('journal_record_invalid');
+    }
+    let bindingAudit = currentLeaseAudit;
+    let bindingPredecessorAudit = currentPredecessorAudit;
+    if (lifecycle.record.fenceEpoch !== plan.boundFenceEpoch) {
+      const bindingAuditDocument = await readRequiredLifecycleAudit(
+        plan.boundFenceEpoch + 1,
+      );
+      bindingAudit = validateProviderLeaseAudit(
+        bindingAuditDocument.value,
+        plan.boundFenceEpoch,
+        prepared,
+      );
+      bindingPredecessorAudit = null;
+      if (plan.boundFenceEpoch > 1) {
+        const predecessorDocument = await readRequiredLifecycleAudit(plan.boundFenceEpoch);
+        bindingPredecessorAudit = validateProviderLeaseAudit(
+          predecessorDocument.value,
+          plan.boundFenceEpoch - 1,
+          prepared,
+        );
+      }
+    }
+    validateProviderLeaseChronology(bindingAudit, bindingPredecessorAudit, lifecycle);
+    providerPlan = validateProviderPlanPair(
+      plan,
+      planAudit,
+      bindingAudit,
+      prepared,
+      registration,
+      lifecycle,
+    );
+  }
+
+  return Object.freeze({ lifecycle, providerPlan, mayCreate });
+}
+
+function validateActiveProviderPlanLease(prepared, lifecycle) {
+  if (lifecycle.record.state !== 'leased'
+    || lifecycle.record.leaseOwnerFingerprint !== prepared.leaseOwnerFingerprint
+    || lifecycle.record.fenceEpoch !== prepared.expectedFenceEpoch
+    || compareTimestamps(prepared.occurredAtParts, lifecycle.leaseExpiresAt) >= 0) {
+    reject('lease_stale');
+  }
+  return compareTimestamps(prepared.occurredAtParts, lifecycle.leaseAcquiredAt) >= 0;
+}
+
+const PROVIDER_PLAN_BOUND = Object.freeze({
+  journalSchemaVersion,
+  providerPlanSchemaVersion,
+  outcome: 'provider_plan_bound',
+  state: 'planned',
+});
+const PROVIDER_PLAN_EXISTING = Object.freeze({
+  journalSchemaVersion,
+  providerPlanSchemaVersion,
+  outcome: 'provider_plan_existing',
+  state: 'planned',
+});
+
+async function bindInitialStripeProviderPlan(input) {
+  const prepared = prepareProviderPlanOperation(input);
+
+  try {
+    const result = await prepared.db.runTransaction(async (transaction) => {
+      const context = await readProviderPlanContext(transaction, prepared);
+      if (context.providerPlan !== null) return PROVIDER_PLAN_EXISTING;
+      if (!context.mayCreate) reject('lease_stale');
+
+      transaction.create(prepared.providerPlanRef, prepared.providerPlanRecord);
+      transaction.create(prepared.providerPlanAuditRef, prepared.providerPlanAuditRecord);
+      return PROVIDER_PLAN_BOUND;
+    }, TRANSACTION_OPTIONS);
+
+    if (result !== PROVIDER_PLAN_BOUND && result !== PROVIDER_PLAN_EXISTING) {
+      reject('journal_unavailable');
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+}
+
 const REGISTERED_NEW = Object.freeze({
   journalSchemaVersion,
   outcome: 'registered_new',
@@ -1102,6 +1674,7 @@ module.exports = Object.freeze({
   lifecycleSchemaVersion,
   CommerceCommandJournalError,
   acquireCommerceCommandLease,
+  bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
   registerCommerceCommand,
