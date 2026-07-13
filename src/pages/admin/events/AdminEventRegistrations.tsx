@@ -188,8 +188,8 @@ function Inner() {
     try {
       const token = await services.firebaseResources.auth.currentUser?.getIdToken();
       if (!token) throw new Error('Not signed in');
-      const projectId = services.firebaseResources.app.options.projectId;
-      const url = `https://us-central1-${projectId}.cloudfunctions.net/exportRegistrationsCsv?eventId=${encodeURIComponent(slug)}`;
+      const endpoint = services.firebaseResources.getHttpFunctionUrl('exportRegistrationsCsv');
+      const url = `${endpoint}?eventId=${encodeURIComponent(slug)}`;
       const resp = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });

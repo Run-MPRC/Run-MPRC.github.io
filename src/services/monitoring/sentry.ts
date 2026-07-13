@@ -9,10 +9,26 @@ import * as Sentry from '@sentry/react';
  *   3. Set REACT_APP_SENTRY_DSN in your build environment
  */
 
-let _initialized = false;
+let initialized = false;
+const CAPABILITY_CALLBACK_PATHS = new Set([
+  '/account/strava/callback',
+  '/register/success',
+  '/shop/purchase/success',
+]);
+
+function hasCapabilityCallbackState(): boolean {
+  if (typeof window === 'undefined') return false;
+  const { pathname, search, hash } = window.location;
+  return CAPABILITY_CALLBACK_PATHS.has(pathname)
+    && (search.length > 0 || hash.length > 0);
+}
 
 export function initSentry(): void {
-  if (_initialized) return;
+  if (initialized) return;
+  // Local/test sessions must not reach an outside monitoring service. In
+  // production, do not initialize on callback URLs carrying OAuth or checkout
+  // capabilities. #111 owns the broader hosted redaction/replay policy.
+  if (process.env.NODE_ENV !== 'production' || hasCapabilityCallbackState()) return;
   const dsn = process.env.REACT_APP_SENTRY_DSN;
   if (!dsn) return;
   const environment = process.env.REACT_APP_SENTRY_ENV
@@ -25,21 +41,21 @@ export function initSentry(): void {
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
   });
-  _initialized = true;
+  initialized = true;
 }
 
 export function captureException(err: unknown): void {
-  if (_initialized) {
+  if (initialized) {
     Sentry.captureException(err);
   }
 }
 
 export function setUserContext(user: { uid: string; email?: string | null }): void {
-  if (!_initialized) return;
+  if (!initialized) return;
   Sentry.setUser({ id: user.uid, email: user.email || undefined });
 }
 
 export function clearUserContext(): void {
-  if (!_initialized) return;
+  if (!initialized) return;
   Sentry.setUser(null);
 }

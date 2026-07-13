@@ -160,16 +160,10 @@
   </head>
 
   <body>
-    <script>
-      // Handle SPA redirects from 404.html on GitHub Pages
-      (function() {
-        var redirect = sessionStorage.getItem('redirect');
-        if (redirect) {
-          sessionStorage.removeItem('redirect');
-          window.history.replaceState(null, '', redirect);
-        }
-      })();
-    </script>
+    <script
+      src="%PUBLIC_URL%/spa-navigation.js"
+      data-mprc-spa-action="restore"
+    ></script>
     <div id="root"></div>
   </body>
 </html>

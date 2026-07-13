@@ -87,10 +87,29 @@ flowchart LR
 | Payments | Stripe Checkout Sessions, Payment Links, refunds, signed webhook | `functions/createCheckoutSession.js`, `createMerchCheckout.js`, `stripeWebhook.js` | Not ready for live payments until P0 issues are complete. |
 | Hosting | Netlify currently answers `runmprc.com`; GitHub Actions also publishes a separate Pages copy | `netlify.toml`, `.github/workflows/deploy.yml`, `public/404.html` | Split and drifting as verified 2026-07-12. A Pages success does not prove the live Netlify site changed. Hosting authority, preview, DNS, headers, and rollback remain open CI/WEB work. |
 | Email | Firestore `mail` outbox designed for the Firebase Trigger Email extension | `functions/sendConfirmationEmail.js` | Extension/provider deployment is unverified; outbox creation is not transactionally idempotent and HTML needs escaping. |
-| Observability | Optional Sentry and Firebase Analytics | `src/services/monitoring`, `src/services/analytics` | Local initialization is disabled in the working tree; hosted policy/config is unverified and no payment-specific alerts, metrics, or reconciliation dashboard exists. |
+| Observability | Optional Sentry and Firebase Analytics | `src/services/monitoring`, `src/services/analytics` | Local/test initialization is disabled by #99 source. Hosted redaction, replay, consent, retention, and provider configuration remain unverified under #111. |
 | Third-party fitness | Strava OAuth tokens and statistics | `functions/strava.js`, `src/services/strava` | Functional prototype. Working-tree Rules deny browser token access, but transactional refresh, scopes/revocation, IAM/encryption decision, and audit remain OAUTH-001. |
 
 The repository workflow presents GitHub Pages plus Firebase as a release path, but public DNS and response headers show that the live custom domain is served by Netlify. The two copies currently contain different bundles. The Firebase job can also finish green while explicitly skipping deployment when `FIREBASE_SERVICE_ACCOUNT` is absent. Treat Pages publication, Netlify production, and Firebase deployment as separate evidence until one hosting/release authority is chosen. The App Engine synchronization script is another surface that must be documented as active or retired.
+
+### GitHub Pages callback handoff
+
+```mermaid
+flowchart LR
+    Provider["Stripe or Strava returns to a deep link"]
+    Missing["GitHub Pages 404"]
+    Store["Store same-origin path, query, and fragment\nin this browser tab"]
+    Root["Redirect to the site root"]
+    Restore["Remove temporary state, validate origin,\nand restore the route once"]
+    Router["React Router opens the callback page"]
+    Reject["Discard malformed or outside-site target"]
+
+    Provider --> Missing --> Store --> Root --> Restore
+    Restore -->|safe| Router
+    Restore -->|unsafe| Reject
+```
+
+Text alternative: the 404 page temporarily carries the complete return route to the root page; the root page deletes that temporary value before accepting only a same-origin route. The bridge does not prove payment, OAuth state, or identity. Server/provider verification still decides the result.
 
 ## 4. Target deployment topology
 
@@ -296,12 +315,32 @@ Returning a `2xx` response to Stripe means the event has been durably accepted o
 
 | Environment | Firebase | Stripe | Domain | Data policy |
 | --- | --- | --- | --- | --- |
-| Local | Firebase Emulator Suite | Stripe CLI and test objects | `localhost` | Synthetic data only; no production network fallback |
+| Local source runtime | Firebase Emulator Suite under `demo-mprc-local` | Not safe by Firebase emulation alone | `localhost:3000` | Synthetic data only; browser Firebase traffic is loopback-only |
 | CI | Ephemeral emulators and mocks | Stripe fixtures/signature tests; optional isolated test account | None | Synthetic data, no production secrets |
 | Staging | Dedicated non-production Firebase project | Stripe sandbox/test keys and its own webhook endpoint | `dev.runmprc.com` | Synthetic or consented test records only |
 | Production | Dedicated production Firebase project | Live restricted keys and production webhook secret | `runmprc.com` | Real data under documented retention and access policies |
 
-`SITE_ORIGIN`, Firebase project IDs, App Check keys, Stripe keys, webhook endpoints, Sentry environments, and email providers must be environment-scoped. Live and test webhook secrets are never interchangeable. The current repository points to one Firebase project and needs an explicit staging project before end-to-end rollout.
+```mermaid
+flowchart LR
+    Browser["Local React app\nlocalhost:3000"]
+    Auth["Auth emulator\n127.0.0.1:9099"]
+    Firestore["Firestore emulator\n127.0.0.1:8080"]
+    Functions["Functions emulator\n127.0.0.1:5001"]
+    Providers["Stripe, Strava, email,\nand other outside providers"]
+
+    Browser --> Auth
+    Browser --> Firestore
+    Browser --> Functions
+    Functions -. "NOT isolated by Firebase" .-> Providers
+```
+
+Text alternative: the local browser uses only the three loopback Firebase emulators. A Function can still call an outside provider, so Firebase emulator readiness alone does not authorize checkout, refund, email, or Strava testing.
+
+#99 source selects a fully synthetic Firebase configuration for development/test, connects Auth, Firestore, and Functions to the loopback ports above, stops startup when connection setup fails, and leaves App Check, Analytics, and Sentry off locally. The Firebase CLI must still report all three emulators ready before the app is opened. Mocked endpoint tests alone do not prove listening processes.
+
+Optimized builds—including current Netlify previews and a locally served `build/` directory—use `NODE_ENV=production` and still target production Firebase. They are restricted to public, read-only visual review until #105/CONFIG establishes a separate staging configuration. Do not sign in, open private/admin pages, or test Firebase/provider actions in those previews.
+
+`SITE_ORIGIN`, Firebase project IDs, App Check keys, Stripe keys, webhook endpoints, Sentry environments, and email providers must be environment-scoped. Live and test webhook secrets are never interchangeable. The repository still needs an explicit staging project before end-to-end rollout.
 
 ## 11. Security, privacy, and compliance posture
 
