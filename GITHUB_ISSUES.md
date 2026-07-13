@@ -76,7 +76,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 24 | WEB-001 | Move to controlled hosting and add browser security policy | P1 | L | proposed | SAFETY-001, CI-001 |
 | 25 | OBS-001 | Add payment observability, alerts, SLOs, and redaction | P1 | M | proposed | PAY-003, PAY-005 |
 | 26 | RESILIENCE-001 | Establish backup, restore, retention, and audited repair | P1 | L | proposed | DATA-001, PAY-005 |
-| 27 | TEST-001 | Build the Stripe/Firebase security integration and E2E suite | P0 | L | proposed | core security/payment/data children |
+| 27 | TEST-001 | Build the Stripe/Firebase security integration and E2E suite | P0 | L | in progress through #175; most children proposed | core security/payment/data children |
 | 28 | LEGAL-001 | Approve legal, tax, insurance, privacy, refund, and fulfillment policy | P0 | M | blocked_owner_decision | — |
 | 29 | OPS-001 | Configure production systems and run a controlled live pilot | P0 | L | blocked by all launch gates | CI-001, TEST-001, LEGAL-001, OBS-001, RESILIENCE-001 |
 
@@ -1202,8 +1202,12 @@ Cloud backup configuration changes external state and needs an authorized owner.
 ## TEST-001 — Build the Stripe/Firebase security integration and E2E suite
 
 **Labels:** `priority:P0`, `type:testing`, `type:security`, `area:stripe`, `area:firebase`, `size:L`
-**Status:** Proposed
+**Status:** In progress through focused child [#175](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/175); the wider integration/E2E program remains proposed
 **Depends on:** Core SEC/AUTH/ABUSE/PAY/RACE/MERCH/MAIL/DATA work
+
+### Current child status
+
+TEST-001A is split so a small safety foundation can be reviewed before any CI artifact or end-to-end expansion. TEST-001A1 is tracked in [#175](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/175): Functions tests receive deterministic reserved fixtures, one shared synthetic Stripe signer, fail-closed checks for supplied production/live configuration, and a Node transport guard that permits only loopback emulator targets. TEST-001A2 remains proposed for bounded emitted-artifact scanning and named CI/release wiring. Neither child authorizes provider calls, production data, Firebase deployment, or live payment testing.
 
 ### Problem
 

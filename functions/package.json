@@ -28,5 +28,10 @@
     "firebase-functions-test": "^3.1.0",
     "jest": "^29.7.0"
   },
+  "jest": {
+    "setupFilesAfterEnv": [
+      "<rootDir>/testSupport/jestSafetySetup.js"
+    ]
+  },
   "private": true
 }
