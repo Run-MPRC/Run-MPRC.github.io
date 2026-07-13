@@ -36,6 +36,7 @@ Use the club's approved password manager for access. Share only a public link or
 
 - **Code changed:** What changed?
 - **Hosted frontend tests passed:** Did the `Frontend lint + build` job show a green `Run frontend Jest tests` step? Jest is the automated frontend behavior test.
+- **Hosted payment-safety test passed:** Did the `Commerce command journal emulator` job finish green? This check uses made-up records in a closed test database.
 - **Other tests passed:** What else was checked for this change?
 - **Code merged:** Which pull request was approved?
 - **Release approved:** Which environment, exact commit, and named approver were recorded?
