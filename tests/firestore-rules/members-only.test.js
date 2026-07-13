@@ -33,7 +33,7 @@ describe('members_only collection', () => {
     await assertSucceeds(member.doc('members_only/benefits').get());
   });
 
-  test('admins CAN read private content through the admin catch-all', async () => {
+  test('admins CAN read private content through the explicit collection rule', async () => {
     await seed('members_only/benefits', PRIVATE_CONTENT);
     const admin = await db({ uid: 'a1', role: 'admin' });
 
@@ -54,5 +54,16 @@ describe('members_only collection', () => {
       discounts: '<p>Changed without admin access.</p>',
     }));
     await assertFails(user.doc('members_only/benefits').delete());
+  });
+
+  test('admins CANNOT write private content from the browser', async () => {
+    await seed('members_only/benefits', PRIVATE_CONTENT);
+    const admin = await db({ uid: 'a1', role: 'admin' });
+
+    await assertFails(admin.doc('members_only/new-benefit').set(PRIVATE_CONTENT));
+    await assertFails(admin.doc('members_only/benefits').update({
+      discounts: '<p>Changed directly.</p>',
+    }));
+    await assertFails(admin.doc('members_only/benefits').delete());
   });
 });
