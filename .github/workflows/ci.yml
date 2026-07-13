@@ -27,7 +27,7 @@ jobs:
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/ci.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
-          node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js
+          node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js
       - run: npm run lint:fix -- --max-warnings=0 || true
       - name: Build
         env:
@@ -38,6 +38,22 @@ jobs:
           REACT_APP_RECAPTCHA_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_SITE_KEY }}
           REACT_APP_SENTRY_DSN: ${{ secrets.REACT_APP_SENTRY_DSN }}
         run: npm run build
+
+  test-artifact-scrubber:
+    name: Test artifact scrubber
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - name: Run emitted test artifact safety tests
+        run: node --test tests/test-artifact-safety.test.js
 
   functions:
     name: Cloud Functions lint + test
