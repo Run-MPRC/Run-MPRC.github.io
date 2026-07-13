@@ -1591,6 +1591,33 @@ describe('stripeWebhook', () => {
     });
   });
 
+  test('does not anchor a PI-null dispute to an unrelated stored PaymentIntent', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeChargeId: null,
+    });
+    await deliver(stripeEvent('evt_unanchored_bad_dispute', 'charge.dispute.updated', {
+      id: 'dp_unanchored_bad',
+      object: 'dispute',
+      charge: 'ch_unanchored_bad',
+      payment_intent: null,
+      amount: 2001,
+      currency: 'usd',
+      reason: 'fraudulent',
+      status: 'needs_response',
+      metadata: { type: 'merch', orderId: 'order-1' },
+    }));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'paid',
+      paymentReviewReason: 'invalid_dispute_amount',
+    });
+    expect(admin.__get('stripeObjectBindings/dispute:dp_unanchored_bad')).toBeUndefined();
+    expect(admin.__get('stripeObjectBindings/charge:ch_unanchored_bad')).toBeUndefined();
+  });
+
   test('quarantines an unmatched dispute instead of acknowledging it as unrelated', async () => {
     const dispute = {
       id: 'dp_unmatched',

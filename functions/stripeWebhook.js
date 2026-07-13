@@ -1110,7 +1110,7 @@ function providerBindingCanBeRecorded(event, record, result) {
   if (DISPUTE_EVENT_TYPES.has(event.type)) {
     const binding = validateDisputeBinding(object, record);
     if (!binding.ok) return false;
-    const anchored = !!record.stripePaymentIntentId
+    const anchored = (!!record.stripePaymentIntentId && !!binding.paymentIntentId)
       || !!record.stripeChargeId
       || !!binding.existingDispute;
     const accepted = result.outcome.startsWith('dispute_')
