@@ -185,14 +185,7 @@ describe('Sentry environment and callback isolation', () => {
       },
     };
 
-    const unsafeHint = {
-      attachments: [{
-        data: canaries[9],
-        filename: canaries[0],
-      }],
-    };
-    const sanitized = options.beforeSend(unsafeEvent, unsafeHint);
-    expect(unsafeHint.attachments).toEqual([]);
+    const sanitized = options.beforeSend(unsafeEvent, {});
     expect(sanitized).toEqual({
       environment: 'production',
       event_id: '0123456789abcdef0123456789abcdef',
@@ -220,9 +213,18 @@ describe('Sentry environment and callback isolation', () => {
     const serialized = JSON.stringify(sanitized);
     canaries.forEach((canary) => expect(serialized).not.toContain(canary));
     expect(options.beforeSend({ message: canaries[8] }, {})).toBeNull();
+
+    const unsafeHint = {
+      attachments: [{
+        data: canaries[9],
+        filename: canaries[0],
+      }],
+    };
+    expect(options.beforeSend(unsafeEvent, unsafeHint)).toBeNull();
+    expect(unsafeHint.attachments).toHaveLength(1);
   });
 
-  test('fails closed for malformed events and stack frames', () => {
+  test('fails closed for malformed events, hints, and stack frames', () => {
     initializeFor('production', '/events');
 
     const options = mockInit.mock.calls[0][0];
@@ -241,6 +243,26 @@ describe('Sentry environment and callback isolation', () => {
       get: () => { throw new Error('private-getter-canary'); },
     });
     expect(options.beforeSend(throwingEvent, {})).toBeNull();
+
+    const validEvent = { exception: { values: [{ type: 'TypeError' }] } };
+    expect(options.beforeSend(validEvent, { attachments: {} })).toBeNull();
+    expect(options.beforeSend(validEvent, {
+      attachments: Object.freeze([{ data: 'frozen-attachment-canary' }]),
+    })).toBeNull();
+
+    const poisonedAttachments = [{ data: 'poisoned-attachment-canary' }];
+    const noOpSplice = jest.fn(() => []);
+    Object.defineProperty(poisonedAttachments, 'splice', { value: noOpSplice });
+    expect(options.beforeSend(validEvent, {
+      attachments: poisonedAttachments,
+    })).toBeNull();
+    expect(noOpSplice).not.toHaveBeenCalled();
+
+    const throwingHint = {};
+    Object.defineProperty(throwingHint, 'attachments', {
+      get: () => { throw new Error('attachment-getter-canary'); },
+    });
+    expect(options.beforeSend(validEvent, throwingHint)).toBeNull();
 
     const coercingIdentifier = {
       privateValue: 'coercion-canary',
@@ -279,6 +301,52 @@ describe('Sentry environment and callback isolation', () => {
         }],
       },
     });
+  });
+
+  test('does not invoke methods overridden by untrusted array subclasses', () => {
+    initializeFor('production', '/events');
+
+    const options = mockInit.mock.calls[0][0];
+    const methodCanary = 'private-array-method-canary';
+    class PoisonedArray<T> extends Array<T> {}
+    const frames = new PoisonedArray<Record<string, unknown>>();
+    frames[0] = {
+      filename: '/static/js/main.e86a0f7a.js',
+      function: methodCanary,
+    };
+    const exceptions = new PoisonedArray<Record<string, unknown>>();
+    exceptions[0] = {
+      type: 'TypeError',
+      value: methodCanary,
+      stacktrace: { frames },
+    };
+    const poisonedMethods: jest.Mock[] = [];
+
+    [frames, exceptions].forEach((array) => {
+      ['slice', 'map', 'filter'].forEach((method) => {
+        const poisonedMethod = jest.fn(() => {
+          throw new Error(methodCanary);
+        });
+        poisonedMethods[poisonedMethods.length] = poisonedMethod;
+        Object.defineProperty(array, method, { value: poisonedMethod });
+      });
+    });
+
+    const sanitized = options.beforeSend({
+      exception: { values: exceptions },
+    }, {});
+    expect(sanitized).toEqual({
+      exception: {
+        values: [{
+          stacktrace: {
+            frames: [{ filename: '/static/js/main.e86a0f7a.js' }],
+          },
+          type: 'TypeError',
+        }],
+      },
+    });
+    poisonedMethods.forEach((method) => expect(method).not.toHaveBeenCalled());
+    expect(JSON.stringify(sanitized)).not.toContain(methodCanary);
   });
 
   test('reads each retained event field once before validating it', () => {

@@ -107,11 +107,19 @@ function sanitizeException(exception: unknown): Exception | undefined {
   const stacktraceCandidate = exception.stacktrace;
   const stacktrace = isRecord(stacktraceCandidate) ? stacktraceCandidate : undefined;
   const framesCandidate = stacktrace?.frames;
-  const rawFrames = Array.isArray(framesCandidate) ? framesCandidate : [];
-  const frames = rawFrames
-    .slice(-50)
-    .map(sanitizeStackFrame)
-    .filter((frame): frame is StackFrame => frame !== undefined);
+  const frames: StackFrame[] = [];
+  if (Array.isArray(framesCandidate)) {
+    const frameCountCandidate = framesCandidate.length;
+    const frameCount = Number.isSafeInteger(frameCountCandidate)
+      && frameCountCandidate >= 0
+      ? frameCountCandidate
+      : 0;
+    const firstFrame = frameCount > 50 ? frameCount - 50 : 0;
+    for (let index = firstFrame; index < frameCount; index += 1) {
+      const frame = sanitizeStackFrame(framesCandidate[index]);
+      if (frame !== undefined) frames[frames.length] = frame;
+    }
+  }
   const safeException: Exception = {
     type: typeof typeCandidate === 'string' && SAFE_ERROR_TYPES.has(typeCandidate)
       ? typeCandidate
@@ -136,13 +144,21 @@ export function sanitizeSentryEvent(event: Event): Event | null {
     const exceptionCandidate = event.exception;
     const exceptionContainer = isRecord(exceptionCandidate) ? exceptionCandidate : undefined;
     const exceptionValuesCandidate = exceptionContainer?.values;
-    const rawExceptions = Array.isArray(exceptionValuesCandidate)
-      ? exceptionValuesCandidate
-      : [];
-    const exceptions = rawExceptions
-      .slice(0, 5)
-      .map(sanitizeException)
-      .filter((exception): exception is Exception => exception !== undefined);
+    const exceptions: Exception[] = [];
+    if (Array.isArray(exceptionValuesCandidate)) {
+      const rawExceptionCount = exceptionValuesCandidate.length;
+      const safeExceptionCount = Number.isSafeInteger(rawExceptionCount)
+        && rawExceptionCount >= 0
+        ? rawExceptionCount
+        : 0;
+      const exceptionCount = safeExceptionCount < 5
+        ? safeExceptionCount
+        : 5;
+      for (let index = 0; index < exceptionCount; index += 1) {
+        const exception = sanitizeException(exceptionValuesCandidate[index]);
+        if (exception !== undefined) exceptions[exceptions.length] = exception;
+      }
+    }
 
     if (exceptions.length === 0) return null;
 
@@ -191,13 +207,10 @@ export function sanitizeSentryEvent(event: Event): Event | null {
 
 function sanitizeSentryEventAndHint(event: Event, hint: EventHint): Event | null {
   try {
-    // Sentry serializes hint attachments after beforeSend. Clearing the same
-    // hint object is therefore part of the fail-closed payload boundary.
+    // Sentry serializes hint attachments after beforeSend. Do not trust input
+    // array methods or mutation here: any event carrying attachments is dropped.
     const attachments = hint?.attachments;
-    if (attachments !== undefined) {
-      if (!Array.isArray(attachments)) return null;
-      attachments.splice(0, attachments.length);
-    }
+    if (attachments !== undefined) return null;
     return sanitizeSentryEvent(event);
   } catch {
     return null;
