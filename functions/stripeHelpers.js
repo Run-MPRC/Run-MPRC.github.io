@@ -2,6 +2,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const Stripe = require('stripe');
 const crypto = require('crypto');
+const { loadCallableServerConfig } = require('./serverConfig');
 
 const {
   Timestamp, FieldValue,
@@ -11,14 +12,9 @@ const STRIPE_API_VERSION = '2023-10-16';
 
 let _stripeClient = null;
 function getStripe() {
+  loadCallableServerConfig({ requireStripeKey: true });
   if (_stripeClient) return _stripeClient;
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  if (!secretKey) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Stripe secret key not configured',
-    );
-  }
   _stripeClient = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
   return _stripeClient;
 }

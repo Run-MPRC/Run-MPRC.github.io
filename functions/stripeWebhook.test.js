@@ -185,8 +185,11 @@ jest.mock('firebase-admin/firestore', () => {
 const admin = require('firebase-admin');
 
 const WEBHOOK_SECRET = 'whsec_testsecret';
+process.env.ENVIRONMENT_NAME = 'test';
+process.env.SITE_ORIGIN = 'https://runmprc.test';
 process.env.STRIPE_SECRET_KEY = 'sk_test_testing';
 process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
+process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
 
 const { stripeWebhook } = require('./stripeWebhook');
 
@@ -331,7 +334,10 @@ describe('stripeWebhook', () => {
 
   beforeEach(() => {
     admin.__clear();
+    process.env.ENVIRONMENT_NAME = 'test';
+    process.env.SITE_ORIGIN = 'https://runmprc.test';
     process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
+    process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
     consoleError.mockClear();
   });
 
@@ -346,15 +352,42 @@ describe('stripeWebhook', () => {
     ));
 
     expect(response.status).toHaveBeenCalledWith(500);
+    expect(response.send).toHaveBeenCalledWith('Server configuration is unavailable');
     expect(admin.__get('events/race-1/registrations/reg-1').status).toBe('pending');
     expect(admin.__get('stripeEvents/evt_missing_mode_config')).toBeUndefined();
   });
 
+  test('reports a missing webhook secret as configuration failure before persistence', async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    seedRegistration();
+
+    const response = await deliver(stripeEvent(
+      'evt_missing_webhook_secret',
+      'checkout.session.completed',
+      registrationSession(),
+    ));
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(response.send).toHaveBeenCalledWith('Server configuration is unavailable');
+    expect(admin.__get('events/race-1/registrations/reg-1').status).toBe('pending');
+    expect(admin.__get('stripeEvents/evt_missing_webhook_secret')).toBeUndefined();
+    expect(consoleError).toHaveBeenCalledWith(
+      'Stripe webhook configuration unavailable',
+      { reason: 'webhook_secret_missing' },
+    );
+  });
+
   afterAll(() => {
     consoleError.mockRestore();
+    delete process.env.ENVIRONMENT_NAME;
+    delete process.env.SITE_ORIGIN;
+    delete process.env.STRIPE_LIVEMODE_EXPECTED;
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_WEBHOOK_SECRET;
   });
 
   test('rejects a missing or invalid signature', async () => {
+    delete process.env.ENVIRONMENT_NAME;
     const event = stripeEvent(
       'evt_bad_sig',
       'checkout.session.completed',
@@ -598,13 +631,13 @@ describe('stripeWebhook', () => {
   });
 
   test('quarantines a configured livemode mismatch without changing the target', async () => {
-    process.env.STRIPE_LIVEMODE_EXPECTED = 'true';
     seedRegistration();
     const event = stripeEvent(
       'evt_wrong_mode',
       'checkout.session.completed',
       registrationSession(),
     );
+    event.livemode = true;
 
     const response = await deliver(event);
     const registration = admin.__get('events/race-1/registrations/reg-1');

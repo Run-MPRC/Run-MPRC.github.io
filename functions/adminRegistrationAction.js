@@ -10,6 +10,7 @@ const {
   auditEntry,
   Timestamp,
 } = require('./stripeHelpers');
+const { loadCallableServerConfig } = require('./serverConfig');
 
 const ACTIONS = new Set([
   'refund_full',
@@ -155,7 +156,7 @@ async function markComp({ eventId, registration, actor }) {
 }
 
 async function addLateRegistration({
-  stripe, eventId, registration, actor,
+  stripe, eventId, registration, actor, siteOrigin,
 }) {
   if (!registration || !isValidEmail(registration.runner?.email)) {
     throw new functions.https.HttpsError('invalid-argument', 'registration.runner.email required');
@@ -246,7 +247,7 @@ async function addLateRegistration({
     after_completion: {
       type: 'redirect',
       redirect: {
-        url: `${process.env.SITE_ORIGIN || 'https://runmprc.com'}/register/success?reg=${newRef.id}&token=${confirmationToken}`,
+        url: `${siteOrigin}/register/success?reg=${newRef.id}&token=${confirmationToken}`,
       },
     },
   });
@@ -261,6 +262,7 @@ exports.adminRegistrationAction = functions
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
     await requireAdmin(context);
+    const serverConfig = loadCallableServerConfig({ requireStripeKey: true });
 
     const {
       eventId, registrationId, action, payload = {},
@@ -284,7 +286,11 @@ exports.adminRegistrationAction = functions
     if (action === 'add_late_registration') {
       const stripe = getStripe();
       return addLateRegistration({
-        stripe, eventId, registration: payload.registration, actor,
+        stripe,
+        eventId,
+        registration: payload.registration,
+        actor,
+        siteOrigin: serverConfig.siteOrigin,
       });
     }
 

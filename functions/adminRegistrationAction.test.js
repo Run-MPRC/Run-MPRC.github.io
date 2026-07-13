@@ -1,10 +1,20 @@
+const mockFirestoreAccess = jest.fn();
+const mockStripeConstructor = jest.fn();
+
+jest.mock('stripe', () => mockStripeConstructor);
+
 jest.mock('firebase-admin', () => {
   const firestore = {};
   firestore.FieldValue = { arrayUnion: (x) => x };
+  const firestoreFunction = () => {
+    mockFirestoreAccess();
+    return firestore;
+  };
+  firestoreFunction.FieldValue = firestore.FieldValue;
   return {
     initializeApp: jest.fn(),
     apps: [{}],
-    firestore: Object.assign(() => firestore, { FieldValue: firestore.FieldValue }),
+    firestore: firestoreFunction,
   };
 });
 
@@ -36,11 +46,50 @@ jest.mock('firebase-admin/firestore', () => ({
 
 describe('adminRegistrationAction authorization', () => {
   beforeEach(() => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_x';
+    process.env.ENVIRONMENT_NAME = 'test';
+    process.env.SITE_ORIGIN = 'https://runmprc.test';
+    process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
+    process.env.STRIPE_SECRET_KEY = [
+      'sk', 'test', 'synthetic_admin_registration',
+    ].join('_');
+    mockFirestoreAccess.mockClear();
+    mockStripeConstructor.mockClear();
     jest.resetModules();
   });
 
+  afterAll(() => {
+    delete process.env.ENVIRONMENT_NAME;
+    delete process.env.SITE_ORIGIN;
+    delete process.env.STRIPE_LIVEMODE_EXPECTED;
+    delete process.env.STRIPE_SECRET_KEY;
+  });
+
+  test('rejects invalid configuration before admin registration side effects', async () => {
+    delete process.env.SITE_ORIGIN;
+    const { adminRegistrationAction } = require('./adminRegistrationAction');
+
+    await expect(adminRegistrationAction({
+      eventId: 'e1',
+      action: 'add_late_registration',
+      payload: {
+        registration: {
+          runner: { email: 'runner@example.test' },
+          amountCents: 1000,
+        },
+      },
+    }, {
+      auth: { uid: 'admin-1', token: { role: 'admin' } },
+    })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Server configuration is unavailable',
+    });
+
+    expect(mockFirestoreAccess).not.toHaveBeenCalled();
+    expect(mockStripeConstructor).not.toHaveBeenCalled();
+  });
+
   test('rejects unauthenticated caller', async () => {
+    delete process.env.ENVIRONMENT_NAME;
     const { adminRegistrationAction } = require('./adminRegistrationAction');
     await expect(
       adminRegistrationAction(
@@ -51,6 +100,7 @@ describe('adminRegistrationAction authorization', () => {
   });
 
   test('rejects non-admin caller', async () => {
+    delete process.env.ENVIRONMENT_NAME;
     const { adminRegistrationAction } = require('./adminRegistrationAction');
     await expect(
       adminRegistrationAction(

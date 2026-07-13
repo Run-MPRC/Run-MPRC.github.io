@@ -1,5 +1,8 @@
 const mockCheckoutCreate = jest.fn();
 const mockProductCreate = jest.fn();
+const mockGetStripe = jest.fn();
+const mockRateLimit = jest.fn();
+const mockFirestoreAccess = jest.fn();
 
 jest.mock('firebase-functions', () => {
   class HttpsError extends Error {
@@ -83,7 +86,10 @@ jest.mock('firebase-admin', () => {
 
   return {
     apps: [{}],
-    firestore: () => firestore,
+    firestore: () => {
+      mockFirestoreAccess();
+      return firestore;
+    },
     __clear: () => {
       store.clear();
       registrationSequence = 0;
@@ -95,10 +101,7 @@ jest.mock('firebase-admin', () => {
 });
 
 jest.mock('./stripeHelpers', () => ({
-  getStripe: () => ({
-    checkout: { sessions: { create: mockCheckoutCreate } },
-    products: { create: mockProductCreate },
-  }),
+  getStripe: mockGetStripe,
   generateToken: () => 'synthetic-confirmation-token',
   resolveCallerRole: async () => null,
   requireAppCheck: () => {},
@@ -113,7 +116,7 @@ jest.mock('./stripeHelpers', () => ({
 }));
 
 jest.mock('./rateLimit', () => ({
-  checkRateLimit: async () => {},
+  checkRateLimit: mockRateLimit,
   extractIp: () => 'synthetic-test-ip',
 }));
 
@@ -126,15 +129,75 @@ describe('Checkout promotion policy', () => {
     admin.__clear();
     mockCheckoutCreate.mockReset();
     mockProductCreate.mockReset();
+    mockGetStripe.mockReset();
+    mockRateLimit.mockReset();
+    mockFirestoreAccess.mockClear();
+    mockGetStripe.mockReturnValue({
+      checkout: { sessions: { create: mockCheckoutCreate } },
+      products: { create: mockProductCreate },
+    });
+    mockRateLimit.mockResolvedValue(undefined);
     mockCheckoutCreate.mockImplementation(async (payload) => ({
       id: payload.metadata.type === 'merch' ? 'cs_order_policy' : 'cs_registration_policy',
       url: 'https://checkout.stripe.test/synthetic-session',
     }));
+    process.env.ENVIRONMENT_NAME = 'test';
     process.env.SITE_ORIGIN = 'https://runmprc.test';
+    process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
+    process.env.STRIPE_SECRET_KEY = [
+      'sk', 'test', 'synthetic_checkout_policy',
+    ].join('_');
   });
 
   afterAll(() => {
+    delete process.env.ENVIRONMENT_NAME;
     delete process.env.SITE_ORIGIN;
+    delete process.env.STRIPE_LIVEMODE_EXPECTED;
+    delete process.env.STRIPE_SECRET_KEY;
+  });
+
+  test.each([
+    ['paid race checkout', createCheckoutSession, {
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'nonMember',
+      acceptedWaiver: true,
+    }],
+    ['free volunteer checkout', createCheckoutSession, {
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Volunteer',
+        email: 'volunteer@example.test',
+      },
+      acceptedWaiver: true,
+      signupType: 'volunteer',
+    }],
+    ['merchandise checkout', createMerchCheckout, {
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }],
+  ])('rejects invalid configuration before %s side effects', async (_name, handler, data) => {
+    delete process.env.ENVIRONMENT_NAME;
+
+    await expect(handler(data, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Server configuration is unavailable',
+    });
+
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockFirestoreAccess).not.toHaveBeenCalled();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
   });
 
   test('race checkout sends the exact disabled-adjustment payload', async () => {

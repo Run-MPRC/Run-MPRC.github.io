@@ -58,6 +58,34 @@ As of **2026-07-13**:
 - Git-triggered Netlify production builds are paused. Netlify build hooks are not controlled by that repository rule and remain unverified.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 
+### Commerce server safety gate — SOURCE ONLY, NOT DEPLOYED
+
+Issue [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) adds a source-code check for the server environment, website address, Stripe test/live mode, and server-key mode. It does not configure Firebase or Stripe. It does not make payments available.
+
+```mermaid
+flowchart LR
+    Request["Signup, shop, admin, webhook, or mail work"] --> Identity["Check App Check, officer access, webhook signature, or whether mail work applies"]
+    Identity --> Config{"Server settings match?"}
+    Config -- "No" --> Stop["Stop before database, mail, or Stripe work"]
+    Config -- "Yes" --> Continue["Continue with the existing safety checks"]
+```
+
+In words: the server first checks identity, the webhook signature, or whether mail work applies. Wrong or missing settings then stop qualifying work before business data, email, or Stripe can change.
+
+If a member or officer sees **Server configuration is unavailable**:
+
+1. Stop.
+2. Do not retry checkout, refund, or late registration.
+3. Record the page and time without member or payment details.
+4. Ask the platform owner to check the private environment record.
+5. Never paste a key, setting value, screenshot of a console, or member details into an issue or AI tool.
+
+**Expected result:** no registration, order, refund, mail, or Stripe object is created while settings are invalid.
+
+**Undo:** revert the reviewed source change if it causes a false stop. Never restore a default production website address.
+
+**Escalation:** platform owner, then the finance owner if a payment might already exist in Stripe.
+
 ## Before merge
 
 1. Open the pull request.
@@ -142,6 +170,7 @@ Stop and contact the platform owner if:
 - The commit is not merged into `main`.
 - The release request is more than 24 hours old.
 - The environment, project, or fixed scope is missing or wrong.
+- The site reports **Server configuration is unavailable**.
 - Anyone asks for a service-account key, token, password, or recovery code.
 - Firebase is skipped, partial, failed, or unverified.
 - A website publication job starts before backend verification.

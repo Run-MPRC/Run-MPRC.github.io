@@ -8,6 +8,7 @@ const {
   auditEntry,
   Timestamp,
 } = require('./stripeHelpers');
+const { loadCallableServerConfig } = require('./serverConfig');
 
 const ACTIONS = new Set([
   'mark_fulfilled',
@@ -27,6 +28,7 @@ exports.adminOrderAction = functions
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
     await requireAdmin(context);
+    loadCallableServerConfig({ requireStripeKey: true });
 
     const { orderId, action, payload = {} } = data || {};
     if (!orderId) {
