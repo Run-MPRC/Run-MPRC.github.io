@@ -82,6 +82,25 @@ flowchart TD
 
 In words: people use their own accounts, at least two officers cover every service, and recovery information stays in the approved password manager rather than the repository or AI.
 
+## Member profile setup and recovery — NOT LIVE YET
+
+```mermaid
+flowchart TD
+    SignIn["Member signs in"] --> Ensure["Server checks this member's profile"]
+    Ensure --> Existing{"Profile already exists?"}
+    Existing -- "Yes" --> Preserve["Keep every field and role unchanged"]
+    Existing -- "No" --> Pending["Create one pending profile"]
+    Preserve --> Read["Website reads through normal Firebase permissions"]
+    Pending --> Read
+    Read -- "Read succeeds" --> Edit["Member may edit name and phone only"]
+    Read -- "Setup or read fails" --> Safe["Edit stays hidden; Try again or sign out"]
+    Ensure -. "does not grant, remove, or change" .-> Access["Membership, payment, discount, or admin access"]
+```
+
+In words: a signed-in member gets their existing profile unchanged or one new pending profile; the website permits only name and phone editing after the normal permission check succeeds. The repair does not change actual access. If displayed profile status and actual access disagree, stop and escalate.
+
+Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair. Source code and local tests do not make it live. The website, server Function, database permissions, and made-up live check must each be proven separately.
+
 ## Emergency decision
 
 ```mermaid

@@ -28,11 +28,39 @@
 | Wrong public text, image, or link | Ask the platform owner for one reviewed revert pull request. |
 | Site unavailable or old after a merge | Ask the platform owner to check Netlify and GitHub Pages separately; do not change DNS. |
 | Login or member access is wrong | Stop role requests and contact the identity/platform owners. |
+| Profile Save says permission is missing | Ask the member to stop, sign out, and wait. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
 | Private member information is visible | Contact platform and privacy owners immediately; they choose containment through an approved service procedure. Do not change permissions yourself. |
 | Unexpected payment, refund, order, or signup | Contact treasurer and platform owners. There is no proven no-code payment kill switch. Do not test with real money. |
 | Password, secret, or recovery code exposed | Contact the owning service's two approved owners. They revoke/rotate through the service-specific procedure and record evidence. Do not rotate it from this generic guide. |
 
 Live commerce is not approved as of 2026-07-12. If the public site appears to accept a real payment, do not test it with a real card.
+
+### Missing profile or profile permission error
+
+**Status:** automatic repair is **NOT AVAILABLE YET**. These are current stop-and-escalate steps only.
+
+**Purpose:** prevent a failed account repair from changing access or private data.
+
+**Approver:** membership lead plus platform/security owner.
+
+**Prerequisites:** the time, the public `/account` address, and a redacted description with no member details.
+
+1. Ask the member to stop using Save.
+2. Ask the member to sign out.
+3. Open a new redacted incident by following [Request a change](./REQUEST_A_CHANGE.md).
+4. Use [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) only as engineering context. Do not add member incidents or private details to it.
+5. Share only the time and the plain symptom.
+6. Wait for a made-up account test and separate website, server Function, and database-permission proof.
+
+**Expected result:** no manual account or database change occurs. The member retries only after the automated repair is proven live.
+
+**Stop conditions:** stop if a step needs a real profile, private screenshot, direct database change, account deletion, account recreation, or role change.
+
+**Success proof:** use the checklist in [Events, shop, members, and money](./EVENTS_SHOP_MEMBERS.md#profile-permission-error).
+
+**Undo:** ask the platform owner to prepare, approve, publish, and verify a reviewed revert or safe roll-forward. Do not delete the account or profile.
+
+**Escalation:** membership lead plus identity/security owner; add the privacy owner if private details were exposed.
 
 ## Safe AI message
 

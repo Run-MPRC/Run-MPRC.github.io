@@ -484,6 +484,28 @@ For database/payment changes, roll-forward is often safer than reverting code be
 
 Never use destructive Git or Firestore reset operations on production as a rollback.
 
+### Missing member profile repair — NOT AVAILABLE YET
+
+Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) replaces manual repair with create-once signup/recovery Functions and a fail-closed account page. Do not use it as a production procedure until #105 supplies a protected staging and deployment path.
+
+Required release order:
+
+1. Confirm the exact merged #100 Rules revision is the reviewed dependency.
+2. Deploy those Rules plus both `createMemberOnSignUp` and `ensureMemberProfile` to isolated staging.
+3. Record the deployed App Check policy. When enforcement is enabled, prove missing or invalid App Check is rejected. When it is not enabled, record that open gate and do not call the boundary enforced.
+4. Use a made-up signed-in account with no profile.
+5. Prove one pending profile is created and retries preserve it byte-for-byte.
+6. Prove existing member/admin profiles and custom claims remain unchanged.
+7. Prove anonymous, injected-field, backend-down, missing-profile, Rules-denial, and cross-user paths fail safely. Prove App Check behavior matches the policy recorded in step 3.
+8. Record and rehearse either the last-compatible Rules/Functions/website rollback or a reviewed safe roll-forward in staging.
+9. Deploy and verify the exact #100 Rules plus both revised Functions in the approved target Firebase project.
+10. If that backend deployment is partial or verification fails, do not deploy the website. Restore the reviewed backend set or safely roll forward, then repeat verification.
+11. Deploy the dependent website only after target-backend proof.
+12. Check the exact website revision and the plain retry state.
+13. Repeat only the approved synthetic live smoke; never use a real member record.
+
+If the website arrives before `ensureMemberProfile` or the matching Rules, the intended safe result is a temporary-unavailable message with Edit hidden. Roll back the website or safely roll forward the reviewed backend. Never release the callable while the old signup trigger remains: that trigger can overwrite a recovered profile or replace claims. Deploy the two revised Functions together, or stop and roll back the partial backend release. Do not create, delete, overwrite, or re-role a production account in Firebase Console.
+
 ## 17. Verification evidence boundaries
 
 The earlier combined pre-extraction working tree reported 7 frontend tests, 4 SPA callback tests, 45 Functions tests, and 185 Firestore Rules tests. Those numbers combine queued #99, #100, #101, and #103 work. They are historical planning evidence only and are **not reproducible proof for #104 or current `main`**.

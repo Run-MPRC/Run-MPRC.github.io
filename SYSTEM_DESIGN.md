@@ -227,7 +227,7 @@ The first release may continue using `admin` in the UI, but server endpoints and
 | `events/{eventId}/registrations/{registrationId}` | Participant identity, waiver evidence, payment references, lifecycle | Cloud Functions and admins today; target Cloud Functions only | Restricted PII and financial metadata |
 | `products/{productId}` | Merchandise catalog | Admin client today | Public plus internal configuration |
 | `orders/{orderId}` | Buyer, shipping, payment, and fulfillment data | Cloud Functions and admins today; target Cloud Functions only | Restricted PII and financial metadata |
-| `members/{uid}` | Profile and role mirror | Signup function, self-service allowlist, admins | Confidential |
+| `members/{uid}` | Profile and role mirror | Create-once signup/recovery Functions; self-service name/phone allowlist; server role operations | Confidential |
 | `members/{uid}/connections/{provider}` | Non-secret connection metadata | Cloud Functions | Confidential |
 | `members/{uid}/secrets/{provider}` | OAuth tokens | Cloud Functions | Restricted secret |
 | `promoCodes/{id}` | Intended promotion configuration | Admin only | Confidential; currently not integrated into checkout validation |
@@ -269,6 +269,48 @@ The following are correctness rules, not UI preferences:
 14. Confirmation pages display only sanitized fields and do not rely on bearer credentials left in URLs or referrer logs.
 
 ## 8. Core workflows
+
+### 8.0 Account profile setup and recovery
+
+Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) adds a create-once recovery path for accounts whose `members/{uid}` record is missing after the Firebase cutover. It is a source design until the exact Function, current Rules, and dependent website are deployed backend-first and proven with a synthetic account.
+
+```mermaid
+sequenceDiagram
+    actor M as Signed-in member
+    participant W as Account page
+    participant F as ensureMemberProfile Function
+    participant A as Firebase Auth Admin
+    participant D as Firestore
+
+    M->>W: Open My Account
+    W->>F: Empty request + verified Firebase sign-in
+    alt setup fails
+        F-->>W: Generic unavailable result
+        W-->>M: Hide Edit; show retry/sign-out path
+    else setup continues
+        F->>D: Read only members/{caller UID}
+        alt profile exists
+            D-->>F: Exists
+            F-->>W: ready=true; no write or claim change
+        else profile missing
+            F->>A: Load caller's authoritative Auth record
+            F->>D: Transactionally recheck and create pending profile once
+            F-->>W: ready=true
+        end
+        W->>D: Read caller profile through Firestore Rules
+        alt read succeeds
+            D-->>W: Profile
+            W-->>M: Show profile and name/phone Edit
+        else read fails
+            D-->>W: Generic failure
+            W-->>M: Hide Edit; show retry/sign-out path
+        end
+    end
+```
+
+The callable accepts no UID or profile fields. A missing record receives identity fields from Firebase Auth and `role: unverified`; it never copies a member/admin claim, dues, payment, or discount state. Existing records and claims remain unchanged. This may expose a pre-existing claim/profile mismatch instead of guessing how to repair it; the identity/membership workflow must resolve that mismatch explicitly. App Check is required by the shared boundary only when deployed enforcement is configured, so release evidence must prove that setting before calling App Check live.
+
+The server chooses initial timestamps. The current self-edit path sends a Firestore server timestamp, but the Rules source type-checks rather than independently proves that edit timestamp. Do not describe arbitrary profile edit timestamps as server-authoritative until a coordinated Rules/API issue closes that residual.
 
 ### 8.1 Paid race registration
 

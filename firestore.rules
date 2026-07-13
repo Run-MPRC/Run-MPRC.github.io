@@ -256,8 +256,8 @@ service cloud.firestore {
     }
 
     // A signed-in user can read and update their own member doc.
-    // Member docs are CREATED only by the onSignUp Cloud Function (Admin SDK);
-    // there is intentionally no client `create` rule.
+    // Member docs are created only by the create-once signup or recovery
+    // Cloud Functions (Admin SDK); there is intentionally no client `create` rule.
     match /members/{uid} {
       // Admin screens may enumerate profiles, but role and profile creation
       // remain server-managed. In particular, an admin claim in a browser is

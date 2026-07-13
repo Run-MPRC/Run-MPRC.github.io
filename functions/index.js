@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 
 const { onSignUp } = require('./signup');
+const { ensureMemberProfile } = require('./ensureMemberProfile');
 const { updateMemberRole } = require('./updatemembers');
 const { createCheckoutSession } = require('./createCheckoutSession');
 const { stripeWebhook } = require('./stripeWebhook');
@@ -27,6 +28,7 @@ const {
 
 // Auth triggers
 exports.createMemberOnSignUp = onSignUp;
+exports.ensureMemberProfile = ensureMemberProfile;
 
 // HTTP endpoints
 exports.updateMemberRole = updateMemberRole;
