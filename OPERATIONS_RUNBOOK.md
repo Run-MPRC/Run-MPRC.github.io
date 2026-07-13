@@ -536,6 +536,30 @@ Required release order:
 
 If the website arrives before `ensureMemberProfile` or the matching Rules, the intended safe result is a temporary-unavailable message with Edit hidden. Roll back the website or safely roll forward the reviewed backend. Never release the callable while the old signup trigger remains: that trigger can overwrite a recovered profile or replace claims. Deploy the two revised Functions together, or stop and roll back the partial backend release. Do not create, delete, overwrite, or re-role a production account in Firebase Console.
 
+### Registration email outcome — SOURCE ONLY, NOT LIVE
+
+AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) separates three transitions:
+
+1. Account creation fails: reject the operation and show one generic create-account error.
+2. Account creation succeeds and Firebase accepts the verification request: preserve the signed-in account and report `accepted`; do not claim delivery.
+3. Account creation succeeds and Firebase rejects the verification request: preserve the signed-in account, report `unavailable`, emit only the fixed `email_verification_failed` diagnostic, and offer My Account as an inspection path. If My Account is unavailable, stop and keep the account. Do not advertise the existing resend action as proven.
+
+The source and tests do not change Firebase Auth, email templates, DNS, sender branding, or mailbox/provider settings. They do not send a network request in tests. Do not test this flow with a production mailbox or a real member.
+
+Release and evidence order:
+
+1. Review the exact source and synthetic mocked tests.
+2. Merge the exact reviewed commit.
+3. Publish that frontend revision only through the approved website release path.
+4. Verify the hosting record and the exact `runmprc.com` revision separately.
+5. Before calling the linked recovery usable, verify the exact [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) Rules, Functions, and profile page plus #120's truthful resend result/cooldown child. An unavailable My Account page is a stop result.
+6. Use an isolated staging Firebase project and approved safe email sink before any end-to-end test.
+7. Record request acceptance separately from message delivery, Spam placement, and sender configuration.
+8. Keep provider/DNS/template work under [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
+9. Keep profile-independent resend/cooldown/session recovery and password/action-code recovery under parent [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120). The current Resend success message is not delivery proof.
+
+Rollback is a reviewed frontend revert or safe roll-forward. Do not delete or recreate an Auth account because the verification request failed.
+
 ## 17. Verification evidence boundaries
 
 The earlier combined pre-extraction working tree reported 7 frontend tests, 4 SPA callback tests, 45 Functions tests, and 185 Firestore Rules tests. Those numbers combine queued #99, #100, #101, and #103 work. They are historical planning evidence only and are **not reproducible proof for #104 or current `main`**.
@@ -555,5 +579,7 @@ The #134 remediation-ledger entry is source/test evidence only. For OBS-001A1 [#
 For OBS-001A2 [#139](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/139), keep the same evidence discipline: **source/tests** means application runtime source and public HTML/JavaScript entrypoints contain no Firebase Analytics import, initialization, or emission and synthetic mocked/static tests pass; **merge** means the resulting `main` SHA; **website publication** means the exact revision has a hosting publication record; **`runmprc.com` verification** separately proves the live host serves that revision; **Firebase deployment** is unchanged and not required for this source-only issue; **Analytics provider configuration** remains unchanged and unverified for collection, cookies/storage, prior provider data, access, retention, consent, and deletion; **live network behavior** remains unverified until an approved public-page check at the exact website revision observes no Analytics request or cookie without signing in or using member data. Removing source calls does not delete provider history or browser storage. Do not use a production-configured preview for this check.
 
 For OBS-001A3 [#142](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/142), **source/tests** means application and public runtime source has no direct console path outside the closed five-outcome helper and synthetic console canaries pass; **merge** means the resulting `main` SHA; **website publication** and **`runmprc.com` verification** remain separate later evidence; **Firebase deployment** and **outside-provider configuration** are unchanged by this frontend-only source issue; **live behavior** and deletion of any earlier local browser-console history remain unverified. Never reproduce a member error or paste a browser console into an issue to prove this boundary.
+
+For AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145), **source/tests** means mocked account-create and email-request outcomes plus fixed-output canary checks; **merge** means the resulting `main` SHA; **website publication** and **`runmprc.com` revision verification** are separate; **Firebase/provider configuration** is unchanged; and **live delivery** remains unverified. An `accepted` result proves only that Firebase accepted the request. It does not prove Inbox delivery, sender reputation, or Spam placement.
 
 Provider configuration, production secrets, Netlify publication, Firebase deployment, and live behavior always require separate dated evidence. Local tests and a green GitHub summary do not prove them.

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useServiceLocator } from '../ServiceLocatorContext';
-import { AuthUser } from '../identity/Identity';
+import { AuthUser, RegistrationResult } from '../identity/Identity';
 
 export interface UseAuthResult {
   user: AuthUser | null;
@@ -10,7 +10,7 @@ export interface UseAuthResult {
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<RegistrationResult>;
 }
 
 export function useAuth(): UseAuthResult {
@@ -20,7 +20,7 @@ export function useAuth(): UseAuthResult {
 
   useEffect(() => {
     if (!isReady || !services) {
-      return;
+      return undefined;
     }
 
     const { identityService } = services;
@@ -52,11 +52,14 @@ export function useAuth(): UseAuthResult {
     await services.identityService.signOut();
   };
 
-  const register = async (email: string, password: string): Promise<void> => {
+  const register = async (
+    email: string,
+    password: string,
+  ): Promise<RegistrationResult> => {
     if (!services) {
       throw new Error('Services not ready');
     }
-    await services.identityService.register(email, password);
+    return services.identityService.register(email, password);
   };
 
   return {

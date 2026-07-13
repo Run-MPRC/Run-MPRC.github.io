@@ -55,6 +55,49 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 If any proof is missing, report the change as **not live**.
 
+## New-account verification message — SOURCE ONLY, NOT LIVE
+
+**Purpose:** tell a member whether the account exists and whether the email service accepted the verification request.
+
+**Approver:** membership lead plus identity/platform owner.
+
+**Prerequisites:** issue [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) is merged; the exact website revision is published and verified; and the identity owner confirms the plain status text. Before calling My Account a working recovery path, also verify the profile Rules, Functions, and page from [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) plus the resend truth/cooldown child under [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120). Email sender and Spam-folder improvements remain separate owner work in [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
+
+```mermaid
+flowchart TD
+    A["Member chooses Create account"] --> B{"Was the account created?"}
+    B -- "No" --> C["Show one generic try-again message"]
+    B -- "Yes" --> D["Show Account created"]
+    D --> E{"Did the email service accept the request?"}
+    E -- "Yes" --> F["Say accepted; check Inbox and Spam"]
+    E -- "No" --> G["Keep account; check My Account; stop if unavailable"]
+```
+
+In words: account creation and the later email request are two separate results. Neither result proves that an email reached the Inbox.
+
+Until the prerequisites are proven, the current website message may still be wrong. Do not treat it as delivery evidence.
+
+Officer steps after live proof:
+
+1. Ask the member which plain status they see.
+2. Do not ask for their email address, password, code, action link, or screenshot.
+3. If the status says the request was accepted, ask them to check Inbox and Spam once.
+4. If the message is in Spam, ask them to mark it **Not spam**.
+5. If the status says the request did not finish, ask them to choose **Check My Account**.
+6. If My Account is unavailable, stop. Keep the account and open a redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
+7. Do not ask the member to use the existing Resend button yet. A truthful resend result, cooldown, and session recovery are **NOT AVAILABLE YET** under parent issue [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120).
+8. Stop repeated create-account or resend attempts.
+
+**Expected result:** the page says `Account created` only after creation succeeds. It separately says the email request was accepted or did not finish. It never displays the member's address or the provider's error. An unavailable My Account page is a stop-and-escalate result, not proof that the account failed.
+
+**Stop conditions:** a request for private account details, repeated resends, a production email test, a claim that accepted means delivered, or a website revision that cannot be identified.
+
+**Success proof:** exact pull request and merge commit, green synthetic tests, website publication record, separate `runmprc.com` revision check, and dated plain-text review. Claim My Account recovery only after #118's exact backend/profile page and #120's truthful resend/cooldown child are verified together. Provider delivery, sender branding, Spam placement, and a real mailbox remain unproven unless #119 records owner-approved private evidence.
+
+**Undo:** publish and verify one reviewed frontend revert or safe roll-forward. Do not delete or recreate the Firebase account.
+
+**Escalation:** membership lead plus identity/platform owner; add the communications owner for Spam or delivery problems.
+
 ## Checkout adjustment guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** prevent an unknown discount, tax, or shipping charge from being treated as a valid payment.

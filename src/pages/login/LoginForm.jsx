@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Link, useLocation, useNavigate,
 } from 'react-router-dom';
@@ -7,6 +7,7 @@ import Header from '../../components/Header';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 import { getSafeLoginReturnPath } from './loginReturnPath';
+import './LoginForm.css';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -14,15 +15,26 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { services, isReady } = useServiceLocator();
-  const [currentUser, setCurrentUser] = useState(null);
+  const [registrationOutcome, setRegistrationOutcome] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const registrationStatusRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
+  let submitLabel = 'Sign in';
+  if (isLoading) submitLabel = 'Working...';
+  else if (isRegistering) submitLabel = 'Create account';
+
+  useEffect(() => {
+    if (registrationOutcome) {
+      registrationStatusRef.current?.focus();
+    }
+  }, [registrationOutcome]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setRegistrationOutcome(null);
 
     if (!isReady || !services) {
       setError('Services not ready. Please try again.');
@@ -34,15 +46,16 @@ function LoginForm() {
     try {
       const { identityService } = services;
       if (isRegistering) {
-        const credential = await identityService.register(email, password);
-        setCurrentUser(credential.user);
+        const result = await identityService.register(email, password);
+        setRegistrationOutcome(result.verificationEmailRequest);
       } else {
-        const credential = await identityService.signIn(email, password);
-        setCurrentUser(credential.user);
+        await identityService.signIn(email, password);
         navigate(getSafeLoginReturnPath(location.state?.from), { replace: true });
       }
-    } catch (loginError) {
-      setError('Failed to authenticate. Please check your credentials and try again.');
+    } catch {
+      setError(isRegistering
+        ? 'We could not create the account. Please try again.'
+        : 'Failed to authenticate. Please check your credentials and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +64,7 @@ function LoginForm() {
   const handleToggleMode = () => {
     setIsRegistering(!isRegistering);
     setError('');
-    setCurrentUser(null);
+    setRegistrationOutcome(null);
     setResetSent(false);
   };
 
@@ -87,17 +100,35 @@ function LoginForm() {
             {isRegistering ? 'Create your account' : 'Sign in'}
           </h2>
 
-          {currentUser && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800">
-              Welcome,
-              {' '}
-              {currentUser.email}
-              !
-              {isRegistering && (
-                <p className="mt-1 text-xs">
-                  Check your inbox for a verification email.
+          {registrationOutcome && (
+            <div
+              ref={registrationStatusRef}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              tabIndex="-1"
+              className={`registration-outcome registration-outcome--${registrationOutcome}`}
+            >
+              <p className="registration-outcome__title">Account created.</p>
+              {registrationOutcome === 'accepted' ? (
+                <p className="registration-outcome__message">
+                  The email service accepted the verification email request.
+                  Delivery is not guaranteed. Check your Inbox and Spam folder.
+                  If it is in Spam, mark it “Not spam.”
+                </p>
+              ) : (
+                <p className="registration-outcome__message">
+                  The verification email request did not finish. Keep this account.
+                  Check My Account for the next available step. If My Account is unavailable,
+                  stop and ask the club membership contact for help.
                 </p>
               )}
+              <Link
+                to="/account"
+                className="registration-outcome__action"
+              >
+                Check My Account
+              </Link>
             </div>
           )}
 
@@ -113,66 +144,68 @@ function LoginForm() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <label className="block">
-              <span className="text-sm font-medium">Email</span>
-              <input
-                type="email"
-                aria-label="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+          {!registrationOutcome && (
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <label htmlFor="login-email" className="block">
+                <span className="text-sm font-medium">Email</span>
+                <input
+                  id="login-email"
+                  type="email"
+                  aria-label="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="border rounded px-3 py-2 w-full mt-1 disabled:bg-gray-100"
+                  autoComplete="email"
+                />
+              </label>
+              <label htmlFor="login-password" className="block">
+                <span className="text-sm font-medium">Password</span>
+                <input
+                  id="login-password"
+                  type="password"
+                  aria-label="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="border rounded px-3 py-2 w-full mt-1 disabled:bg-gray-100"
+                  autoComplete={isRegistering ? 'new-password' : 'current-password'}
+                />
+              </label>
+              <button
+                type="submit"
                 disabled={isLoading}
-                className="border rounded px-3 py-2 w-full mt-1 disabled:bg-gray-100"
-                autoComplete="email"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium">Password</span>
-              <input
-                type="password"
-                aria-label="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
-                className="border rounded px-3 py-2 w-full mt-1 disabled:bg-gray-100"
-                autoComplete={isRegistering ? 'new-password' : 'current-password'}
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 rounded w-full"
-            >
-              {isLoading
-                ? 'Working...'
-                : isRegistering
-                  ? 'Create account'
-                  : 'Sign in'}
-            </button>
-          </form>
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 rounded w-full"
+              >
+                {submitLabel}
+              </button>
+            </form>
+          )}
 
-          <div className="mt-4 flex justify-between items-center text-sm">
-            <button
-              type="button"
-              onClick={handleToggleMode}
-              disabled={isLoading}
-              className="text-blue-600 hover:underline"
-            >
-              {isRegistering ? 'Have an account? Sign in' : 'New here? Register'}
-            </button>
-            {!isRegistering && (
+          {!registrationOutcome && (
+            <div className="mt-4 flex justify-between items-center text-sm">
               <button
                 type="button"
-                onClick={handleForgotPassword}
+                onClick={handleToggleMode}
                 disabled={isLoading}
                 className="text-blue-600 hover:underline"
               >
-                Forgot password?
+                {isRegistering ? 'Have an account? Sign in' : 'New here? Register'}
               </button>
-            )}
-          </div>
+              {!isRegistering && (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={isLoading}
+                  className="text-blue-600 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
+          )}
 
           <p className="mt-6 pt-4 border-t text-xs text-gray-500 text-center">
             By continuing you agree to the

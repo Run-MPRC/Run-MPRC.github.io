@@ -19,6 +19,14 @@ import FirebaseResources from '../firebase/FirebaseResources';
 
 export type UserRole = 'admin' | 'member' | 'unverified' | null;
 
+export type VerificationEmailRequestStatus = 'accepted' | 'unavailable';
+
+export interface RegistrationResult {
+  credential: UserCredential;
+  user: User;
+  verificationEmailRequest: VerificationEmailRequestStatus;
+}
+
 export interface AuthUser {
   uid: string;
   email: string | null;
@@ -131,15 +139,24 @@ class IdentityService {
     return credential;
   }
 
-  async register(email: string, password: string): Promise<UserCredential> {
+  async register(email: string, password: string): Promise<RegistrationResult> {
     const credential = await createUserWithEmailAndPassword(this.auth, email, password);
     this.currentUserRole = 'unverified';
     try {
       await sendEmailVerification(credential.user);
+      return {
+        credential,
+        user: credential.user,
+        verificationEmailRequest: 'accepted',
+      };
     } catch {
       reportClientFailure(clientFailureEvents.emailVerificationFailed);
+      return {
+        credential,
+        user: credential.user,
+        verificationEmailRequest: 'unavailable',
+      };
     }
-    return credential;
   }
 
   async signOut(): Promise<void> {

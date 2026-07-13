@@ -230,7 +230,7 @@ describe('client diagnostic privacy', () => {
     expect(serializedConsole).not.toContain('private component stack');
   });
 
-  test('verification-email failure returns the credential without logging provider data', async () => {
+  test('verification-email failure returns unavailable without logging provider data', async () => {
     const canaries = [
       'registration-member@example.test',
       'auth/provider-response-canary',
@@ -248,7 +248,11 @@ describe('client diagnostic privacy', () => {
     const identity = new IdentityService({ auth: { currentUser: null } });
 
     await expect(identity.register(canaries[0], 'synthetic-password'))
-      .resolves.toBe(credential);
+      .resolves.toEqual({
+        credential,
+        user: credential.user,
+        verificationEmailRequest: 'unavailable',
+      });
     expect(mockSendEmailVerification).toHaveBeenCalledWith(credential.user);
     expect(consoleWarn).toHaveBeenCalledWith(
       '[MPRC client] email_verification_failed',
