@@ -105,7 +105,7 @@ The following are **NOT AVAILABLE YET** on `main`:
 - `npm run emulators` and fail-closed Auth/Firestore/Functions isolation — owned by #99.
 - `npm run test:spa-navigation` — owned by #99.
 
-The deterministic frontend Jest baseline is available through the command above. It is not yet a required CI quality gate; workflow enforcement remains **NOT AVAILABLE YET** under #105.
+The deterministic frontend Jest baseline is available through the command above. Hosted CI runs that command as the blocking `Run frontend Jest tests` step under #124. This proves the suite ran for that commit; it does not prove branch protection, website publication, Firebase deployment, provider configuration, or production behavior. The remaining fail-closed lint and deployment work stays open under #105.
 
 Do not run Firebase-backed local development against the current production-configured client. Do not describe queued working-tree commands as merged or available.
 
