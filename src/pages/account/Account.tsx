@@ -6,7 +6,6 @@ import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
-import { Member } from '../../types/member';
 import {
   ensureMyProfile,
   getMyProfile,
@@ -15,6 +14,7 @@ import {
   MEMBER_PROFILE_LIMITS,
   validateMemberProfileFields,
   MyRegistrationsResponse,
+  MyMemberProfile,
 } from '../../services/account/accountService';
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
 import StravaSection from './StravaSection';
@@ -230,7 +230,7 @@ export function AccountContent({
   user: NonNullable<ReturnType<typeof useAuth>['user']>;
 }) {
   const { services } = useServiceLocator();
-  const [profile, setProfile] = useState<Member | null>(null);
+  const [profile, setProfile] = useState<MyMemberProfile | null>(null);
   const [profileState, setProfileState] = useState<'loading' | 'ready' | 'unavailable'>(
     'loading',
   );
@@ -238,7 +238,6 @@ export function AccountContent({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -268,7 +267,6 @@ export function AccountContent({
         if (!active) return;
         setProfile(nextProfile);
         setFullName(nextProfile.fullName || '');
-        setPhoneNumber(nextProfile.phoneNumber || '');
         setProfileState('ready');
       } catch {
         if (!active) return;
@@ -303,7 +301,7 @@ export function AccountContent({
 
   async function handleSave() {
     if (!services) return;
-    const validation = validateMemberProfileFields({ fullName, phoneNumber });
+    const validation = validateMemberProfileFields({ fullName });
     if (!validation.valid) {
       setSaveError(validation.message);
       return;
@@ -320,7 +318,6 @@ export function AccountContent({
       if (!fresh) throw new Error('Profile unavailable after save.');
       setProfile(fresh);
       setFullName(fresh.fullName || '');
-      setPhoneNumber(fresh.phoneNumber || '');
       setProfileError(null);
       setProfileState('ready');
       setEditing(false);
@@ -415,10 +412,6 @@ export function AccountContent({
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500 text-xs">Phone</dt>
-                <dd>{profile.phoneNumber || <span className="text-gray-400">not set</span>}</dd>
-              </div>
-              <div>
                 <dt className="text-gray-500 text-xs">Membership</dt>
                 <dd>{roleLabel(profile.role)}</dd>
               </div>
@@ -431,6 +424,13 @@ export function AccountContent({
                 <dd>{tsToDate(profile.lastLogin)}</dd>
               </div>
             </dl>
+          )}
+          {profileState === 'ready' && profile && (
+            <p className="mt-3 text-sm text-gray-600">
+              Phone collection is temporarily paused while we review how contact
+              information is handled. This update does not change existing stored
+              information.
+            </p>
           )}
           {editing && (
             <div className="space-y-3">
@@ -457,29 +457,6 @@ export function AccountContent({
                   characters.
                 </span>
               </div>
-              <div>
-                <label htmlFor="profile-phone" className="block">
-                  <span className="text-sm font-medium">Phone</span>
-                  <input
-                    id="profile-phone"
-                    type="tel"
-                    className="border rounded px-3 py-2 w-full"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    aria-describedby="phone-number-limit"
-                    autoComplete="tel"
-                    disabled={saving}
-                    maxLength={MEMBER_PROFILE_LIMITS.phoneNumber}
-                  />
-                </label>
-                <span id="phone-number-limit" className="text-xs text-gray-500">
-                  Up to
-                  {' '}
-                  {MEMBER_PROFILE_LIMITS.phoneNumber}
-                  {' '}
-                  characters.
-                </span>
-              </div>
               {saveError && (
                 <p role="alert" className="text-sm text-red-600">{saveError}</p>
               )}
@@ -497,7 +474,6 @@ export function AccountContent({
                   onClick={() => {
                     setEditing(false);
                     setFullName(profile?.fullName || '');
-                    setPhoneNumber(profile?.phoneNumber || '');
                     setSaveError(null);
                   }}
                   disabled={saving}

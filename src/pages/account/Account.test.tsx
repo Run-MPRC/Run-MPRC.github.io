@@ -50,7 +50,6 @@ const PROFILE = {
   email: USER.email,
   fullName: 'Synthetic Member',
   role: 'unverified' as const,
-  phoneNumber: '555-0100',
   emailVerified: false,
   provider: 'password',
   createdAt: null,
@@ -153,20 +152,27 @@ describe('Account profile recovery', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
-  test('shows the same name and phone limits as the Firestore rules', async () => {
+  test('pauses phone display and collection while keeping name editing available', async () => {
+    const legacyProfile = {
+      ...PROFILE,
+      phoneNumber: 'synthetic-phone-canary',
+    };
+    (getMyProfile as jest.Mock).mockResolvedValue(legacyProfile);
     renderAccount();
+    expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+    expect(screen.queryByText(legacyProfile.phoneNumber)).not.toBeInTheDocument();
+    expect(screen.getByText(/phone collection is temporarily paused/i))
+      .toBeInTheDocument();
+
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
 
     expect(screen.getByLabelText('Full name')).toHaveAccessibleDescription(
       'Up to 200 characters.',
     );
-    expect(screen.getByLabelText('Phone')).toHaveAccessibleDescription(
-      'Up to 40 characters.',
-    );
     expect(screen.getByLabelText('Full name')).toHaveAttribute('autocomplete', 'name');
-    expect(screen.getByLabelText('Phone')).toHaveAttribute('autocomplete', 'tel');
     expect(screen.getByLabelText('Full name')).toHaveAttribute('maxLength', '200');
-    expect(screen.getByLabelText('Phone')).toHaveAttribute('maxLength', '40');
+    expect(screen.queryByLabelText('Phone')).not.toBeInTheDocument();
+    expect(document.querySelector('input[autocomplete="tel"]')).toBeNull();
   });
 
   test('uses a safe state when the profile read fails after setup', async () => {
@@ -219,7 +225,7 @@ describe('Account profile recovery', () => {
     await waitFor(() => expect(updateMyProfile).toHaveBeenCalledWith(
       firestore,
       USER.uid,
-      { fullName: 'Updated Synthetic Member', phoneNumber: '555-0100' },
+      { fullName: 'Updated Synthetic Member' },
     ));
   });
 

@@ -265,7 +265,10 @@ service cloud.firestore {
       allow read: if request.auth != null
         && (request.auth.uid == uid || isAdmin());
 
-      // Self-service edits are restricted to an explicit field allowlist.
+      // Self-service edits are restricted to a name-only field allowlist while
+      // optional phone collection is paused for privacy review. Existing phone
+      // values remain untouched; browser clients cannot add, replace, or clear
+      // them through this rule.
       // An allowlist (rather than pinning each protected field individually)
       // blocks BOTH tampering with managed fields — role, email, createdAt,
       // emailVerified, provider — AND injection of arbitrary new fields (e.g.
@@ -274,14 +277,12 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['fullName', 'phoneNumber', 'updatedAt'])
+             .hasOnly(['fullName', 'updatedAt'])
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasAll(['updatedAt'])
         && (request.resource.data.fullName == null
             || (request.resource.data.fullName is string
                 && request.resource.data.fullName.size() <= 200))
-        && request.resource.data.phoneNumber is string
-        && request.resource.data.phoneNumber.size() <= 40
         && request.resource.data.updatedAt is timestamp;
 
       // Third-party connections (Strava, etc). Users can read *whether*
