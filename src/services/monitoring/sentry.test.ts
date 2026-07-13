@@ -65,6 +65,9 @@ describe('Sentry environment and callback isolation', () => {
     '/register/success#example-capability',
     '/REGISTER/SUCCESS?registration=r1&token=example-capability',
     '/shop/purchase/success/?order=o1&token=example-capability',
+    '/register/%73uccess?registration=r1&token=example-capability',
+    '/%72egister/success#example-capability',
+    '/register/%ZZsuccess?token=example-capability',
   ])('does not initialize monitoring on a capability callback: %s', (locationPath) => {
     initializeFor('production', locationPath);
     expect(mockInit).not.toHaveBeenCalled();
