@@ -1,6 +1,7 @@
 export {};
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const mockAnalytics = { name: 'test-analytics' };
@@ -20,14 +21,24 @@ function loadAnalyticsModule(): AnalyticsModule {
   return require('./analytics') as AnalyticsModule;
 }
 
-function runtimeSourceFiles(directory: string): string[] {
+function runtimeSourceFiles(directory: string, includeHtml = false): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry: any) => {
     const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) return runtimeSourceFiles(entryPath);
-    if (!/\.(?:js|jsx|ts|tsx)$/.test(entry.name)) return [];
-    if (/\.(?:test|spec)\.(?:js|jsx|ts|tsx)$/.test(entry.name)) return [];
+    if (entry.isDirectory()) return runtimeSourceFiles(entryPath, includeHtml);
+    const runtimeExtension = includeHtml
+      ? /\.(?:html|js|mjs)$/
+      : /\.(?:js|jsx|mjs|ts|tsx)$/;
+    if (!runtimeExtension.test(entry.name)) return [];
+    if (!includeHtml && /\.(?:test|spec)\.(?:js|jsx|mjs|ts|tsx)$/.test(entry.name)) return [];
     return [entryPath];
   });
+}
+
+function applicationRuntimeFiles(projectRoot: string): string[] {
+  return [
+    ...runtimeSourceFiles(path.join(projectRoot, 'src')),
+    ...runtimeSourceFiles(path.join(projectRoot, 'public'), true),
+  ];
 }
 
 const FORBIDDEN_ANALYTICS_RUNTIME = [
@@ -63,12 +74,37 @@ describe('Firebase Analytics containment', () => {
     expect(mockLogEvent).not.toHaveBeenCalled();
   });
 
+  test('enumerates CRA runtime .mjs plus public HTML and JavaScript', () => {
+    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mprc-analytics-runtime-'));
+    fs.mkdirSync(path.join(fixtureRoot, 'src'));
+    fs.mkdirSync(path.join(fixtureRoot, 'public'));
+    fs.writeFileSync(path.join(fixtureRoot, 'src', 'future-runtime.mjs'), 'export {};');
+    fs.writeFileSync(path.join(fixtureRoot, 'src', 'ignored.test.mjs'), 'export {};');
+    fs.writeFileSync(path.join(fixtureRoot, 'public', 'index.html'), '<main></main>');
+    fs.writeFileSync(path.join(fixtureRoot, 'public', 'runtime.test.js'), 'void 0;');
+    fs.writeFileSync(path.join(fixtureRoot, 'public', 'spa-navigation.js'), 'void 0;');
+    fs.writeFileSync(path.join(fixtureRoot, 'public', 'manifest.json'), '{}');
+
+    try {
+      expect(applicationRuntimeFiles(fixtureRoot).map((sourcePath) => (
+        path.relative(fixtureRoot, sourcePath)
+      )).sort()).toEqual([
+        path.join('public', 'index.html'),
+        path.join('public', 'runtime.test.js'),
+        path.join('public', 'spa-navigation.js'),
+        path.join('src', 'future-runtime.mjs'),
+      ]);
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   test('has no application runtime import or call path to Firebase Analytics', () => {
-    const sourceRoot = path.resolve(__dirname, '../..');
-    const offenders = runtimeSourceFiles(sourceRoot).flatMap((sourcePath) => {
+    const projectRoot = path.resolve(__dirname, '../../..');
+    const offenders = applicationRuntimeFiles(projectRoot).flatMap((sourcePath) => {
       const source = fs.readFileSync(sourcePath, 'utf8');
       return hasAnalyticsRuntime(source)
-        ? [path.relative(sourceRoot, sourcePath)]
+        ? [path.relative(projectRoot, sourcePath)]
         : [];
     });
 
