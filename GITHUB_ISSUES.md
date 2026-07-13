@@ -121,7 +121,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 ### Verification
 
 - Node 20: 10/10 standalone SPA navigation/referrer-policy tests.
-- Node 20: 20/20 focused Firebase/monitoring tests and 4 frontend suites / 36 tests.
+- Node 20: 25/25 focused Firebase/monitoring tests and 4 frontend suites / 41 tests.
 - Node 20: Functions lint and 17/17 Functions tests.
 - Java 17 + Firebase CLI: demo-only Auth/Firestore/Functions readiness and loopback-port smoke.
 - Diagnostic production compile invoked without the sitemap-generating prebuild.

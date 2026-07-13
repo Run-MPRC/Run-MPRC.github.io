@@ -13,6 +13,10 @@ const CAPABILITY_CALLBACK_PATHS = new Set([
 export default function hasCapabilityCallbackState(
   location: BrowserLocationState,
 ): boolean {
-  return CAPABILITY_CALLBACK_PATHS.has(location.pathname)
+  const normalizedPathname = location.pathname === '/'
+    ? '/'
+    : location.pathname.toLowerCase().replace(/\/+$/, '');
+
+  return CAPABILITY_CALLBACK_PATHS.has(normalizedPathname)
     && (location.search.length > 0 || location.hash.length > 0);
 }

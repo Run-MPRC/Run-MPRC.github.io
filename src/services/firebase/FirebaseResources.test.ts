@@ -189,11 +189,30 @@ describe('FirebaseResources environment isolation', () => {
     '/register/success?registration=r1&token=example-capability',
     '/shop/purchase/success?order=o1&token=example-capability',
     '/register/success#example-capability',
+    '/REGISTER/SUCCESS?registration=r1&token=example-capability',
+    '/shop/purchase/success/?order=o1&token=example-capability',
   ])('production does not initialize Analytics on a capability callback: %s', (pathName) => {
     createResourcesFor('production', 'configured-public-site-key', pathName);
 
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
     expect(mockGetAnalytics).not.toHaveBeenCalled();
+  });
+
+  test('ordinary production query pages initialize supported Analytics', async () => {
+    mockIsAnalyticsSupported.mockResolvedValueOnce(true);
+
+    const resources = createResourcesFor(
+      'production',
+      'configured-public-site-key',
+      '/events?source=public-calendar',
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(mockIsAnalyticsSupported).toHaveBeenCalledTimes(1);
+    expect(mockGetAnalytics).toHaveBeenCalledWith(resources.app);
+    expect(resources.analytics).toEqual({ name: 'test-analytics' });
   });
 
   test('rejects malformed direct Function names before building a URL', () => {
