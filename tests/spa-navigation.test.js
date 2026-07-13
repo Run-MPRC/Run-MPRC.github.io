@@ -11,6 +11,17 @@ const {
   restoreRedirect,
 } = require('../public/spa-navigation');
 
+const UNSAFE_STORED_TARGETS = [
+  '//attacker.example/collect',
+  '/\\attacker.example/collect',
+  'https://attacker.example/collect',
+  ['java', 'script:alert(1)'].join(''),
+  'not a URL',
+  '/%2e%2e//attacker.example',
+  '/.//attacker.example',
+  '/a/..//attacker.example',
+];
+
 function storageWith(initial = {}) {
   const values = new Map(Object.entries(initial));
   return {
@@ -68,30 +79,24 @@ test('restores the exact same-origin route and clears temporary state', () => {
 });
 
 test('rejects cross-origin, protocol-relative, and malformed stored targets', () => {
-  const rejected = [
-    '//attacker.example/collect',
-    '/\\attacker.example/collect',
-    'https://attacker.example/collect',
-    ['java', 'script:alert(1)'].join(''),
-    'not a URL',
-  ];
-
-  rejected.forEach((target) => {
+  UNSAFE_STORED_TARGETS.forEach((target) => {
     assert.equal(parseSameOriginTarget(target, 'https://runmprc.com'), null);
   });
   assert.equal(parseSameOriginTarget('/safe?next=%2F%2Fexample.test', 'not an origin'), null);
 });
 
-test('clears an unsafe stored target without changing browser history', () => {
-  const storage = storageWith({ [STORAGE_KEY]: '//attacker.example/collect' });
-  const browserWindow = {
-    location: { origin: 'https://runmprc.com' },
-    sessionStorage: storage,
-    history: { replaceState: () => assert.fail('unsafe target must not be restored') },
-  };
+test('clears unsafe stored targets without changing browser history', () => {
+  UNSAFE_STORED_TARGETS.forEach((target) => {
+    const storage = storageWith({ [STORAGE_KEY]: target });
+    const browserWindow = {
+      location: { origin: 'https://runmprc.com' },
+      sessionStorage: storage,
+      history: { replaceState: () => assert.fail('unsafe target must not be restored') },
+    };
 
-  assert.equal(restoreRedirect(browserWindow), false);
-  assert.equal(storage.has(STORAGE_KEY), false);
+    assert.equal(restoreRedirect(browserWindow), false);
+    assert.equal(storage.has(STORAGE_KEY), false);
+  });
 });
 
 test('fails safely when session storage is unavailable', () => {

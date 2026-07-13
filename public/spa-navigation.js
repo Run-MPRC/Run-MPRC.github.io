@@ -43,6 +43,9 @@
       const normalizedOrigin = new URL(origin).origin;
       const target = new URL(storedTarget, normalizedOrigin);
       if (target.origin !== normalizedOrigin) return null;
+      if (!target.pathname.startsWith('/') || target.pathname.startsWith('//')) {
+        return null;
+      }
       return target.pathname + target.search + target.hash;
     } catch (_error) {
       return null;
