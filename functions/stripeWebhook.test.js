@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const { createSignedStripePayload } = require('./testSupport/testSafety');
 
 jest.mock('firebase-admin', () => {
   const store = new Map();
@@ -184,7 +184,7 @@ jest.mock('firebase-admin/firestore', () => {
 
 const admin = require('firebase-admin');
 
-const WEBHOOK_SECRET = 'whsec_testsecret';
+const WEBHOOK_SECRET = 'stripe_webhook_synthetic_test_material';
 process.env.ENVIRONMENT_NAME = 'test';
 process.env.SITE_ORIGIN = 'https://runmprc.test';
 process.env.STRIPE_SECRET_KEY = 'sk_test_testing';
@@ -297,16 +297,16 @@ function seedOrder(overrides = {}) {
 }
 
 function signedRequest(event, signatureOverride) {
-  const body = JSON.stringify(event);
   const timestamp = Math.floor(Date.now() / 1000);
-  const signature = crypto
-    .createHmac('sha256', WEBHOOK_SECRET)
-    .update(`${timestamp}.${body}`, 'utf8')
-    .digest('hex');
-  const header = signatureOverride || `t=${timestamp},v1=${signature}`;
+  const signedPayload = createSignedStripePayload({
+    event,
+    secret: WEBHOOK_SECRET,
+    timestamp,
+  });
+  const header = signatureOverride || signedPayload.signatureHeader;
   return {
     method: 'POST',
-    rawBody: Buffer.from(body),
+    rawBody: signedPayload.rawBody,
     get: (name) => (name.toLowerCase() === 'stripe-signature' ? header : undefined),
   };
 }
