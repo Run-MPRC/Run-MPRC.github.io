@@ -206,7 +206,7 @@ CI=true npm test -- --watchAll=false --runInBand
 npm run test:spa-navigation
 ```
 
-The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). The SPA command is a separate Node suite; hosted enforcement is still **NOT AVAILABLE YET** and belongs to [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126). Required branch protection, fail-closed lint, and protected deployment remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
+The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Hosted CI also runs the separate Node SPA suite as the blocking `Run SPA callback safety tests` step under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126). Required branch protection, fail-closed lint, and protected deployment remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
 
 ### Firestore Rules
 
@@ -496,6 +496,6 @@ On the isolated #103 branch based at `0e03ac1`, Node 20 focused App tests pass 1
 
 Issue #124 adds that complete committed frontend suite to the hosted frontend job as the named, blocking `Run frontend Jest tests` step. Its pull-request and post-merge runs are the proof that the exact commits executed Jest. Even a green step does not prove branch protection, website publication, Firebase deployment, provider configuration, or production behavior.
 
-On the isolated #99 branch rebased over #124, Node 20 local evidence is: 10/10 standalone SPA navigation/referrer-policy tests; 31/31 focused Firebase/monitoring tests; 4 frontend suites / 47 tests; 17/17 Functions tests; a clean diagnostic build; and a demo-only CLI smoke in which Auth, Firestore, and Functions listened on the three documented loopback ports. No browser account flow, production callback, Stripe/Strava/email call, Firebase deployment, or production data was used. The standalone SPA suite is not yet hosted under #124; #126 owns that separate check.
+On the isolated #99 branch rebased over #124, Node 20 local evidence is: 10/10 standalone SPA navigation/referrer-policy tests; 31/31 focused Firebase/monitoring tests; 4 frontend suites / 47 tests; 17/17 Functions tests; a clean diagnostic build; and a demo-only CLI smoke in which Auth, Firestore, and Functions listened on the three documented loopback ports. No browser account flow, production callback, Stripe/Strava/email call, Firebase deployment, or production data was used. #126 adds the standalone SPA suite as its own named blocking hosted step; only exact pull-request and post-merge step results prove that gate ran.
 
 Provider configuration, production secrets, Netlify publication, Firebase deployment, and live behavior always require separate dated evidence. Local tests and a green GitHub summary do not prove them.

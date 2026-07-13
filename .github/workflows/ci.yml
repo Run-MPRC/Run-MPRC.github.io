@@ -21,6 +21,8 @@ jobs:
         env:
           CI: 'true'
         run: npm test -- --watchAll=false --runInBand
+      - name: Run SPA callback safety tests
+        run: npm run test:spa-navigation
       - run: npm run lint:fix -- --max-warnings=0 || true
       - name: Build
         env:
