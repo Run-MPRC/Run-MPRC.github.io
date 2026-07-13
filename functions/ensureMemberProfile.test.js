@@ -296,4 +296,76 @@ describe('signup profile compatibility', () => {
     expect(admin.__read(AUTH_USER.uid)).toMatchObject({ role: 'unverified' });
     expect(admin.__mocks.setCustomUserClaims).not.toHaveBeenCalled();
   });
+
+  test('logs only the fixed failure outcome and never user or provider data', async () => {
+    const canaries = [
+      'signup-member@example.test',
+      '+1-555-010-4242',
+      'oauth-token-canary',
+      'provider-response-canary',
+      'request-body-canary',
+      'https://runmprc.com/account?token=capability-canary#private',
+      'signup-uid-canary',
+      'Private Signup Name Canary',
+    ];
+    const hostileUser = {
+      ...AUTH_USER,
+      uid: canaries[6],
+      email: canaries[0],
+      displayName: canaries[7],
+      phoneNumber: canaries[1],
+      providerData: [{ providerId: canaries[3] }],
+    };
+    const providerFailure = Object.assign(new Error(canaries.join(' ')), {
+      email: canaries[0],
+      phone: canaries[1],
+      token: canaries[2],
+      response: { message: canaries[3] },
+      request: { body: canaries[4] },
+      url: canaries[5],
+    });
+    const consoleDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const otherConsoleSpies = [consoleDebug, consoleInfo, consoleLog, consoleWarn];
+    const allConsoleSpies = [consoleError, ...otherConsoleSpies];
+    const { onSignUp } = require('./signup');
+
+    try {
+      await onSignUp(AUTH_USER);
+      allConsoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+
+      admin.__mocks.firestoreApi.runTransaction.mockRejectedValueOnce(providerFailure);
+      let caught;
+      try {
+        await onSignUp(hostileUser);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toMatchObject({
+        code: 'internal',
+        message: 'Failed to create member record',
+      });
+      expect(caught).not.toBe(providerFailure);
+      expect(caught.cause).toBeUndefined();
+      expect(consoleError.mock.calls).toEqual([
+        ['Member profile setup failed during account creation.'],
+      ]);
+      otherConsoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+
+      const serializedConsole = JSON.stringify(
+        allConsoleSpies.map((spy) => spy.mock.calls),
+      );
+      const returnedError = `${caught.code}: ${caught.message}`;
+      canaries.forEach((canary) => {
+        expect(serializedConsole).not.toContain(canary);
+        expect(returnedError).not.toContain(canary);
+      });
+    } finally {
+      allConsoleSpies.forEach((spy) => spy.mockRestore());
+    }
+  });
 });
