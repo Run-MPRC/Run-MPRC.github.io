@@ -245,8 +245,8 @@ The first release may continue using `admin` in the UI, but server endpoints and
 | Path or field | Purpose |
 | --- | --- |
 | `stripeEvents/{stripeEventId}` | Durable, non-PII webhook inbox/deduplication record with processing status and business reference |
-| `checkoutRequests/{commandKeyHash}` | Server-only caller/environment command mapping. PAY-002B1 defines the pure hash/fingerprint/provider-key contract; PAY-002B2 must add transactional replay, conflict, lease/fencing, attempt, and audit state. |
-| `auditEvents/{eventId}` or bounded per-record audit subcollections | Append-oriented operational and security audit trail without unbounded arrays |
+| `checkoutRequests/{commandKeyHash}` | Server-only command journal. PAY-002B2A/#165 adds only an immutable `registered` revision-1 record; PAY-002B2B/C must add lease/fence, terminal-pointer, provider-plan, safe-send, and reconciliation state. |
+| `auditEvents/{eventId}` or bounded per-record audit subcollections | Append-oriented operational and security audit trail. B2A's first event is exactly `auditEvents/commerce_command_{commandKeyHash}_0000000001`. |
 | `events/{id}.capacityCounters` | Transactionally maintained participant reservations, paid seats, and released seats |
 | `products/{id}/variants/{variantId}` | SKU, option values, price, on-hand, reserved, and sold counts |
 | `orders.paymentStatus` and `orders.fulfillmentStatus` | Separate money state from physical fulfillment state |
@@ -261,7 +261,11 @@ Large `auditLog` arrays on registration and order documents should be replaced b
 
 PAY-002A1 is tracked in live [#161](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/161). Numeric local `stateSchemaVersion: 1` is distinct from string Stripe metadata `schemaVersion: "1"`, which only versions provider reference binding. The reducers and legacy classifier are a pure source/test target: they import no Firebase or Stripe code, make no call, and are not used by an endpoint. Current records, webhook behavior, compatibility writes, real migration, deployment, and live state remain unchanged until later PAY-002/PAY-003 children adopt the contract.
 
-PAY-002B1 is tracked in live [#163](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/163). It is also pure and unused: it separates a caller/environment/UUID command key from a command-type/payload fingerprint, then derives a deterministic Stripe key for one immutable provider attempt. Production/live and non-production/test are the only accepted environment/mode pairs. The command key intentionally excludes command type so PAY-002B2 can reject reuse of one caller command ID for another operation. Hashes are pseudonymous server-only identifiers—not anonymization—and must not enter browsers, logs, URLs, or analytics. The library contains no Firestore transaction, lease, clock, result, audit, Stripe call, or authorization decision. PAY-002B2 must persist the contract version, endpoint schema version, semantic command type, fingerprint, and safe recovery state before any saga can claim retry safety.
+PAY-002B1 is tracked in live [#163](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/163). It is also pure and unused: it separates a caller/environment/UUID command key from a command-type/payload fingerprint, then derives a deterministic Stripe key for one immutable provider attempt. Production/live and non-production/test are the only accepted environment/mode pairs. The command key intentionally excludes command type so a journal can reject reuse of one caller command ID for another operation. Hashes are pseudonymous server-only identifiers—not anonymization—and must not enter browsers, logs, URLs, or analytics. The library contains no Firestore transaction, lease, clock, result, audit, Stripe call, or authorization decision.
+
+PAY-002B2A is tracked in live [#165](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/165). Its unused server-only transaction writes the exact `checkoutRequests/{commandKeyHash}` registered record and `auditEvents/commerce_command_{commandKeyHash}_0000000001` event together with one trusted Timestamp, or writes neither. Exact retries are read-only; command-type, endpoint-version, or payload mismatch under the same B1 key conflicts; corrupt or incomplete pairs fail closed without repair. Environment and caller scope are already bound into the B1 document ID, so a different scope creates a different record rather than a cross-scope conflict. The fixed result grants no authorization or execute/send permission and contains no hash, path, raw identity, UUID, or payload.
+
+B2A has no endpoint/index export, lease, fence, terminal pointer, result replay, provider plan/key/object, Stripe call, provider attempt transition, safe-send clock, or reconciliation behavior. PAY-002B2B owns lease/fence and terminal-pointer state without provider-send permission. PAY-002B2C owns immutable provider-plan binding, pre-send evidence, conservative retry cutoff, ambiguous outcome, verified reconciliation, and safe attempt advancement. No TTL is safe yet: [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110) must approve retention and a server-only tombstone or equivalent durable duplicate barrier before a command pair can be deleted. The #165 concurrent transaction proof is dedicated local-emulator evidence; hosted Functions CI does not start its exact demo project or set its explicit opt-in flag, and the standard differently named demo run safely skips it. None of this deploys Firebase, configures Stripe, or changes live/officer behavior.
 
 ## 7. Business invariants
 
@@ -353,7 +357,7 @@ sequenceDiagram
     F-->>W: Confirmed, processing, failed, or support-required state
 ```
 
-If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2 retries the exact POST only inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing and reconciles stored/provider/webhook evidence because Stripe may have pruned the idempotency key. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
+If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2C retries the exact POST only inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing and reconciles stored/provider/webhook evidence because Stripe may have pruned the idempotency key. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
 
 ### 8.2 Free or volunteer registration
 
@@ -376,7 +380,7 @@ The ingress verifies method, raw payload, signature, and secret. Relevant event 
 Stripe and Firestore cannot share a distributed transaction. Checkout and refunds are therefore explicit sagas:
 
 - A Firestore transaction protects local uniqueness and scarce-resource counters.
-- A stable PAY-002B1 Stripe key identifies one logical provider generation. A lease takeover or HTTP retry is not a new generation. PAY-002B2 may retry exact parameters/key only inside its conservative stored send window; after that window or with unknown send time, it stops automatic POST and reconciles because Stripe may have pruned the old key.
+- A stable PAY-002B1 Stripe key identifies one logical provider generation. A lease takeover or HTTP retry is not a new generation. PAY-002B2C may retry exact parameters/key only inside its conservative stored send window; after that window or with unknown send time, it stops automatic POST and reconciles because Stripe may have pruned the old key.
 - The business record stores the saga step and external ID.
 - A compensating transaction releases a reservation after a known failure.
 - A webhook advances successful external state.
