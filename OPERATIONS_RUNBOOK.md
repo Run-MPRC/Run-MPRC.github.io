@@ -174,9 +174,10 @@ Trigger or complete test-mode Checkout through the application when testing end-
 ```bash
 npm --prefix functions run lint
 npm --prefix functions run test:run -- --runInBand
+CI=true npm test -- --watchAll=false --runInBand
 ```
 
-The SPA navigation command is **NOT AVAILABLE YET** and belongs to #99. A dependable frontend Jest baseline/quality gate is **NOT AVAILABLE YET** and belongs to [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103).
+The SPA navigation command is **NOT AVAILABLE YET** and belongs to #99. The frontend Jest command is a dependable local baseline, but a required CI quality gate is **NOT AVAILABLE YET** and remains under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
 
 ### Firestore Rules
 
@@ -460,6 +461,8 @@ The earlier combined pre-extraction working tree reported 7 frontend tests, 4 SP
 
 Each isolated issue must publish its own exact base commit, commands, counts, and results. A documentation-only #104 branch starts from `main` with the merged #98 role-grant behavior; it must not claim the queued emulator, webhook, Rules, or frontend-test outcomes.
 
-On the isolated #104 branch based at `ce22c110`, Functions lint and 17/17 Functions tests pass, 97/97 Firestore Rules tests pass with Java 17, and the diagnostic production build passes. Frontend Jest runs 15 Login tests but the App suite fails on the known missing `TextEncoder`; #103 owns that baseline repair. These are branch checks, not deployment evidence.
+On the isolated #104 branch based at `ce22c110`, Functions lint and 17/17 Functions tests pass, 97/97 Firestore Rules tests pass with Java 17, and the diagnostic production build passes. At that point, frontend Jest ran 15 Login tests but the App suite failed on the known missing `TextEncoder`. These are historical branch checks, not deployment evidence.
+
+On the isolated #103 branch based at `0e03ac1`, Node 20 focused App tests pass 1/1 and the complete frontend suite on the branch passes 16/16. Changed-file lint, diff checks, and the diagnostic production build also pass. Service initialization and provider-network paths are prevented by test mocks; this was not a socket-monitored provider test, and the separately owned #99 Firebase/Sentry tests are not present on the branch. A separate read-only Node 20 compatibility run against the preserved #99 working tree passed those two suites 6/6, but that is not #103 branch or merge coverage. This proves a deterministic local baseline only. It does not prove a required CI gate, website publication, Firebase deployment, provider configuration, or production behavior.
 
 Provider configuration, production secrets, Netlify publication, Firebase deployment, and live behavior always require separate dated evidence. Local tests and a green GitHub summary do not prove them.

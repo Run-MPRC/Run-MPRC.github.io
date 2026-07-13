@@ -121,12 +121,12 @@ Do not redesign routing or hosting in this issue; WEB-001 owns that. Do not incl
 ## CI-001 — Repair test gates and secure the deployment pipeline
 
 **Labels:** `priority:P0`, `type:security`, `type:testing`, `area:ci`, `size:L`, `needs-external-config`
-**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105); CI-001A [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) is claimed and queued. The current workflow remains non-compliant.
+**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105); focused child [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) owns the deterministic local frontend Jest baseline. The live issue records its merge state. Required workflow gating and protected deployment remain open under #105, so the current workflow is still non-compliant.
 **Depends on:** SAFETY-001
 
 ### Problem
 
-Frontend tests fail because the Jest environment lacks `TextEncoder`. CI runs a mutating `lint:fix` command and ignores failure with `|| true`. Deployment runs independently of CI, gives a full Firebase service-account JSON to the frontend build, installs `firebase-tools@latest`, deploys frontend before backend, and can succeed while silently skipping Firebase deployment.
+Before #103, frontend tests failed because the Jest environment lacked `TextEncoder`. The focused child repairs that local baseline, but CI still runs a mutating `lint:fix` command, ignores failure with `|| true`, and does not require frontend Jest. Deployment runs independently of CI, gives a full Firebase service-account JSON to the frontend build, installs `firebase-tools@latest`, deploys frontend before backend, and can succeed while silently skipping Firebase deployment.
 
 ### Scope
 

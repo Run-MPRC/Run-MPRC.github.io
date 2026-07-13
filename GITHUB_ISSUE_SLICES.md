@@ -16,7 +16,7 @@ An agent-ready child has one observable outcome, one trust boundary, explicit de
 
 | ID | Status/dependency | Bounded deliverable | Close evidence |
 | --- | --- | --- | --- |
-| CI-001A | ready; SAFETY-001 | Add non-mutating fail-closed frontend lint and one deterministic local/CI quality gate for SPA, frontend, Functions, Rules, and build. | Deliberate lint/test failure blocks; clean-worktree check; all local suites pass. |
+| CI-001A | published as #103; local baseline slice | Repair Jest browser globals and replace the stale starter test with a deterministic, no-provider-network MPRC app smoke test. Required workflow gating remains under #105. | Node 20 focused/full frontend tests, changed-file lint, clean diff, and diagnostic build pass; do not claim a required CI gate. |
 | CI-001B | owner_action; CI-001A | Protect backend-first staging/production deployment; pin tools/Actions; remove frontend service-account JSON; configure OIDC/WIF, approvals, missing-config failure, smoke and roll-forward. | PR gate and negative credential run; private two-owner IAM review; staging deployment evidence. |
 | SUPPLY-001A | ready; CI-001A | Prove `gpxparser` unused and remove its obsolete transitive chain. | `rg`/tree proof, before/after audits, root lockfile diff, full frontend checks. |
 | SUPPLY-001B | ready; CI-001A | Patch React Router within compatible 6.x and resolve/test future flags without route redesign. | Navigation/callback tests, audit delta, build. |
