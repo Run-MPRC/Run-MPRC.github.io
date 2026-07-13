@@ -6,6 +6,9 @@ const {
 } = require('./commerceCommandIdentity');
 const {
   CommerceCommandJournalError,
+  acquireCommerceCommandLease,
+  completeCommerceCommand,
+  failCommerceCommand,
   registerCommerceCommand,
 } = require('./commerceCommandJournal');
 
@@ -17,7 +20,7 @@ const describeWithEmulator = process.env[JOURNAL_EMULATOR_OPT_IN] === '1'
   ? describe
   : describe.skip;
 
-jest.setTimeout(30000);
+jest.setTimeout(60000);
 
 const COMMAND_IDS = Object.freeze({
   identical: '11111111-1111-4111-8111-111111111111',
@@ -26,7 +29,25 @@ const COMMAND_IDS = Object.freeze({
   lostResponse: '44444444-4444-4444-8444-444444444444',
   malformed: '55555555-5555-4555-8555-555555555555',
   future: '66666666-6666-4666-8666-666666666666',
+  distinctLeaseRace: '77777777-7777-4777-8777-777777777777',
+  sameLeaseRace: '88888888-8888-4888-8888-888888888888',
+  takeoverRace: '99999999-9999-4999-8999-999999999999',
+  terminalRace: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  commitmentRace: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  terminalReplay: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  finalFailureReplay: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  preseedLifecycleAudit: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  malformedLifecycle: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+  orphanLifecycle: '01234567-89ab-4cde-8fab-0123456789ab',
+  preseedTerminalAudit: '12345678-9abc-4def-8abc-123456789abc',
+  missingCurrentAudit: '23456789-abcd-4efa-8bcd-23456789abcd',
+  malformedLifecycleShape: '3456789a-bcde-4fab-8cde-3456789abcde',
+  malformedCurrentAudit: '456789ab-cdef-4abc-8def-456789abcdef',
 });
+const BASE_NOW_MILLIS = 1800000000123;
+const LEASE_DURATION_MILLIS = 60000;
+const TERMINAL_REFERENCE_FINGERPRINT = 'd'.repeat(64);
+const OTHER_TERMINAL_REFERENCE_FINGERPRINT = 'e'.repeat(64);
 
 function frozenRecord(entries) {
   const record = Object.create(null);
@@ -54,6 +75,33 @@ function commandArgs(db, commandId, commandPayload) {
     commandType: 'race.checkout.create',
     endpointSchemaVersion: 1,
     payload: commandPayload,
+  };
+}
+
+function deterministicLeaseId(index) {
+  return `10000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
+}
+
+function acquireArgs(db, commandId, commandPayload, leaseId) {
+  return {
+    ...commandArgs(db, commandId, commandPayload),
+    leaseId,
+  };
+}
+
+function completeArgs(db, commandId, commandPayload, leaseId, expectedFenceEpoch,
+  terminalReferenceFingerprint = TERMINAL_REFERENCE_FINGERPRINT) {
+  return {
+    ...acquireArgs(db, commandId, commandPayload, leaseId),
+    expectedFenceEpoch,
+    terminalReferenceFingerprint,
+  };
+}
+
+function failArgs(db, commandId, commandPayload, leaseId, expectedFenceEpoch) {
+  return {
+    ...acquireArgs(db, commandId, commandPayload, leaseId),
+    expectedFenceEpoch,
   };
 }
 
@@ -130,15 +178,28 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
   let app;
   let db;
   let trackedRefs = new Map();
+  let nowMillis;
+  let timestampNow;
+
+  function trackRef(ref) {
+    trackedRefs.set(ref.path, ref);
+    return ref;
+  }
+
+  function auditRefFor(commandKeyHash, revision) {
+    return trackRef(db.collection('auditEvents')
+      .doc(`commerce_command_${commandKeyHash}_${String(revision).padStart(10, '0')}`));
+  }
 
   function pairFor(args) {
     const { commandKeyHash } = commandIdentity(args);
-    const commandRef = db.collection('checkoutRequests').doc(commandKeyHash);
-    const auditRef = db.collection('auditEvents')
-      .doc(`commerce_command_${commandKeyHash}_0000000001`);
-    trackedRefs.set(commandRef.path, commandRef);
-    trackedRefs.set(auditRef.path, auditRef);
-    return { commandKeyHash, commandRef, auditRef };
+    const commandRef = trackRef(db.collection('checkoutRequests').doc(commandKeyHash));
+    const lifecycleRef = trackRef(commandRef.collection('lifecycle').doc('current'));
+    const auditRef = auditRefFor(commandKeyHash, 1);
+    // Track every revision this focused suite can create before a concurrent
+    // assertion runs, so even an early failure cannot leak synthetic audits.
+    for (const revision of [2, 3, 4]) auditRefFor(commandKeyHash, revision);
+    return { commandKeyHash, commandRef, lifecycleRef, auditRef };
   }
 
   async function readPair(pair) {
@@ -147,6 +208,73 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       pair.auditRef.get(),
     ]);
     return { commandSnapshot, auditSnapshot };
+  }
+
+  async function readLifecycle(pair) {
+    return pair.lifecycleRef.get();
+  }
+
+  async function readAudit(pair, revision) {
+    return auditRefFor(pair.commandKeyHash, revision).get();
+  }
+
+  async function readLifecycleEvidence(pair, revision) {
+    const [lifecycleSnapshot, auditSnapshot] = await Promise.all([
+      readLifecycle(pair),
+      readAudit(pair, revision),
+    ]);
+    return {
+      lifecycle: snapshotEvidence(lifecycleSnapshot),
+      audit: snapshotEvidence(auditSnapshot),
+    };
+  }
+
+  async function matchingAudits(pair) {
+    return db.collection('auditEvents')
+      .where('commandKeyHash', '==', pair.commandKeyHash)
+      .get();
+  }
+
+  function setTrustedNow(millis) {
+    nowMillis = millis;
+  }
+
+  function expectLeaseResult(result, fenceEpoch) {
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      lifecycleSchemaVersion: 1,
+      outcome: 'lease_acquired',
+      state: 'leased',
+      fenceEpoch,
+      leaseExpiresAt: {
+        seconds: expect.any(Number),
+        nanoseconds: expect.any(Number),
+      },
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.leaseExpiresAt)).toBe(true);
+  }
+
+  function expectBusyResult(result) {
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      lifecycleSchemaVersion: 1,
+      outcome: 'lease_busy',
+      state: 'leased',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(result).not.toHaveProperty('fenceEpoch');
+    expect(result).not.toHaveProperty('leaseExpiresAt');
+  }
+
+  function expectTerminalResult(result, state) {
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      lifecycleSchemaVersion: 1,
+      outcome: state === 'succeeded' ? 'terminal_succeeded' : 'terminal_failed_final',
+      state,
+    });
+    expect(Object.isFrozen(result)).toBe(true);
   }
 
   async function cleanupTrackedRefs() {
@@ -168,9 +296,13 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
 
   beforeEach(() => {
     trackedRefs = new Map();
+    nowMillis = BASE_NOW_MILLIS;
+    timestampNow = jest.spyOn(admin.firestore.Timestamp, 'now')
+      .mockImplementation(() => admin.firestore.Timestamp.fromMillis(nowMillis));
   });
 
   afterEach(async () => {
+    timestampNow.mockRestore();
     await cleanupTrackedRefs();
   });
 
@@ -349,5 +481,586 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       .toEqual(snapshotEvidence(future.commandSnapshot));
     expect(snapshotEvidence(afterAttempt.auditSnapshot))
       .toEqual(snapshotEvidence(future.auditSnapshot));
+  });
+
+  test('24 distinct holders race to one first lease and preserve registration bytes', async () => {
+    const commandPayload = payload('distinct-lease-race');
+    const registrationArgs = commandArgs(
+      db,
+      COMMAND_IDS.distinctLeaseRace,
+      commandPayload,
+    );
+    const pair = pairFor(registrationArgs);
+    await registerCommerceCommand(registrationArgs);
+    const registrationBefore = await readPair(pair);
+
+    const leaseArgs = Array.from({ length: CONCURRENT_CALLS }, (_, index) => acquireArgs(
+      db,
+      COMMAND_IDS.distinctLeaseRace,
+      commandPayload,
+      deterministicLeaseId(index + 1),
+    ));
+    const results = await Promise.all(leaseArgs.map(acquireCommerceCommandLease));
+    const acquired = results.filter((result) => result.outcome === 'lease_acquired');
+    const busy = results.filter((result) => result.outcome === 'lease_busy');
+
+    expect(acquired).toHaveLength(1);
+    expect(busy).toHaveLength(CONCURRENT_CALLS - 1);
+    expectLeaseResult(acquired[0], 1);
+    for (const result of busy) expectBusyResult(result);
+
+    const lifecycle = await readLifecycle(pair);
+    const lifecycleAudit = await readAudit(pair, 2);
+    expect(lifecycle.data()).toMatchObject({
+      lifecycleSchemaVersion: 1,
+      commandKeyHash: pair.commandKeyHash,
+      state: 'leased',
+      commandRevision: 2,
+      fenceEpoch: 1,
+      terminalCommitmentKind: null,
+      terminalCommitmentHash: null,
+    });
+    expect(lifecycle.data().leaseAcquiredAt.toMillis()).toBe(BASE_NOW_MILLIS);
+    expect(lifecycle.data().leaseExpiresAt.toMillis())
+      .toBe(BASE_NOW_MILLIS + LEASE_DURATION_MILLIS);
+    expect(lifecycleAudit.data()).toMatchObject({
+      auditSchemaVersion: 2,
+      commandKeyHash: pair.commandKeyHash,
+      commandRevision: 2,
+      eventType: 'command_lease_acquired',
+      fromState: 'registered',
+      toState: 'leased',
+      fenceEpoch: 1,
+    });
+    expect((await matchingAudits(pair)).size).toBe(2);
+
+    const registrationAfter = await readPair(pair);
+    expect(snapshotEvidence(registrationAfter.commandSnapshot))
+      .toEqual(snapshotEvidence(registrationBefore.commandSnapshot));
+    expect(snapshotEvidence(registrationAfter.auditSnapshot))
+      .toEqual(snapshotEvidence(registrationBefore.auditSnapshot));
+    await expect(registerCommerceCommand(registrationArgs)).resolves.toEqual({
+      journalSchemaVersion: 1,
+      outcome: 'registered_existing',
+      state: 'registered',
+    });
+  });
+
+  test('24 same-holder lost-response calls recover one identical lease without another write', async () => {
+    const commandPayload = payload('same-holder-recovery');
+    const registrationArgs = commandArgs(db, COMMAND_IDS.sameLeaseRace, commandPayload);
+    const args = acquireArgs(
+      db,
+      COMMAND_IDS.sameLeaseRace,
+      commandPayload,
+      deterministicLeaseId(50),
+    );
+    const pair = pairFor(args);
+    await registerCommerceCommand(registrationArgs);
+
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENT_CALLS }, () => acquireCommerceCommandLease(args)),
+    );
+    for (const result of results) {
+      expectLeaseResult(result, 1);
+      expect(result).toEqual(results[0]);
+    }
+
+    const beforeRecovery = await readLifecycleEvidence(pair, 2);
+    const recovered = await Promise.all(
+      Array.from({ length: 8 }, () => acquireCommerceCommandLease(args)),
+    );
+    expect(recovered).toEqual(Array.from({ length: 8 }, () => results[0]));
+    const afterRecovery = await readLifecycleEvidence(pair, 2);
+    expect(afterRecovery).toEqual(beforeRecovery);
+    expect((await matchingAudits(pair)).size).toBe(2);
+  });
+
+  test('an expired 24-holder race advances one fence and rejects the old holder and fence', async () => {
+    const commandPayload = payload('expired-takeover');
+    const registrationArgs = commandArgs(db, COMMAND_IDS.takeoverRace, commandPayload);
+    const oldLeaseId = deterministicLeaseId(60);
+    const oldLeaseArgs = acquireArgs(
+      db,
+      COMMAND_IDS.takeoverRace,
+      commandPayload,
+      oldLeaseId,
+    );
+    const pair = pairFor(oldLeaseArgs);
+    await registerCommerceCommand(registrationArgs);
+    const firstLease = await acquireCommerceCommandLease(oldLeaseArgs);
+    expectLeaseResult(firstLease, 1);
+
+    setTrustedNow(BASE_NOW_MILLIS + LEASE_DURATION_MILLIS);
+    const contenders = Array.from({ length: CONCURRENT_CALLS }, (_, index) => ({
+      leaseId: deterministicLeaseId(index + 100),
+      args: acquireArgs(
+        db,
+        COMMAND_IDS.takeoverRace,
+        commandPayload,
+        deterministicLeaseId(index + 100),
+      ),
+    }));
+    const results = await Promise.all(
+      contenders.map(({ args }) => acquireCommerceCommandLease(args)),
+    );
+    const winningIndexes = results
+      .map((result, index) => ({ result, index }))
+      .filter(({ result }) => result.outcome === 'lease_acquired');
+    expect(winningIndexes).toHaveLength(1);
+    expectLeaseResult(winningIndexes[0].result, 2);
+    for (const result of results.filter((value) => value.outcome === 'lease_busy')) {
+      expectBusyResult(result);
+    }
+    expect(results.filter((result) => result.outcome === 'lease_busy'))
+      .toHaveLength(CONCURRENT_CALLS - 1);
+
+    const lifecycle = await readLifecycle(pair);
+    expect(lifecycle.data()).toMatchObject({
+      state: 'leased',
+      commandRevision: 3,
+      fenceEpoch: 2,
+    });
+    const takeoverAudit = await readAudit(pair, 3);
+    expect(takeoverAudit.data()).toMatchObject({
+      commandRevision: 3,
+      eventType: 'command_lease_taken_over',
+      fromState: 'leased',
+      toState: 'leased',
+      fenceEpoch: 2,
+    });
+    expect((await matchingAudits(pair)).size).toBe(3);
+
+    const beforeStaleFinish = await readLifecycleEvidence(pair, 3);
+    const staleAttempts = await Promise.allSettled([
+      completeCommerceCommand(completeArgs(
+        db,
+        COMMAND_IDS.takeoverRace,
+        commandPayload,
+        oldLeaseId,
+        1,
+      )),
+      failCommerceCommand(failArgs(
+        db,
+        COMMAND_IDS.takeoverRace,
+        commandPayload,
+        oldLeaseId,
+        1,
+      )),
+    ]);
+    expect(staleAttempts).toHaveLength(2);
+    for (const result of staleAttempts) {
+      expect(result.status).toBe('rejected');
+      expectJournalError(result.reason, 'lease_stale');
+    }
+    expect(await readLifecycleEvidence(pair, 3)).toEqual(beforeStaleFinish);
+    expect((await matchingAudits(pair)).size).toBe(3);
+  });
+
+  test('concurrent complete-versus-final-fail commits exactly one terminal outcome', async () => {
+    const commandPayload = payload('terminal-outcome-race');
+    const leaseId = deterministicLeaseId(200);
+    const registrationArgs = commandArgs(db, COMMAND_IDS.terminalRace, commandPayload);
+    const leaseArgs = acquireArgs(
+      db,
+      COMMAND_IDS.terminalRace,
+      commandPayload,
+      leaseId,
+    );
+    const pair = pairFor(leaseArgs);
+    await registerCommerceCommand(registrationArgs);
+    await acquireCommerceCommandLease(leaseArgs);
+    setTrustedNow(BASE_NOW_MILLIS + 1);
+
+    const settled = await Promise.allSettled([
+      completeCommerceCommand(completeArgs(
+        db,
+        COMMAND_IDS.terminalRace,
+        commandPayload,
+        leaseId,
+        1,
+      )),
+      failCommerceCommand(failArgs(
+        db,
+        COMMAND_IDS.terminalRace,
+        commandPayload,
+        leaseId,
+        1,
+      )),
+    ]);
+    const fulfilled = settled.filter((result) => result.status === 'fulfilled');
+    const rejected = settled.filter((result) => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(['succeeded', 'failed_final']).toContain(fulfilled[0].value.state);
+    expectTerminalResult(fulfilled[0].value, fulfilled[0].value.state);
+    expectJournalError(rejected[0].reason, 'terminal_conflict');
+
+    const lifecycle = await readLifecycle(pair);
+    const terminalAudit = await readAudit(pair, 3);
+    expect(lifecycle.data()).toMatchObject({
+      state: fulfilled[0].value.state,
+      commandRevision: 3,
+      fenceEpoch: 1,
+    });
+    expect(terminalAudit.data()).toMatchObject({
+      commandRevision: 3,
+      eventType: fulfilled[0].value.state === 'succeeded'
+        ? 'command_succeeded'
+        : 'command_failed_final',
+      fromState: 'leased',
+      toState: fulfilled[0].value.state,
+      fenceEpoch: 1,
+    });
+    expect((await matchingAudits(pair)).size).toBe(3);
+    expect((await readAudit(pair, 4)).exists).toBe(false);
+  });
+
+  test('distinct success commitments race to one immutable terminal commitment', async () => {
+    const commandPayload = payload('terminal-commitment-race');
+    const leaseId = deterministicLeaseId(210);
+    const registrationArgs = commandArgs(db, COMMAND_IDS.commitmentRace, commandPayload);
+    const leaseArgs = acquireArgs(
+      db,
+      COMMAND_IDS.commitmentRace,
+      commandPayload,
+      leaseId,
+    );
+    const pair = pairFor(leaseArgs);
+    await registerCommerceCommand(registrationArgs);
+    await acquireCommerceCommandLease(leaseArgs);
+    setTrustedNow(BASE_NOW_MILLIS + 1);
+
+    const settled = await Promise.allSettled([
+      completeCommerceCommand(completeArgs(
+        db,
+        COMMAND_IDS.commitmentRace,
+        commandPayload,
+        leaseId,
+        1,
+        TERMINAL_REFERENCE_FINGERPRINT,
+      )),
+      completeCommerceCommand(completeArgs(
+        db,
+        COMMAND_IDS.commitmentRace,
+        commandPayload,
+        leaseId,
+        1,
+        OTHER_TERMINAL_REFERENCE_FINGERPRINT,
+      )),
+    ]);
+    const fulfilled = settled.filter((result) => result.status === 'fulfilled');
+    const rejected = settled.filter((result) => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expectTerminalResult(fulfilled[0].value, 'succeeded');
+    expectJournalError(rejected[0].reason, 'terminal_conflict');
+
+    const lifecycle = await readLifecycle(pair);
+    const terminalAudit = await readAudit(pair, 3);
+    expect(lifecycle.data()).toMatchObject({
+      state: 'succeeded',
+      commandRevision: 3,
+      fenceEpoch: 1,
+      terminalCommitmentKind: 'business_record_digest',
+      terminalCommitmentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(lifecycle.data().terminalCommitmentHash)
+      .not.toBe(TERMINAL_REFERENCE_FINGERPRINT);
+    expect(lifecycle.data().terminalCommitmentHash)
+      .not.toBe(OTHER_TERMINAL_REFERENCE_FINGERPRINT);
+    expect(terminalAudit.data()).not.toHaveProperty('terminalCommitmentKind');
+    expect(terminalAudit.data()).not.toHaveProperty('terminalCommitmentHash');
+    expect(JSON.stringify(terminalAudit.data())).not.toContain(TERMINAL_REFERENCE_FINGERPRINT);
+    expect(JSON.stringify(terminalAudit.data()))
+      .not.toContain(OTHER_TERMINAL_REFERENCE_FINGERPRINT);
+    expect((await matchingAudits(pair)).size).toBe(3);
+  });
+
+  test.each([
+    {
+      name: 'successful',
+      commandId: COMMAND_IDS.terminalReplay,
+      state: 'succeeded',
+      finalize: completeCommerceCommand,
+      finalizeArgs: completeArgs,
+    },
+    {
+      name: 'final-failure',
+      commandId: COMMAND_IDS.finalFailureReplay,
+      state: 'failed_final',
+      finalize: failCommerceCommand,
+      finalizeArgs: failArgs,
+    },
+  ])('$name terminal retry, later acquire, and registration are read-only', async ({
+    commandId,
+    state,
+    finalize,
+    finalizeArgs,
+  }) => {
+    setTrustedNow(BASE_NOW_MILLIS);
+    const commandPayload = payload(`terminal-replay-${state}`);
+    const leaseId = deterministicLeaseId(state === 'succeeded' ? 220 : 221);
+    const registrationArgs = commandArgs(db, commandId, commandPayload);
+    const leaseArgs = acquireArgs(db, commandId, commandPayload, leaseId);
+    const pair = pairFor(leaseArgs);
+    await registerCommerceCommand(registrationArgs);
+    const registrationBefore = await readPair(pair);
+    await acquireCommerceCommandLease(leaseArgs);
+    setTrustedNow(BASE_NOW_MILLIS + 1);
+
+    const terminalInput = finalizeArgs(
+      db,
+      commandId,
+      commandPayload,
+      leaseId,
+      1,
+    );
+    expectTerminalResult(await finalize(terminalInput), state);
+    const terminalBeforeReplay = await readLifecycleEvidence(pair, 3);
+    const registrationAtTerminal = await readPair(pair);
+    expect(snapshotEvidence(registrationAtTerminal.commandSnapshot))
+      .toEqual(snapshotEvidence(registrationBefore.commandSnapshot));
+    expect(snapshotEvidence(registrationAtTerminal.auditSnapshot))
+      .toEqual(snapshotEvidence(registrationBefore.auditSnapshot));
+
+    setTrustedNow(BASE_NOW_MILLIS + (LEASE_DURATION_MILLIS * 2));
+    expectTerminalResult(await finalize(terminalInput), state);
+    expectTerminalResult(await acquireCommerceCommandLease(acquireArgs(
+      db,
+      commandId,
+      commandPayload,
+      deterministicLeaseId(state === 'succeeded' ? 222 : 223),
+    )), state);
+    await expect(registerCommerceCommand(registrationArgs)).resolves.toEqual({
+      journalSchemaVersion: 1,
+      outcome: 'registered_existing',
+      state: 'registered',
+    });
+
+    expect(await readLifecycleEvidence(pair, 3)).toEqual(terminalBeforeReplay);
+    expect((await matchingAudits(pair)).size).toBe(3);
+    expect((await readAudit(pair, 4)).exists).toBe(false);
+    const registrationAfterReplay = await readPair(pair);
+    expect(snapshotEvidence(registrationAfterReplay.commandSnapshot))
+      .toEqual(snapshotEvidence(registrationBefore.commandSnapshot));
+    expect(snapshotEvidence(registrationAfterReplay.auditSnapshot))
+      .toEqual(snapshotEvidence(registrationBefore.auditSnapshot));
+  });
+
+  test('preseeded next audits block first lease and terminal completion atomically', async () => {
+    const firstPayload = payload('preseed-first-lifecycle-audit');
+    const firstRegistration = commandArgs(
+      db,
+      COMMAND_IDS.preseedLifecycleAudit,
+      firstPayload,
+    );
+    const firstLease = acquireArgs(
+      db,
+      COMMAND_IDS.preseedLifecycleAudit,
+      firstPayload,
+      deterministicLeaseId(230),
+    );
+    const firstPair = pairFor(firstLease);
+    await registerCommerceCommand(firstRegistration);
+    const firstRegistrationBefore = await readPair(firstPair);
+    const preseededRevisionTwo = auditRefFor(firstPair.commandKeyHash, 2);
+    await preseededRevisionTwo.create({ syntheticPreseed: 'revision-two' });
+    const revisionTwoBefore = await preseededRevisionTwo.get();
+
+    await expect(acquireCommerceCommandLease(firstLease)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect((await readLifecycle(firstPair)).exists).toBe(false);
+    expect(snapshotEvidence(await preseededRevisionTwo.get()))
+      .toEqual(snapshotEvidence(revisionTwoBefore));
+    const firstRegistrationAfter = await readPair(firstPair);
+    expect(snapshotEvidence(firstRegistrationAfter.commandSnapshot))
+      .toEqual(snapshotEvidence(firstRegistrationBefore.commandSnapshot));
+    expect(snapshotEvidence(firstRegistrationAfter.auditSnapshot))
+      .toEqual(snapshotEvidence(firstRegistrationBefore.auditSnapshot));
+
+    const terminalPayload = payload('preseed-terminal-audit');
+    const terminalRegistration = commandArgs(
+      db,
+      COMMAND_IDS.preseedTerminalAudit,
+      terminalPayload,
+    );
+    const terminalLeaseId = deterministicLeaseId(231);
+    const terminalLease = acquireArgs(
+      db,
+      COMMAND_IDS.preseedTerminalAudit,
+      terminalPayload,
+      terminalLeaseId,
+    );
+    const terminalPair = pairFor(terminalLease);
+    await registerCommerceCommand(terminalRegistration);
+    await acquireCommerceCommandLease(terminalLease);
+    const lifecycleBefore = await readLifecycleEvidence(terminalPair, 2);
+    const preseededRevisionThree = auditRefFor(terminalPair.commandKeyHash, 3);
+    await preseededRevisionThree.create({ syntheticPreseed: 'revision-three' });
+    const revisionThreeBefore = await preseededRevisionThree.get();
+    setTrustedNow(BASE_NOW_MILLIS + 1);
+
+    await expect(completeCommerceCommand(completeArgs(
+      db,
+      COMMAND_IDS.preseedTerminalAudit,
+      terminalPayload,
+      terminalLeaseId,
+      1,
+    ))).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readLifecycleEvidence(terminalPair, 2)).toEqual(lifecycleBefore);
+    expect(snapshotEvidence(await preseededRevisionThree.get()))
+      .toEqual(snapshotEvidence(revisionThreeBefore));
+  });
+
+  test('orphan, future, malformed, and unpaired lifecycle states reject without repair', async () => {
+    const orphanPayload = payload('orphan-lifecycle');
+    const orphanArgs = acquireArgs(
+      db,
+      COMMAND_IDS.orphanLifecycle,
+      orphanPayload,
+      deterministicLeaseId(240),
+    );
+    const orphanPair = pairFor(orphanArgs);
+    await orphanPair.lifecycleRef.create({ syntheticOrphan: true });
+    const orphanBefore = await orphanPair.lifecycleRef.get();
+    await expect(acquireCommerceCommandLease(orphanArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(snapshotEvidence(await orphanPair.lifecycleRef.get()))
+      .toEqual(snapshotEvidence(orphanBefore));
+    expect((await readPair(orphanPair)).commandSnapshot.exists).toBe(false);
+    expect((await readPair(orphanPair)).auditSnapshot.exists).toBe(false);
+
+    const futurePayload = payload('future-lifecycle');
+    const futureRegistration = commandArgs(
+      db,
+      COMMAND_IDS.malformedLifecycle,
+      futurePayload,
+    );
+    const futureArgs = acquireArgs(
+      db,
+      COMMAND_IDS.malformedLifecycle,
+      futurePayload,
+      deterministicLeaseId(241),
+    );
+    const futurePair = pairFor(futureArgs);
+    await registerCommerceCommand(futureRegistration);
+    await futurePair.lifecycleRef.create({
+      lifecycleSchemaVersion: 2,
+      syntheticFuture: true,
+    });
+    const futureBefore = await futurePair.lifecycleRef.get();
+    await expect(acquireCommerceCommandLease(futureArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(snapshotEvidence(await futurePair.lifecycleRef.get()))
+      .toEqual(snapshotEvidence(futureBefore));
+    expect((await readAudit(futurePair, 2)).exists).toBe(false);
+
+    const malformedPayload = payload('malformed-lifecycle-shape');
+    const malformedRegistration = commandArgs(
+      db,
+      COMMAND_IDS.malformedLifecycleShape,
+      malformedPayload,
+    );
+    const malformedArgs = acquireArgs(
+      db,
+      COMMAND_IDS.malformedLifecycleShape,
+      malformedPayload,
+      deterministicLeaseId(243),
+    );
+    const malformedPair = pairFor(malformedArgs);
+    await registerCommerceCommand(malformedRegistration);
+    await acquireCommerceCommandLease(malformedArgs);
+    const validMalformedLifecycle = await readLifecycle(malformedPair);
+    const malformedAuditBefore = await readAudit(malformedPair, 2);
+    await malformedPair.lifecycleRef.set({
+      ...validMalformedLifecycle.data(),
+      commandRevision: 4,
+    });
+    const malformedLifecycleBefore = await readLifecycle(malformedPair);
+
+    await expect(acquireCommerceCommandLease(malformedArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(snapshotEvidence(await readLifecycle(malformedPair)))
+      .toEqual(snapshotEvidence(malformedLifecycleBefore));
+    expect(snapshotEvidence(await readAudit(malformedPair, 2)))
+      .toEqual(snapshotEvidence(malformedAuditBefore));
+    expect((await readAudit(malformedPair, 3)).exists).toBe(false);
+
+    const malformedAuditPayload = payload('malformed-current-audit');
+    const malformedAuditRegistration = commandArgs(
+      db,
+      COMMAND_IDS.malformedCurrentAudit,
+      malformedAuditPayload,
+    );
+    const malformedAuditArgs = acquireArgs(
+      db,
+      COMMAND_IDS.malformedCurrentAudit,
+      malformedAuditPayload,
+      deterministicLeaseId(244),
+    );
+    const malformedAuditPair = pairFor(malformedAuditArgs);
+    await registerCommerceCommand(malformedAuditRegistration);
+    await acquireCommerceCommandLease(malformedAuditArgs);
+    const lifecycleBeforeMalformedAudit = await readLifecycle(malformedAuditPair);
+    const currentMalformedAuditRef = auditRefFor(malformedAuditPair.commandKeyHash, 2);
+    const validCurrentAudit = await currentMalformedAuditRef.get();
+    await currentMalformedAuditRef.set({
+      ...validCurrentAudit.data(),
+      eventType: 'command_succeeded',
+    });
+    const currentMalformedAuditBefore = await currentMalformedAuditRef.get();
+
+    await expect(acquireCommerceCommandLease(malformedAuditArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(snapshotEvidence(await readLifecycle(malformedAuditPair)))
+      .toEqual(snapshotEvidence(lifecycleBeforeMalformedAudit));
+    expect(snapshotEvidence(await currentMalformedAuditRef.get()))
+      .toEqual(snapshotEvidence(currentMalformedAuditBefore));
+    expect((await readAudit(malformedAuditPair, 3)).exists).toBe(false);
+
+    const missingAuditPayload = payload('missing-current-audit');
+    const missingAuditRegistration = commandArgs(
+      db,
+      COMMAND_IDS.missingCurrentAudit,
+      missingAuditPayload,
+    );
+    const missingAuditArgs = acquireArgs(
+      db,
+      COMMAND_IDS.missingCurrentAudit,
+      missingAuditPayload,
+      deterministicLeaseId(242),
+    );
+    const missingAuditPair = pairFor(missingAuditArgs);
+    await registerCommerceCommand(missingAuditRegistration);
+    await acquireCommerceCommandLease(missingAuditArgs);
+    const lifecycleWithPartner = await readLifecycle(missingAuditPair);
+    const currentAuditRef = auditRefFor(missingAuditPair.commandKeyHash, 2);
+    await currentAuditRef.delete();
+    const lifecycleWithoutPartner = await readLifecycle(missingAuditPair);
+    expect(snapshotEvidence(lifecycleWithoutPartner))
+      .toEqual(snapshotEvidence(lifecycleWithPartner));
+
+    await expect(acquireCommerceCommandLease(missingAuditArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(snapshotEvidence(await readLifecycle(missingAuditPair)))
+      .toEqual(snapshotEvidence(lifecycleWithoutPartner));
+    expect((await currentAuditRef.get()).exists).toBe(false);
+    expect((await readAudit(missingAuditPair, 3)).exists).toBe(false);
   });
 });
