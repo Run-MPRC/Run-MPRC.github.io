@@ -2,14 +2,40 @@ export {};
 
 const fs = require('node:fs');
 const path = require('node:path');
+const React = require('react');
+const ts = require('typescript');
+const { render, screen } = require('@testing-library/react');
 
 const mockCaptureException = jest.fn();
+const mockCreateUserWithEmailAndPassword = jest.fn();
+const mockDoc = jest.fn();
+const mockGetDoc = jest.fn();
+const mockOnAuthStateChanged = jest.fn(() => jest.fn());
+const mockSendEmailVerification = jest.fn();
+const mockUseServiceLocator = jest.fn();
 
 jest.mock('./sentry', () => ({
   captureException: mockCaptureException,
 }));
+jest.mock('firebase/auth', () => ({
+  createUserWithEmailAndPassword: mockCreateUserWithEmailAndPassword,
+  onAuthStateChanged: mockOnAuthStateChanged,
+  sendEmailVerification: mockSendEmailVerification,
+  sendPasswordResetEmail: jest.fn(),
+  signInWithEmailAndPassword: jest.fn(),
+  signOut: jest.fn(),
+}));
+jest.mock('firebase/firestore', () => ({
+  doc: mockDoc,
+  getDoc: mockGetDoc,
+}));
+jest.mock('../ServiceLocatorContext', () => ({
+  useServiceLocator: mockUseServiceLocator,
+}));
 
 const ErrorBoundary = require('../../components/ErrorBoundary').default;
+const MembersOnly = require('../../components/MembersOnly').default;
+const IdentityService = require('../identity/Identity').default;
 const {
   clientFailureEvents,
   reportClientFailure,
@@ -42,15 +68,80 @@ function applicationRuntimeFiles(projectRoot: string): string[] {
   ];
 }
 
-function hasDirectConsoleCall(source: string): boolean {
-  return /\bconsole\s*(?:\.|\[)/.test(source);
+function staticStringValue(node: any): string | undefined {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  if (
+    ts.isBinaryExpression(node)
+    && node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const left = staticStringValue(node.left);
+    const right = staticStringValue(node.right);
+    return left === undefined || right === undefined ? undefined : left + right;
+  }
+  return undefined;
+}
+
+function containsConsoleToken(value: string): boolean {
+  return /(?:\bconsole\b|con\\u(?:0073|\{73\})ole)/i.test(value);
+}
+
+function hasConsoleReference(source: string, filename = 'fixture.ts'): boolean {
+  if (path.extname(filename).toLowerCase() === '.html') {
+    // Public HTML is not a TypeScript source file. Conservatively reject the
+    // console token even in text/comments so a script insertion cannot hide.
+    return containsConsoleToken(source);
+  }
+
+  const extension = path.extname(filename).toLowerCase();
+  let scriptKind = ts.ScriptKind.JS;
+  if (extension === '.tsx') scriptKind = ts.ScriptKind.TSX;
+  else if (extension === '.jsx') scriptKind = ts.ScriptKind.JSX;
+  else if (extension === '.ts') scriptKind = ts.ScriptKind.TS;
+  const sourceFile = ts.createSourceFile(
+    filename,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
+  let found = false;
+  const visit = (node: any) => {
+    if (found) return;
+    if (
+      (ts.isIdentifier(node) && node.text === 'console')
+      || ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+        && containsConsoleToken(node.text))
+      || (ts.isBinaryExpression(node)
+        && containsConsoleToken(staticStringValue(node) || ''))
+      || (ts.isElementAccessExpression(node)
+        && staticStringValue(node.argumentExpression) === 'console')
+      || (ts.isComputedPropertyName(node)
+        && staticStringValue(node.expression) === 'console')
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return found;
 }
 
 describe('client diagnostic privacy', () => {
   const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
   const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOnAuthStateChanged.mockReturnValue(jest.fn());
+    mockDoc.mockReturnValue({ path: 'members_only/synthetic' });
+    mockUseServiceLocator.mockReturnValue({
+      isReady: true,
+      services: { firebaseResources: { firestore: { name: 'synthetic-firestore' } } },
+    });
+  });
 
   afterAll(() => {
     consoleError.mockRestore();
@@ -139,6 +230,57 @@ describe('client diagnostic privacy', () => {
     expect(serializedConsole).not.toContain('private component stack');
   });
 
+  test('verification-email failure returns the credential without logging provider data', async () => {
+    const canaries = [
+      'registration-member@example.test',
+      'auth/provider-response-canary',
+      'verification-token-canary',
+    ];
+    const credential = {
+      user: { uid: 'synthetic-uid', email: canaries[0] },
+    };
+    const providerError = Object.assign(new Error(canaries.join(' ')), {
+      code: canaries[1],
+      token: canaries[2],
+    });
+    mockCreateUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+    mockSendEmailVerification.mockRejectedValueOnce(providerError);
+    const identity = new IdentityService({ auth: { currentUser: null } });
+
+    await expect(identity.register(canaries[0], 'synthetic-password'))
+      .resolves.toBe(credential);
+    expect(mockSendEmailVerification).toHaveBeenCalledWith(credential.user);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[MPRC client] email_verification_failed',
+    );
+    const serializedConsole = JSON.stringify(consoleWarn.mock.calls);
+    canaries.forEach((canary) => expect(serializedConsole).not.toContain(canary));
+  });
+
+  test('members-only fetch failure completes loading without logging Firestore data', async () => {
+    const canaries = [
+      'members-only-member@example.test',
+      'firestore-provider-response-canary',
+      'https://runmprc.com/private?token=members-only-token#details',
+    ];
+    mockGetDoc.mockRejectedValueOnce(Object.assign(new Error(canaries.join(' ')), {
+      response: canaries[1],
+      url: canaries[2],
+    }));
+
+    render(React.createElement(MembersOnly, {
+      dataKey: 'discounts',
+      style: {},
+    }));
+
+    expect(await screen.findByText(/Failed to fetch data/)).toBeInTheDocument();
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[MPRC client] members_only_fetch_failed',
+    );
+    const serializedConsole = JSON.stringify(consoleWarn.mock.calls);
+    canaries.forEach((canary) => expect(serializedConsole).not.toContain(canary));
+  });
+
   test('allows console output only through the closed diagnostic helper', () => {
     const projectRoot = path.resolve(__dirname, '../../..');
     const runtimeSources = applicationRuntimeFiles(projectRoot);
@@ -148,7 +290,7 @@ describe('client diagnostic privacy', () => {
     const offenders = runtimeSources.flatMap((sourcePath) => {
       const relativePath = path.relative(projectRoot, sourcePath);
       if (relativePath === SAFE_CONSOLE_OWNER) return [];
-      return hasDirectConsoleCall(fs.readFileSync(sourcePath, 'utf8'))
+      return hasConsoleReference(fs.readFileSync(sourcePath, 'utf8'), sourcePath)
         ? [relativePath]
         : [];
     });
@@ -165,7 +307,17 @@ describe('client diagnostic privacy', () => {
     ['dot access', 'console.error(privateValue);'],
     ['window access', 'window.console.warn(privateValue);'],
     ['computed access', "console['error'](privateValue);"],
+    ['optional chaining', 'console?.error(privateValue);'],
+    ['parenthesized access', '(console).error(privateValue);'],
+    ['comment-separated access', 'console /* private */ .error(privateValue);'],
+    ['alias', 'const c = console; c.error(privateValue);'],
+    ['destructure', 'const { error } = console; error(privateValue);'],
+    ['computed global', 'globalThis["console"].error(privateValue);'],
+    ['computed window', 'window["console"].warn(privateValue);'],
+    ['escaped identifier', 'con\\u0073ole.error(privateValue);'],
+    ['constructed property', "globalThis['con' + 'sole'].error(privateValue);"],
+    ['evaluated source', 'eval("console.error(privateValue)");'],
   ])('recognizes the %s bypass', (_label, source) => {
-    expect(hasDirectConsoleCall(source)).toBe(true);
+    expect(hasConsoleReference(source)).toBe(true);
   });
 });

@@ -186,6 +186,51 @@ describe('FirebaseResources environment isolation', () => {
     );
   });
 
+  test('production without an App Check key continues with one fixed diagnostic', () => {
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const resources = createResourcesFor('production');
+
+      expect(resources.auth).toBe(mockAuth);
+      expect(resources.firestore).toBe(mockFirestore);
+      expect(resources.functions).toBe(mockFunctions);
+      expect(mockInitializeAppCheck).not.toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalledWith('[MPRC client] app_check_disabled');
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
+  test('App Check failure continues without logging provider details', () => {
+    const canaries = [
+      'app-check-member@example.test',
+      'app-check-provider-response-canary',
+      'app-check-token-canary',
+    ];
+    const providerError = Object.assign(new Error(canaries.join(' ')), {
+      response: canaries[1],
+      token: canaries[2],
+    });
+    mockInitializeAppCheck.mockImplementationOnce(() => { throw providerError; });
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const resources = createResourcesFor('production', 'configured-public-site-key');
+
+      expect(resources.auth).toBe(mockAuth);
+      expect(resources.firestore).toBe(mockFirestore);
+      expect(resources.functions).toBe(mockFunctions);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[MPRC client] app_check_initialization_failed',
+      );
+      const serializedConsole = JSON.stringify(consoleWarn.mock.calls);
+      canaries.forEach((canary) => expect(serializedConsole).not.toContain(canary));
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
   test.each([
     '/account/strava/callback?code=example&state=example-state',
     '/register/success?registration=r1&token=example-capability',
