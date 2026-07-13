@@ -10,13 +10,24 @@ jobs:
   frontend:
     name: Frontend lint + build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
-      - run: npm ci --legacy-peer-deps
+      - run: npm ci --legacy-peer-deps --ignore-scripts
+      - name: Run non-mutating frontend lint
+        run: node .github/scripts/check-frontend-lint.cjs
+      - name: Verify frontend lint left the checkout unchanged
+        run: |
+          git diff --exit-code HEAD --
+          frontend_git_status="$(git status --porcelain=v1 --untracked-files=all)"
+          test -z "$frontend_git_status"
       - name: Run frontend Jest tests
         env:
           CI: 'true'
@@ -28,7 +39,6 @@ jobs:
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/ci.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
           node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js
-      - run: npm run lint:fix -- --max-warnings=0 || true
       - name: Build
         env:
           CI: 'true'

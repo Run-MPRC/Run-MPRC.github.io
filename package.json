@@ -30,6 +30,7 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "emulators": "firebase emulators:start --project demo-mprc-local --only auth,firestore,functions",
+    "lint:ci": "node .github/scripts/check-frontend-lint.cjs",
     "lint:fix": "eslint --fix --ext .js,.jsx .",
     "test": "react-scripts test",
     "test:spa-navigation": "node --test tests/spa-navigation.test.js",
