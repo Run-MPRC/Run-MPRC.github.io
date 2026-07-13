@@ -55,6 +55,43 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 If any proof is missing, report the change as **not live**.
 
+## Checkout adjustment guard — SOURCE ONLY, NOT LIVE
+
+**Purpose:** prevent an unknown discount, tax, or shipping charge from being treated as a valid payment.
+
+**Approver:** treasurer plus platform owner.
+
+**Prerequisites:** source for issue [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102) has merged, a private Stripe-owner inventory, made-up test payments, and one protected release plan covering all three affected server Functions.
+
+```mermaid
+flowchart LR
+    A["Website asks Stripe for Checkout"] --> B["Promotion entry and automatic tax stay off"]
+    B --> C["Stripe sends a signed result"]
+    C --> D{"All adjustment amounts are present and zero?"}
+    D -- "Yes" --> E["Other payment checks continue"]
+    D -- "No or unknown" --> F["Keep for review; never mark paid"]
+```
+
+In words: Checkout starts with unapproved adjustments off; the server accepts the money result only when Stripe explicitly reports zero discount, tax, and shipping.
+
+Officer steps:
+
+1. Keep live race and shop checkout unavailable.
+2. Do not create a promotion code, tax rule, or shipping rate for the website.
+3. Ask the Stripe owner to review older open Sessions privately.
+4. Do not put Session links, code values, customer details, screenshots, or provider IDs in GitHub or AI.
+5. Wait for separate proof of source merge, Firebase deployment, Stripe readback, and made-up test behavior.
+
+**Expected result:** a complete all-zero Stripe breakdown may continue through the other checks. Unknown or nonzero adjustments stay under review. A failed or expired Session closes locally; it keeps an adjustment or earlier warning, while an ordinary all-zero failure does not create a new warning.
+
+**Stop conditions:** any real payment/customer data, production-mode test, missing private inventory, missing server Function, skipped Firebase work, or request to “temporarily” enable a discount.
+
+**Success proof:** exact pull request/commit, green exact-commit checks, private redacted inventory, three named Function readbacks, Stripe test-mode results, and separate provider-owner confirmation.
+
+**Undo:** use one reviewed three-Function revert or safe roll-forward. Do not edit a payment record, delete a webhook event, or change production Stripe settings by hand.
+
+**Escalation:** treasurer plus platform owner; add security if an adjustment reached paid/fulfilled state.
+
 ## Profile permission error
 
 **Status: AUTOMATIC REPAIR NOT LIVE YET**

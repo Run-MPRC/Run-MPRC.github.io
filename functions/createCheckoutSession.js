@@ -247,16 +247,21 @@ exports.createCheckoutSession = functions
         },
         quantity: 1,
       }],
-      allow_promotion_codes: true,
+      // Discounts remain disabled until a server-approved discount snapshot
+      // and reconciliation contract is implemented (PROMO-001).
+      allow_promotion_codes: false,
+      automatic_tax: { enabled: false },
       success_url: `${origin}${SUCCESS_PATH}?session_id={CHECKOUT_SESSION_ID}&reg=${regRef.id}&token=${confirmationToken}&event=${eventId}`,
       cancel_url: `${origin}${CANCEL_PATH_PREFIX}${eventSlug}?cancelled=1`,
       metadata: {
+        schemaVersion: '1',
         eventId,
         registrationId: regRef.id,
         priceTier,
       },
       payment_intent_data: {
         metadata: {
+          schemaVersion: '1',
           eventId,
           registrationId: regRef.id,
           priceTier,

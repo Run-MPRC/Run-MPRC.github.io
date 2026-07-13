@@ -61,9 +61,9 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 9 | AUTH-003 | Introduce scoped admin capabilities, MFA, and recent authentication | P1 | L | proposed | AUTH-001, AUTH-002, SEC-001 |
 | 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | ready | CI-001 baseline |
 | 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | ready | ABUSE-001 interface agreed |
-| 12 | PROMO-001 | Disable unmodeled Stripe promotions until discounts are authoritative | P0 | S | partial_implemented_locally | PAY-001 for final discount contract |
+| 12 | PROMO-001 | Disable unmodeled Stripe promotions until discounts are authoritative | P0 | S | source/tests complete under open GitHub issue #102; provider inventory and deployment remain owner action | PAY-001 for any future discount contract |
 | 13 | PAY-002 | Implement idempotent payment commands and explicit state machines | P0 | L | ready after PAY-001 | CONFIG-001, PAY-001 |
-| 14 | PAY-003 | Build idempotent, async-aware Stripe webhook ingestion | P0 | L | partial_implemented_locally | CONFIG-001, PAY-001/PAY-002 target contract |
+| 14 | PAY-003 | Build idempotent, async-aware Stripe webhook ingestion | P0 | L | PAY-003A source merged in #101; PAY-003B/C remain open; not deployed | CONFIG-001, PAY-001/PAY-002 target contract |
 | 15 | RACE-001 | Add transactional race-capacity reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 16 | MERCH-001 | Add SKU variants and transactional inventory reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 17 | PAY-004 | Make cancellation authoritative and replace reusable late Payment Links | P0 | L | proposed | PAY-002, PAY-003, RACE-001 |
@@ -567,7 +567,7 @@ Keep schemas close to the trusted Functions boundary and expose derived TypeScri
 ## PROMO-001 — Disable unmodeled Stripe promotions until discounts are authoritative
 
 **Labels:** `priority:P0`, `type:security`, `area:stripe`, `size:S`
-**Status:** `partial_implemented_locally`; creation and webhook defenses exist, but direct creator-payload tests and the future discount contract remain open
+**Status:** source and exact tests are complete under open GitHub issue [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102); pre-change Session/provider inventory, protected deployment, provider readback, and live verification remain open, so do not close the GitHub issue yet
 **Depends on:** PAY-001 for any future enabled discount model
 
 ### Problem
@@ -577,17 +577,18 @@ The original race and merchandise Checkout creators enabled arbitrary Dashboard 
 ### Scope
 
 - Set `allow_promotion_codes: false` in every current Checkout Session creator.
-- Treat any nonzero Stripe `amount_discount` as a permanent anomaly requiring review while discounts are disabled.
+- Add `schemaVersion: "1"` only to newly created Session and PaymentIntent metadata. This is an additive marker, not schema enforcement: legacy metadata remains accepted, and allowlisting/migration stays with PAY-003B.
+- Require a complete Stripe adjustment breakdown and treat unknown or nonzero discount, tax, or shipping amounts as permanent anomalies requiring review while those features are disabled.
 - Add creator payload tests and signed webhook tests, including a 100% discount and legacy outstanding Session.
 - Inventory and disable/restrict active promotion configuration or outstanding Sessions in test/staging before release; production provider changes belong to OPS-001.
 - If promotions are later desired, open a new issue under PAY-001/PAY-002 for server-approved code/campaign eligibility, immutable discount snapshot, actual total/refund/reconciliation, limits, expiry, audit, and migration before changing this guard.
 
 ### Acceptance criteria
 
-- [ ] Neither race nor merchandise Session permits Stripe promotion-code entry.
-- [ ] A nonzero discounted Session never becomes locally paid/fulfilled and is durably quarantined/alerted.
-- [ ] Zero-discount Sessions continue through normal amount/currency validation.
-- [ ] No UI or API claims a promotion is accepted.
+- [x] Neither race nor merchandise Session payload permits Stripe promotion-code entry; automatic tax is also explicit-off.
+- [x] Unknown or nonzero discount, tax, or shipping adjustments never make a local record paid/fulfilled and create durable review evidence.
+- [x] Complete all-zero adjustment Sessions continue through normal amount/currency validation.
+- [x] No checkout UI or API claims a promotion is accepted.
 - [ ] Provider inventory/release checklist accounts for Sessions created before the change.
 
 ### Tests/evidence

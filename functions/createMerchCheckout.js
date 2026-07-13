@@ -149,7 +149,10 @@ exports.createMerchCheckout = functions
         },
         quantity: 1,
       }],
-      allow_promotion_codes: true,
+      // Discounts remain disabled until a server-approved discount snapshot
+      // and reconciliation contract is implemented (PROMO-001).
+      allow_promotion_codes: false,
+      automatic_tax: { enabled: false },
       shipping_address_collection: {
         allowed_countries: ['US', 'CA'],
       },
@@ -157,6 +160,7 @@ exports.createMerchCheckout = functions
       success_url: `${origin}/shop/purchase/success?session_id={CHECKOUT_SESSION_ID}&order=${orderRef.id}&token=${confirmationToken}`,
       cancel_url: `${origin}/shop/${productSlug}?cancelled=1`,
       metadata: {
+        schemaVersion: '1',
         type: 'merch',
         productSlug,
         orderId: orderRef.id,
@@ -165,6 +169,7 @@ exports.createMerchCheckout = functions
       },
       payment_intent_data: {
         metadata: {
+          schemaVersion: '1',
           type: 'merch',
           productSlug,
           orderId: orderRef.id,

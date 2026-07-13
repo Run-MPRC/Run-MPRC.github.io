@@ -219,6 +219,11 @@ function registrationSession(overrides = {}) {
     amount_total: 5000,
     currency: 'usd',
     payment_intent: 'pi_reg_1',
+    total_details: {
+      amount_discount: 0,
+      amount_shipping: 0,
+      amount_tax: 0,
+    },
     ...overrides,
   };
 }
@@ -238,6 +243,11 @@ function orderSession(overrides = {}) {
     amount_total: 2000,
     currency: 'usd',
     payment_intent: 'pi_order_1',
+    total_details: {
+      amount_discount: 0,
+      amount_shipping: 0,
+      amount_tax: 0,
+    },
     shipping_details: {
       name: 'Buyer Name',
       address: {
@@ -640,6 +650,9 @@ describe('stripeWebhook', () => {
       stripePaymentIntentId: 'pi_reg_1',
       stripeAmountSubtotalCents: 5000,
       stripeAmountTotalCents: 5000,
+      stripeDiscountCents: 0,
+      stripeTaxCents: 0,
+      stripeShippingCents: 0,
       stripeCurrency: 'usd',
     });
     expect(registration.auditLog).toHaveLength(1);
@@ -658,6 +671,340 @@ describe('stripeWebhook', () => {
     expect(admin.__get('stripeObjectBindings/payment_intent:pi_reg_1')).toMatchObject({
       targetType: 'registration',
       targetPath: 'events/race-1/registrations/reg-1',
+    });
+  });
+
+  test.each([
+    ['partial', 4500, 'paid', 'pi_reg_1', 500],
+    ['100 percent', 0, 'no_payment_required', null, 5000],
+  ])('quarantines a %s unapproved promotion discount', async (
+    _label,
+    total,
+    paymentStatus,
+    paymentIntent,
+    discount,
+  ) => {
+    seedRegistration();
+    const eventId = `evt_discount_${discount}`;
+    await deliver(stripeEvent(
+      eventId,
+      'checkout.session.completed',
+      registrationSession({
+        amount_total: total,
+        payment_status: paymentStatus,
+        payment_intent: paymentIntent,
+        total_details: {
+          amount_discount: discount,
+          amount_shipping: 0,
+          amount_tax: 0,
+        },
+      }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewRequired: true,
+      paymentReviewReason: 'discount_not_allowed',
+    });
+    expect(admin.__get(`stripeEvents/${eventId}`)).toMatchObject({
+      outcome: 'needs_review:discount_not_allowed',
+      requiresReview: true,
+    });
+  });
+
+  test('quarantines a discounted pre-change Session that permitted promotions', async () => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      'evt_legacy_promotion_discount',
+      'checkout.session.completed',
+      registrationSession({
+        allow_promotion_codes: true,
+        amount_total: 4500,
+        total_details: {
+          amount_discount: 500,
+          amount_shipping: 0,
+          amount_tax: 0,
+        },
+      }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewRequired: true,
+      paymentReviewReason: 'discount_not_allowed',
+    });
+    expect(admin.__get('stripeEvents/evt_legacy_promotion_discount')).toMatchObject({
+      outcome: 'needs_review:discount_not_allowed',
+      requiresReview: true,
+    });
+  });
+
+  test('accepts Stripe null shipping as an explicit zero adjustment', async () => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      'evt_null_shipping_zero',
+      'checkout.session.completed',
+      registrationSession({
+        total_details: {
+          amount_discount: 0,
+          amount_shipping: null,
+          amount_tax: 0,
+        },
+      }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'paid',
+      stripeDiscountCents: 0,
+      stripeTaxCents: 0,
+      stripeShippingCents: 0,
+    });
+  });
+
+  test('accepts a complete all-zero Stripe shipping cost breakdown', async () => {
+    seedOrder();
+    await deliver(stripeEvent(
+      'evt_zero_shipping_cost',
+      'checkout.session.completed',
+      orderSession({
+        shipping_cost: { amount_subtotal: 0, amount_tax: 0, amount_total: 0 },
+      }),
+    ));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'paid',
+      stripeDiscountCents: 0,
+      stripeTaxCents: 0,
+      stripeShippingCents: 0,
+    });
+  });
+
+  test.each([
+    [
+      'tax',
+      { amount_discount: 0, amount_shipping: 0, amount_tax: 100 },
+      null,
+      2100,
+      'tax_not_configured',
+    ],
+    [
+      'shipping charge',
+      { amount_discount: 0, amount_shipping: 250, amount_tax: 0 },
+      { amount_subtotal: 250, amount_tax: 0, amount_total: 250 },
+      2250,
+      'shipping_charge_not_configured',
+    ],
+  ])('quarantines an unconfigured %s', async (
+    _label,
+    totalDetails,
+    shippingCost,
+    total,
+    reason,
+  ) => {
+    seedOrder();
+    const eventId = `evt_${reason}_${_label.replace(/[^A-Za-z0-9]+/g, '_')}`;
+    await deliver(stripeEvent(
+      eventId,
+      'checkout.session.completed',
+      orderSession({
+        amount_total: total,
+        total_details: totalDetails,
+        shipping_cost: shippingCost,
+      }),
+    ));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewRequired: true,
+      paymentReviewReason: reason,
+    });
+    expect(admin.__get(`stripeEvents/${eventId}`)).toMatchObject({
+      outcome: `needs_review:${reason}`,
+      requiresReview: true,
+    });
+  });
+
+  test.each([
+    ['missing details', { total_details: undefined }],
+    ['null details', { total_details: null }],
+    ['missing discount', {
+      total_details: { amount_shipping: 0, amount_tax: 0 },
+    }],
+    ['null discount', {
+      total_details: { amount_discount: null, amount_shipping: 0, amount_tax: 0 },
+    }],
+    ['missing tax', {
+      total_details: { amount_discount: 0, amount_shipping: 0 },
+    }],
+    ['null tax', {
+      total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: null },
+    }],
+    ['missing detail shipping', {
+      total_details: { amount_discount: 0, amount_tax: 0 },
+    }],
+    ['negative discount', {
+      total_details: { amount_discount: -1, amount_shipping: 0, amount_tax: 0 },
+    }],
+    ['unsafe discount', {
+      total_details: {
+        amount_discount: Number.MAX_SAFE_INTEGER + 1,
+        amount_shipping: 0,
+        amount_tax: 0,
+      },
+    }],
+    ['fractional tax', {
+      total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 0.5 },
+    }],
+    ['string shipping', {
+      total_details: { amount_discount: 0, amount_shipping: '0', amount_tax: 0 },
+    }],
+    ['non-object details', { total_details: 'none' }],
+    ['non-object shipping cost', { shipping_cost: 'none' }],
+    ['missing shipping cost subtotal', {
+      shipping_cost: { amount_tax: 0, amount_total: 0 },
+    }],
+    ['missing shipping cost tax', {
+      shipping_cost: { amount_subtotal: 0, amount_total: 0 },
+    }],
+    ['missing shipping cost total', {
+      shipping_cost: { amount_subtotal: 0, amount_tax: 0 },
+    }],
+    ['null shipping cost subtotal', {
+      shipping_cost: { amount_subtotal: null, amount_tax: 0, amount_total: 0 },
+    }],
+    ['null shipping cost tax', {
+      shipping_cost: { amount_subtotal: 0, amount_tax: null, amount_total: 0 },
+    }],
+    ['null shipping cost total', {
+      shipping_cost: { amount_subtotal: 0, amount_tax: 0, amount_total: null },
+    }],
+  ])('quarantines an invalid adjustment shape: %s', async (_label, patch) => {
+    seedRegistration();
+    const eventId = `evt_invalid_adjustment_${_label.replace(/[^A-Za-z0-9]+/g, '_')}`;
+    await deliver(stripeEvent(
+      eventId,
+      'checkout.session.completed',
+      registrationSession(patch),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewReason: 'invalid_stripe_adjustment',
+    });
+    expect(admin.__get(`stripeEvents/${eventId}`)).toMatchObject({
+      outcome: 'needs_review:invalid_stripe_adjustment',
+    });
+  });
+
+  test('quarantines conflicting shipping total sources', async () => {
+    seedOrder();
+    await deliver(stripeEvent(
+      'evt_shipping_source_conflict',
+      'checkout.session.completed',
+      orderSession({
+        amount_total: 2250,
+        total_details: {
+          amount_discount: 0,
+          amount_shipping: 0,
+          amount_tax: 0,
+        },
+        shipping_cost: { amount_subtotal: 250, amount_tax: 0, amount_total: 250 },
+      }),
+    ));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewReason: 'stripe_shipping_breakdown_mismatch',
+    });
+  });
+
+  test.each([
+    ['hidden subtotal', { amount_subtotal: 100, amount_tax: 0, amount_total: 0 }],
+    ['hidden tax', { amount_subtotal: 0, amount_tax: 100, amount_total: 0 }],
+  ])('quarantines a shipping cost with a %s', async (_label, shippingCost) => {
+    seedOrder();
+    const eventId = `evt_shipping_${_label.replace(/[^A-Za-z0-9]+/g, '_')}`;
+    await deliver(stripeEvent(
+      eventId,
+      'checkout.session.completed',
+      orderSession({ shipping_cost: shippingCost }),
+    ));
+
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewReason: 'stripe_shipping_breakdown_mismatch',
+    });
+    expect(admin.__get(`stripeEvents/${eventId}`)).toMatchObject({
+      outcome: 'needs_review:stripe_shipping_breakdown_mismatch',
+      requiresReview: true,
+    });
+  });
+
+  test('quarantines an inconsistent Stripe total breakdown', async () => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      'evt_total_breakdown_mismatch',
+      'checkout.session.completed',
+      registrationSession({
+        amount_total: 5000,
+        total_details: {
+          amount_discount: 500,
+          amount_shipping: 0,
+          amount_tax: 0,
+        },
+      }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewReason: 'stripe_total_breakdown_mismatch',
+    });
+  });
+
+  test('quarantines an adjustment breakdown whose computed total is unsafe', async () => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      'evt_total_breakdown_overflow',
+      'checkout.session.completed',
+      registrationSession({
+        amount_total: Number.MAX_SAFE_INTEGER,
+        total_details: {
+          amount_discount: 0,
+          amount_shipping: Number.MAX_SAFE_INTEGER,
+          amount_tax: Number.MAX_SAFE_INTEGER,
+        },
+      }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewReason: 'stripe_total_breakdown_mismatch',
+    });
+    expect(admin.__get('stripeEvents/evt_total_breakdown_overflow')).toMatchObject({
+      outcome: 'needs_review:stripe_total_breakdown_mismatch',
+      requiresReview: true,
+    });
+  });
+
+  test('never infers a missing subtotal when adjustments are present', async () => {
+    seedRegistration();
+    await deliver(stripeEvent(
+      'evt_adjusted_missing_subtotal',
+      'checkout.session.completed',
+      registrationSession({
+        amount_subtotal: null,
+        amount_total: 4500,
+        total_details: {
+          amount_discount: 500,
+          amount_shipping: 0,
+          amount_tax: 0,
+        },
+      }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'pending',
+      paymentReviewReason: 'invalid_stripe_subtotal',
     });
   });
 
@@ -714,6 +1061,9 @@ describe('stripeWebhook', () => {
       stripePaymentIntentId: 'pi_order_1',
       stripeAmountSubtotalCents: 2000,
       stripeAmountTotalCents: 2000,
+      stripeDiscountCents: 0,
+      stripeTaxCents: 0,
+      stripeShippingCents: 0,
       shipping: {
         line1: '1 Main St',
         city: 'San Mateo',
@@ -810,6 +1160,137 @@ describe('stripeWebhook', () => {
     expect(order.status).toBe('cancelled');
     expect(order.paymentStatus).toBe('failed');
     expect(order.cancelledAt).toBeDefined();
+  });
+
+  test.each([
+    ['failure', 'checkout.session.async_payment_failed', 'failed'],
+    ['expiry', 'checkout.session.expired', 'expired'],
+  ])('an ordinary async %s preserves an earlier review flag', async (_label, type, status) => {
+    seedRegistration({
+      paymentReviewRequired: true,
+      paymentReviewReason: 'existing_review_reason',
+    });
+    await deliver(stripeEvent(
+      `evt_preserve_review_${status}`,
+      type,
+      registrationSession({ payment_status: 'unpaid' }),
+    ));
+
+    expect(admin.__get('events/race-1/registrations/reg-1')).toMatchObject({
+      status: 'cancelled',
+      paymentStatus: status,
+      paymentReviewRequired: true,
+      paymentReviewReason: 'existing_review_reason',
+    });
+  });
+
+  test.each([
+    [
+      'failure discount',
+      'checkout.session.async_payment_failed',
+      {
+        amount_total: 1900,
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 100, amount_shipping: 0, amount_tax: 0 },
+      },
+      'discount_not_allowed',
+    ],
+    [
+      'expiry discount',
+      'checkout.session.expired',
+      {
+        amount_total: 1900,
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 100, amount_shipping: 0, amount_tax: 0 },
+      },
+      'discount_not_allowed',
+    ],
+    [
+      'failure tax',
+      'checkout.session.async_payment_failed',
+      {
+        amount_total: 2100,
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 100 },
+      },
+      'tax_not_configured',
+    ],
+    [
+      'expiry tax',
+      'checkout.session.expired',
+      {
+        amount_total: 2100,
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 100 },
+      },
+      'tax_not_configured',
+    ],
+    [
+      'failure shipping',
+      'checkout.session.async_payment_failed',
+      {
+        amount_total: 2100,
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 0, amount_shipping: 100, amount_tax: 0 },
+        shipping_cost: { amount_subtotal: 100, amount_tax: 0, amount_total: 100 },
+      },
+      'shipping_charge_not_configured',
+    ],
+    [
+      'expiry shipping',
+      'checkout.session.expired',
+      {
+        amount_total: 2100,
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 0, amount_shipping: 100, amount_tax: 0 },
+        shipping_cost: { amount_subtotal: 100, amount_tax: 0, amount_total: 100 },
+      },
+      'shipping_charge_not_configured',
+    ],
+    [
+      'failure malformed breakdown',
+      'checkout.session.async_payment_failed',
+      { payment_status: 'unpaid', total_details: null },
+      'invalid_stripe_adjustment',
+    ],
+    [
+      'expiry malformed breakdown',
+      'checkout.session.expired',
+      {
+        payment_status: 'unpaid',
+        total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 },
+        shipping_cost: { amount_subtotal: 0, amount_tax: 0 },
+      },
+      'invalid_stripe_adjustment',
+    ],
+    [
+      'failure hidden shipping subtotal',
+      'checkout.session.async_payment_failed',
+      {
+        payment_status: 'unpaid',
+        shipping_cost: { amount_subtotal: 100, amount_tax: 0, amount_total: 0 },
+      },
+      'stripe_shipping_breakdown_mismatch',
+    ],
+  ])('quarantines an adjusted async %s Session', async (_label, type, patch, reason) => {
+    seedOrder();
+    const eventId = `evt_adjusted_${_label.replace(/[^A-Za-z0-9]+/g, '_')}`;
+    await deliver(stripeEvent(eventId, type, orderSession(patch)));
+
+    const order = admin.__get('orders/order-1');
+    expect(order).toMatchObject({
+      status: 'cancelled',
+      paymentStatus: type === 'checkout.session.expired' ? 'expired' : 'failed',
+      paymentReviewRequired: true,
+      paymentReviewReason: reason,
+    });
+    expect(order.cancelledAt).toBeDefined();
+    expect(order.paidAt).toBeUndefined();
+    expect(order.fulfilledAt).toBeUndefined();
+    expect(admin.__get(`stripeEvents/${eventId}`)).toMatchObject({
+      outcome: `needs_review:${reason}`,
+      requiresReview: true,
+    });
   });
 
   test.each([
