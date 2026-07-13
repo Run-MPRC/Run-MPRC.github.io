@@ -1,3 +1,4 @@
+const { createHash } = require('node:crypto');
 const { types: { isProxy } } = require('node:util');
 const { Timestamp } = require('firebase-admin/firestore');
 
@@ -10,13 +11,27 @@ const {
 
 const journalSchemaVersion = 1;
 const auditSchemaVersion = 1;
+const lifecycleSchemaVersion = 1;
+const lifecycleAuditSchemaVersion = 2;
 const MAXIMUM_ENDPOINT_SCHEMA_VERSION = 1000000;
+const MAXIMUM_LIFECYCLE_NUMBER = 9999999999;
+const LEASE_DURATION_SECONDS = 60;
+const TRANSACTION_OPTIONS = Object.freeze({ maxAttempts: 10 });
 const COMMAND_COLLECTION = 'checkoutRequests';
 const AUDIT_COLLECTION = 'auditEvents';
+const LIFECYCLE_COLLECTION = 'lifecycle';
+const LIFECYCLE_DOCUMENT = 'current';
 const COMMAND_STATE = 'registered';
 const COMMAND_REVISION = 1;
 const LOWERCASE_SHA256 = /^[0-9a-f]{64}$/;
+const CANONICAL_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SAFE_COMMAND_TYPE = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+const LIFECYCLE_STATES = new Set(['leased', 'succeeded', 'failed_final']);
+const HASH_MAGIC = 'mprc-commerce-command-journal-sha256';
+const HASH_DOMAINS = Object.freeze({
+  leaseOwner: 'mprc.command-lease-owner.v1',
+  terminalCommitment: 'mprc.command-terminal-commitment.v1',
+});
 const ENVIRONMENTS = new Set(['local', 'test', 'staging', 'production']);
 const CALLER_SCOPE_KINDS = new Set([
   'firebase_uid',
@@ -32,6 +47,16 @@ const INPUT_FIELDS = Object.freeze([
   'commandType',
   'endpointSchemaVersion',
   'payload',
+]);
+const ACQUIRE_INPUT_FIELDS = Object.freeze([...INPUT_FIELDS, 'leaseId']);
+const COMPLETE_INPUT_FIELDS = Object.freeze([
+  ...ACQUIRE_INPUT_FIELDS,
+  'expectedFenceEpoch',
+  'terminalReferenceFingerprint',
+]);
+const FAIL_INPUT_FIELDS = Object.freeze([
+  ...ACQUIRE_INPUT_FIELDS,
+  'expectedFenceEpoch',
 ]);
 const CALLER_SCOPE_FIELDS = Object.freeze(['kind', 'value']);
 const COMMAND_FIELDS = Object.freeze([
@@ -60,12 +85,44 @@ const AUDIT_FIELDS = Object.freeze([
   'commandType',
   'occurredAt',
 ]);
+const LIFECYCLE_FIELDS = Object.freeze([
+  'lifecycleSchemaVersion',
+  'commandKeyHash',
+  'state',
+  'commandRevision',
+  'fenceEpoch',
+  'leaseOwnerFingerprint',
+  'leaseAcquiredAt',
+  'leaseExpiresAt',
+  'createdAt',
+  'updatedAt',
+  'terminalCommitmentKind',
+  'terminalCommitmentHash',
+]);
+const LIFECYCLE_AUDIT_FIELDS = Object.freeze([
+  'auditSchemaVersion',
+  'aggregateType',
+  'commandKeyHash',
+  'commandRevision',
+  'eventType',
+  'fromState',
+  'toState',
+  'environment',
+  'callerScopeKind',
+  'commandType',
+  'fenceEpoch',
+  'leaseExpiresAt',
+  'occurredAt',
+]);
 
 const ERROR_MESSAGES = Object.freeze({
-  invalid_command_input: 'Commerce command registration input is invalid.',
-  command_conflict: 'Commerce command registration conflicts with an existing command.',
-  journal_record_invalid: 'Commerce command registration record is invalid.',
-  journal_unavailable: 'Commerce command registration is unavailable.',
+  invalid_command_input: 'Commerce command journal input is invalid.',
+  command_conflict: 'Commerce command conflicts with an existing command.',
+  command_not_registered: 'Commerce command is not registered.',
+  journal_record_invalid: 'Commerce command journal record is invalid.',
+  lease_stale: 'Commerce command lease is no longer current.',
+  terminal_conflict: 'Commerce command terminal state conflicts with this request.',
+  journal_unavailable: 'Commerce command journal is unavailable.',
 });
 
 class CommerceCommandJournalError extends Error {
@@ -179,6 +236,115 @@ function timestampsEqual(first, second) {
     && first.nanoseconds === second.nanoseconds;
 }
 
+function compareTimestamps(first, second) {
+  if (first.seconds !== second.seconds) return first.seconds < second.seconds ? -1 : 1;
+  if (first.nanoseconds !== second.nanoseconds) {
+    return first.nanoseconds < second.nanoseconds ? -1 : 1;
+  }
+  return 0;
+}
+
+function timestampExactlySecondsAfter(later, earlier, seconds) {
+  return later.seconds === earlier.seconds + seconds
+    && later.nanoseconds === earlier.nanoseconds;
+}
+
+function captureTrustedTimestamp() {
+  let timestamp;
+  try {
+    timestamp = Timestamp.now();
+  } catch {
+    reject('journal_unavailable');
+  }
+  if (readTimestamp(timestamp) === null) reject('journal_unavailable');
+  try {
+    Object.freeze(timestamp);
+  } catch {
+    reject('journal_unavailable');
+  }
+  return timestamp;
+}
+
+function addLeaseDuration(timestamp) {
+  const parts = readTimestamp(timestamp);
+  if (parts === null || parts.seconds > 253402300799 - LEASE_DURATION_SECONDS) {
+    reject('journal_unavailable');
+  }
+  let expiresAt;
+  try {
+    expiresAt = new Timestamp(
+      parts.seconds + LEASE_DURATION_SECONDS,
+      parts.nanoseconds,
+    );
+    Object.freeze(expiresAt);
+  } catch {
+    reject('journal_unavailable');
+  }
+  return expiresAt;
+}
+
+function copyTimestamp(parts) {
+  let timestamp;
+  try {
+    timestamp = new Timestamp(parts.seconds, parts.nanoseconds);
+    Object.freeze(timestamp);
+  } catch {
+    reject('journal_unavailable');
+  }
+  return timestamp;
+}
+
+function unsignedLength(length) {
+  const buffer = Buffer.allocUnsafe(4);
+  buffer.writeUInt32BE(length, 0);
+  return buffer;
+}
+
+function updateLengthFramed(hash, value) {
+  const bytes = Buffer.from(value, 'utf8');
+  hash.update(unsignedLength(bytes.length));
+  hash.update(bytes);
+}
+
+function digest(domain, fields) {
+  try {
+    const hash = createHash('sha256');
+    updateLengthFramed(hash, HASH_MAGIC);
+    updateLengthFramed(hash, domain);
+    for (const [name, value] of fields) {
+      updateLengthFramed(hash, name);
+      updateLengthFramed(hash, value);
+    }
+    return hash.digest('hex');
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+}
+
+function createLeaseOwnerFingerprint(commandKeyHash, leaseId) {
+  return digest(HASH_DOMAINS.leaseOwner, [
+    ['version', '1'],
+    ['commandKeyHash', commandKeyHash],
+    ['leaseId', leaseId],
+  ]);
+}
+
+function createTerminalCommitment(commandKeyHash, terminalReferenceFingerprint) {
+  return digest(HASH_DOMAINS.terminalCommitment, [
+    ['version', '1'],
+    ['commandKeyHash', commandKeyHash],
+    ['kind', 'business_record_digest'],
+    ['terminalReferenceFingerprint', terminalReferenceFingerprint],
+  ]);
+}
+
+function validLifecycleNumber(value) {
+  return Number.isSafeInteger(value)
+    && value >= 1
+    && value <= MAXIMUM_LIFECYCLE_NUMBER;
+}
+
 function validEndpointSchemaVersion(value) {
   return Number.isSafeInteger(value)
     && value >= 1
@@ -261,45 +427,135 @@ function validateExistingPair(commandValue, auditValue, expected) {
     || command.payloadFingerprint !== expected.payloadFingerprint) {
     reject('command_conflict');
   }
+  return Object.freeze({ createdAt });
 }
 
-function readSnapshot(snapshot) {
-  let exists;
-  try {
-    exists = snapshot.exists;
-  } catch {
-    reject('journal_unavailable');
-  }
-  if (exists === false) return Object.freeze({ exists: false, value: null });
-  if (exists !== true) reject('journal_unavailable');
+function parseLifecycle(value, expected) {
+  const record = readExactOwnDataObject(
+    value,
+    LIFECYCLE_FIELDS,
+    'journal_record_invalid',
+  );
+  const createdAt = readTimestamp(record.createdAt);
+  const updatedAt = readTimestamp(record.updatedAt);
+  const leaseAcquiredAt = readTimestamp(record.leaseAcquiredAt);
+  const leaseExpiresAt = readTimestamp(record.leaseExpiresAt);
 
-  let value;
-  try {
-    value = snapshot.data();
-  } catch {
-    reject('journal_unavailable');
+  if (record.lifecycleSchemaVersion !== lifecycleSchemaVersion
+    || record.commandKeyHash !== expected.commandKeyHash
+    || typeof record.state !== 'string'
+    || !LIFECYCLE_STATES.has(record.state)
+    || !validLifecycleNumber(record.commandRevision)
+    || record.commandRevision < 2
+    || !validLifecycleNumber(record.fenceEpoch)
+    || typeof record.leaseOwnerFingerprint !== 'string'
+    || !LOWERCASE_SHA256.test(record.leaseOwnerFingerprint)
+    || createdAt === null
+    || updatedAt === null
+    || leaseAcquiredAt === null
+    || leaseExpiresAt === null
+    || compareTimestamps(createdAt, leaseAcquiredAt) > 0
+    || !timestampExactlySecondsAfter(
+      leaseExpiresAt,
+      leaseAcquiredAt,
+      LEASE_DURATION_SECONDS,
+    )) {
+    reject('journal_record_invalid');
   }
-  return Object.freeze({ exists: true, value });
+
+  if (record.fenceEpoch === 1) {
+    if (!timestampsEqual(createdAt, leaseAcquiredAt)) reject('journal_record_invalid');
+  } else if (compareTimestamps(createdAt, leaseAcquiredAt) >= 0) {
+    reject('journal_record_invalid');
+  }
+
+  if (record.state === 'leased') {
+    if (record.commandRevision !== record.fenceEpoch + 1
+      || !timestampsEqual(updatedAt, leaseAcquiredAt)
+      || record.terminalCommitmentKind !== null
+      || record.terminalCommitmentHash !== null) {
+      reject('journal_record_invalid');
+    }
+  } else {
+    if (record.commandRevision !== record.fenceEpoch + 2
+      || compareTimestamps(updatedAt, leaseAcquiredAt) < 0
+      || compareTimestamps(updatedAt, leaseExpiresAt) >= 0) {
+      reject('journal_record_invalid');
+    }
+    if (record.state === 'succeeded') {
+      if (record.terminalCommitmentKind !== 'business_record_digest'
+        || typeof record.terminalCommitmentHash !== 'string'
+        || !LOWERCASE_SHA256.test(record.terminalCommitmentHash)) {
+        reject('journal_record_invalid');
+      }
+    } else if (record.terminalCommitmentKind !== null
+      || record.terminalCommitmentHash !== null) {
+      reject('journal_record_invalid');
+    }
+  }
+
+  return Object.freeze({
+    record,
+    createdAt,
+    updatedAt,
+    leaseAcquiredAt,
+    leaseExpiresAt,
+  });
 }
 
-const REGISTERED_NEW = Object.freeze({
-  journalSchemaVersion,
-  outcome: 'registered_new',
-  state: COMMAND_STATE,
-});
-const REGISTERED_EXISTING = Object.freeze({
-  journalSchemaVersion,
-  outcome: 'registered_existing',
-  state: COMMAND_STATE,
-});
+function validateLifecycleAudit(value, lifecycle, expected) {
+  const audit = readExactOwnDataObject(
+    value,
+    LIFECYCLE_AUDIT_FIELDS,
+    'journal_record_invalid',
+  );
+  const leaseExpiresAt = readTimestamp(audit.leaseExpiresAt);
+  const occurredAt = readTimestamp(audit.occurredAt);
 
-async function registerCommerceCommand(input) {
+  let expectedEvent;
+  let expectedFromState;
+  if (lifecycle.record.state === 'leased') {
+    expectedEvent = lifecycle.record.fenceEpoch === 1
+      ? 'command_lease_acquired'
+      : 'command_lease_taken_over';
+    expectedFromState = lifecycle.record.fenceEpoch === 1 ? 'registered' : 'leased';
+  } else if (lifecycle.record.state === 'succeeded') {
+    expectedEvent = 'command_succeeded';
+    expectedFromState = 'leased';
+  } else {
+    expectedEvent = 'command_failed_final';
+    expectedFromState = 'leased';
+  }
+
+  if (audit.auditSchemaVersion !== lifecycleAuditSchemaVersion
+    || audit.aggregateType !== 'commerce_command'
+    || audit.commandKeyHash !== expected.commandKeyHash
+    || audit.commandRevision !== lifecycle.record.commandRevision
+    || audit.eventType !== expectedEvent
+    || audit.fromState !== expectedFromState
+    || audit.toState !== lifecycle.record.state
+    || audit.environment !== expected.environment
+    || audit.callerScopeKind !== expected.callerScopeKind
+    || audit.commandType !== expected.commandType
+    || audit.fenceEpoch !== lifecycle.record.fenceEpoch
+    || !timestampsEqual(leaseExpiresAt, lifecycle.leaseExpiresAt)
+    || !timestampsEqual(occurredAt, lifecycle.updatedAt)) {
+    reject('journal_record_invalid');
+  }
+}
+
+function auditDocumentId(commandKeyHash, revision) {
+  if (!validLifecycleNumber(revision)) reject('journal_record_invalid');
+  return `commerce_command_${commandKeyHash}_${String(revision).padStart(10, '0')}`;
+}
+
+function prepareIdentity(input, fields) {
   let values;
   let commandKey;
   let fingerprint;
   let callerScopeKind;
   try {
-    values = readExactOwnDataObject(input, INPUT_FIELDS, 'invalid_command_input');
+    values = readExactOwnDataObject(input, fields, 'invalid_command_input');
     if (!validEndpointSchemaVersion(values.endpointSchemaVersion)) {
       reject('invalid_command_input');
     }
@@ -324,16 +580,327 @@ async function registerCommerceCommand(input) {
     reject('journal_unavailable');
   }
 
+  return Object.freeze({
+    values,
+    commandKeyHash: commandKey.commandKeyHash,
+    callerScopeKind,
+    expected: Object.freeze({
+      commandKeyHash: commandKey.commandKeyHash,
+      endpointSchemaVersion: values.endpointSchemaVersion,
+      environment: values.environment,
+      callerScopeKind,
+      commandType: values.commandType,
+      payloadFingerprint: fingerprint.payloadFingerprint,
+    }),
+  });
+}
+
+function prepareLifecycleOperation(input, fields, operation) {
+  const identity = prepareIdentity(input, fields);
+  const { values } = identity;
+
+  if (typeof values.leaseId !== 'string'
+    || !CANONICAL_UUID_V4.test(values.leaseId)
+    || values.leaseId === values.commandId) {
+    reject('invalid_command_input');
+  }
+  if (operation !== 'acquire' && !validLifecycleNumber(values.expectedFenceEpoch)) {
+    reject('invalid_command_input');
+  }
+  if (operation === 'complete'
+    && (typeof values.terminalReferenceFingerprint !== 'string'
+      || !LOWERCASE_SHA256.test(values.terminalReferenceFingerprint))) {
+    reject('invalid_command_input');
+  }
+
+  let commandRef;
+  let registrationAuditRef;
+  let lifecycleRef;
+  try {
+    commandRef = values.db.collection(COMMAND_COLLECTION).doc(identity.commandKeyHash);
+    registrationAuditRef = values.db.collection(AUDIT_COLLECTION).doc(
+      auditDocumentId(identity.commandKeyHash, COMMAND_REVISION),
+    );
+    lifecycleRef = commandRef.collection(LIFECYCLE_COLLECTION).doc(LIFECYCLE_DOCUMENT);
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+
+  const occurredAt = captureTrustedTimestamp();
+  const leaseOwnerFingerprint = createLeaseOwnerFingerprint(
+    identity.commandKeyHash,
+    values.leaseId,
+  );
+  const terminalCommitmentHash = operation === 'complete'
+    ? createTerminalCommitment(
+      identity.commandKeyHash,
+      values.terminalReferenceFingerprint,
+    )
+    : null;
+
+  return Object.freeze({
+    ...identity,
+    commandRef,
+    registrationAuditRef,
+    lifecycleRef,
+    occurredAt,
+    occurredAtParts: readTimestamp(occurredAt),
+    proposedLeaseExpiresAt: operation === 'acquire' ? addLeaseDuration(occurredAt) : null,
+    leaseOwnerFingerprint,
+    terminalCommitmentHash,
+  });
+}
+
+function readSnapshot(snapshot) {
+  let exists;
+  try {
+    exists = snapshot.exists;
+  } catch {
+    reject('journal_unavailable');
+  }
+  if (exists === false) return Object.freeze({ exists: false, value: null });
+  if (exists !== true) reject('journal_unavailable');
+
+  let value;
+  try {
+    value = snapshot.data();
+  } catch {
+    reject('journal_unavailable');
+  }
+  return Object.freeze({ exists: true, value });
+}
+
+const LEASE_BUSY = Object.freeze({
+  journalSchemaVersion,
+  lifecycleSchemaVersion,
+  outcome: 'lease_busy',
+  state: 'leased',
+});
+const TERMINAL_SUCCEEDED = Object.freeze({
+  journalSchemaVersion,
+  lifecycleSchemaVersion,
+  outcome: 'terminal_succeeded',
+  state: 'succeeded',
+});
+const TERMINAL_FAILED_FINAL = Object.freeze({
+  journalSchemaVersion,
+  lifecycleSchemaVersion,
+  outcome: 'terminal_failed_final',
+  state: 'failed_final',
+});
+
+function createLeaseResult(fenceEpoch, leaseExpiresAt) {
+  const expiresAt = readTimestamp(leaseExpiresAt);
+  if (!validLifecycleNumber(fenceEpoch) || expiresAt === null) {
+    reject('journal_unavailable');
+  }
+  return Object.freeze({
+    journalSchemaVersion,
+    lifecycleSchemaVersion,
+    outcome: 'lease_acquired',
+    state: 'leased',
+    fenceEpoch,
+    leaseExpiresAt: expiresAt,
+  });
+}
+
+function validateLifecycleResult(result) {
+  if (result === LEASE_BUSY
+    || result === TERMINAL_SUCCEEDED
+    || result === TERMINAL_FAILED_FINAL) {
+    return result;
+  }
+
+  const value = readExactOwnDataObject(result, [
+    'journalSchemaVersion',
+    'lifecycleSchemaVersion',
+    'outcome',
+    'state',
+    'fenceEpoch',
+    'leaseExpiresAt',
+  ], 'journal_unavailable');
+  const expiry = readExactOwnDataObject(
+    value.leaseExpiresAt,
+    ['seconds', 'nanoseconds'],
+    'journal_unavailable',
+  );
+  if (value.journalSchemaVersion !== journalSchemaVersion
+    || value.lifecycleSchemaVersion !== lifecycleSchemaVersion
+    || value.outcome !== 'lease_acquired'
+    || value.state !== 'leased'
+    || !validLifecycleNumber(value.fenceEpoch)
+    || !Number.isSafeInteger(expiry.seconds)
+    || expiry.seconds < -62135596800
+    || expiry.seconds > 253402300799
+    || !Number.isSafeInteger(expiry.nanoseconds)
+    || expiry.nanoseconds < 0
+    || expiry.nanoseconds > 999999999
+    || !Object.isFrozen(result)
+    || !Object.isFrozen(value.leaseExpiresAt)) {
+    reject('journal_unavailable');
+  }
+  return result;
+}
+
+function buildLeasedLifecycle(prepared, previous = null) {
+  const fenceEpoch = previous === null ? 1 : previous.record.fenceEpoch + 1;
+  const commandRevision = previous === null ? 2 : previous.record.commandRevision + 1;
+  if (!validLifecycleNumber(fenceEpoch) || !validLifecycleNumber(commandRevision)) {
+    reject('journal_record_invalid');
+  }
+
+  return Object.freeze({
+    lifecycleSchemaVersion,
+    commandKeyHash: prepared.commandKeyHash,
+    state: 'leased',
+    commandRevision,
+    fenceEpoch,
+    leaseOwnerFingerprint: prepared.leaseOwnerFingerprint,
+    leaseAcquiredAt: prepared.occurredAt,
+    leaseExpiresAt: prepared.proposedLeaseExpiresAt,
+    createdAt: previous === null
+      ? prepared.occurredAt
+      : copyTimestamp(previous.createdAt),
+    updatedAt: prepared.occurredAt,
+    terminalCommitmentKind: null,
+    terminalCommitmentHash: null,
+  });
+}
+
+function buildTerminalLifecycle(prepared, lifecycle, state) {
+  const commandRevision = lifecycle.record.commandRevision + 1;
+  if (!validLifecycleNumber(commandRevision)) reject('journal_record_invalid');
+
+  return Object.freeze({
+    lifecycleSchemaVersion,
+    commandKeyHash: prepared.commandKeyHash,
+    state,
+    commandRevision,
+    fenceEpoch: lifecycle.record.fenceEpoch,
+    leaseOwnerFingerprint: lifecycle.record.leaseOwnerFingerprint,
+    leaseAcquiredAt: copyTimestamp(lifecycle.leaseAcquiredAt),
+    leaseExpiresAt: copyTimestamp(lifecycle.leaseExpiresAt),
+    createdAt: copyTimestamp(lifecycle.createdAt),
+    updatedAt: prepared.occurredAt,
+    terminalCommitmentKind: state === 'succeeded' ? 'business_record_digest' : null,
+    terminalCommitmentHash: state === 'succeeded'
+      ? prepared.terminalCommitmentHash
+      : null,
+  });
+}
+
+function buildLifecycleAudit(prepared, lifecycleRecord, eventType, fromState) {
+  return Object.freeze({
+    auditSchemaVersion: lifecycleAuditSchemaVersion,
+    aggregateType: 'commerce_command',
+    commandKeyHash: prepared.commandKeyHash,
+    commandRevision: lifecycleRecord.commandRevision,
+    eventType,
+    fromState,
+    toState: lifecycleRecord.state,
+    environment: prepared.expected.environment,
+    callerScopeKind: prepared.callerScopeKind,
+    commandType: prepared.expected.commandType,
+    fenceEpoch: lifecycleRecord.fenceEpoch,
+    leaseExpiresAt: lifecycleRecord.leaseExpiresAt,
+    occurredAt: lifecycleRecord.updatedAt,
+  });
+}
+
+async function readLifecycleContext(transaction, prepared) {
+  const commandSnapshot = await transaction.get(prepared.commandRef);
+  const registrationAuditSnapshot = await transaction.get(prepared.registrationAuditRef);
+  const lifecycleSnapshot = await transaction.get(prepared.lifecycleRef);
+  const command = readSnapshot(commandSnapshot);
+  const registrationAudit = readSnapshot(registrationAuditSnapshot);
+  const lifecycleDocument = readSnapshot(lifecycleSnapshot);
+
+  if (command.exists !== registrationAudit.exists) reject('journal_record_invalid');
+  if (!command.exists) {
+    if (lifecycleDocument.exists) reject('journal_record_invalid');
+    reject('command_not_registered');
+  }
+  const registration = validateExistingPair(
+    command.value,
+    registrationAudit.value,
+    prepared.expected,
+  );
+
+  if (!lifecycleDocument.exists) {
+    if (compareTimestamps(prepared.occurredAtParts, registration.createdAt) < 0) {
+      reject('journal_record_invalid');
+    }
+    const nextAuditRef = prepared.values.db.collection(AUDIT_COLLECTION).doc(
+      auditDocumentId(prepared.commandKeyHash, 2),
+    );
+    const nextAudit = readSnapshot(await transaction.get(nextAuditRef));
+    if (nextAudit.exists) reject('journal_record_invalid');
+    return Object.freeze({
+      lifecycle: null,
+      nextAuditRef,
+    });
+  }
+
+  const lifecycle = parseLifecycle(lifecycleDocument.value, prepared.expected);
+  if (compareTimestamps(lifecycle.createdAt, registration.createdAt) < 0) {
+    reject('journal_record_invalid');
+  }
+  const currentAuditRef = prepared.values.db.collection(AUDIT_COLLECTION).doc(
+    auditDocumentId(prepared.commandKeyHash, lifecycle.record.commandRevision),
+  );
+  const currentAudit = readSnapshot(await transaction.get(currentAuditRef));
+  if (!currentAudit.exists) reject('journal_record_invalid');
+  validateLifecycleAudit(currentAudit.value, lifecycle, prepared.expected);
+
+  let nextAuditRef = null;
+  if (lifecycle.record.commandRevision < MAXIMUM_LIFECYCLE_NUMBER) {
+    nextAuditRef = prepared.values.db.collection(AUDIT_COLLECTION).doc(
+      auditDocumentId(prepared.commandKeyHash, lifecycle.record.commandRevision + 1),
+    );
+    const nextAudit = readSnapshot(await transaction.get(nextAuditRef));
+    if (nextAudit.exists) reject('journal_record_invalid');
+  }
+
+  return Object.freeze({
+    lifecycle,
+    nextAuditRef,
+  });
+}
+
+function writeLifecycleTransition(transaction, prepared, context, lifecycleRecord, auditRecord) {
+  if (context.nextAuditRef === null) reject('journal_record_invalid');
+  if (context.lifecycle === null) {
+    transaction.create(prepared.lifecycleRef, lifecycleRecord);
+  } else {
+    transaction.set(prepared.lifecycleRef, lifecycleRecord);
+  }
+  transaction.create(context.nextAuditRef, auditRecord);
+}
+
+const REGISTERED_NEW = Object.freeze({
+  journalSchemaVersion,
+  outcome: 'registered_new',
+  state: COMMAND_STATE,
+});
+const REGISTERED_EXISTING = Object.freeze({
+  journalSchemaVersion,
+  outcome: 'registered_existing',
+  state: COMMAND_STATE,
+});
+
+async function registerCommerceCommand(input) {
+  const prepared = prepareIdentity(input, INPUT_FIELDS);
+  const { values, callerScopeKind } = prepared;
+
   let occurredAt;
   let commandRef;
   let auditRef;
   try {
-    occurredAt = Timestamp.now();
-    if (readTimestamp(occurredAt) === null) reject('journal_unavailable');
-    Object.freeze(occurredAt);
-    commandRef = values.db.collection(COMMAND_COLLECTION).doc(commandKey.commandKeyHash);
+    occurredAt = captureTrustedTimestamp();
+    commandRef = values.db.collection(COMMAND_COLLECTION).doc(prepared.commandKeyHash);
     auditRef = values.db.collection(AUDIT_COLLECTION).doc(
-      `commerce_command_${commandKey.commandKeyHash}_0000000001`,
+      auditDocumentId(prepared.commandKeyHash, COMMAND_REVISION),
     );
   } catch (error) {
     if (error instanceof CommerceCommandJournalError) throw error;
@@ -347,7 +914,7 @@ async function registerCommerceCommand(input) {
     environment: values.environment,
     callerScopeKind,
     commandType: values.commandType,
-    payloadFingerprint: fingerprint.payloadFingerprint,
+    payloadFingerprint: prepared.expected.payloadFingerprint,
     state: COMMAND_STATE,
     revision: COMMAND_REVISION,
     createdAt: occurredAt,
@@ -356,7 +923,7 @@ async function registerCommerceCommand(input) {
   const auditRecord = Object.freeze({
     auditSchemaVersion,
     aggregateType: 'commerce_command',
-    commandKeyHash: commandKey.commandKeyHash,
+    commandKeyHash: prepared.commandKeyHash,
     commandRevision: COMMAND_REVISION,
     eventType: 'command_registered',
     fromState: null,
@@ -365,14 +932,6 @@ async function registerCommerceCommand(input) {
     callerScopeKind,
     commandType: values.commandType,
     occurredAt,
-  });
-  const expected = Object.freeze({
-    commandKeyHash: commandKey.commandKeyHash,
-    endpointSchemaVersion: values.endpointSchemaVersion,
-    environment: values.environment,
-    callerScopeKind,
-    commandType: values.commandType,
-    payloadFingerprint: fingerprint.payloadFingerprint,
   });
 
   try {
@@ -384,14 +943,14 @@ async function registerCommerceCommand(input) {
 
       if (command.exists !== audit.exists) reject('journal_record_invalid');
       if (command.exists) {
-        validateExistingPair(command.value, audit.value, expected);
+        validateExistingPair(command.value, audit.value, prepared.expected);
         return REGISTERED_EXISTING;
       }
 
       transaction.create(commandRef, commandRecord);
       transaction.create(auditRef, auditRecord);
       return REGISTERED_NEW;
-    });
+    }, TRANSACTION_OPTIONS);
 
     if (result !== REGISTERED_NEW && result !== REGISTERED_EXISTING) {
       reject('journal_unavailable');
@@ -403,11 +962,147 @@ async function registerCommerceCommand(input) {
   }
 }
 
+async function runLifecycleTransaction(prepared, callback) {
+  try {
+    const result = await prepared.values.db.runTransaction(callback, TRANSACTION_OPTIONS);
+    return validateLifecycleResult(result);
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+}
+
+async function acquireCommerceCommandLease(input) {
+  const prepared = prepareLifecycleOperation(input, ACQUIRE_INPUT_FIELDS, 'acquire');
+
+  return runLifecycleTransaction(prepared, async (transaction) => {
+    const context = await readLifecycleContext(transaction, prepared);
+    if (context.lifecycle === null) {
+      const lifecycleRecord = buildLeasedLifecycle(prepared);
+      const auditRecord = buildLifecycleAudit(
+        prepared,
+        lifecycleRecord,
+        'command_lease_acquired',
+        'registered',
+      );
+      writeLifecycleTransition(
+        transaction,
+        prepared,
+        context,
+        lifecycleRecord,
+        auditRecord,
+      );
+      return createLeaseResult(
+        lifecycleRecord.fenceEpoch,
+        lifecycleRecord.leaseExpiresAt,
+      );
+    }
+
+    const { lifecycle } = context;
+    if (lifecycle.record.state === 'succeeded') return TERMINAL_SUCCEEDED;
+    if (lifecycle.record.state === 'failed_final') return TERMINAL_FAILED_FINAL;
+    if (compareTimestamps(prepared.occurredAtParts, lifecycle.leaseExpiresAt) < 0) {
+      if (lifecycle.record.leaseOwnerFingerprint !== prepared.leaseOwnerFingerprint) {
+        return LEASE_BUSY;
+      }
+      return createLeaseResult(
+        lifecycle.record.fenceEpoch,
+        copyTimestamp(lifecycle.leaseExpiresAt),
+      );
+    }
+
+    const lifecycleRecord = buildLeasedLifecycle(prepared, lifecycle);
+    const auditRecord = buildLifecycleAudit(
+      prepared,
+      lifecycleRecord,
+      'command_lease_taken_over',
+      'leased',
+    );
+    writeLifecycleTransition(
+      transaction,
+      prepared,
+      context,
+      lifecycleRecord,
+      auditRecord,
+    );
+    return createLeaseResult(
+      lifecycleRecord.fenceEpoch,
+      lifecycleRecord.leaseExpiresAt,
+    );
+  });
+}
+
+function exactTerminalRetry(prepared, lifecycle, state) {
+  if (lifecycle.record.state !== state
+    || lifecycle.record.leaseOwnerFingerprint !== prepared.leaseOwnerFingerprint
+    || lifecycle.record.fenceEpoch !== prepared.values.expectedFenceEpoch) {
+    return false;
+  }
+  if (state === 'succeeded') {
+    return lifecycle.record.terminalCommitmentHash === prepared.terminalCommitmentHash;
+  }
+  return true;
+}
+
+async function finalizeCommerceCommand(input, fields, state) {
+  const operation = state === 'succeeded' ? 'complete' : 'fail';
+  const prepared = prepareLifecycleOperation(input, fields, operation);
+
+  return runLifecycleTransaction(prepared, async (transaction) => {
+    const context = await readLifecycleContext(transaction, prepared);
+    const { lifecycle } = context;
+    if (lifecycle === null) reject('lease_stale');
+
+    if (lifecycle.record.state !== 'leased') {
+      if (!exactTerminalRetry(prepared, lifecycle, state)) reject('terminal_conflict');
+      return state === 'succeeded' ? TERMINAL_SUCCEEDED : TERMINAL_FAILED_FINAL;
+    }
+
+    if (compareTimestamps(prepared.occurredAtParts, lifecycle.leaseAcquiredAt) < 0
+      || compareTimestamps(prepared.occurredAtParts, lifecycle.leaseExpiresAt) >= 0
+      || lifecycle.record.leaseOwnerFingerprint !== prepared.leaseOwnerFingerprint
+      || lifecycle.record.fenceEpoch !== prepared.values.expectedFenceEpoch) {
+      reject('lease_stale');
+    }
+
+    const lifecycleRecord = buildTerminalLifecycle(prepared, lifecycle, state);
+    const eventType = state === 'succeeded'
+      ? 'command_succeeded'
+      : 'command_failed_final';
+    const auditRecord = buildLifecycleAudit(
+      prepared,
+      lifecycleRecord,
+      eventType,
+      'leased',
+    );
+    writeLifecycleTransition(
+      transaction,
+      prepared,
+      context,
+      lifecycleRecord,
+      auditRecord,
+    );
+    return state === 'succeeded' ? TERMINAL_SUCCEEDED : TERMINAL_FAILED_FINAL;
+  });
+}
+
+async function completeCommerceCommand(input) {
+  return finalizeCommerceCommand(input, COMPLETE_INPUT_FIELDS, 'succeeded');
+}
+
+async function failCommerceCommand(input) {
+  return finalizeCommerceCommand(input, FAIL_INPUT_FIELDS, 'failed_final');
+}
+
 Object.freeze(CommerceCommandJournalError.prototype);
 Object.freeze(CommerceCommandJournalError);
 
 module.exports = Object.freeze({
   journalSchemaVersion,
+  lifecycleSchemaVersion,
   CommerceCommandJournalError,
+  acquireCommerceCommandLease,
+  completeCommerceCommand,
+  failCommerceCommand,
   registerCommerceCommand,
 });

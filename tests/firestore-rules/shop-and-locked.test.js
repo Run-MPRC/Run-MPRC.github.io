@@ -352,6 +352,31 @@ describe('server-only operational collections', () => {
   });
 
   describe.each([
+    ['anonymous', undefined],
+    ['member', { uid: 'member-1', role: 'member' }],
+    ['browser admin', { uid: 'admin-1', role: 'admin' }],
+  ])('checkoutRequests lifecycle — %s', (_label, auth) => {
+    const existingPath = 'checkoutRequests/synthetic-existing/lifecycle/current';
+    const newPath = 'checkoutRequests/synthetic-new/lifecycle/current';
+    const lifecycle = {
+      lifecycleSchemaVersion: 1,
+      state: 'leased',
+      commandRevision: 2,
+      fenceEpoch: 1,
+    };
+
+    test('CANNOT read, create, update, or delete lifecycle/current', async () => {
+      await seed(existingPath, lifecycle);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingPath).get());
+      await assertFails(client.doc(newPath).set(lifecycle));
+      await assertFails(client.doc(existingPath).update({ state: 'succeeded' }));
+      await assertFails(client.doc(existingPath).delete());
+    });
+  });
+
+  describe.each([
     ['promoCodes/PROMO1', 'promoCodes/PROMO2', { discountPercent: 10 }],
     ['ratelimits/checkout_ip__1.2.3.4', 'ratelimits/checkout_ip__5.6.7.8', { count: 5 }],
     ['mail/message1', 'mail/message2', { to: ['runner@example.com'] }],

@@ -441,6 +441,13 @@ service cloud.firestore {
 
     match /checkoutRequests/{requestId} {
       allow read, write: if false;
+
+      // Firestore subcollections do not inherit their parent document's rule.
+      // Keep every command lifecycle and any future nested command record at
+      // this server-only boundary, including from browser-admin clients.
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
     }
 
     match /auditEvents/{auditEventId} {
