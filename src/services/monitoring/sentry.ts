@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/react';
 
+import hasCapabilityCallbackState from './capabilityCallback';
+
 /**
  * Initialize Sentry error monitoring iff REACT_APP_SENTRY_DSN is set.
  * Without the DSN this is a no-op, so the build works fine without Sentry
@@ -9,10 +11,17 @@ import * as Sentry from '@sentry/react';
  *   3. Set REACT_APP_SENTRY_DSN in your build environment
  */
 
-let _initialized = false;
+let initialized = false;
 
 export function initSentry(): void {
-  if (_initialized) return;
+  if (initialized) return;
+  // Local/test sessions must not reach an outside monitoring service. In
+  // production, do not initialize on callback URLs carrying OAuth or checkout
+  // capabilities. #111 owns the broader hosted redaction/replay policy.
+  if (
+    process.env.NODE_ENV !== 'production'
+    || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
+  ) return;
   const dsn = process.env.REACT_APP_SENTRY_DSN;
   if (!dsn) return;
   const environment = process.env.REACT_APP_SENTRY_ENV
@@ -25,21 +34,21 @@ export function initSentry(): void {
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
   });
-  _initialized = true;
+  initialized = true;
 }
 
 export function captureException(err: unknown): void {
-  if (_initialized) {
+  if (initialized) {
     Sentry.captureException(err);
   }
 }
 
 export function setUserContext(user: { uid: string; email?: string | null }): void {
-  if (!_initialized) return;
+  if (!initialized) return;
   Sentry.setUser({ id: user.uid, email: user.email || undefined });
 }
 
 export function clearUserContext(): void {
-  if (!_initialized) return;
+  if (!initialized) return;
   Sentry.setUser(null);
 }

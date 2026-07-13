@@ -78,7 +78,7 @@ Split an issue before implementation if it cannot be safely reviewed as one focu
 - `firestore.rules`: browser access boundary. Admin SDK bypasses it, so also review server IAM/code.
 - `tests/firestore-rules/`: required allow/deny tests for every rule change.
 - `.github/workflows/`: CI and deployment trust boundary.
-- `public/404.html` and `public/index.html`: current GitHub Pages SPA fallback. `public/spa-navigation.js` is queued #99 work and is **NOT AVAILABLE YET** on `main`.
+- `public/404.html`, `public/index.html`, and `public/spa-navigation.js`: current same-origin GitHub Pages SPA callback bridge and its shared tested logic.
 - `docs/`: historical/developer/content context.
 - `docs/officers/`: current plain-language officer procedures, maps, continuity, and emergency guidance.
 
@@ -94,20 +94,18 @@ npm --prefix functions ci
 npm --prefix functions run lint
 npm --prefix functions run test:run -- --runInBand
 CI=true npm test -- --watchAll=false --runInBand
+npm run test:spa-navigation
 npm run test:rules
 CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
 ```
 
 The Rules suite needs Java 17. The direct `react-scripts build` command is preferred for a diagnostic build because normal `npm run build` regenerates the sitemap. Run dependency audits for security/dependency issues, but do not apply forced automatic upgrades.
 
-The following are **NOT AVAILABLE YET** on `main`:
-
-- `npm run emulators` and fail-closed Auth/Firestore/Functions isolation — owned by #99.
-- `npm run test:spa-navigation` — owned by #99.
-
 The deterministic frontend Jest baseline is available through the command above. Hosted CI runs that command as the blocking `Run frontend Jest tests` step under #124. This proves the suite ran for that commit; it does not prove branch protection, website publication, Firebase deployment, provider configuration, or production behavior. The remaining fail-closed lint and deployment work stays open under #105.
 
-Do not run Firebase-backed local development against the current production-configured client. Do not describe queued working-tree commands as merged or available.
+For Firebase-backed local development, run `npm run emulators` first and wait until Auth, Firestore, and Functions are ready under `demo-mprc-local`. In a second terminal, run `npm start` and use `http://localhost:3000`. Stop if any browser Firebase request uses a non-loopback host. The emulator suite does not isolate Stripe, Strava, email, or other provider calls made by Functions; those flows remain forbidden until their test configuration and safe sink are separately proven.
+
+Optimized builds and current deploy previews still use production Firebase configuration. Do not sign in, open private/admin pages, or exercise Firebase/provider behavior in a preview. Safe staging and provider isolation remain **NOT AVAILABLE YET** under #105/CONFIG.
 
 For Stripe lifecycle work, tests must include relevant negative and retry cases: invalid signature, duplicate/out-of-order Event, unpaid completion, amount/currency/environment mismatch, terminal-state protection, async success/failure, expiration, cancellation, and refund retry. Capacity/inventory work must include concurrent final-unit tests.
 

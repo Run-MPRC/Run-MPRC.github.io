@@ -92,7 +92,7 @@ Exit gate:
 - Unused vulnerable dependency chains are removed and direct safe patches applied.
 - Live checkout remains disabled and placeholder policies are visible as a launch blocker.
 
-**Assessment snapshot, not current `main`:** the combined working tree contains a locally verified SAFETY-001 candidate, but issue [#99](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/99) is queued behind #104. Until #99 is isolated, reviewed, merged, and reverified, callback/emulator behavior is **NOT AVAILABLE YET**.
+**Current source boundary:** issue [#99](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/99) provides the isolated callback and local Firebase safety slice: a same-origin path/query/fragment bridge, a fully synthetic local Firebase namespace, loopback Auth/Firestore/Functions routing, fail-closed setup, and local monitoring shutdown. Its exact issue/PR record remains the status source. This does not create staging, isolate provider calls made by Functions, prove a production callback, or repair a member profile.
 
 ### Phase 1 — Establish trust boundaries
 
@@ -206,9 +206,9 @@ Use structured correlation across checkout request, business record, Stripe Sess
 
 The first tranche deliberately combines one urgent safety repair with the most complex payment foundation:
 
-1. **SAFETY-001 — callback and emulator isolation:** preserve path/query/hash through GitHub Pages and connect local Functions to the emulator. This prevents paid/OAuth callbacks from breaking and local code from reaching production unexpectedly.
+1. **SAFETY-001 — callback and emulator isolation:** #99 supplies the source/test boundary for same-origin callback preservation and loopback Auth/Firestore/Functions development. Provider calls, optimized previews, staging, and live callbacks remain separately gated.
 2. **PAY-003 — webhook event inbox and safe reducer:** add event replay protection, async-aware payment confirmation, expected total/currency validation, direct metadata lookup, terminal-state guards, and lifecycle tests.
-3. **SEC-001 — Firestore trust boundaries:** remove recursive browser-admin authority, protect secrets/financial state, retain only allowlisted catalog administration, and reverse unsafe rule tests. This is implemented locally and awaits review/deployment evidence.
+3. **SEC-001 — Firestore trust boundaries:** #100 merged through [PR #123](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/123) at `a7fc301e85b0aeabe396e771faea21d3fc8e7b2b`. Source and 295 Rules tests remove recursive browser-admin authority. Firebase deployment explicitly skipped, so deployed/live Rules remain unproven under #105.
 4. **PROMO-001 — fail-safe monetary policy:** disable promotion entry and quarantine unexplained discount/tax/shipping adjustments. This safety default is implemented locally; creator tests/provider inventory remain.
 5. **Identity/config next:** AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) merged at `ce22c110`, proving source/tests for unverified-target rejection at the existing role-grant endpoints. Its Firebase deployment skipped, so backend-live status is unproven and the remaining AUTH-001 parent work stays open. Continue CONFIG-001 and the uncompleted AUTH-001 guards/Rules/refresh/audit scope without duplicating #98.
 6. **Then:** PAY-001/PAY-002 so checkout creation, refunds, and every later handler share strict schemas and idempotent state.

@@ -46,7 +46,7 @@ Maintain an internal inventory with project/account IDs and console links:
 
 | Environment | Firebase project | Stripe mode/account | Web domain | GitHub environment | Status |
 | --- | --- | --- | --- | --- | --- |
-| Local | Emulator project ID | Test + Stripe CLI | `localhost:3000` | None | **NOT AVAILABLE YET** — blocked on #99 fail-closed emulator isolation |
+| Local source runtime | `demo-mprc-local` emulators | Providers remain separately gated | `localhost:3000` | None | Available for synthetic Firebase work after all three loopback emulators report ready |
 | CI | Demo/emulator project | Fixtures/test only | None | CI | Partially implemented |
 | Staging | **Create dedicated project** | Test/sandbox + unique endpoint | `dev.runmprc.com` | `staging` | Launch blocker |
 | Production | `mid-peninsula-running-club` (verify) | Live + unique endpoint | `runmprc.com` | `production` | Informational site only until gates close |
@@ -139,33 +139,61 @@ STRAVA_CLIENT_ID=test-or-development-id
 STRAVA_CLIENT_SECRET=development-secret
 ```
 
-### Start emulators and app — NOT AVAILABLE YET
+### Start emulators and app — available for synthetic Firebase work
 
-Issue [#99](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/99) owns the demo-project script, Auth/Firestore/Functions emulator wiring, local monitoring isolation, and fail-closed startup. Those changes exist only in queued working-tree work and are not part of the current `main` baseline.
+**Purpose:** start the browser against the local Auth, Firestore, and Functions emulators without a production Firebase fallback.
 
-Until #99 merges, do not start the app for Firebase-backed account, admin, member, event, shop, payment, or private-data testing. The current client can inherit production Firebase configuration. Historical commands are not a safe workaround.
+1. Confirm the terminal is at the repository root.
+2. Confirm Node.js 20 is active.
+3. In terminal 1, run:
 
-After #99 merges, replace this warning with the exact merged commands and proof. The finished procedure must confirm the demo project and all three emulator connections before test data is created.
+```bash
+npm run emulators
+```
 
-### Forward Stripe events
+4. Wait for the CLI to name project `demo-mprc-local`.
+5. Wait for Auth on `127.0.0.1:9099`.
+6. Wait for Firestore on `127.0.0.1:8080`.
+7. Wait for Functions on `127.0.0.1:5001`.
+8. Stop if any emulator fails, uses another project, or reports a production resource.
+9. In terminal 2, run:
 
-Use the Stripe CLI logged into the intended test workspace:
+```bash
+npm start
+```
+
+10. Open only `http://localhost:3000`.
+11. Use synthetic records only.
+12. Stop if browser Firebase traffic uses a host other than `127.0.0.1` or `localhost`.
+
+Expected result: the browser uses a fully synthetic Firebase configuration, Auth/Firestore/Functions use loopback, and App Check, Analytics, and Sentry remain off. A failed emulator-connection setup stops app initialization.
+
+The CLI readiness messages prove the three processes listened during that run. Mocked frontend tests prove endpoint selection, not process readiness. If an emulator later stops, requests fail locally; do not change the project or disable the guard.
+
+Optimized builds are different. Netlify previews and a locally served `build/` directory use `NODE_ENV=production` and currently target production Firebase. Use them only for public, read-only visual checks. Do not sign in or open account, member, admin, event-registration, shop-purchase, or provider flows.
+
+### Forward Stripe events — NOT AVAILABLE YET for end-to-end use
+
+Firebase emulation does not isolate Stripe, Strava, email, or any other provider called by a Function. Do not run provider-facing flows until the owning issue proves the correct test account/key, safe email sink, configuration fail-closed behavior, and synthetic fixtures.
+
+When that gate is complete, the intended Stripe test-mode command is:
 
 ```bash
 stripe listen --forward-to http://127.0.0.1:5001/demo-mprc-local/us-central1/stripeWebhook
 ```
 
-Copy the CLI's temporary webhook signing secret only into the ignored local secret override. Do not use the Dashboard production endpoint secret locally.
+Copy the CLI's temporary test webhook signing secret only into the ignored local secret override. Do not use a Dashboard production endpoint secret locally.
 
-Trigger or complete test-mode Checkout through the application when testing end-to-end. Synthetic webhook triggers are useful for individual handlers but do not replace a real test Checkout flow with metadata and totals.
+Do not trigger Checkout from the current app merely because the Firebase emulators are running. PAY/CONFIG/TEST issues own the later test-mode rehearsal.
 
 ### Local safety checks
 
-- Browser/network calls target localhost for Auth, Firestore, and Functions.
-- Stripe objects show test mode.
+- The CLI names `demo-mprc-local` and all three expected loopback ports.
+- Browser Firebase calls target only localhost/127.0.0.1.
+- App Check, Analytics, and Sentry do not initialize locally.
 - No production customer email, address, DOB, or emergency-contact data is copied into local Firestore.
-- Email extension is disabled or points to a safe sink/test mailbox.
-- Sentry and analytics use development environments or are disabled.
+- No checkout, refund, email, Strava, or other provider flow runs until its separate test configuration and safe sink are proven.
+- No optimized preview/build is used for sign-in or private/Firebase behavior.
 
 ## 6. Verification commands
 
@@ -175,9 +203,10 @@ Trigger or complete test-mode Checkout through the application when testing end-
 npm --prefix functions run lint
 npm --prefix functions run test:run -- --runInBand
 CI=true npm test -- --watchAll=false --runInBand
+npm run test:spa-navigation
 ```
 
-The SPA navigation command is **NOT AVAILABLE YET** and belongs to #99. The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Required branch protection, fail-closed lint, and protected deployment remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
+The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). The SPA command is a separate Node suite; hosted enforcement is still **NOT AVAILABLE YET** and belongs to [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126). Required branch protection, fail-closed lint, and protected deployment remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
 
 ### Firestore Rules
 
@@ -466,5 +495,7 @@ On the isolated #104 branch based at `ce22c110`, Functions lint and 17/17 Functi
 On the isolated #103 branch based at `0e03ac1`, Node 20 focused App tests pass 1/1 and the complete frontend suite on the branch passes 16/16. Changed-file lint, diff checks, and the diagnostic production build also pass. Service initialization and provider-network paths are prevented by test mocks; this was not a socket-monitored provider test, and the separately owned #99 Firebase/Sentry tests are not present on the branch. A separate read-only Node 20 compatibility run against the preserved #99 working tree passed those two suites 6/6, but that is not #103 branch or merge coverage. This proves a deterministic local baseline only. It does not prove a required CI gate, website publication, Firebase deployment, provider configuration, or production behavior.
 
 Issue #124 adds that complete committed frontend suite to the hosted frontend job as the named, blocking `Run frontend Jest tests` step. Its pull-request and post-merge runs are the proof that the exact commits executed Jest. Even a green step does not prove branch protection, website publication, Firebase deployment, provider configuration, or production behavior.
+
+On the isolated #99 branch rebased over #124, Node 20 local evidence is: 10/10 standalone SPA navigation/referrer-policy tests; 31/31 focused Firebase/monitoring tests; 4 frontend suites / 47 tests; 17/17 Functions tests; a clean diagnostic build; and a demo-only CLI smoke in which Auth, Firestore, and Functions listened on the three documented loopback ports. No browser account flow, production callback, Stripe/Strava/email call, Firebase deployment, or production data was used. The standalone SPA suite is not yet hosted under #124; #126 owns that separate check.
 
 Provider configuration, production secrets, Netlify publication, Firebase deployment, and live behavior always require separate dated evidence. Local tests and a green GitHub summary do not prove them.
