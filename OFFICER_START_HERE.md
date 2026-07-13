@@ -40,10 +40,10 @@ Use the club's approved password manager for access. Share only a public link or
 - **Code merged:** Which pull request was approved?
 - **Release approved:** Which environment, exact commit, and named approver were recorded?
 - **Backend live:** If Firebase changed, did the fixed backend deployment and verification finish before website publication?
-- **Website copy published:** Did GitHub Pages receive the same exact commit?
+- **Pages published:** Did GitHub Pages receive the same exact commit, and was its old `runmprc.com` claim cleared and verified?
 - **Website live:** Did Netlify identify that commit, and was the exact change then seen on [runmprc.com](https://runmprc.com)?
 - **Outside service verified:** If Stripe, Netlify, DNS, Google, or email changed, was that service checked separately?
 
-As of **2026-07-13**, a merge runs checks but does not start the GitHub release. The protected release is **NOT AVAILABLE YET** until its short-lived cloud identity and named environment approvers are configured under issue #133. Git-triggered Netlify production builds are paused, and a protected way to publish the live Netlify site is also **NOT AVAILABLE YET**. A green test or workflow does **not** by itself prove that GitHub Pages, `runmprc.com`, or Firebase changed.
+As of **2026-07-13**, a merge runs checks but does not start the GitHub release. The protected release is **NOT AVAILABLE YET** until its short-lived cloud identity and named environment approvers are configured under issue #133. Git-triggered Netlify production builds are paused, and a protected way to publish the live Netlify site is also **NOT AVAILABLE YET**. GitHub Pages still reports `runmprc.com` as its custom domain even though Netlify serves that name; source removal is not provider proof. A green test or workflow does **not** by itself prove that GitHub Pages, `runmprc.com`, Firebase, or that domain setting changed.
 
 For the concise handbook, see [OFFICER_HANDBOOK.md](./OFFICER_HANDBOOK.md). The expanded task index is [docs/officers/README.md](./docs/officers/README.md).

@@ -5,10 +5,10 @@
 // branch merge silently publish runmprc.com before the protected host gate.
 const { CONTEXT: context } = process.env;
 
-if (!context || context === 'production') {
-  console.log('Git-triggered Netlify production builds are paused.');
-  process.exitCode = 0;
-} else {
+if (context === 'deploy-preview' || context === 'branch-deploy') {
   console.log('Non-production Netlify build may continue for public review.');
   process.exitCode = 1;
+} else {
+  console.log('Git-triggered Netlify production builds are paused.');
+  process.exitCode = 0;
 }

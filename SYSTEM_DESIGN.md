@@ -1,7 +1,7 @@
 # MPRC Platform System Design
 
 **Status:** Target architecture and current-state assessment
-**Last reviewed:** 2026-07-12
+**Last reviewed:** 2026-07-13
 **Owners:** MPRC product, engineering, operations, and finance leads
 
 This document is the system-level map for the Mid-Peninsula Running Club platform. It describes what exists in this repository, which parts are safe to rely on today, and the architecture required before accepting live race-registration or merchandise payments.
@@ -50,7 +50,7 @@ The repository already contains a substantial prototype: a public React site, Fi
 flowchart LR
     Visitor["Visitor or member browser"]
     Admin["Club administrator browser"]
-    Web["React single-page app\nNetlify live; separate GitHub Pages copy"]
+    Web["React single-page app\nNetlify live; Pages domain conflict unresolved"]
     Auth["Firebase Authentication"]
     FS["Cloud Firestore"]
     Fn["Firebase Cloud Functions\nNode.js 20"]
@@ -85,12 +85,30 @@ flowchart LR
 | Operational data | Cloud Firestore | `src/services`, `firestore.rules`, `firestore.indexes.json` | Appropriate for current scale; counters and state transitions require transactional design. |
 | Server API | First-generation Firebase callable/HTTP/trigger functions | `functions/` | Prototype covers most workflows; validation, idempotency, and isolation are incomplete. |
 | Payments | Stripe Checkout Sessions, Payment Links, refunds, signed webhook | `functions/createCheckoutSession.js`, `createMerchCheckout.js`, `stripeWebhook.js` | Not ready for live payments until P0 issues are complete. |
-| Hosting | Netlify currently answers `runmprc.com`; GitHub Actions also publishes a separate Pages copy | `netlify.toml`, `.github/workflows/deploy.yml`, `public/404.html` | Split and drifting as verified 2026-07-12. A Pages success does not prove the live Netlify site changed. Hosting authority, preview, DNS, headers, and rollback remain open CI/WEB work. |
+| Hosting and release | Netlify currently answers `runmprc.com`. GitHub Pages still reports the same custom domain, so its default URL redirects to the Netlify-served name instead of providing an independent copy. #135 source stops automatic releases, pauses Git-triggered Netlify production builds, and removes the Pages CNAME from future protected artifacts. | `netlify.toml`, `.github/workflows/deploy.yml`, `public/404.html` | Split and conflicting as verified 2026-07-13. The existing Pages provider setting is not cleared until a controlled #136/WEB-001 release and readback prove it. #133 authority, #136 release evidence, Netlify provider triggers, DNS, headers, and rollback remain open. |
 | Email | Firestore `mail` outbox designed for the Firebase Trigger Email extension | `functions/sendConfirmationEmail.js` | Extension/provider deployment is unverified; outbox creation is not transactionally idempotent and HTML needs escaping. |
 | Observability | Optional Sentry and Firebase Analytics | `src/services/monitoring`, `src/services/analytics` | Local/test initialization is disabled by #99 source. Hosted redaction, replay, consent, retention, and provider configuration remain unverified under #111. |
 | Third-party fitness | Strava OAuth tokens and statistics | `functions/strava.js`, `src/services/strava` | Functional prototype. The #100 source Rules deny browser token access, but Firebase deployment is unproven and transactional refresh, scopes/revocation, IAM/encryption decision, and audit remain OAUTH-001. |
 
-The repository workflow presents GitHub Pages plus Firebase as a release path, but public DNS and response headers show that the live custom domain is served by Netlify. The two copies currently contain different bundles. The Firebase job can also finish green while explicitly skipping deployment when `FIREBASE_SERVICE_ACCOUNT` is absent. Treat Pages publication, Netlify production, and Firebase deployment as separate evidence until one hosting/release authority is chosen. The App Engine synchronization script is another surface that must be documented as active or retired.
+The former workflow automatically published Pages before attempting Firebase and could finish green after skipping Firebase. #135 replaces that source path with a manual exact-current-commit request, exact latest CI checks, one fixed backend plan, protected short-lived identity wiring, provider readback, and Firebase-before-Pages publication. Missing authority or failed/partial verification is red. Git-triggered Netlify production builds stop, while build hooks and protected Netlify publication remain unverified. No source test clears the current Pages custom-domain claim, configures #133, deploys #136, or proves `runmprc.com`; those remain separate provider states. The App Engine synchronization script is another surface that must be documented as active or retired.
+
+```mermaid
+flowchart TD
+    Merge["Merge to main"] --> CI["Exact main-push CI"]
+    CI --> Request["Manual exact-commit release request"]
+    Request --> Prepare["Credential-free artifact preparation"]
+    Prepare --> Approval{"Protected environment approved?"}
+    Approval -- "No" --> Stop["Stop — nothing published"]
+    Approval -- "Yes" --> Recheck{"Main, latest CI, project, scope, authority, and artifact still valid?"}
+    Recheck -- "No" --> Stop
+    Recheck -- "Yes" --> Backend["Deploy fixed Firebase set once"]
+    Backend --> Verify{"Exact Rules and Function revisions verified?"}
+    Verify -- "No" --> Stop
+    Verify -- "Yes" --> Pages["Publish Pages branch without a CNAME"]
+    Merge -. "Git production build paused" .-> Netlify["Netlify / runmprc.com\nprotected publication not available"]
+```
+
+Text alternative: a merge only runs CI; a separate request prepares a public artifact, waits for protected approval, rechecks current source and authority, verifies Firebase, and only then publishes a Pages branch that no longer claims the Netlify domain.
 
 ### GitHub Pages callback handoff
 

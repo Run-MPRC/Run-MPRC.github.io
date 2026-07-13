@@ -29,6 +29,15 @@ function functionState(project, id, overrides = {}) {
   };
 }
 
+function rulesState(project, rulesetId, files, overrides = {}) {
+  return {
+    releaseName: `projects/${project}/releases/cloud.firestore/(default)`,
+    rulesetName: `projects/${project}/rulesets/${rulesetId}`,
+    files,
+    ...overrides,
+  };
+}
+
 test('accepts an advanced exact Rules source and both expected Functions', async () => {
   const { digestRulesSource, validateBackendState } = await import(SCRIPT_URL);
   const project = 'demo-approved-project';
@@ -36,7 +45,9 @@ test('accepts an advanced exact Rules source and both expected Functions', async
   const digest = digestRulesSource(rules);
   const before = {
     project,
-    rules: { rulesetName: `projects/${project}/rulesets/old` },
+    rules: rulesState(project, 'old', [
+      { name: 'firestore.rules', digest: 'old' },
+    ]),
     functions: {
       createMemberOnSignUp: functionState(project, 'createMemberOnSignUp', {
         updateTime: '2026-07-13T08:00:00Z', versionId: '1', buildId: 'build-1',
@@ -46,10 +57,7 @@ test('accepts an advanced exact Rules source and both expected Functions', async
   };
   const after = {
     project,
-    rules: {
-      rulesetName: `projects/${project}/rulesets/new`,
-      files: [{ name: 'firestore.rules', digest }],
-    },
+    rules: rulesState(project, 'new', [{ name: 'firestore.rules', digest }]),
     functions: {
       createMemberOnSignUp: functionState(project, 'createMemberOnSignUp'),
       ensureMemberProfile: functionState(project, 'ensureMemberProfile'),
@@ -68,7 +76,9 @@ test('rejects stale Rules, stale Function revisions, and wrong trigger/runtime s
   });
   const before = {
     project,
-    rules: { rulesetName: `projects/${project}/rulesets/same` },
+    rules: rulesState(project, 'same', [
+      { name: 'firestore.rules', digest: 'previous-wrong' },
+    ]),
     functions: {
       createMemberOnSignUp: staleSignup,
       ensureMemberProfile: functionState(project, 'ensureMemberProfile', {
@@ -78,12 +88,18 @@ test('rejects stale Rules, stale Function revisions, and wrong trigger/runtime s
   };
   const after = {
     project,
-    rules: {
-      rulesetName: `projects/${project}/rulesets/same`,
-      files: [{ name: 'firestore.rules', digest: 'wrong' }],
-    },
+    rules: rulesState(
+      project,
+      'same',
+      [
+        { name: 'firestore.rules', digest: 'wrong' },
+        { name: 'backup-firestore.rules', digest },
+      ],
+    ),
     functions: {
-      createMemberOnSignUp: staleSignup,
+      createMemberOnSignUp: functionState(project, 'createMemberOnSignUp', {
+        versionId: '1', buildId: 'build-1', updateTime: '2026-07-13T09:00:00Z',
+      }),
       ensureMemberProfile: functionState(project, 'ensureMemberProfile', {
         runtime: 'nodejs18',
         trigger: 'event',
@@ -103,6 +119,56 @@ test('rejects stale Rules, stale Function revisions, and wrong trigger/runtime s
   assert.ok(errors.includes('ensureMemberProfile revision did not advance.'));
 });
 
+test('accepts an idempotent Rules retry when exact source is already live', async () => {
+  const { validateBackendState } = await import(SCRIPT_URL);
+  const project = 'demo-approved-project';
+  const digest = 'expected';
+  const rules = rulesState(project, 'already-live', [
+    { name: 'firestore.rules', digest },
+  ]);
+  const before = {
+    project,
+    rules,
+    functions: {
+      createMemberOnSignUp: functionState(project, 'createMemberOnSignUp', {
+        versionId: '1', buildId: 'build-1', updateTime: '2026-07-13T08:00:00Z',
+      }),
+      ensureMemberProfile: functionState(project, 'ensureMemberProfile', {
+        versionId: '1', buildId: 'build-1', updateTime: '2026-07-13T08:00:00Z',
+      }),
+    },
+  };
+  const after = {
+    project,
+    rules,
+    functions: {
+      createMemberOnSignUp: functionState(project, 'createMemberOnSignUp'),
+      ensureMemberProfile: functionState(project, 'ensureMemberProfile'),
+    },
+  };
+
+  assert.deepEqual(validateBackendState(before, after, digest), []);
+});
+
+test('rejects missing Function revision evidence', async () => {
+  const { validateBackendState } = await import(SCRIPT_URL);
+  const project = 'demo-approved-project';
+  const digest = 'expected';
+  const after = {
+    project,
+    rules: rulesState(project, 'new', [{ name: 'firestore.rules', digest }]),
+    functions: {
+      createMemberOnSignUp: functionState(project, 'createMemberOnSignUp', {
+        buildId: undefined,
+      }),
+      ensureMemberProfile: functionState(project, 'ensureMemberProfile'),
+    },
+  };
+
+  const errors = validateBackendState({ project, functions: {} }, after, digest);
+  assert.ok(errors.includes('createMemberOnSignUp revision metadata is unreadable.'));
+});
+
 test('fails closed when provider readback is incomplete or malformed', async () => {
   const { validateBackendState } = await import(SCRIPT_URL);
   const errors = validateBackendState(
@@ -110,6 +176,7 @@ test('fails closed when provider readback is incomplete or malformed', async () 
     {
       project: 'demo-approved-project',
       rules: {
+        releaseName: 'projects/wrong-project/releases/cloud.firestore',
         rulesetName: 'projects/demo-approved-project/rulesets/new',
         files: [{ digest: 'unexpected' }],
       },
@@ -117,7 +184,63 @@ test('fails closed when provider readback is incomplete or malformed', async () 
     'expected',
   );
 
+  assert.ok(errors.includes(
+    'Firestore Rules release has the wrong project or ruleset identity.',
+  ));
   assert.ok(errors.includes('Firestore Rules source does not match the approved commit.'));
   assert.ok(errors.includes('createMemberOnSignUp is unreadable.'));
   assert.ok(errors.includes('ensureMemberProfile is unreadable.'));
+});
+
+test('rejects readback from a different backend project', async () => {
+  const { validateBackendState } = await import(SCRIPT_URL);
+  const project = 'demo-other-project';
+  const digest = 'expected';
+  const after = {
+    project,
+    rules: rulesState(project, 'new', [{ name: 'firestore.rules', digest }]),
+    functions: {
+      createMemberOnSignUp: functionState(project, 'createMemberOnSignUp'),
+      ensureMemberProfile: functionState(project, 'ensureMemberProfile'),
+    },
+  };
+
+  const errors = validateBackendState(
+    { project: 'demo-approved-project', functions: {} },
+    after,
+    digest,
+  );
+  assert.ok(errors.includes(
+    'Backend project readback does not match the approved environment.',
+  ));
+});
+
+test('rejects unsuffixed and non-default Firestore release identities', async () => {
+  const { validateBackendState } = await import(SCRIPT_URL);
+  const project = 'demo-approved-project';
+  const digest = 'expected';
+  const functions = {
+    createMemberOnSignUp: functionState(project, 'createMemberOnSignUp'),
+    ensureMemberProfile: functionState(project, 'ensureMemberProfile'),
+  };
+
+  for (const releaseName of [
+    `projects/${project}/releases/cloud.firestore`,
+    `projects/${project}/releases/cloud.firestore/other`,
+  ]) {
+    const after = {
+      project,
+      rules: rulesState(
+        project,
+        'new',
+        [{ name: 'firestore.rules', digest }],
+        { releaseName },
+      ),
+      functions,
+    };
+    const errors = validateBackendState({ project, functions: {} }, after, digest);
+    assert.ok(errors.includes(
+      'Firestore Rules release has the wrong project or ruleset identity.',
+    ));
+  }
 });

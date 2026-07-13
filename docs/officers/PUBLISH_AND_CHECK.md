@@ -8,9 +8,9 @@
 
 **Prerequisites:** one approved pull request aimed at `main`; green required checks; an exact 40-character merged commit; a rollback or safe roll-forward note; and a named observer.
 
-**Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, public build values, and a short-lived cloud identity. Do not add a long-lived Firebase key as a shortcut.
+**Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Live Netlify publication status:** **NOT AVAILABLE YET.** Git-triggered production builds are paused by repository configuration. The Netlify owner, build hooks, manual trigger, exact-commit proof, and rollback path remain unverified provider work. The GitHub release publishes only the separate GitHub Pages copy.
+**Live Netlify publication status:** **NOT AVAILABLE YET.** Git-triggered production builds are paused by repository configuration. The Netlify owner, build hooks, manual trigger, exact-commit proof, and rollback path remain unverified provider work. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
 ## The release gate
 
@@ -31,7 +31,7 @@ flowchart TD
     Rules --> Functions["Deploy two named Functions"]
     Functions --> VerifyBackend{"Both Functions verified?"}
     VerifyBackend -- "No" --> Stop
-    VerifyBackend -- "Yes" --> Pages["Publish prebuilt GitHub Pages copy"]
+    VerifyBackend -- "Yes" --> Pages["Publish prebuilt Pages branch without Netlify's domain"]
     Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
 ```
 
@@ -53,6 +53,8 @@ As of **2026-07-13**:
 - A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
 - The `staging` option deliberately stops before deployment until #113/#133 name one exact approved staging Firebase project. A future staging release remains backend-only until a separate staging browser configuration and host exist.
 - `runmprc.com` is served by Netlify, not GitHub Pages.
+- GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
+- Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
 - Git-triggered Netlify production builds are paused. Netlify build hooks are not controlled by that repository rule and remain unverified.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 
@@ -96,6 +98,7 @@ Do not use this section until #133 records that both GitHub environments are pro
 9. Record the release-run link.
 10. Wait for the exact-commit checks and credential-free artifact preparation.
 11. Have the named reviewer confirm the environment, commit, fixed plan, and undo note before approving the protected environment.
+12. Do not approve a request older than 24 hours. Start a new request from the current `main` commit.
 
 ## Watch the release — NOT AVAILABLE YET
 
@@ -114,7 +117,7 @@ Do not use this section until #133 records that both GitHub environments are pro
 
 ## Verify every affected surface
 
-1. Record whether the GitHub Pages copy published.
+1. Record whether the GitHub Pages branch published and whether provider readback shows its old `runmprc.com` claim is gone.
 2. Ask the Netlify owner which commit, if any, Netlify published.
 3. Open [runmprc.com](https://runmprc.com) in a private window.
 4. Visit the exact changed public page.
@@ -137,6 +140,7 @@ Stop and contact the platform owner if:
 - Approval, required checks, or the undo note is missing.
 - The release uses a branch name or short commit.
 - The commit is not merged into `main`.
+- The release request is more than 24 hours old.
 - The environment, project, or fixed scope is missing or wrong.
 - Anyone asks for a service-account key, token, password, or recovery code.
 - Firebase is skipped, partial, failed, or unverified.

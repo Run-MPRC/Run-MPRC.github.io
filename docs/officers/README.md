@@ -20,7 +20,7 @@ flowchart TD
     R -- "Yes" --> V["Check project, scope, and authority"]
     V --> H{"Firebase deployed and verified?"}
     H -- "No" --> S["Stop — website is not published"]
-    H -- "Yes" --> W["Publish GitHub Pages copy"]
+    H -- "Yes" --> W["Publish Pages branch without Netlify's domain name"]
     W --> F["Check Pages, Netlify, runmprc.com, and providers"]
     F --> G["Record proof and close"]
 ```
@@ -55,7 +55,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 | Merged | GitHub accepted the code into `main`; it is not released. |
 | Release approved | A named approver accepted one exact commit and environment. |
 | Backend verified | The fixed Firebase deployment and checks finished successfully. |
-| Pages published | GitHub published its website copy after backend verification. |
+| Pages published | GitHub published the approved commit after backend verification, without claiming Netlify's domain. |
 | Netlify commit verified | The live host identifies the intended merged commit. |
 | Website verified | The exact result was seen on `runmprc.com`. |
 | Firebase deployed | The backend deployment actually ran; it did not skip. |
@@ -66,6 +66,8 @@ Never shorten several of these states to “done.”
 Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
 
 The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures the environment approvers and short-lived cloud identity. Missing authority stops the release with a red failure before Firebase or website publication.
+
+GitHub Pages currently still claims `runmprc.com`, so its normal address redirects to the Netlify-served name. The source stops adding that claim, but #136/WEB-001 must publish and verify the provider setting before officers call Pages an independent copy.
 
 ## Current safety warning
 

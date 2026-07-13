@@ -56,14 +56,14 @@ flowchart TD
     Gate -- "No" --> Stop
     Gate -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
     Rules --> Functions["Deploy and verify named Functions"]
-    Functions --> Pages["GitHub Pages copy"]
+    Functions --> Pages["Pages branch without Netlify's domain claim"]
     Main -. "Git-triggered production build paused" .-> Netlify
     Netlify["Netlify — current live host; protected publication unavailable"] --> Live["runmprc.com"]
-    Pages -. "currently not the live custom-domain copy" .-> Live
+    Pages -. "existing provider claim still conflicts until verified clear" .-> Live
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; the Pages copy and live Netlify site still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 

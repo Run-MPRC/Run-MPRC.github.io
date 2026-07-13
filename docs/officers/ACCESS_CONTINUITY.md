@@ -85,6 +85,7 @@ For each system, record only:
 11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
 13. Confirm Netlify Git-triggered production builds remain paused until a protected live-host path exists.
+14. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
 
 ## Expected result and success proof
 

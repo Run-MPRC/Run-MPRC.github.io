@@ -22,7 +22,7 @@ flowchart TD
     Release -- "Yes" --> Gate["Check project, scope, and authority"]
     Gate --> Backend{"Firebase deployed and verified?"}
     Backend -- "No" --> Stop["Stop — website is not published"]
-    Backend -- "Yes" --> Pages["Publish GitHub Pages copy"]
+    Backend -- "Yes" --> Pages["Publish Pages branch without Netlify's domain name"]
     Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
     Verify --> Record["Record proof and undo plan"]
 ```
@@ -50,7 +50,8 @@ In words: approve the merge first; request one exact release; approve its protec
 
 - Use the canonical [`main` branch](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main).
 - `runmprc.com` is currently served by Netlify.
-- GitHub also publishes a separate Pages copy.
+- GitHub Pages currently still claims `runmprc.com`, so its normal address redirects to the Netlify-served name. It is not an independently reachable copy today.
+- The new source stops writing that domain claim. #136/WEB-001 must publish and verify the provider setting before officers call the conflict cleared.
 - A `main` merge runs checks but does not start the protected GitHub release.
 - The protected release is **NOT AVAILABLE YET** until #133 configures its short-lived cloud identity and named approvers.
 - The release fails when authority or required configuration is missing. It cannot report a green backend skip.
@@ -89,7 +90,7 @@ Record separate answers:
 3. What pull request merged?
 4. Which exact commit and environment were approved for release?
 5. Did Firebase deploy and pass verification first?
-6. Was the GitHub Pages copy published afterward?
+6. Was the GitHub Pages branch published afterward, and was its old custom-domain claim cleared and verified?
 7. Did Netlify identify the intended commit, or is that still unknown?
 8. Was the exact result seen on `runmprc.com`?
 9. Was each affected outside provider configured and checked directly?

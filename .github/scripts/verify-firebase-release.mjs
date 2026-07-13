@@ -17,7 +17,9 @@ const FUNCTION_SPECS = Object.freeze({
 
 const REGION = 'us-central1';
 const RUNTIME = 'nodejs20';
+const FIRESTORE_RELEASE = 'cloud.firestore/(default)';
 const PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+const VERSION_PATTERN = /^\d+$/;
 
 export function normalizeRulesSource(source) {
   return `${source.replace(/\r\n/g, '\n').trimEnd()}\n`;
@@ -63,19 +65,42 @@ export function validateBackendState(before, after, expectedRulesDigest) {
   const errors = [];
   const previousFunctions = before?.functions ?? {};
   const currentFunctions = after?.functions ?? {};
+  const expectedReleaseName = `projects/${after?.project}/releases/${FIRESTORE_RELEASE}`;
+  const expectedRulesetPrefix = `projects/${after?.project}/rulesets/`;
+
+  const hasExpectedRulesIdentity = (rules) => {
+    if (rules?.releaseName !== expectedReleaseName) return false;
+    if (typeof rules.rulesetName !== 'string') return false;
+    if (!rules.rulesetName.startsWith(expectedRulesetPrefix)) return false;
+    const rulesetId = rules.rulesetName.slice(expectedRulesetPrefix.length);
+    return rulesetId.length > 0 && !rulesetId.includes('/');
+  };
+
+  const hasExactRulesSource = (rules) => Array.isArray(rules?.files)
+    && rules.files.length === 1
+    && rules.files[0]?.name === 'firestore.rules'
+    && rules.files[0]?.digest === expectedRulesDigest;
+
+  if (typeof after?.project !== 'string' || after.project !== before?.project) {
+    errors.push('Backend project readback does not match the approved environment.');
+  }
 
   if (!after?.rules) {
     errors.push('Firestore Rules release is unreadable.');
   } else {
-    if (after.rules.rulesetName === before?.rules?.rulesetName) {
+    if (!hasExpectedRulesIdentity(after.rules)) {
+      errors.push('Firestore Rules release has the wrong project or ruleset identity.');
+    }
+    const rulesAlreadyExact = before?.project === after.project
+      && hasExpectedRulesIdentity(before?.rules)
+      && hasExactRulesSource(before?.rules);
+    if (
+      after.rules.rulesetName === before?.rules?.rulesetName
+      && !rulesAlreadyExact
+    ) {
       errors.push('Firestore Rules release did not advance.');
     }
-    const rulesMatch = Array.isArray(after.rules.files) && after.rules.files.some(
-      (file) => typeof file?.name === 'string'
-        && file.name.endsWith('firestore.rules')
-        && file.digest === expectedRulesDigest,
-    );
-    if (!rulesMatch) {
+    if (!hasExactRulesSource(after.rules)) {
       errors.push('Firestore Rules source does not match the approved commit.');
     }
   }
@@ -102,11 +127,27 @@ export function validateBackendState(before, after, expectedRulesDigest) {
     if (spec.eventType && current.eventType !== spec.eventType) {
       errors.push(`${id} has the wrong event trigger.`);
     }
+    const hasCurrentRevision = VERSION_PATTERN.test(current.versionId ?? '')
+      && typeof current.updateTime === 'string'
+      && Number.isFinite(Date.parse(current.updateTime))
+      && typeof current.buildId === 'string'
+      && current.buildId.length > 0;
+    if (!hasCurrentRevision) {
+      errors.push(`${id} revision metadata is unreadable.`);
+      continue;
+    }
     if (
       previous
-      && current.versionId === previous.versionId
-      && current.updateTime === previous.updateTime
-      && current.buildId === previous.buildId
+      && (
+        !VERSION_PATTERN.test(previous.versionId ?? '')
+        || typeof previous.updateTime !== 'string'
+        || !Number.isFinite(Date.parse(previous.updateTime))
+        || typeof previous.buildId !== 'string'
+        || previous.buildId.length === 0
+        || BigInt(current.versionId) <= BigInt(previous.versionId)
+        || Date.parse(current.updateTime) <= Date.parse(previous.updateTime)
+        || current.buildId === previous.buildId
+      )
     ) {
       errors.push(`${id} revision did not advance.`);
     }
@@ -127,7 +168,7 @@ async function getJson(url, token, { allowNotFound = false } = {}) {
 }
 
 async function readBackendState(project, token) {
-  const releaseName = `projects/${project}/releases/cloud.firestore`;
+  const releaseName = `projects/${project}/releases/${FIRESTORE_RELEASE}`;
   const release = await getJson(
     `https://firebaserules.googleapis.com/v1/${releaseName}`,
     token,

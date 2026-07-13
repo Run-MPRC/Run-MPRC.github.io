@@ -269,7 +269,7 @@ For expand-and-contract changes:
 7. Run smoke and reconciliation checks.
 8. Observe for the defined period before removing legacy fields/endpoints.
 
-The GitHub release workflow is now manual and exact-commit. It fails on missing protected configuration, uses a lockfile Firebase CLI, verifies reviewed Rules and two named profile Functions before publishing the GitHub Pages copy, and never gives cloud authority to website preparation or publication. The source gate is not a usable release until #133 configures protected environments/OIDC. It does not publish the live Netlify host; that remains WEB-001/provider work. Treat the full pipeline as incomplete until #105 closes.
+The GitHub release workflow is now manual and exact-current-commit. After protected approval it rechecks `main`, the newest exact CI run, and the retained credential-free artifact before cloud authentication. It fails on missing protected configuration, uses a lockfile Firebase CLI, verifies reviewed Rules and two named profile Functions before publishing the Pages branch, and never gives cloud authority to website preparation or publication. Future Pages artifacts omit the `runmprc.com` CNAME, but the existing Pages provider setting still claims that Netlify-served name until #136/WEB-001 publish and read it back. The source gate is not usable until #133 configures protected environments/OIDC. It does not publish the live Netlify host. Treat the full pipeline as incomplete until #105 closes.
 
 ### Production approvals
 
