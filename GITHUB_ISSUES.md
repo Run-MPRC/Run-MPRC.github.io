@@ -137,12 +137,12 @@ Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized p
 ## CI-001 — Repair test gates and secure the deployment pipeline
 
 **Labels:** `priority:P0`, `type:security`, `type:testing`, `area:ci`, `size:L`, `needs-external-config`
-**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105). [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) merged the deterministic local frontend Jest baseline, and [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124) added its named blocking hosted-CI step. [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126) owns the separate standalone SPA test gate. Fail-closed lint, required branch protection, dependency/secret checks, and protected backend-first deployment remain open, so the delivery pipeline is still non-compliant overall.
+**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105). [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103), [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124), and [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126) provide the local/hosted frontend and SPA baselines. [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135) owns the manual exact-commit, backend-first source gate and Git-triggered Netlify production containment. [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133) owns protected OIDC/environment configuration, and [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136) owns the actual profile-recovery release. Fail-closed lint, required checks, scanning, staging/live evidence, and protected Netlify publication remain open, so the pipeline is still non-compliant overall.
 **Depends on:** SAFETY-001
 
 ### Problem
 
-Before #103, frontend tests failed because the Jest environment lacked `TextEncoder`. That child repaired the local baseline, and #124 adds it to hosted CI. CI still runs a mutating `lint:fix` command and ignores its failure with `|| true`. Deployment still runs independently of CI, gives a full Firebase service-account JSON to the frontend build, installs `firebase-tools@latest`, deploys frontend before backend, and can skip or fail before proving Firebase deployment.
+Before #103, frontend tests failed because the Jest environment lacked `TextEncoder`. That child repaired the local baseline, and #124 adds it to hosted CI. CI still runs a mutating `lint:fix` command and ignores its failure with `|| true`. #135 removes the automatic/fail-open release source defects: merge and release are separate, exact CI checks are re-read, release targets are fixed, OIDC replaces JSON-key wiring, lockfile tooling is used, backend precedes Pages, and Git-triggered Netlify production builds stop. The protected identity/environments and actual staged/live release remain outside that source slice.
 
 ### Scope
 
@@ -179,7 +179,7 @@ Before #103, frontend tests failed because the Jest environment lacked `TextEnco
 
 ### Agent handoff
 
-Repository changes can implement tests/workflow shape, but OIDC/IAM/environment protection requires an authorized owner. CI-001A/#103 owns test reliability, CI-001B1/#124 owns the hosted frontend-Jest step, CI-001B1A/#126 owns the standalone SPA step, and the remaining CI-001B2 deployment-identity/protection work must stay in separately claimed children.
+Repository changes can implement tests/workflow shape, but OIDC/IAM/environment protection requires an authorized owner. CI-001A/#103 owns test reliability, CI-001B1/#124 owns hosted frontend Jest, CI-001B1A/#126 owns hosted SPA safety, CI-001B2/#135 owns the protected release source gate, #133 owns cloud/environment authority, and #136 owns staged/target release evidence. Keep fail-closed lint, scanning, required checks, and Netlify hosting work in separately claimed children.
 
 ---
 

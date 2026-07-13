@@ -9,18 +9,25 @@ The private Google Doc entry card titled **MPRC Website — Officer Start Here**
 ## The whole process
 
 ```mermaid
-flowchart LR
+flowchart TD
     Ask["Describe the result"] --> Track["One issue and pull request"]
     Track --> Preview["Preview and checks"]
-    Preview --> Approve{"Approve merge and its automatic deployment attempt?"}
+    Preview --> Approve{"Approve merge?"}
     Approve -- "No" --> Track
-    Approve -- "Yes" --> Merged["Merged to main"]
-    Merged --> Auto["Automatic Pages publication and Firebase attempt"]
-    Auto --> Verify["Check runmprc.com, Firebase, and providers separately"]
+    Approve -- "Yes" --> Merged["Merged to main — not released"]
+    Merged --> Request["Request one exact-commit release"]
+    Request --> Preflight["Check commit and tests; prepare public artifact"]
+    Preflight --> Release{"Approve protected environment?"}
+    Release -- "No" --> Merged
+    Release -- "Yes" --> Gate["Check project, scope, and authority"]
+    Gate --> Backend{"Firebase deployed and verified?"}
+    Backend -- "No" --> Stop["Stop — website is not published"]
+    Backend -- "Yes" --> Pages["Publish Pages branch without Netlify's domain name"]
+    Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
     Verify --> Record["Record proof and undo plan"]
 ```
 
-In words: ask and preview first; approving a merge also authorizes today's automatic deployment attempt; then verify each real service separately.
+In words: approve the merge first; request one exact release; approve its protected environment after the source checks; Firebase must finish before the Pages copy; then check every real service separately.
 
 ## One-line request for AI
 
@@ -41,12 +48,17 @@ In words: ask and preview first; approving a merge also authorizes today's autom
 
 ## Current facts that prevent false confidence
 
-- Use the canonical [`main` branch](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main). The repository currently opens stale `dev` by default.
+- Use the canonical [`main` branch](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main).
 - `runmprc.com` is currently served by Netlify.
-- GitHub also publishes a separate Pages copy.
-- A `main` merge automatically publishes the Pages copy; there is no separate Pages approval today.
+- GitHub Pages currently still claims `runmprc.com`, so its normal address redirects to the Netlify-served name. It is not an independently reachable copy today.
+- The new source stops writing that domain claim. #136/WEB-001 must publish and verify the provider setting before officers call the conflict cleared.
+- A `main` merge runs checks but does not start the protected GitHub release.
+- The protected release is **NOT AVAILABLE YET** until #133 configures its short-lived cloud identity and named approvers.
+- The release fails when authority or required configuration is missing. It cannot report a green backend skip.
+- Firebase must be verified before the Pages publication job can start.
+- Git-triggered Netlify production builds are paused by repository configuration.
 - Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**.
-- A green workflow can include “skipping Firebase deploy.”
+- Netlify build hooks and provider settings remain unverified. The GitHub release does not claim to publish `runmprc.com`.
 - Live race registration, merchandise payments, and refunds are not approved.
 - There is no proven no-code switch that safely stops every new Stripe payment.
 
@@ -76,12 +88,13 @@ Record separate answers:
 1. What source changed?
 2. What tests passed?
 3. What pull request merged?
-4. Was a website copy published?
-5. Did Netlify identify the intended commit, or is that still unknown?
-6. Was the exact result seen on `runmprc.com`?
-7. Did Firebase actually deploy, without a skip message?
-8. Was each affected outside provider configured and checked directly?
-9. Who approved and checked the result?
-10. How can the change be undone safely?
+4. Which exact commit and environment were approved for release?
+5. Did Firebase deploy and pass verification first?
+6. Was the GitHub Pages branch published afterward, and was its old custom-domain claim cleared and verified?
+7. Did Netlify identify the intended commit, or is that still unknown?
+8. Was the exact result seen on `runmprc.com`?
+9. Was each affected outside provider configured and checked directly?
+10. Who approved and checked the result?
+11. How can the change be undone safely through the same gate?
 
 The expanded handbook and task index is [docs/officers/README.md](./docs/officers/README.md).

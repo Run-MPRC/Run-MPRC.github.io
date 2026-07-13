@@ -206,7 +206,7 @@ CI=true npm test -- --watchAll=false --runInBand
 npm run test:spa-navigation
 ```
 
-The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Hosted CI also runs the separate Node SPA suite as the blocking `Run SPA callback safety tests` step under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126). Required branch protection, fail-closed lint, and protected deployment remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
+The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Hosted CI also runs the separate Node SPA suite as `Run SPA callback safety tests` under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126), plus the manual-release source invariants under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). Protected environment/OIDC configuration, actual staged/live deployment, fail-closed lint, required checks, and controlled Netlify publication remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105), [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133), [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136), and WEB-001.
 
 ### Firestore Rules
 
@@ -269,7 +269,7 @@ For expand-and-contract changes:
 7. Run smoke and reconciliation checks.
 8. Observe for the defined period before removing legacy fields/endpoints.
 
-The current workflow deploys the frontend before Functions and can silently skip Firebase deployment when credentials are absent. Treat it as non-compliant until CI-001 is complete.
+The GitHub release workflow is now manual and exact-current-commit. After protected approval it rechecks `main`, the newest exact CI run, and the retained credential-free artifact before cloud authentication. It fails on missing protected configuration, uses a lockfile Firebase CLI, verifies reviewed Rules and two named profile Functions before publishing the Pages branch, and never gives cloud authority to website preparation or publication. Future Pages artifacts omit the `runmprc.com` CNAME, but the existing Pages provider setting still claims that Netlify-served name until #136/WEB-001 publish and read it back. The source gate is not usable until #133 configures protected environments/OIDC. It does not publish the live Netlify host. Treat the full pipeline as incomplete until #105 closes.
 
 ### Production approvals
 

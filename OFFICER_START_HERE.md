@@ -38,10 +38,12 @@ Use the club's approved password manager for access. Share only a public link or
 - **Hosted frontend tests passed:** Did the `Frontend lint + build` job show a green `Run frontend Jest tests` step? Jest is the automated frontend behavior test.
 - **Other tests passed:** What else was checked for this change?
 - **Code merged:** Which pull request was approved?
-- **Website live:** Was the exact change seen on [runmprc.com](https://runmprc.com)?
-- **Backend live:** If Firebase changed, did the log show a real Firebase deployment rather than “skipping” it?
+- **Release approved:** Which environment, exact commit, and named approver were recorded?
+- **Backend live:** If Firebase changed, did the fixed backend deployment and verification finish before website publication?
+- **Pages published:** Did GitHub Pages receive the same exact commit, and was its old `runmprc.com` claim cleared and verified?
+- **Website live:** Did Netlify identify that commit, and was the exact change then seen on [runmprc.com](https://runmprc.com)?
 - **Outside service verified:** If Stripe, Netlify, DNS, Google, or email changed, was that service checked separately?
 
-As of **2026-07-13**, hosted CI runs the frontend Jest suite, but GitHub Pages and the live Netlify site are still separate. A green test or workflow does **not** by itself prove that `runmprc.com` or Firebase changed.
+As of **2026-07-13**, a merge runs checks but does not start the GitHub release. The protected release is **NOT AVAILABLE YET** until its short-lived cloud identity and named environment approvers are configured under issue #133. Git-triggered Netlify production builds are paused, and a protected way to publish the live Netlify site is also **NOT AVAILABLE YET**. GitHub Pages still reports `runmprc.com` as its custom domain even though Netlify serves that name; source removal is not provider proof. A green test or workflow does **not** by itself prove that GitHub Pages, `runmprc.com`, Firebase, or that domain setting changed.
 
 For the concise handbook, see [OFFICER_HANDBOOK.md](./OFFICER_HANDBOOK.md). The expanded task index is [docs/officers/README.md](./docs/officers/README.md).

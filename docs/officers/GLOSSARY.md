@@ -19,7 +19,7 @@
 | Firestore | The database inside Firebase. Saving an Admin form can change its records immediately. |
 | Function | A protected backend action, such as checking access or handling a payment event. |
 | Netlify | The service currently answering requests for `runmprc.com`. |
-| GitHub Pages | A second website copy built from GitHub. It is not currently the custom-domain production copy. |
+| GitHub Pages | A GitHub-hosted website branch. It currently still claims `runmprc.com`, so it is not an independently reachable second copy; source removal and provider verification remain open. |
 | Stripe | The outside payment service. MPRC live commerce is not approved yet. |
 | Secret | A password-like value, key, token, or recovery code that must not be put in source, issues, AI, email, or screenshots. |
 | Token | A password-like value that lets a person or service act. Treat it as a secret. |

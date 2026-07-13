@@ -41,7 +41,7 @@ Historical developer/content/LLM guides remain under [`docs/`](./docs/README.md)
 - `.github/workflows/`: frontend, Functions, Rules CI and deployment automation.
 - `public/404.html`, `public/index.html`, and `public/spa-navigation.js`: current tested GitHub Pages callback handoff. It preserves safe same-origin path, query, and fragment state.
 
-**Deployment reality checked 2026-07-12:** the repository publishes a GitHub Pages copy, while `runmprc.com` is currently served by a separate Netlify deployment. The Firebase workflow can remain green while skipping backend deployment when its service-account secret is absent. Treat website, Firebase, and provider deployment as separate states until CI-001 and hosting consolidation are complete.
+**Deployment reality checked 2026-07-13:** merges run CI but do not start the manual release workflow. The protected gate accepts one exact current merged commit, rechecks its newest CI run after approval, uses one fixed Firebase target set, fails when protected authority/configuration is missing, verifies Firebase before publishing GitHub Pages, and gives no server credential to website preparation or publication. Git-triggered Netlify production builds are paused. The source stops adding a Pages `CNAME`, but GitHub Pages currently still claims `runmprc.com` and its default URL redirects there; only a controlled #136/WEB-001 publication and provider readback can clear that conflict. Protected publication to the live Netlify-served `runmprc.com` is not configured yet. Treat GitHub Pages, Netlify, `runmprc.com`, Firebase, and outside providers as separate states.
 
 ## Local setup status
 
@@ -79,7 +79,7 @@ npm run test:rules
 CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
 ```
 
-Rules tests require Java 17. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. The frontend Jest command runs as the blocking `Run frontend Jest tests` step in hosted CI under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). The separate SPA callback command is locally available; [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126) owns adding it to hosted CI. [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) still owns non-mutating lint, branch/deployment protection, credentials, staging, and the other incomplete delivery gates.
+Rules tests require Java 17. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. Hosted CI runs the frontend Jest suite under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124), the SPA callback suite under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126), and the release-gate source tests under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133) still owns protected environment/OIDC configuration; [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136) owns the actual staged profile-recovery release. Non-mutating lint, required branch checks, scanning, staging, and hosting consolidation remain open under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) and their atomic children.
 
 These safety changes do not repair a missing member profile or prove deployed Firebase Rules/Functions. The reported profile-save failure remains [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118).
 
@@ -95,4 +95,4 @@ Business owners—not coding agents—must approve legal text, waiver/insurance 
 
 ## Deployment warning
 
-Pushing to `main` currently triggers GitHub Pages deployment and may deploy Firebase resources when configured. The existing workflow is itself scheduled for hardening in CI-001; do not assume a merge is a safe commerce release. Production changes require protected approval, passing checks, compatible backend-first rollout, a named observer, and the runbook's post-deploy/reconciliation steps.
+Pushing to `main` runs CI only. It does not start `.github/workflows/deploy.yml`. The manual workflow is fixed to an exact merged commit and reviewed target set, but it is **NOT AVAILABLE YET** until #133 configures protected environments and short-lived cloud authority. Git-triggered Netlify production builds are paused; a protected live-Netlify publication path is also **NOT AVAILABLE YET**. Production changes still require protected approval, a compatible backend-first rollout, separate live-host proof, a named observer, and the runbook's post-deploy/reconciliation steps.

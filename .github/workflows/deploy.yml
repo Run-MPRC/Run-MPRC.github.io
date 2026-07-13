@@ -1,72 +1,491 @@
-name: Deploy
+name: Protected release
+
+run-name: >-
+  ${{ inputs.deployment_environment }} ${{ inputs.release_plan }} from
+  ${{ inputs.source_commit }}
 
 on:
-  push:
-    branches: [master, main]
   workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Full 40-character commit at the current tip of main
+        required: true
+        type: string
+      deployment_environment:
+        description: Protected release environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      release_plan:
+        description: Fixed reviewed backend set; add another plan by pull request
+        required: true
+        type: choice
+        options:
+          - profile-recovery
+
+permissions: {}
+
+concurrency:
+  group: release-${{ inputs.deployment_environment }}
+  cancel-in-progress: false
 
 jobs:
-  deploy-frontend:
-    name: Deploy frontend to GitHub Pages
+  preflight:
+    name: Validate exact current-main release
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      ci_run_id: ${{ steps.validate.outputs.ci_run_id }}
+      source_commit: ${{ steps.validate.outputs.source_commit }}
+    steps:
+      - name: Check out canonical main history
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: main
+      - id: validate
+        name: Require current main and its successful push CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "Release workflow must run from main." >&2
+            exit 1
+          fi
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Source commit must be a full lowercase Git SHA." >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin refs/heads/main
+          current_main="$(git rev-parse origin/main)"
+          if [[ "$SOURCE_COMMIT" != "$current_main" ]]; then
+            echo "Source commit must equal the current tip of main." >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "$SOURCE_COMMIT" ]]; then
+            echo "Checked-out source does not match the approved commit." >&2
+            exit 1
+          fi
+
+          runs_file="$(mktemp)"
+          jobs_file="$(mktemp)"
+          trap 'rm -f "$runs_file" "$jobs_file"' EXIT
+          gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f head_sha="$SOURCE_COMMIT" \
+            -f branch=main \
+            -f event=push \
+            -f per_page=100 > "$runs_file"
+
+          ci_run_id="$(jq -er --arg sha "$SOURCE_COMMIT" '
+            .workflow_runs
+            | map(select(
+                .head_sha == $sha
+                and .head_branch == "main"
+                and .event == "push"
+              ))
+            | sort_by([.run_number, (.run_attempt // 0)])
+            | last
+            | select(.status == "completed" and .conclusion == "success")
+            | .id
+          ' "$runs_file")" || {
+            echo "The latest exact main-push CI run is not successful." >&2
+            exit 1
+          }
+
+          gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${ci_run_id}/jobs" \
+            -f filter=latest \
+            -f per_page=100 > "$jobs_file"
+
+          for required_job in \
+            "Frontend lint + build" \
+            "Cloud Functions lint + test" \
+            "Firestore security-rules tests"
+          do
+            if ! jq -e --arg name "$required_job" '
+              [.jobs[] | select(
+                .name == $name
+                and .status == "completed"
+                and .conclusion == "success"
+              )] | length == 1
+            ' "$jobs_file" >/dev/null
+            then
+              echo "Required CI job is not exactly one successful result: $required_job" >&2
+              exit 1
+            fi
+          done
+
+          echo "ci_run_id=$ci_run_id" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Preflight passed for current main and its exact push CI run."
+
+  prepare-pages:
+    name: Build immutable website artifact without cloud authority
+    if: ${{ inputs.deployment_environment == 'production' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Validate required public build configuration
+        env:
+          PUBLIC_RECAPTCHA_SITE_KEY: ${{ vars.REACT_APP_RECAPTCHA_SITE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PUBLIC_RECAPTCHA_SITE_KEY" ]]; then
+            echo "Required public App Check site key is missing." >&2
+            exit 1
+          fi
+          echo "Required public website configuration is present."
+      - name: Check out the approved current-main commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.preflight.outputs.source_commit }}
+          persist-credentials: false
+      - name: Confirm website source commit
+        env:
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_COMMIT" ]] || {
+            echo "Website source does not match the approved commit." >&2
+            exit 1
+          }
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install committed website dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Build public website artifact
+        env:
+          CI: 'true'
+          DISABLE_ESLINT_PLUGIN: 'true'
+          SITE_ORIGIN: 'https://runmprc.com'
+          REACT_APP_RECAPTCHA_SITE_KEY: ${{ vars.REACT_APP_RECAPTCHA_SITE_KEY }}
+          REACT_APP_SENTRY_DSN: ${{ vars.REACT_APP_SENTRY_DSN }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          npm run build
+          printf '%s\n' "$SOURCE_COMMIT" > build/release-commit.txt
+      - name: Reject server-credential material in the website artifact
+        run: |
+          set -euo pipefail
+          if grep -R -q -E \
+            'FIREBASE_SERVICE_ACCOUNT|FIREBASE_TOKEN|GOOGLE_APPLICATION_CREDENTIALS|BEGIN (RSA )?PRIVATE KEY' \
+            build
+          then
+            echo "Server credential material was found in the website artifact." >&2
+            exit 1
+          fi
+      - name: Retain the exact prebuilt Pages artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pages-${{ needs.preflight.outputs.source_commit }}
+          path: build
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy-backend:
+    name: Deploy and verify fixed Firebase backend
+    if: ${{ always() && needs.preflight.result == 'success' && (inputs.deployment_environment == 'staging' || needs.prepare-pages.result == 'success') }}
+    needs:
+      - preflight
+      - prepare-pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: ${{ inputs.deployment_environment }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment_environment }}
+      RELEASE_PLAN: ${{ inputs.release_plan }}
+      TARGET_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    outputs:
+      backend_verified: ${{ steps.verify.outputs.backend_verified }}
+    steps:
+      - name: Validate protected environment mapping
+        env:
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$DEPLOYMENT_ENVIRONMENT" == "staging" ]]; then
+            echo "Staging is unavailable until #113/#133 add one exact approved project." >&2
+            exit 1
+          fi
+          if [[ "$DEPLOYMENT_ENVIRONMENT" != "production" ]]; then
+            echo "Unsupported release environment." >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_PLAN" != "profile-recovery" ]]; then
+            echo "Unsupported release plan." >&2
+            exit 1
+          fi
+          if [[ "$TARGET_PROJECT_ID" != "mid-peninsula-running-club" ]]; then
+            echo "Production project does not match the reviewed target." >&2
+            exit 1
+          fi
+          if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" || -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
+            echo "Required protected cloud authority is missing." >&2
+            exit 1
+          fi
+          if [[ ! "$WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[A-Za-z0-9._-]+/providers/[A-Za-z0-9._-]+$ ]]; then
+            echo "Workload Identity provider configuration is invalid." >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]]; then
+            echo "Deploy service account configuration is invalid." >&2
+            exit 1
+          fi
+          echo "Protected production mapping and authority are present."
+      - name: Check out the approved current-main commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.preflight.outputs.source_commit }}
+          persist-credentials: false
+      - name: Confirm fixed source and target set
+        env:
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_COMMIT" ]] || {
+            echo "Backend source does not match the approved commit." >&2
+            exit 1
+          }
+          grep -q 'exports.createMemberOnSignUp' functions/index.js
+          grep -q 'exports.ensureMemberProfile' functions/index.js
+          test -s firestore.rules
+          echo "Exact source commit and fixed release resources are present."
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - name: Install committed deploy dependencies without lifecycle scripts
+        run: |
+          set -euo pipefail
+          npm ci --legacy-peer-deps --ignore-scripts
+          npm --prefix functions ci --ignore-scripts
+      - name: Verify the lockfile Firebase CLI before cloud authentication
+        run: |
+          set -euo pipefail
+          expected_version="$(node -p "require('./package-lock.json').packages['node_modules/firebase-tools'].version")"
+          actual_version="$(npx --no-install firebase --version)"
+          if [[ "$actual_version" != "$expected_version" ]]; then
+            echo "Firebase CLI does not match package-lock.json." >&2
+            exit 1
+          fi
+          echo "Using the Firebase CLI version committed in package-lock.json."
+      - name: Confirm the prebuilt Pages artifact is still available after approval
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pages-${{ needs.preflight.outputs.source_commit }}
+          path: ${{ runner.temp }}/prebuilt-pages
+      - name: Recheck the prebuilt artifact before backend mutation
+        env:
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          artifact="$RUNNER_TEMP/prebuilt-pages"
+          [[ "$(cat "$artifact/release-commit.txt")" == "$SOURCE_COMMIT" ]] || {
+            echo "Prebuilt website artifact no longer matches the approved commit." >&2
+            exit 1
+          }
+          if grep -R -q -E \
+            'FIREBASE_SERVICE_ACCOUNT|FIREBASE_TOKEN|GOOGLE_APPLICATION_CREDENTIALS|BEGIN (RSA )?PRIVATE KEY' \
+            "$artifact"
+          then
+            echo "Server credential material was found in the website artifact." >&2
+            exit 1
+          fi
+          echo "The exact credential-free website artifact remains available."
+      - name: Revalidate current main and exact CI after protected approval
+        env:
+          CI_RUN_ID: ${{ needs.preflight.outputs.ci_run_id }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin refs/heads/main
+          [[ "$(git rev-parse origin/main)" == "$SOURCE_COMMIT" ]] || {
+            echo "Main advanced after this release was requested; request a new release." >&2
+            exit 1
+          }
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_COMMIT" ]] || {
+            echo "Backend source no longer matches the approved commit." >&2
+            exit 1
+          }
+
+          runs_file="$(mktemp)"
+          jobs_file="$(mktemp)"
+          release_file="$(mktemp)"
+          trap 'rm -f "$runs_file" "$jobs_file" "$release_file"' EXIT
+
+          gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}" \
+            > "$release_file"
+          release_created_at="$(jq -er '.created_at' "$release_file")"
+          release_created_epoch="$(date -u -d "$release_created_at" +%s)"
+          current_epoch="$(date -u +%s)"
+          if (( current_epoch - release_created_epoch > 86400 )); then
+            echo "Release request is older than 24 hours; request a new release." >&2
+            exit 1
+          fi
+
+          gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f head_sha="$SOURCE_COMMIT" \
+            -f branch=main \
+            -f event=push \
+            -f per_page=100 > "$runs_file"
+
+          validated_ci_run_id="$(jq -er --arg sha "$SOURCE_COMMIT" '
+            .workflow_runs
+            | map(select(
+                .head_sha == $sha
+                and .head_branch == "main"
+                and .event == "push"
+              ))
+            | sort_by([.run_number, (.run_attempt // 0)])
+            | last
+            | select(.status == "completed" and .conclusion == "success")
+            | .id
+          ' "$runs_file")" || {
+            echo "The newest exact main-push CI run is no longer successful." >&2
+            exit 1
+          }
+          if [[ "$validated_ci_run_id" != "$CI_RUN_ID" ]]; then
+            echo "The approved CI run is no longer the newest exact run." >&2
+            exit 1
+          fi
+
+          gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${validated_ci_run_id}/jobs" \
+            -f filter=latest \
+            -f per_page=100 > "$jobs_file"
+          for required_job in \
+            "Frontend lint + build" \
+            "Cloud Functions lint + test" \
+            "Firestore security-rules tests"
+          do
+            if ! jq -e --arg name "$required_job" '
+              [.jobs[] | select(
+                .name == $name
+                and .status == "completed"
+                and .conclusion == "success"
+              )] | length == 1
+            ' "$jobs_file" >/dev/null
+            then
+              echo "Required CI job is no longer successful: $required_job" >&2
+              exit 1
+            fi
+          done
+          echo "Current main and its exact CI remain approved after the wait."
+      - id: auth
+        name: Obtain short-lived Google Cloud credentials
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          cleanup_credentials: true
+          export_environment_variables: true
+          token_format: access_token
+          access_token_lifetime: 3300s
+          request_reason: mprc-release-${{ needs.preflight.outputs.source_commit }}
+      - id: capture
+        name: Capture private provider state before deployment
+        env:
+          CLOUD_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: >-
+          node .github/scripts/verify-firebase-release.mjs capture
+          --project "$TARGET_PROJECT_ID"
+          --output "$RUNNER_TEMP/firebase-before.json"
+      - id: deploy
+        name: Deploy the one fixed backend set
+        run: >-
+          timeout --signal=TERM --kill-after=30s 20m
+          npx --no-install firebase deploy
+          --only firestore:rules,functions:createMemberOnSignUp,functions:ensureMemberProfile
+          --project "$TARGET_PROJECT_ID"
+          --non-interactive
+      - id: verify
+        name: Always read back Rules and both Function revisions
+        if: ${{ always() && steps.auth.outcome == 'success' && steps.capture.outcome == 'success' }}
+        env:
+          CLOUD_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          DEPLOY_SUCCEEDED: ${{ steps.deploy.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/verify-firebase-release.mjs verify \
+            --project "$TARGET_PROJECT_ID" \
+            --before "$RUNNER_TEMP/firebase-before.json" \
+            --rules firestore.rules \
+            --deploy-succeeded "$DEPLOY_SUCCEEDED"
+          echo "backend_verified=true" >> "$GITHUB_OUTPUT"
+
+  deploy-pages:
+    name: Publish the prebuilt GitHub Pages copy
+    if: ${{ inputs.deployment_environment == 'production' && needs.deploy-backend.result == 'success' && needs.deploy-backend.outputs.backend_verified == 'true' }}
+    needs:
+      - preflight
+      - prepare-pages
+      - deploy-backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - name: Download the exact prebuilt website artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci --legacy-peer-deps
-      - name: Build
+          name: pages-${{ needs.preflight.outputs.source_commit }}
+          path: build
+      - name: Confirm artifact commit and credential separation
         env:
-          CI: 'false'
-          DISABLE_ESLINT_PLUGIN: 'true'
-          SITE_ORIGIN: 'https://runmprc.com'
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          REACT_APP_RECAPTCHA_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_SITE_KEY }}
-          REACT_APP_SENTRY_DSN: ${{ secrets.REACT_APP_SENTRY_DSN }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
         run: |
-          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            echo "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          set -euo pipefail
+          [[ "$(cat build/release-commit.txt)" == "$SOURCE_COMMIT" ]] || {
+            echo "Website artifact does not match the approved commit." >&2
+            exit 1
+          }
+          if grep -R -q -E \
+            'FIREBASE_SERVICE_ACCOUNT|FIREBASE_TOKEN|GOOGLE_APPLICATION_CREDENTIALS|BEGIN (RSA )?PRIVATE KEY' \
+            build
+          then
+            echo "Server credential material was found in the website artifact." >&2
+            exit 1
           fi
-          npm run build
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+          echo "The prebuilt website artifact matches the verified backend commit."
+      - name: Publish GitHub Pages copy
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.token }}
           publish_dir: ./build
-          cname: runmprc.com
-
-  deploy-functions:
-    name: Deploy Cloud Functions + Firestore rules
-    runs-on: ubuntu-latest
-    needs: deploy-frontend
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-      - run: npm ci
-        working-directory: functions
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        if: ${{ false }}  # Swap to a firebase-tools deploy step when ready; this placeholder keeps the job declarative.
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: mid-peninsula-running-club
-      - name: Deploy via firebase-tools
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          npm install -g firebase-tools@latest
-          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            echo "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
-            firebase deploy --only firestore:rules,firestore:indexes,functions --project mid-peninsula-running-club --non-interactive
-          else
-            echo "No FIREBASE_SERVICE_ACCOUNT secret; skipping Firebase deploy"
-          fi

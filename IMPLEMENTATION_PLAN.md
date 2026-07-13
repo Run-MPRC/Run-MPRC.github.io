@@ -28,7 +28,7 @@ MPRC can open a race or merchandise item for sale only when the platform can:
 3. Schema changes are additive first. Backfills are idempotent, dry-runnable, and report counts/anomalies.
 4. Backend/rules/indexes deploy before dependent clients. Legacy reads remain until migration evidence is complete.
 5. No issue requires production secrets for development or CI.
-6. Live-mode enabling must become a separate protected operation. The current `main` workflow automatically publishes Pages and attempts Firebase deployment on merge, so it is non-compliant until CI-001 is complete.
+6. Live-mode enabling is a separate protected operation. #135 supplies a manual, exact-commit, backend-first source gate and pauses Git-triggered Netlify production builds. Protected environment/OIDC configuration, staged/live proof, fail-closed lint, required checks, and a protected live-Netlify path remain open under #105/#133/#136/WEB-001.
 7. A provider Console setting is not complete until its non-secret configuration and verification evidence are recorded privately.
 8. Security controls fail closed in hosted environments and remain developer-friendly only in explicit local/CI environments.
 9. Do not trade payment integrity for UI responsiveness. Confirmation may say “processing”; it must not guess “paid.”

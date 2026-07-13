@@ -27,13 +27,14 @@ Have one of these ready:
 6. Require one GitHub issue and one small pull request based on `main`.
 7. Ask for the affected page link and a preview or clear before/after view.
 8. Review spelling, dates, links, mobile layout, and unintended changes.
-9. If the preview is correct, ask a platform maintainer to explain which automatic builds a merge will start.
-10. Approve the merge only if those automatic builds are also acceptable.
-11. Use [Publish and check](./PUBLISH_AND_CHECK.md) before calling the change live.
+9. If the preview is correct, approve or reject the merge.
+10. Record the merged commit as **not released**.
+11. If publication is needed, use the separate protected-release checklist in [Publish and check](./PUBLISH_AND_CHECK.md).
+12. Use [Publish and check](./PUBLISH_AND_CHECK.md) before calling the change live.
 
-If you open GitHub yourself, use the [canonical repository on `main`](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main), then select **Issues**. The normal repository landing page currently opens stale `dev`; do not use `dev` as the source for a new request.
+If you open GitHub yourself, use the [canonical repository on `main`](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main), then select **Issues**. `main` is now the repository default. Do not use the legacy `dev` branch as the source for a new request.
 
-GitHub automatically publishes a Pages copy after a `main` merge. Other outside automation may also react to a merge. There is no safe “merge but guarantee nothing publishes” option in the current workflow.
+The GitHub release is manual. A `main` merge runs checks but does not publish the GitHub Pages copy or deploy Firebase. Git-triggered Netlify production builds are paused by repository configuration, but Netlify build hooks/provider settings remain unverified. Stop and escalate any unexpected publication.
 
 ## If you cannot open an AI assistant
 

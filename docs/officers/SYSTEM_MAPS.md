@@ -41,23 +41,29 @@ flowchart LR
 
 In words: public content comes from GitHub; private accounts and operational records use Firebase; Google Forms are separate; Stripe must remain test-only until approved.
 
-## How a change reaches people today
+## How a change reaches people through the protected gate
 
 ```mermaid
 flowchart TD
-    PR["Approved pull request"] --> Main["Merge to main"]
-    Main --> Workflow["GitHub workflow"]
-    Workflow --> Pages["GitHub Pages copy"]
-    Workflow --> Firebase{"Firebase credential present?"}
-    Firebase -- "No" --> Skip["Backend deploy skipped"]
-    Firebase -- "Yes and job succeeds" --> Backend["Firebase deployed"]
-    Main -. "connection and trigger not verified" .-> Netlify
-    Netlify["Netlify deployment — current live host"] --> Live["runmprc.com"]
-    Pages -. "currently not the live custom-domain copy" .-> Live
-    Dev["dev — stale default branch"] -. "do not use for new release work" .-> PR
+    PR["Approved pull request"] --> Main["Merge to main — checks only"]
+    Main --> Request["Request one exact-commit release"]
+    Request --> Preflight{"Commit and required checks valid?"}
+    Preflight -- "No" --> Stop["Red failure — publish nothing"]
+    Preflight -- "Yes" --> Prepare["Prepare credential-free artifact"]
+    Prepare --> Approval{"Protected environment approved?"}
+    Approval -- "No" --> Stop
+    Approval -- "Yes" --> Gate{"Project, scope, and authority valid?"}
+    Gate -- "No" --> Stop
+    Gate -- "Yes" --> Rules["Deploy reviewed Firestore Rules"]
+    Rules --> Functions["Deploy and verify named Functions"]
+    Functions --> Pages["Pages branch without Netlify's domain claim"]
+    Main -. "Git-triggered production build paused" .-> Netlify
+    Netlify["Netlify — current live host; protected publication unavailable"] --> Live["runmprc.com"]
+    Pages -. "existing provider claim still conflicts until verified clear" .-> Live
+    Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: GitHub can report success while the live Netlify site stays old or Firebase is skipped, so each surface needs separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 

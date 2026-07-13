@@ -23,6 +23,10 @@ jobs:
         run: npm test -- --watchAll=false --runInBand
       - name: Run SPA callback safety tests
         run: npm run test:spa-navigation
+      - name: Validate protected release workflow
+        run: |
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
+          node --test tests/release-workflow.test.js tests/firebase-release-verification.test.js
       - run: npm run lint:fix -- --max-warnings=0 || true
       - name: Build
         env:
