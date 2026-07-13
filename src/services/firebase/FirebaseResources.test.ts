@@ -167,7 +167,7 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
   });
 
-  test('production retains its project and never connects an emulator', async () => {
+  test('production retains its project without starting Analytics', async () => {
     const resources = createResourcesFor('production', 'configured-public-site-key');
 
     expect(resources.app.options.projectId).toBe('mid-peninsula-running-club');
@@ -176,7 +176,9 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockConnectFunctionsEmulator).not.toHaveBeenCalled();
     expect(mockReCaptchaV3Provider).toHaveBeenCalledWith('configured-public-site-key');
     expect(mockInitializeAppCheck).toHaveBeenCalled();
-    expect(mockIsAnalyticsSupported).toHaveBeenCalled();
+    expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
+    expect(mockGetAnalytics).not.toHaveBeenCalled();
+    expect(resources.analytics).toBeNull();
     await Promise.resolve();
     expect(resources.getHttpFunctionUrl('exportRegistrationsCsv')).toBe(
       'https://us-central1-mid-peninsula-running-club.cloudfunctions.net/'
@@ -203,7 +205,7 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockGetAnalytics).not.toHaveBeenCalled();
   });
 
-  test('ordinary production query pages initialize supported Analytics', async () => {
+  test('ordinary production query pages keep Analytics disabled', async () => {
     mockIsAnalyticsSupported.mockResolvedValueOnce(true);
 
     const resources = createResourcesFor(
@@ -215,9 +217,9 @@ describe('FirebaseResources environment isolation', () => {
       setTimeout(resolve, 0);
     });
 
-    expect(mockIsAnalyticsSupported).toHaveBeenCalledTimes(1);
-    expect(mockGetAnalytics).toHaveBeenCalledWith(resources.app);
-    expect(resources.analytics).toEqual({ name: 'test-analytics' });
+    expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
+    expect(mockGetAnalytics).not.toHaveBeenCalled();
+    expect(resources.analytics).toBeNull();
   });
 
   test('rejects malformed direct Function names before building a URL', () => {

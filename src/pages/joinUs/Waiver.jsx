@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { logEvent } from 'firebase/analytics';
 import FlexColumnContainer from '../../components/FlexColumnContainer';
 import './waiver.css';
-import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { WAIVER_FORM_LINK } from '../../text/externalLinks';
 
 const WAIVER_INTRO = 'Regardless of membership, participants are required to read and complete the waiver form below before joining our runs.';
@@ -11,15 +9,8 @@ const WAIVER_TITLE = 'Club Activity Waiver';
 
 function Waiver({ onWaiverSubmit }) {
   const [hasConfirmed, setHasConfirmed] = useState(false);
-  const { services } = useServiceLocator();
 
   const handleContinue = () => {
-    const { analytics } = services?.firebaseResources || {};
-    if (analytics) {
-      logEvent(analytics, 'signed_waiver', {
-        signed: true,
-      });
-    }
     localStorage.setItem('waiverSigned', 'true');
     onWaiverSubmit();
   };
@@ -43,8 +34,9 @@ function Waiver({ onWaiverSubmit }) {
       </div>
 
       <div className="waiver-actions">
-        <label className="waiver-checkbox-label">
+        <label className="waiver-checkbox-label" htmlFor="waiver-confirmed">
           <input
+            id="waiver-confirmed"
             type="checkbox"
             checked={hasConfirmed}
             onChange={(e) => setHasConfirmed(e.target.checked)}

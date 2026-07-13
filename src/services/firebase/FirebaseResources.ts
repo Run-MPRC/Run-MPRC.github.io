@@ -1,5 +1,4 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
-import { Analytics, getAnalytics, isSupported } from 'firebase/analytics';
 import {
   AppCheck, initializeAppCheck, ReCaptchaV3Provider,
 } from 'firebase/app-check';
@@ -53,7 +52,7 @@ class FirebaseResources {
 
   readonly functions: Functions;
 
-  private _analytics: Analytics | null = null;
+  readonly analytics: null = null;
 
   private _appCheck: AppCheck | null = null;
 
@@ -69,7 +68,6 @@ class FirebaseResources {
     this.functions = getFunctions(this.app);
 
     this.connectEmulators();
-    this.initAnalytics();
   }
 
   private initAppCheck(): void {
@@ -121,29 +119,6 @@ class FirebaseResources {
         );
       }
     }
-  }
-
-  private async initAnalytics(): Promise<void> {
-    // Analytics has no Emulator Suite target. Never initialize it from local
-    // development or tests, even when a production measurement ID is present.
-    // A restored OAuth/checkout callback may contain a capability in its URL;
-    // do not let automatic analytics startup observe that initial location.
-    if (
-      isLocalRuntime
-      || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
-    ) return;
-    try {
-      const supported = await isSupported();
-      if (supported) {
-        this._analytics = getAnalytics(this.app);
-      }
-    } catch (error) {
-      console.warn('Analytics not supported:', error);
-    }
-  }
-
-  get analytics(): Analytics | null {
-    return this._analytics;
   }
 
   getHttpFunctionUrl(functionName: string): string {
