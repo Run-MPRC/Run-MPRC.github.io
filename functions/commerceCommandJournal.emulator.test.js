@@ -1,4 +1,9 @@
 const admin = require('firebase-admin');
+// Test-only pinned SDK boundary: fail visibly on an SDK upgrade rather than
+// silently replacing the real post-callback Firestore commit proof.
+const {
+  Transaction: FirestoreTransaction,
+} = require('@google-cloud/firestore/build/src/transaction');
 
 const {
   createCommandKey,
@@ -7,6 +12,7 @@ const {
 const {
   CommerceCommandJournalError,
   acquireCommerceCommandLease,
+  bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
   registerCommerceCommand,
@@ -15,6 +21,7 @@ const {
 const PROJECT_ID = 'demo-pay002b2-test';
 const APP_NAME = 'commerce-command-journal-emulator-test';
 const CONCURRENT_CALLS = 24;
+const MAXIMUM_WHOLE_OPERATION_CALLS = 3;
 const JOURNAL_EMULATOR_OPT_IN = 'REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR';
 const describeWithEmulator = process.env[JOURNAL_EMULATOR_OPT_IN] === '1'
   ? describe
@@ -43,11 +50,32 @@ const COMMAND_IDS = Object.freeze({
   missingCurrentAudit: '23456789-abcd-4efa-8bcd-23456789abcd',
   malformedLifecycleShape: '3456789a-bcde-4fab-8cde-3456789abcde',
   malformedCurrentAudit: '456789ab-cdef-4abc-8def-456789abcdef',
+  providerSamePlan: '56789abc-def0-4bcd-8ef0-56789abcdef0',
+  providerConflict: '6789abcd-ef01-4cde-8f01-6789abcdef01',
+  providerLostResponse: '789abcde-f012-4def-8012-789abcdef012',
+  providerTakeover: '89abcdef-0123-4efa-8123-89abcdef0123',
+  providerWrongHolder: '9abcdef0-1234-4fab-8234-9abcdef01234',
+  providerTerminal: 'abcdef01-2345-4abc-8345-abcdef012345',
+  providerPreseedAudit: 'bcdef012-3456-4bcd-8456-bcdef0123456',
+  providerOrphanPlan: 'cdef0123-4567-4cde-8567-cdef01234567',
+  providerMalformedPlan: 'def01234-5678-4def-8678-def012345678',
+  providerFutureAudit: 'ef012345-6789-4efa-8789-ef0123456789',
+  providerMalformedRoot: 'f0123456-789a-4fab-889a-f0123456789a',
+  providerMalformedLifecycle: '13579bdf-2468-4ace-8bdf-13579bdf2468',
+  providerEarlierClock: '2468ace0-1357-4bdf-8ace-2468ace01357',
+  providerOrphanAudit: '3579bdf1-4680-4ace-8bdf-3579bdf14680',
+  providerExpiredBeforeBind: '468ace02-5791-4bdf-8ace-468ace025791',
+  providerTerminalNoPlan: '579bdf13-6802-4ace-8bdf-579bdf136802',
+  providerCommitFailure: '68ace024-7913-4bdf-8ace-68ace0247913',
 });
 const BASE_NOW_MILLIS = 1800000000123;
 const LEASE_DURATION_MILLIS = 60000;
 const TERMINAL_REFERENCE_FINGERPRINT = 'd'.repeat(64);
 const OTHER_TERMINAL_REFERENCE_FINGERPRINT = 'e'.repeat(64);
+const STRIPE_ACCOUNT_ID = 'acct_1SyntheticTest000000000001';
+const STRIPE_API_VERSION = '2025-06-30.basil';
+const STRIPE_ENDPOINT_PATH = '/v1/checkout/sessions';
+const STRIPE_OPERATION = 'checkout_session_create';
 
 function frozenRecord(entries) {
   const record = Object.create(null);
@@ -60,6 +88,14 @@ function payload(reference) {
     ['amountCents', 2500],
     ['currency', 'usd'],
     ['syntheticReference', reference],
+  ]);
+}
+
+function providerParameters(reference) {
+  return frozenRecord([
+    ['amount_total', 2500],
+    ['currency', 'usd'],
+    ['synthetic_reference', reference],
   ]);
 }
 
@@ -102,6 +138,28 @@ function failArgs(db, commandId, commandPayload, leaseId, expectedFenceEpoch) {
   return {
     ...acquireArgs(db, commandId, commandPayload, leaseId),
     expectedFenceEpoch,
+  };
+}
+
+function providerPlanArgs(
+  db,
+  commandId,
+  commandPayload,
+  leaseId,
+  expectedFenceEpoch,
+  parameters,
+  overrides = {},
+) {
+  return {
+    ...acquireArgs(db, commandId, commandPayload, leaseId),
+    expectedFenceEpoch,
+    stripeAccountId: STRIPE_ACCOUNT_ID,
+    stripeMode: 'test',
+    stripeApiVersion: STRIPE_API_VERSION,
+    endpointPath: STRIPE_ENDPOINT_PATH,
+    providerOperation: STRIPE_OPERATION,
+    providerParameters: parameters,
+    ...overrides,
   };
 }
 
@@ -174,12 +232,32 @@ function expectJournalError(error, reason) {
   expect(Object.isFrozen(error)).toBe(true);
 }
 
+// The emulator can exhaust Firestore's fixed internal retry budget under an
+// intentional same-document race. Retry only the exact caller operation, with
+// the same closed-over immutable input and no delay or regenerated identity.
+async function retryWholeOperationAfterUnavailable(operation, retryEvidence) {
+  retryEvidence.operations += 1;
+  for (let call = 1; call <= MAXIMUM_WHOLE_OPERATION_CALLS; call += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const mayRetry = error instanceof CommerceCommandJournalError
+        && error.reason === 'journal_unavailable'
+        && call < MAXIMUM_WHOLE_OPERATION_CALLS;
+      if (!mayRetry) throw error;
+      retryEvidence.unavailableRetries += 1;
+    }
+  }
+  throw new Error('The bounded whole-operation retry loop did not return or throw.');
+}
+
 describeWithEmulator('commerce command journal Firestore transaction', () => {
   let app;
   let db;
   let trackedRefs = new Map();
   let nowMillis;
   let timestampNow;
+  let retryEvidence;
 
   function trackRef(ref) {
     trackedRefs.set(ref.path, ref);
@@ -195,11 +273,22 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     const { commandKeyHash } = commandIdentity(args);
     const commandRef = trackRef(db.collection('checkoutRequests').doc(commandKeyHash));
     const lifecycleRef = trackRef(commandRef.collection('lifecycle').doc('current'));
+    const providerPlanRef = trackRef(commandRef.collection('providerAttempts')
+      .doc('0000000001'));
+    const providerAuditRef = trackRef(db.collection('auditEvents')
+      .doc(`commerce_provider_attempt_${commandKeyHash}_0000000001`));
     const auditRef = auditRefFor(commandKeyHash, 1);
     // Track every revision this focused suite can create before a concurrent
     // assertion runs, so even an early failure cannot leak synthetic audits.
     for (const revision of [2, 3, 4]) auditRefFor(commandKeyHash, revision);
-    return { commandKeyHash, commandRef, lifecycleRef, auditRef };
+    return {
+      commandKeyHash,
+      commandRef,
+      lifecycleRef,
+      auditRef,
+      providerPlanRef,
+      providerAuditRef,
+    };
   }
 
   async function readPair(pair) {
@@ -226,6 +315,29 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     return {
       lifecycle: snapshotEvidence(lifecycleSnapshot),
       audit: snapshotEvidence(auditSnapshot),
+    };
+  }
+
+  async function readProviderEvidence(pair) {
+    const [planSnapshot, auditSnapshot] = await Promise.all([
+      pair.providerPlanRef.get(),
+      pair.providerAuditRef.get(),
+    ]);
+    return {
+      plan: snapshotEvidence(planSnapshot),
+      audit: snapshotEvidence(auditSnapshot),
+    };
+  }
+
+  async function readFoundationEvidence(pair, lifecycleRevision) {
+    const [registration, lifecycle] = await Promise.all([
+      readPair(pair),
+      readLifecycleEvidence(pair, lifecycleRevision),
+    ]);
+    return {
+      command: snapshotEvidence(registration.commandSnapshot),
+      registrationAudit: snapshotEvidence(registration.auditSnapshot),
+      lifecycle,
     };
   }
 
@@ -277,6 +389,33 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     expect(Object.isFrozen(result)).toBe(true);
   }
 
+  function expectProviderPlanResult(result, outcome) {
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      providerPlanSchemaVersion: 1,
+      outcome,
+      state: 'planned',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  }
+
+  async function setupLeasedCommand(commandId, reference, leaseIndex) {
+    const commandPayload = payload(reference);
+    const leaseId = deterministicLeaseId(leaseIndex);
+    const registrationArgs = commandArgs(db, commandId, commandPayload);
+    const leaseArgs = acquireArgs(db, commandId, commandPayload, leaseId);
+    const pair = pairFor(leaseArgs);
+    await registerCommerceCommand(registrationArgs);
+    expectLeaseResult(await acquireCommerceCommandLease(leaseArgs), 1);
+    return {
+      commandPayload,
+      leaseId,
+      registrationArgs,
+      leaseArgs,
+      pair,
+    };
+  }
+
   async function cleanupTrackedRefs() {
     if (!trackedRefs) return;
     const refs = [...trackedRefs.values()];
@@ -296,6 +435,7 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
 
   beforeEach(() => {
     trackedRefs = new Map();
+    retryEvidence = { operations: 0, unavailableRetries: 0 };
     nowMillis = BASE_NOW_MILLIS;
     timestampNow = jest.spyOn(admin.firestore.Timestamp, 'now')
       .mockImplementation(() => admin.firestore.Timestamp.fromMillis(nowMillis));
@@ -303,6 +443,8 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
 
   afterEach(async () => {
     timestampNow.mockRestore();
+    expect(retryEvidence.unavailableRetries)
+      .toBeLessThanOrEqual(retryEvidence.operations * (MAXIMUM_WHOLE_OPERATION_CALLS - 1));
     await cleanupTrackedRefs();
   });
 
@@ -316,7 +458,10 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     const pair = pairFor(args);
 
     const results = await Promise.all(
-      Array.from({ length: CONCURRENT_CALLS }, () => registerCommerceCommand(args)),
+      Array.from({ length: CONCURRENT_CALLS }, () => retryWholeOperationAfterUnavailable(
+        () => registerCommerceCommand(args),
+        retryEvidence,
+      )),
     );
 
     expect(results.filter((result) => result.outcome === 'registered_new')).toHaveLength(1);
@@ -347,8 +492,14 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     const pair = pairFor(firstArgs);
 
     const calls = [
-      ...Array.from({ length: 12 }, () => registerCommerceCommand(firstArgs)),
-      ...Array.from({ length: 12 }, () => registerCommerceCommand(secondArgs)),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => registerCommerceCommand(firstArgs),
+        retryEvidence,
+      )),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => registerCommerceCommand(secondArgs),
+        retryEvidence,
+      )),
     ];
     const settled = await Promise.allSettled(calls);
     const fulfilled = settled.filter((result) => result.status === 'fulfilled');
@@ -500,7 +651,10 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       commandPayload,
       deterministicLeaseId(index + 1),
     ));
-    const results = await Promise.all(leaseArgs.map(acquireCommerceCommandLease));
+    const results = await Promise.all(leaseArgs.map((args) => retryWholeOperationAfterUnavailable(
+      () => acquireCommerceCommandLease(args),
+      retryEvidence,
+    )));
     const acquired = results.filter((result) => result.outcome === 'lease_acquired');
     const busy = results.filter((result) => result.outcome === 'lease_busy');
 
@@ -559,7 +713,10 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     await registerCommerceCommand(registrationArgs);
 
     const results = await Promise.all(
-      Array.from({ length: CONCURRENT_CALLS }, () => acquireCommerceCommandLease(args)),
+      Array.from({ length: CONCURRENT_CALLS }, () => retryWholeOperationAfterUnavailable(
+        () => acquireCommerceCommandLease(args),
+        retryEvidence,
+      )),
     );
     for (const result of results) {
       expectLeaseResult(result, 1);
@@ -602,7 +759,10 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       ),
     }));
     const results = await Promise.all(
-      contenders.map(({ args }) => acquireCommerceCommandLease(args)),
+      contenders.map(({ args }) => retryWholeOperationAfterUnavailable(
+        () => acquireCommerceCommandLease(args),
+        retryEvidence,
+      )),
     );
     const winningIndexes = results
       .map((result, index) => ({ result, index }))
@@ -673,20 +833,26 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     setTrustedNow(BASE_NOW_MILLIS + 1);
 
     const settled = await Promise.allSettled([
-      completeCommerceCommand(completeArgs(
-        db,
-        COMMAND_IDS.terminalRace,
-        commandPayload,
-        leaseId,
-        1,
-      )),
-      failCommerceCommand(failArgs(
-        db,
-        COMMAND_IDS.terminalRace,
-        commandPayload,
-        leaseId,
-        1,
-      )),
+      retryWholeOperationAfterUnavailable(
+        () => completeCommerceCommand(completeArgs(
+          db,
+          COMMAND_IDS.terminalRace,
+          commandPayload,
+          leaseId,
+          1,
+        )),
+        retryEvidence,
+      ),
+      retryWholeOperationAfterUnavailable(
+        () => failCommerceCommand(failArgs(
+          db,
+          COMMAND_IDS.terminalRace,
+          commandPayload,
+          leaseId,
+          1,
+        )),
+        retryEvidence,
+      ),
     ]);
     const fulfilled = settled.filter((result) => result.status === 'fulfilled');
     const rejected = settled.filter((result) => result.status === 'rejected');
@@ -732,22 +898,28 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     setTrustedNow(BASE_NOW_MILLIS + 1);
 
     const settled = await Promise.allSettled([
-      completeCommerceCommand(completeArgs(
-        db,
-        COMMAND_IDS.commitmentRace,
-        commandPayload,
-        leaseId,
-        1,
-        TERMINAL_REFERENCE_FINGERPRINT,
-      )),
-      completeCommerceCommand(completeArgs(
-        db,
-        COMMAND_IDS.commitmentRace,
-        commandPayload,
-        leaseId,
-        1,
-        OTHER_TERMINAL_REFERENCE_FINGERPRINT,
-      )),
+      retryWholeOperationAfterUnavailable(
+        () => completeCommerceCommand(completeArgs(
+          db,
+          COMMAND_IDS.commitmentRace,
+          commandPayload,
+          leaseId,
+          1,
+          TERMINAL_REFERENCE_FINGERPRINT,
+        )),
+        retryEvidence,
+      ),
+      retryWholeOperationAfterUnavailable(
+        () => completeCommerceCommand(completeArgs(
+          db,
+          COMMAND_IDS.commitmentRace,
+          commandPayload,
+          leaseId,
+          1,
+          OTHER_TERMINAL_REFERENCE_FINGERPRINT,
+        )),
+        retryEvidence,
+      ),
     ]);
     const fulfilled = settled.filter((result) => result.status === 'fulfilled');
     const rejected = settled.filter((result) => result.status === 'rejected');
@@ -1062,5 +1234,689 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       .toEqual(snapshotEvidence(lifecycleWithoutPartner));
     expect((await currentAuditRef.get()).exists).toBe(false);
     expect((await readAudit(missingAuditPair, 3)).exists).toBe(false);
+  });
+
+  test('24 same-plan current-holder calls create one immutable provider pair', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerSamePlan,
+      'provider-same-plan',
+      300,
+    );
+    const args = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerSamePlan,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-same-plan'),
+    );
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENT_CALLS }, () => retryWholeOperationAfterUnavailable(
+        () => bindInitialStripeProviderPlan(args),
+        retryEvidence,
+      )),
+    );
+    expect(results.filter(({ outcome }) => outcome === 'provider_plan_bound'))
+      .toHaveLength(1);
+    expect(results.filter(({ outcome }) => outcome === 'provider_plan_existing'))
+      .toHaveLength(CONCURRENT_CALLS - 1);
+    for (const result of results) {
+      expectProviderPlanResult(result, result.outcome);
+    }
+
+    const provider = await readProviderEvidence(setup.pair);
+    expect(provider.plan.exists).toBe(true);
+    expect(provider.audit.exists).toBe(true);
+    expect(Object.keys(provider.plan.data).sort()).toEqual([
+      'boundAt',
+      'boundFenceEpoch',
+      'commandIdentityVersion',
+      'commandKeyHash',
+      'endpointPath',
+      'environment',
+      'httpMethod',
+      'idempotencyKeyFingerprint',
+      'parametersFingerprint',
+      'provider',
+      'providerAttempt',
+      'providerOperation',
+      'providerPlanSchemaVersion',
+      'stripeAccountFingerprint',
+      'stripeApiVersion',
+      'stripeMode',
+    ].sort());
+    expect(provider.plan.data).toMatchObject({
+      providerPlanSchemaVersion: 1,
+      commandIdentityVersion: 1,
+      commandKeyHash: setup.pair.commandKeyHash,
+      environment: 'test',
+      provider: 'stripe',
+      providerAttempt: 1,
+      providerOperation: STRIPE_OPERATION,
+      stripeMode: 'test',
+      stripeApiVersion: STRIPE_API_VERSION,
+      httpMethod: 'POST',
+      endpointPath: STRIPE_ENDPOINT_PATH,
+      stripeAccountFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      parametersFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      idempotencyKeyFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      boundFenceEpoch: 1,
+    });
+    expect(provider.plan.data.boundAt.toMillis()).toBe(BASE_NOW_MILLIS);
+    expect(Object.keys(provider.audit.data).sort()).toEqual([
+      'aggregateType',
+      'boundFenceEpoch',
+      'commandKeyHash',
+      'environment',
+      'eventType',
+      'occurredAt',
+      'provider',
+      'providerAttempt',
+      'providerOperation',
+      'providerPlanAuditSchemaVersion',
+      'stripeMode',
+    ].sort());
+    expect(provider.audit.data).toMatchObject({
+      providerPlanAuditSchemaVersion: 1,
+      aggregateType: 'commerce_provider_attempt',
+      commandKeyHash: setup.pair.commandKeyHash,
+      providerAttempt: 1,
+      eventType: 'provider_plan_bound',
+      provider: 'stripe',
+      environment: 'test',
+      stripeMode: 'test',
+      providerOperation: STRIPE_OPERATION,
+      boundFenceEpoch: 1,
+    });
+    expect(provider.audit.data.occurredAt.toMillis()).toBe(BASE_NOW_MILLIS);
+    const serialized = JSON.stringify(provider);
+    expect(serialized).not.toContain(STRIPE_ACCOUNT_ID);
+    expect(serialized).not.toContain('provider-same-plan');
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(3);
+  });
+
+  test('conflicting provider plans race to one immutable winner', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerConflict,
+      'provider-plan-conflict',
+      301,
+    );
+    const firstArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerConflict,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-plan-a'),
+    );
+    const secondArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerConflict,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-plan-b'),
+    );
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+    const settled = await Promise.allSettled([
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => bindInitialStripeProviderPlan(firstArgs),
+        retryEvidence,
+      )),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => bindInitialStripeProviderPlan(secondArgs),
+        retryEvidence,
+      )),
+    ]);
+    const fulfilled = settled.filter(({ status }) => status === 'fulfilled');
+    const rejected = settled.filter(({ status }) => status === 'rejected');
+    expect(fulfilled).toHaveLength(12);
+    expect(fulfilled.filter(({ value }) => value.outcome === 'provider_plan_bound'))
+      .toHaveLength(1);
+    expect(fulfilled.filter(({ value }) => value.outcome === 'provider_plan_existing'))
+      .toHaveLength(11);
+    for (const result of fulfilled) expectProviderPlanResult(result.value, result.value.outcome);
+    expect(rejected).toHaveLength(12);
+    for (const result of rejected) expectJournalError(result.reason, 'command_conflict');
+
+    const firstHalfWon = settled.slice(0, 12).every(({ status }) => status === 'fulfilled');
+    const secondHalfWon = settled.slice(12).every(({ status }) => status === 'fulfilled');
+    expect([firstHalfWon, secondHalfWon]).toEqual(expect.arrayContaining([true, false]));
+    const winningArgs = firstHalfWon ? firstArgs : secondArgs;
+    const losingArgs = firstHalfWon ? secondArgs : firstArgs;
+    const providerBeforeProbes = await readProviderEvidence(setup.pair);
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(winningArgs),
+      'provider_plan_existing',
+    );
+    await expect(bindInitialStripeProviderPlan(losingArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'command_conflict',
+    });
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBeforeProbes);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect(JSON.stringify(providerBeforeProbes)).not.toContain('provider-plan-a');
+    expect(JSON.stringify(providerBeforeProbes)).not.toContain('provider-plan-b');
+    expect((await matchingAudits(setup.pair)).size).toBe(3);
+  });
+
+  test('a provider-plan retry after a lost response is byte-preserving', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerLostResponse,
+      'provider-lost-response',
+      302,
+    );
+    const args = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerLostResponse,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-lost-response'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(args),
+      'provider_plan_bound',
+    );
+    const providerBeforeRetry = await readProviderEvidence(setup.pair);
+    const foundationBeforeRetry = await readFoundationEvidence(setup.pair, 2);
+
+    const retries = await Promise.all(
+      Array.from({ length: 8 }, () => bindInitialStripeProviderPlan(args)),
+    );
+    for (const result of retries) {
+      expectProviderPlanResult(result, 'provider_plan_existing');
+    }
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBeforeRetry);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBeforeRetry);
+    expect((await matchingAudits(setup.pair)).size).toBe(3);
+  });
+
+  test('an injected real-emulator commit failure leaves every record unchanged', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerCommitFailure,
+      'provider-commit-failure',
+      318,
+    );
+    const args = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerCommitFailure,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-commit-failure'),
+    );
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+    const providerBefore = await readProviderEvidence(setup.pair);
+    const auditsBefore = await matchingAudits(setup.pair);
+    const commitFailure = jest.spyOn(FirestoreTransaction.prototype, 'commit')
+      .mockRejectedValueOnce(new Error('synthetic commit failure'));
+    let commitCalls = 0;
+
+    try {
+      const error = await bindInitialStripeProviderPlan(args).then(
+        () => null,
+        (reason) => reason,
+      );
+      expectJournalError(error, 'journal_unavailable');
+      commitCalls = commitFailure.mock.calls.length;
+    } finally {
+      commitFailure.mockRestore();
+    }
+
+    expect(commitCalls).toBe(1);
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBefore);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(auditsBefore.size);
+    expect(providerBefore.plan.exists).toBe(false);
+    expect(providerBefore.audit.exists).toBe(false);
+  });
+
+  test('an expired holder cannot bind or observe, while takeover reads without rewrite', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerTakeover,
+      'provider-takeover',
+      303,
+    );
+    const oldArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerTakeover,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-takeover'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(oldArgs),
+      'provider_plan_bound',
+    );
+    const providerBeforeExpiry = await readProviderEvidence(setup.pair);
+    const foundationBeforeExpiry = await readFoundationEvidence(setup.pair, 2);
+
+    setTrustedNow(BASE_NOW_MILLIS + LEASE_DURATION_MILLIS);
+    await expect(bindInitialStripeProviderPlan(oldArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'lease_stale',
+    });
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBeforeExpiry);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBeforeExpiry);
+
+    const nextLeaseId = deterministicLeaseId(304);
+    const nextLeaseArgs = acquireArgs(
+      db,
+      COMMAND_IDS.providerTakeover,
+      setup.commandPayload,
+      nextLeaseId,
+    );
+    expectLeaseResult(await acquireCommerceCommandLease(nextLeaseArgs), 2);
+    const providerBeforeTakeoverRead = await readProviderEvidence(setup.pair);
+    const foundationBeforeTakeoverRead = await readFoundationEvidence(setup.pair, 3);
+    const nextArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerTakeover,
+      setup.commandPayload,
+      nextLeaseId,
+      2,
+      providerParameters('provider-takeover'),
+    );
+    await expect(bindInitialStripeProviderPlan(oldArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'lease_stale',
+    });
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(nextArgs),
+      'provider_plan_existing',
+    );
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBeforeTakeoverRead);
+    expect(await readFoundationEvidence(setup.pair, 3)).toEqual(foundationBeforeTakeoverRead);
+    expect(providerBeforeTakeoverRead.plan.data.boundFenceEpoch).toBe(1);
+    expect(providerBeforeTakeoverRead.plan.data.boundAt.toMillis()).toBe(BASE_NOW_MILLIS);
+    expect((await matchingAudits(setup.pair)).size).toBe(4);
+
+    setTrustedNow(BASE_NOW_MILLIS + (LEASE_DURATION_MILLIS * 2));
+    const expired = await setupLeasedCommand(
+      COMMAND_IDS.providerExpiredBeforeBind,
+      'provider-expired-before-bind',
+      316,
+    );
+    const expiredArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerExpiredBeforeBind,
+      expired.commandPayload,
+      expired.leaseId,
+      1,
+      providerParameters('provider-expired-before-bind'),
+    );
+    const expiredFoundationBefore = await readFoundationEvidence(expired.pair, 2);
+    const expiredProviderBefore = await readProviderEvidence(expired.pair);
+    setTrustedNow(BASE_NOW_MILLIS + (LEASE_DURATION_MILLIS * 3));
+    await expect(bindInitialStripeProviderPlan(expiredArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'lease_stale',
+    });
+    expect(await readProviderEvidence(expired.pair)).toEqual(expiredProviderBefore);
+    expect(await readFoundationEvidence(expired.pair, 2)).toEqual(expiredFoundationBefore);
+    expect(expiredProviderBefore.plan.exists).toBe(false);
+    expect(expiredProviderBefore.audit.exists).toBe(false);
+  });
+
+  test('wrong holder, wrong fence, and earlier captured time reject without a plan', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerWrongHolder,
+      'provider-wrong-holder',
+      305,
+    );
+    const validParameters = providerParameters('provider-wrong-holder');
+    const wrongHolderArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerWrongHolder,
+      setup.commandPayload,
+      deterministicLeaseId(306),
+      1,
+      validParameters,
+    );
+    const wrongFenceArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerWrongHolder,
+      setup.commandPayload,
+      setup.leaseId,
+      2,
+      validParameters,
+    );
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+    const providerBefore = await readProviderEvidence(setup.pair);
+    const settled = await Promise.allSettled([
+      bindInitialStripeProviderPlan(wrongHolderArgs),
+      bindInitialStripeProviderPlan(wrongFenceArgs),
+    ]);
+    for (const result of settled) {
+      expect(result.status).toBe('rejected');
+      expectJournalError(result.reason, 'lease_stale');
+    }
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBefore);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect(providerBefore.plan.exists).toBe(false);
+    expect(providerBefore.audit.exists).toBe(false);
+
+    setTrustedNow(BASE_NOW_MILLIS + 1000);
+    const clockSetup = await setupLeasedCommand(
+      COMMAND_IDS.providerEarlierClock,
+      'provider-earlier-clock',
+      307,
+    );
+    const clockArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerEarlierClock,
+      clockSetup.commandPayload,
+      clockSetup.leaseId,
+      1,
+      providerParameters('provider-earlier-clock'),
+    );
+    const clockFoundationBefore = await readFoundationEvidence(clockSetup.pair, 2);
+    const clockProviderBefore = await readProviderEvidence(clockSetup.pair);
+    setTrustedNow(BASE_NOW_MILLIS);
+    await expect(bindInitialStripeProviderPlan(clockArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'lease_stale',
+    });
+    expect(await readProviderEvidence(clockSetup.pair)).toEqual(clockProviderBefore);
+    expect(await readFoundationEvidence(clockSetup.pair, 2))
+      .toEqual(clockFoundationBefore);
+  });
+
+  test('a terminal lifecycle cannot create or observe a provider plan', async () => {
+    const setup = await setupLeasedCommand(
+      COMMAND_IDS.providerTerminal,
+      'provider-terminal',
+      308,
+    );
+    const args = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerTerminal,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+      providerParameters('provider-terminal'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(args),
+      'provider_plan_bound',
+    );
+    setTrustedNow(BASE_NOW_MILLIS + 1);
+    expectTerminalResult(await completeCommerceCommand(completeArgs(
+      db,
+      COMMAND_IDS.providerTerminal,
+      setup.commandPayload,
+      setup.leaseId,
+      1,
+    )), 'succeeded');
+    const foundationBefore = await readFoundationEvidence(setup.pair, 3);
+    const providerBefore = await readProviderEvidence(setup.pair);
+    await expect(bindInitialStripeProviderPlan(args)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'lease_stale',
+    });
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBefore);
+    expect(await readFoundationEvidence(setup.pair, 3)).toEqual(foundationBefore);
+    expect(providerBefore.plan.exists).toBe(true);
+    expect(providerBefore.audit.exists).toBe(true);
+    expect((await matchingAudits(setup.pair)).size).toBe(4);
+
+    const noPlan = await setupLeasedCommand(
+      COMMAND_IDS.providerTerminalNoPlan,
+      'provider-terminal-no-plan',
+      317,
+    );
+    setTrustedNow(BASE_NOW_MILLIS + 2);
+    expectTerminalResult(await completeCommerceCommand(completeArgs(
+      db,
+      COMMAND_IDS.providerTerminalNoPlan,
+      noPlan.commandPayload,
+      noPlan.leaseId,
+      1,
+    )), 'succeeded');
+    const noPlanArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerTerminalNoPlan,
+      noPlan.commandPayload,
+      noPlan.leaseId,
+      1,
+      providerParameters('provider-terminal-no-plan'),
+    );
+    const noPlanFoundationBefore = await readFoundationEvidence(noPlan.pair, 3);
+    const noPlanProviderBefore = await readProviderEvidence(noPlan.pair);
+    await expect(bindInitialStripeProviderPlan(noPlanArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'lease_stale',
+    });
+    expect(await readProviderEvidence(noPlan.pair)).toEqual(noPlanProviderBefore);
+    expect(await readFoundationEvidence(noPlan.pair, 3)).toEqual(noPlanFoundationBefore);
+    expect(noPlanProviderBefore.plan.exists).toBe(false);
+    expect(noPlanProviderBefore.audit.exists).toBe(false);
+  });
+
+  test('preseeded or orphan provider partners reject without repair', async () => {
+    const preseed = await setupLeasedCommand(
+      COMMAND_IDS.providerPreseedAudit,
+      'provider-preseed-audit',
+      309,
+    );
+    const preseedArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerPreseedAudit,
+      preseed.commandPayload,
+      preseed.leaseId,
+      1,
+      providerParameters('provider-preseed-audit'),
+    );
+    await preseed.pair.providerAuditRef.create({ syntheticPreseed: true });
+    const preseedFoundationBefore = await readFoundationEvidence(preseed.pair, 2);
+    const preseedProviderBefore = await readProviderEvidence(preseed.pair);
+    await expect(bindInitialStripeProviderPlan(preseedArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(preseed.pair)).toEqual(preseedProviderBefore);
+    expect(await readFoundationEvidence(preseed.pair, 2)).toEqual(preseedFoundationBefore);
+    expect(preseedProviderBefore.plan.exists).toBe(false);
+    expect(preseedProviderBefore.audit.exists).toBe(true);
+
+    const orphan = await setupLeasedCommand(
+      COMMAND_IDS.providerOrphanPlan,
+      'provider-orphan-plan',
+      310,
+    );
+    const orphanArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerOrphanPlan,
+      orphan.commandPayload,
+      orphan.leaseId,
+      1,
+      providerParameters('provider-orphan-plan'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(orphanArgs),
+      'provider_plan_bound',
+    );
+    await orphan.pair.providerAuditRef.delete();
+    const orphanFoundationBefore = await readFoundationEvidence(orphan.pair, 2);
+    const orphanProviderBefore = await readProviderEvidence(orphan.pair);
+    await expect(bindInitialStripeProviderPlan(orphanArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(orphan.pair)).toEqual(orphanProviderBefore);
+    expect(await readFoundationEvidence(orphan.pair, 2)).toEqual(orphanFoundationBefore);
+    expect(orphanProviderBefore.plan.exists).toBe(true);
+    expect(orphanProviderBefore.audit.exists).toBe(false);
+
+    const orphanAudit = await setupLeasedCommand(
+      COMMAND_IDS.providerOrphanAudit,
+      'provider-orphan-audit',
+      315,
+    );
+    const orphanAuditArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerOrphanAudit,
+      orphanAudit.commandPayload,
+      orphanAudit.leaseId,
+      1,
+      providerParameters('provider-orphan-audit'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(orphanAuditArgs),
+      'provider_plan_bound',
+    );
+    await orphanAudit.pair.providerPlanRef.delete();
+    const orphanAuditFoundationBefore = await readFoundationEvidence(orphanAudit.pair, 2);
+    const orphanAuditProviderBefore = await readProviderEvidence(orphanAudit.pair);
+    await expect(bindInitialStripeProviderPlan(orphanAuditArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(orphanAudit.pair)).toEqual(orphanAuditProviderBefore);
+    expect(await readFoundationEvidence(orphanAudit.pair, 2))
+      .toEqual(orphanAuditFoundationBefore);
+    expect(orphanAuditProviderBefore.plan.exists).toBe(false);
+    expect(orphanAuditProviderBefore.audit.exists).toBe(true);
+  });
+
+  test('malformed and future provider records reject without rewrite', async () => {
+    const malformed = await setupLeasedCommand(
+      COMMAND_IDS.providerMalformedPlan,
+      'provider-malformed-plan',
+      311,
+    );
+    const malformedArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerMalformedPlan,
+      malformed.commandPayload,
+      malformed.leaseId,
+      1,
+      providerParameters('provider-malformed-plan'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(malformedArgs),
+      'provider_plan_bound',
+    );
+    const validPlan = await malformed.pair.providerPlanRef.get();
+    await malformed.pair.providerPlanRef.set({
+      ...validPlan.data(),
+      providerAttempt: 2,
+    });
+    const malformedFoundationBefore = await readFoundationEvidence(malformed.pair, 2);
+    const malformedProviderBefore = await readProviderEvidence(malformed.pair);
+    await expect(bindInitialStripeProviderPlan(malformedArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(malformed.pair)).toEqual(malformedProviderBefore);
+    expect(await readFoundationEvidence(malformed.pair, 2))
+      .toEqual(malformedFoundationBefore);
+
+    const future = await setupLeasedCommand(
+      COMMAND_IDS.providerFutureAudit,
+      'provider-future-audit',
+      312,
+    );
+    const futureArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerFutureAudit,
+      future.commandPayload,
+      future.leaseId,
+      1,
+      providerParameters('provider-future-audit'),
+    );
+    expectProviderPlanResult(
+      await bindInitialStripeProviderPlan(futureArgs),
+      'provider_plan_bound',
+    );
+    const validAudit = await future.pair.providerAuditRef.get();
+    await future.pair.providerAuditRef.set({
+      ...validAudit.data(),
+      providerPlanAuditSchemaVersion: 2,
+    });
+    const futureFoundationBefore = await readFoundationEvidence(future.pair, 2);
+    const futureProviderBefore = await readProviderEvidence(future.pair);
+    await expect(bindInitialStripeProviderPlan(futureArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(future.pair)).toEqual(futureProviderBefore);
+    expect(await readFoundationEvidence(future.pair, 2)).toEqual(futureFoundationBefore);
+
+    await future.pair.providerAuditRef.set({
+      ...validAudit.data(),
+      eventType: 'provider_request_sent',
+    });
+    const malformedAuditFoundationBefore = await readFoundationEvidence(future.pair, 2);
+    const malformedAuditProviderBefore = await readProviderEvidence(future.pair);
+    await expect(bindInitialStripeProviderPlan(futureArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(future.pair)).toEqual(malformedAuditProviderBefore);
+    expect(await readFoundationEvidence(future.pair, 2))
+      .toEqual(malformedAuditFoundationBefore);
+  });
+
+  test('malformed B2A and B2B partners block plan creation without repair', async () => {
+    const root = await setupLeasedCommand(
+      COMMAND_IDS.providerMalformedRoot,
+      'provider-malformed-root',
+      313,
+    );
+    const rootArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerMalformedRoot,
+      root.commandPayload,
+      root.leaseId,
+      1,
+      providerParameters('provider-malformed-root'),
+    );
+    const validRoot = await root.pair.commandRef.get();
+    await root.pair.commandRef.set({
+      ...validRoot.data(),
+      journalSchemaVersion: 2,
+    });
+    const rootFoundationBefore = await readFoundationEvidence(root.pair, 2);
+    const rootProviderBefore = await readProviderEvidence(root.pair);
+    await expect(bindInitialStripeProviderPlan(rootArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(root.pair)).toEqual(rootProviderBefore);
+    expect(await readFoundationEvidence(root.pair, 2)).toEqual(rootFoundationBefore);
+
+    const lifecycle = await setupLeasedCommand(
+      COMMAND_IDS.providerMalformedLifecycle,
+      'provider-malformed-lifecycle',
+      314,
+    );
+    const lifecycleArgs = providerPlanArgs(
+      db,
+      COMMAND_IDS.providerMalformedLifecycle,
+      lifecycle.commandPayload,
+      lifecycle.leaseId,
+      1,
+      providerParameters('provider-malformed-lifecycle'),
+    );
+    const validLifecycle = await lifecycle.pair.lifecycleRef.get();
+    await lifecycle.pair.lifecycleRef.set({
+      ...validLifecycle.data(),
+      commandRevision: 4,
+    });
+    const lifecycleFoundationBefore = await readFoundationEvidence(lifecycle.pair, 2);
+    const lifecycleProviderBefore = await readProviderEvidence(lifecycle.pair);
+    await expect(bindInitialStripeProviderPlan(lifecycleArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderEvidence(lifecycle.pair)).toEqual(lifecycleProviderBefore);
+    expect(await readFoundationEvidence(lifecycle.pair, 2))
+      .toEqual(lifecycleFoundationBefore);
   });
 });
