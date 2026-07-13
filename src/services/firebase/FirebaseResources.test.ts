@@ -194,9 +194,11 @@ describe('FirebaseResources environment isolation', () => {
     '/register/%73uccess?registration=r1&token=example-capability',
     '/%72egister/success#example-capability',
     '/register/%ZZsuccess?token=example-capability',
-  ])('production does not initialize Analytics on a capability callback: %s', (pathName) => {
+  ])('production keeps App Check and Analytics off a capability callback: %s', (pathName) => {
     createResourcesFor('production', 'configured-public-site-key', pathName);
 
+    expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
+    expect(mockInitializeAppCheck).not.toHaveBeenCalled();
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
     expect(mockGetAnalytics).not.toHaveBeenCalled();
   });

@@ -99,7 +99,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 - Use a fully synthetic Firebase configuration in development/test.
 - Connect shared Auth, Firestore, and Functions clients to their loopback emulators and stop startup if connector setup fails.
 - Route the existing direct CSV Function URL through the same local/production resolver.
-- Keep App Check, Analytics, and Sentry off locally; do not initialize Analytics or Sentry on an initial capability callback URL.
+- Keep App Check, Analytics, and Sentry off locally; do not initialize App Check, Analytics, or Sentry on an initial capability callback URL.
 - Add focused callback, environment, failure, direct-URL, and monitoring tests.
 
 ### Acceptance criteria
@@ -111,7 +111,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 - [x] Auth, Firestore, and Functions all connect to emulators in development.
 - [x] Development/test Firebase configuration contains no production project identifiers.
 - [x] App Check, Analytics, and Sentry do not initialize locally, even when public config is present.
-- [x] Analytics and Sentry do not initialize on an initial capability callback carrying query or fragment state.
+- [x] App Check, Analytics, and Sentry do not initialize on an initial capability callback carrying query or fragment state.
 - [x] Every Auth/Firestore/Functions connector failure stops local startup.
 - [x] The direct CSV export resolves to the local Functions emulator outside production.
 - [x] None connects to an emulator in a production build.
@@ -129,7 +129,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 ### Agent handoff
 
-Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
+Do not redesign routing or hosting in this issue; WEB-001 owns that. Optimized previews still target production Firebase, so private preview behavior remains blocked on #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A/DATA-001A must design a safe handoff before a callback page depends on an App Check-protected browser request; do not weaken the initial capability guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
 
 ---
 

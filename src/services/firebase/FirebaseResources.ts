@@ -75,7 +75,12 @@ class FirebaseResources {
   private initAppCheck(): void {
     // App Check has no local Emulator Suite target. Do not initialize a
     // provider or exchange a debug token from development or tests.
-    if (isLocalRuntime) return;
+    // Its reCAPTCHA provider is also an outside script, so do not start it
+    // while an initial OAuth/checkout capability remains in the page URL.
+    if (
+      isLocalRuntime
+      || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
+    ) return;
 
     const siteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
     if (!siteKey) {
