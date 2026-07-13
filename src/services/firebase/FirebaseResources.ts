@@ -15,6 +15,10 @@ import {
 } from 'firebase/functions';
 
 import hasCapabilityCallbackState from '../monitoring/capabilityCallback';
+import {
+  clientFailureEvents,
+  reportClientFailure,
+} from '../monitoring/clientDiagnostics';
 
 const isLocalRuntime = process.env.NODE_ENV !== 'production';
 const LOCAL_FIREBASE_PROJECT_ID = 'demo-mprc-local';
@@ -82,9 +86,7 @@ class FirebaseResources {
 
     const siteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
     if (!siteKey) {
-      console.warn(
-        'App Check disabled: set REACT_APP_RECAPTCHA_SITE_KEY to enable',
-      );
+      reportClientFailure(clientFailureEvents.appCheckDisabled);
       return;
     }
     try {
@@ -92,8 +94,8 @@ class FirebaseResources {
         provider: new ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true,
       });
-    } catch (error) {
-      console.warn('App Check init failed:', error);
+    } catch {
+      reportClientFailure(clientFailureEvents.appCheckInitializationFailed);
     }
   }
 
