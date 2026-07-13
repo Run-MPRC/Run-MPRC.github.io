@@ -28,7 +28,7 @@
 | Wrong public text, image, or link | Ask the platform owner for one reviewed revert pull request. |
 | Site unavailable or old after a merge | Ask the platform owner to check Netlify and GitHub Pages separately; do not change DNS. |
 | Login or member access is wrong | Stop role requests and contact the identity/platform owners. |
-| Account exists but verification email request failed | Ask the member to stop resending. Record only the time, public `/login` URL, and plain status. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
+| Account exists but a verification email request is unavailable | Ask the member to stop resending. Record only the time, route path `/login` or `/account`, and plain status. Omit all query/fragment text. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
 | Profile Save says permission is missing | Ask the member to stop, sign out, and wait. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
 | Private member information is visible | Contact platform and privacy owners immediately; they choose containment through an approved service procedure. Do not change permissions yourself. |
 | Unexpected payment, refund, order, or signup | Contact treasurer and platform owners. The new source guard is not deployed and its officer control is NOT AVAILABLE YET. Do not test with real money. |
@@ -75,30 +75,39 @@ In words: stop, record only safe public facts, contact both owners, and wait for
 
 **Escalation:** treasurer plus platform owner; add the security owner for an unauthorized command and the privacy owner if member information appeared.
 
-### Account created but verification request failed
+### Verification email request unavailable
 
-**Status:** the truthful two-result screen in [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) is **SOURCE ONLY, NOT LIVE** until its exact website revision is published and verified.
+**Status:** the truthful create-account result in [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) and My Account resend/countdown in [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) are **SOURCE ONLY, NOT LIVE** until the exact website revision is published and verified. #118 profile source is merged, but its backend and live behavior are also unproven.
 
 **Purpose:** preserve the new account and prevent repeated email requests or unsafe account repair.
 
 **Approver:** membership lead plus identity/platform owner.
 
-**Prerequisites:** the time, the public `/login` address, and the exact plain status with all private details omitted. My Account recovery is not proven until [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) records the exact Rules, Functions, and profile page, and [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120) records a truthful resend result plus cooldown. Without both proofs, use only these stop-and-escalate steps.
+**Prerequisites:** the time, the public route path `/login` or `/account`, and the exact plain status with all private details omitted. Do not copy anything after `?` or `#` in the browser address. My Account recovery is not proven until [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) has exact Rules/Functions/profile-page deployment evidence and [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) has exact website evidence. Without both proofs, use only the stop-and-escalate steps below.
 
-1. Ask the member to stop clicking Create account or Resend.
+1. Ask the member to stop clicking Create account or the email-request action.
 2. Do not ask for their email address, password, code, action link, mailbox access, or screenshot.
-3. Record only `account created; verification request did not finish`, the time, and the public `/login` URL.
+3. Record only the exact plain `accepted` or `unavailable` status, the time, and the route path `/login` or `/account`. Omit all query text after `?` and all fragment text after `#`.
 4. Ask the member to keep the account. Do not delete or recreate it.
 5. Open a redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
 6. Contact the identity/platform owner.
 7. Add the communications owner if accepted messages land in Spam or never arrive.
 8. Wait for separate website and provider evidence before saying the problem is fixed.
 
-**Expected result:** no private data is copied, no duplicate account is created, and the owner can separate a website request failure from a provider-delivery problem.
+After the exact #118 and #153 live proofs exist:
 
-**Stop conditions:** repeated resend attempts, real mailbox tests, direct Firebase Console changes, account deletion/recreation, role changes, or a request for private details.
+1. Ask the member to choose **Request another verification email** once.
+2. Ask them to wait through the full visible 60-second countdown.
+3. If accepted, ask them to check Inbox and Spam once. Accepted does not mean delivered.
+4. If unavailable, wait through the countdown and try once more.
+5. If the second request is unavailable, stop and escalate.
+6. Do not refresh to bypass the browser countdown. It can reset, but Firebase can still throttle requests.
 
-**Success proof:** the exact website revision displays the correct generic status in an approved synthetic check. Sender branding, delivery, and Spam placement need separate private evidence under [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
+**Expected result:** no private data is copied, no duplicate account is created, rapid repeats are blocked, and the owner can separate a website request failure from a provider-delivery problem.
+
+**Stop conditions:** more than one retry after the countdown, refresh used to bypass it, real mailbox tests, direct Firebase Console changes, account deletion/recreation, role changes, or a request for private details.
+
+**Success proof:** the exact website revision displays accepted/unavailable outcomes, the visible countdown, and one later retry in an approved synthetic check. Sender branding, delivery, and Spam placement need separate private evidence under [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119).
 
 **Undo:** ask for one reviewed frontend revert or safe roll-forward. Never undo this problem by deleting the login account.
 

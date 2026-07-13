@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, {
+  useEffect, useRef, useState,
+} from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
@@ -17,6 +19,7 @@ import {
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
 import StravaSection from './StravaSection';
 import { getLocationReturnPath } from '../login/loginReturnPath';
+import './Account.css';
 
 function roleLabel(role: string) {
   if (role === 'admin') return 'Admin';
@@ -31,36 +34,139 @@ function tsToDate(ts: Timestamp | null | undefined) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+const VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+
 function ResendVerificationButton() {
   const { services } = useServiceLocator();
-  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [state, setState] = useState<
+    'idle' | 'sending' | 'accepted' | 'unavailable'
+  >('idle');
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const inFlightRef = useRef(false);
+  const retryAtRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!retryAt) return undefined;
+    const deadline = retryAt;
+
+    function updateCountdown() {
+      const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setRemainingSeconds(seconds);
+      if (seconds === 0) {
+        retryAtRef.current = 0;
+        setRetryAt(null);
+      }
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
 
   async function handleClick() {
-    if (!services) return;
+    if (
+      !services
+      || inFlightRef.current
+      || retryAtRef.current > Date.now()
+    ) return;
+
+    inFlightRef.current = true;
     setState('sending');
     try {
       await services.identityService.resendVerificationEmail();
-      setState('sent');
+      if (mountedRef.current) setState('accepted');
     } catch {
-      setState('error');
+      if (mountedRef.current) setState('unavailable');
+    } finally {
+      const nextRetryAt = Date.now() + VERIFICATION_RESEND_COOLDOWN_SECONDS * 1000;
+      retryAtRef.current = nextRetryAt;
+      inFlightRef.current = false;
+      if (mountedRef.current) {
+        setRemainingSeconds(VERIFICATION_RESEND_COOLDOWN_SECONDS);
+        setRetryAt(nextRetryAt);
+      }
     }
   }
 
-  if (state === 'sent') {
-    return <span className="text-xs text-green-700">Verification email sent.</span>;
+  const coolingDown = remainingSeconds > 0;
+  let buttonLabel = 'Request another verification email';
+  const countdownUnit = remainingSeconds === 1 ? 'second' : 'seconds';
+  if (state === 'sending') {
+    buttonLabel = 'Requesting...';
+  } else if (coolingDown) {
+    buttonLabel = `Try again in ${remainingSeconds} ${countdownUnit}`;
   }
-  if (state === 'error') {
-    return <span className="text-xs text-red-700">Failed to send — try again later.</span>;
-  }
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={state === 'sending'}
-      className="text-sm text-blue-700 hover:underline disabled:opacity-50"
-    >
-      {state === 'sending' ? 'Sending...' : 'Resend verification email'}
-    </button>
+    <div className="verification-resend">
+      {state === 'sending' && (
+        <p
+          id="verification-resend-result"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="verification-resend__result verification-resend__result--sending"
+        >
+          Requesting a verification email...
+        </p>
+      )}
+      {state === 'accepted' && (
+        <p
+          id="verification-resend-result"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="verification-resend__result verification-resend__result--accepted"
+        >
+          The request was accepted. Delivery can take time. Check Inbox and Spam.
+        </p>
+      )}
+      {state === 'unavailable' && (
+        <p
+          id="verification-resend-result"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="verification-resend__result verification-resend__result--unavailable"
+        >
+          We could not request an email right now. Wait for the countdown, then try
+          once more.
+        </p>
+      )}
+      {coolingDown && (
+        <p id="verification-resend-countdown" className="verification-resend__countdown">
+          Another request is available in
+          {' '}
+          {remainingSeconds}
+          {' '}
+          {countdownUnit}
+          .
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={!services || state === 'sending' || coolingDown}
+        aria-describedby={[
+          state !== 'idle'
+            ? 'verification-resend-result'
+            : null,
+          coolingDown ? 'verification-resend-countdown' : null,
+        ].filter(Boolean).join(' ') || undefined}
+        className="verification-resend__button"
+      >
+        {buttonLabel}
+      </button>
+    </div>
   );
 }
 
@@ -403,9 +509,9 @@ export function AccountContent({
             </div>
           )}
           {profile && !profile.emailVerified && (
-            <div className="mt-3 p-3 bg-amber-100 border border-amber-300 rounded text-sm flex justify-between items-center gap-2">
+            <div className="account-verification-notice">
               <span>Your email address is unverified.</span>
-              <ResendVerificationButton />
+              <ResendVerificationButton key={user.uid} />
             </div>
           )}
           {profile?.role === 'unverified' && (

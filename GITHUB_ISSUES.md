@@ -328,6 +328,8 @@ Both the legacy member synchronization function and admin role callable grant cl
 
 AUTH-001A now rejects unverified targets at the two existing role-grant endpoints. Do not duplicate that merged slice. It is not proof that Firebase production runs the new code, and it does not complete the remaining parent requirements below.
 
+Adjacent account-email recovery is represented by canonical live parent [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120), not by a new AUTH-001 role-grant child. AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) merged the account-creation/request split as `46557c7` but is not published. AUTH-MAIL-002B [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) owns the truthful My Account resend result and browser cooldown. AUTH-MAIL-002C remains proposed for password-reset/action-code recovery. None grants membership or proves provider delivery.
+
 ### Scope
 
 - Reject member/admin/capability grants when the target Firebase user's email is unverified.
