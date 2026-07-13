@@ -298,6 +298,36 @@ Required initial event set is documented in [STRIPE_COMMERCE_DESIGN.md](./STRIPE
 
 For secret rotation, support the provider-approved overlap or controlled switchover, send a signed test event, verify the new secret, then retire the old secret and record evidence.
 
+### Promotion-adjustment safety release — BLOCKED
+
+**Purpose:** prevent an older promotion-enabled Stripe Session or provider setting from bypassing the repository guard.
+
+**Approver:** treasurer plus platform owner; the Stripe account owner performs provider readback.
+
+**Prerequisites:** merged [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102), green exact-commit checks, an isolated staging Firebase project, Stripe test mode, and a reviewed protected release plan that names `createCheckoutSession`, `createMerchCheckout`, and `stripeWebhook` together.
+
+The current protected release plan names only the profile-recovery Functions. It cannot deploy this Stripe slice. Do not call #102 deployed until a separately reviewed immutable plan includes all three Stripe Functions and verifies them after deployment.
+
+1. Have the Stripe account owner privately count still-open Sessions created before the #102 release candidate.
+2. Record only redacted counts, mode, date range, and disposition. Do not copy customer details, Session URLs, promotion-code values, or provider identifiers into GitHub, email, screenshots, or AI.
+3. Privately confirm whether promotion codes, coupons, automatic tax, or shipping rates can affect the test/staging Checkout configuration.
+4. Expire or reconcile test/staging Sessions under the approved plan. Do not change production provider state in this procedure.
+5. Run made-up race and merchandise payments in Stripe test mode. A complete all-zero completion must continue. An adjustment or missing breakdown on completion, failure, or expiry must create review evidence and never become paid/fulfilled. An ordinary all-zero failure or expiry cancels without creating a new warning.
+6. Reconcile Stripe test totals with the synthetic Firebase records.
+7. Release the three named Functions together only through the protected exact-commit gate.
+8. Read back the deployed Functions and Stripe event destination separately.
+9. Record Firebase deployment, provider readback, and observed behavior as three different results.
+
+**Expected result:** new Sessions cannot accept promotion entry or automatic tax, and the webhook accepts only a complete all-zero adjustment breakdown. Failed or expired Sessions still cancel while keeping any review flag.
+
+**Stop conditions:** missing owner, production mode, real customer/member data, an old open Session with no approved disposition, a release plan missing one Function, skipped/partial Firebase work, or unavailable provider readback.
+
+**Success proof:** redacted private inventory, exact merge commit, exact CI run, protected release run, three Function readbacks, test-mode event evidence, and separate Stripe owner confirmation.
+
+**Undo:** use one reviewed safe roll-forward or revert through the same three-Function gate. Do not re-enable promotions, edit payment records, delete webhook ledgers, or expire production Sessions by hand.
+
+**Escalation:** treasurer plus platform owner; add the security owner for a suspected bypass and the privacy owner if customer information appeared.
+
 ## 9. Staging dress rehearsal
 
 Before every major payment release:

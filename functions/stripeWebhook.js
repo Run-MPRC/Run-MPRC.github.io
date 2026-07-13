@@ -455,12 +455,120 @@ function nonNegativeInteger(value, fallback = 0) {
   return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
 }
 
+function requiredNullableAdjustment(object, field) {
+  if (!Object.prototype.hasOwnProperty.call(object, field)) {
+    return { ok: false, reason: 'invalid_stripe_adjustment' };
+  }
+  const value = object[field];
+  if (value === null) return { ok: true, value: 0, present: true };
+  return requiredAdjustment(value);
+}
+
+function requiredAdjustment(value) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    return { ok: false, reason: 'invalid_stripe_adjustment' };
+  }
+  return { ok: true, value, present: true };
+}
+
+function validateSessionAdjustments(session) {
+  const details = session.total_details;
+  const shippingCost = session.shipping_cost;
+  // Equality between subtotal and total proves only a net-zero change. Stripe
+  // must provide the component breakdown so offsetting adjustments cannot be
+  // mistaken for an unadjusted payment.
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return { ok: false, reason: 'invalid_stripe_adjustment' };
+  }
+  if (shippingCost !== undefined && shippingCost !== null
+    && (typeof shippingCost !== 'object' || Array.isArray(shippingCost))) {
+    return { ok: false, reason: 'invalid_stripe_adjustment' };
+  }
+
+  const discount = requiredAdjustment(details.amount_discount);
+  const tax = requiredAdjustment(details.amount_tax);
+  const detailShipping = requiredNullableAdjustment(details, 'amount_shipping');
+  const hasShippingCost = shippingCost !== undefined && shippingCost !== null;
+  const costShippingSubtotal = hasShippingCost
+    ? requiredAdjustment(shippingCost.amount_subtotal)
+    : { ok: true, value: 0, present: false };
+  const costShippingTax = hasShippingCost
+    ? requiredAdjustment(shippingCost.amount_tax)
+    : { ok: true, value: 0, present: false };
+  const costShippingTotal = hasShippingCost
+    ? requiredAdjustment(shippingCost.amount_total)
+    : { ok: true, value: 0, present: false };
+  const values = [
+    discount,
+    tax,
+    detailShipping,
+    costShippingSubtotal,
+    costShippingTax,
+    costShippingTotal,
+  ];
+  if (values.some(({ ok }) => !ok)) {
+    return { ok: false, reason: 'invalid_stripe_adjustment' };
+  }
+  const computedShippingTotal = costShippingSubtotal.value + costShippingTax.value;
+  if (hasShippingCost && (!Number.isSafeInteger(computedShippingTotal)
+    || computedShippingTotal !== costShippingTotal.value)) {
+    return { ok: false, reason: 'stripe_shipping_breakdown_mismatch' };
+  }
+  if (hasShippingCost && detailShipping.value !== costShippingTotal.value) {
+    return { ok: false, reason: 'stripe_shipping_breakdown_mismatch' };
+  }
+
+  return {
+    ok: true,
+    discountCents: discount.value,
+    taxCents: tax.value,
+    shippingCents: detailShipping.value,
+    shippingSubtotalCents: costShippingSubtotal.value,
+    shippingTaxCents: costShippingTax.value,
+  };
+}
+
+function validateSessionAdjustmentBreakdown(session, adjustments) {
+  if (!Number.isSafeInteger(session.amount_total) || session.amount_total < 0) {
+    return { ok: false, reason: 'invalid_stripe_total' };
+  }
+  if (!Number.isSafeInteger(session.amount_subtotal) || session.amount_subtotal < 0) {
+    return { ok: false, reason: 'invalid_stripe_subtotal' };
+  }
+  const computedTotalCents = session.amount_subtotal
+    - adjustments.discountCents
+    + adjustments.taxCents
+    + adjustments.shippingCents;
+  if (!Number.isSafeInteger(computedTotalCents)
+    || computedTotalCents !== session.amount_total) {
+    return { ok: false, reason: 'stripe_total_breakdown_mismatch' };
+  }
+  return { ok: true };
+}
+
+function adjustmentPolicyFailure(adjustments) {
+  if (!adjustments.ok) return adjustments;
+  if (adjustments.discountCents !== 0) {
+    return { ok: false, reason: 'discount_not_allowed' };
+  }
+  if (adjustments.taxCents !== 0) {
+    return { ok: false, reason: 'tax_not_configured' };
+  }
+  if (adjustments.shippingCents !== 0
+    || adjustments.shippingSubtotalCents !== 0
+    || adjustments.shippingTaxCents !== 0) {
+    return { ok: false, reason: 'shipping_charge_not_configured' };
+  }
+  return { ok: true };
+}
+
 function validateSessionMoney(session, record) {
   const expectedSubtotal = record.amountCents;
   const expectedCurrency = normalizedCurrency(record.currency);
   const actualCurrency = normalizedCurrency(session.currency);
   const totalCents = session.amount_total;
   const subtotalCents = session.amount_subtotal;
+  const adjustments = validateSessionAdjustments(session);
 
   if (!Number.isSafeInteger(expectedSubtotal) || expectedSubtotal < 0) {
     return { ok: false, reason: 'invalid_expected_amount' };
@@ -477,18 +585,35 @@ function validateSessionMoney(session, record) {
   if (!Number.isSafeInteger(subtotalCents) || subtotalCents < 0) {
     return { ok: false, reason: 'invalid_stripe_subtotal' };
   }
+  if (!adjustments.ok) return adjustments;
   if (subtotalCents !== expectedSubtotal) {
     return { ok: false, reason: 'amount_mismatch' };
   }
-  if (totalCents !== expectedSubtotal) {
+  const {
+    discountCents,
+    taxCents,
+    shippingCents,
+  } = adjustments;
+  const hasAdjustments = discountCents !== 0 || taxCents !== 0 || shippingCents !== 0;
+  if (!hasAdjustments && totalCents !== expectedSubtotal) {
     return { ok: false, reason: 'total_mismatch' };
   }
+  const computedTotalCents = subtotalCents - discountCents + taxCents + shippingCents;
+  if (!Number.isSafeInteger(computedTotalCents)
+    || computedTotalCents !== totalCents) {
+    return { ok: false, reason: 'stripe_total_breakdown_mismatch' };
+  }
+  const adjustmentPolicy = adjustmentPolicyFailure(adjustments);
+  if (!adjustmentPolicy.ok) return adjustmentPolicy;
 
   return {
     ok: true,
     summary: {
       stripeAmountSubtotalCents: subtotalCents,
       stripeAmountTotalCents: totalCents,
+      stripeDiscountCents: discountCents,
+      stripeTaxCents: taxCents,
+      stripeShippingCents: shippingCents,
       stripeCurrency: actualCurrency,
       stripePaymentStatus: session.payment_status || null,
     },
@@ -735,6 +860,16 @@ function successfulPaymentTransition({ event, session, target, record }) {
 function unsuccessfulSessionTransition({ event, session, target, record, reason }) {
   const binding = validateSessionBinding(session, record);
   if (!binding.ok) return reviewTransition({ target, event, reason: binding.reason });
+  const adjustments = validateSessionAdjustments(session);
+  let adjustmentReviewReason = adjustments.ok ? null : adjustments.reason;
+  if (!adjustmentReviewReason) {
+    const breakdown = validateSessionAdjustmentBreakdown(session, adjustments);
+    if (!breakdown.ok) adjustmentReviewReason = breakdown.reason;
+  }
+  if (!adjustmentReviewReason) {
+    const adjustmentPolicy = adjustmentPolicyFailure(adjustments);
+    if (!adjustmentPolicy.ok) adjustmentReviewReason = adjustmentPolicy.reason;
+  }
   if (!CHECKOUT_PAYMENT_STATUSES.has(session.payment_status)) {
     return reviewTransition({ target, event, reason: 'invalid_checkout_payment_status' });
   }
@@ -742,11 +877,19 @@ function unsuccessfulSessionTransition({ event, session, target, record, reason 
     return reviewTransition({ target, event, reason: 'unsuccessful_event_reports_paid' });
   }
   if (record.status !== 'pending') {
+    if (adjustmentReviewReason) {
+      return reviewTransition({ target, event, reason: adjustmentReviewReason });
+    }
     return { outcome: `${reason}_ignored:${record.status}`, patch: null };
   }
   const paymentIntentId = objectId(session.payment_intent);
+  let auditAction = reason === 'expired' ? 'session.expired' : 'payment.async_failed';
+  if (adjustmentReviewReason) auditAction = 'payment.unsuccessful_review_required';
   return {
-    outcome: `payment_${reason}`,
+    outcome: adjustmentReviewReason
+      ? `needs_review:${adjustmentReviewReason}`
+      : `payment_${reason}`,
+    requiresReview: !!adjustmentReviewReason,
     patch: {
       status: 'cancelled',
       paymentStatus: reason,
@@ -754,12 +897,18 @@ function unsuccessfulSessionTransition({ event, session, target, record, reason 
       stripeSessionId: record.stripeSessionId || session.id,
       stripePaymentIntentId: paymentIntentId || record.stripePaymentIntentId || null,
       cancelledAt: record.cancelledAt || Timestamp.now(),
+      ...(adjustmentReviewReason ? {
+        paymentReviewRequired: true,
+        paymentReviewReason: adjustmentReviewReason,
+      } : {}),
       lastStripeEventId: event.id,
       updatedAt: Timestamp.now(),
       auditLog: auditPatch({
         target,
-        action: reason === 'expired' ? 'session.expired' : 'payment.async_failed',
-        note: `event=${event.id}`,
+        action: auditAction,
+        note: adjustmentReviewReason
+          ? `event=${event.id} reason=${adjustmentReviewReason}`
+          : `event=${event.id}`,
       }),
     },
   };

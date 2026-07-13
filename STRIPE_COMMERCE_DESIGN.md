@@ -1,14 +1,14 @@
 # Stripe, Race Registration, and Merchandise Design
 
 **Status:** Required production design; current code is a test-mode prototype
-**Last reviewed:** 2026-07-12
+**Last reviewed:** 2026-07-13
 **Related:** [SYSTEM_DESIGN.md](./SYSTEM_DESIGN.md), [SECURITY.md](./SECURITY.md), [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md)
 
 This document defines how MPRC should configure Stripe and how race-registration and merchandise money flows must behave. It deliberately separates repository implementation from external Stripe account configuration: source code can declare required secret names and behavior, but it cannot prove that the production Stripe account, event destination, bank account, roles, tax settings, Radar controls, or secrets are correctly configured.
 
 ## 1. Launch status
 
-**Do not enable or advertise live checkout yet.** The initial 2026-07-12 assessment found unsafe payment confirmation, no Event-ID ledger, enabled unmodeled promotions, and callback loss. A working-tree safety slice now validates paid/amount/currency/mode/explicit livemode, rejects discounts, deduplicates Events, protects terminal/refund state, and preserves callbacks. That slice is not deployed evidence and does not close the payment architecture. These residual conditions still prevent safe production use:
+**Do not enable or advertise live checkout yet.** The initial 2026-07-12 assessment found unsafe payment confirmation, no Event-ID ledger, enabled unmodeled promotions, and callback loss. Repository safety slices now validate paid/amount/currency/mode/explicit livemode, reject unapproved adjustments, deduplicate Events, protect terminal/refund state, and preserve callbacks. PAY-003A [#101](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/101) is merged source; PROMO-001 [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102) supplies the adjustment guard and exact tests. Neither statement is deployment, provider, or live-behavior evidence, and these slices do not close the payment architecture. These residual conditions still prevent safe production use:
 
 - Checkout creation lacks validated fail-closed environment configuration, command idempotency, a persistence-first saga, and the canonical versioned state/schema contract.
 - The webhook still needs canonical reducer/reservation/outbox integration, explicit metadata schema allowlisting/migration, retry/dead-letter operations, TTL/alerts, emulator integration, and Stripe test-mode delivery rehearsal.
@@ -16,8 +16,8 @@ This document defines how MPRC should configure Stripe and how race-registration
 - Late-registration Payment Links cannot be reliably mapped back to their registration and are reusable.
 - Race capacity is checked with a non-atomic count; merchandise has no SKU inventory reservation.
 - Cancelling locally does not expire an open Stripe Session, so a later payment can reopen the record.
-- Promotion codes are disabled and discounted Sessions quarantined in the working tree, but exact creator tests and outstanding pre-change Session/provider inventory remain PROMO-001.
-- Success credentials remain in query strings even though the working-tree Pages fallback now preserves them; DATA-001 must remove long-lived plaintext capabilities and scrub browser/monitoring state.
+- Promotion entry and automatic tax are disabled in both current Session creators. Exact creator/webhook tests quarantine any nonzero discount, tax, or shipping charge. Outstanding pre-change Session/provider inventory, deployment, and live verification remain open under PROMO-001.
+- Success credentials remain in query strings even though the Pages fallback now preserves them; DATA-001 must remove long-lived plaintext capabilities and scrub browser/monitoring state.
 - Production App Check enforcement is optional and fail-open.
 - Legal, privacy, cancellation/refund, tax, shipping, and waiver content is not approved for launch.
 
@@ -270,7 +270,7 @@ For every Session:
 - Shipping collection only for flows that ship physical goods, with an approved country list.
 - Explicit payment-method policy.
 - Deliberate expiration for reserved capacity/inventory.
-- Promotion codes disabled under PROMO-001 until PAY-001 defines server-approved monetary snapshots and PAY-002 implements the corresponding idempotent eligibility/discount/state contract. The working tree sets `allow_promotion_codes: false` and quarantines nonzero discounts; creator-payload tests and pre-change Session/provider inventory remain open.
+- Promotion codes and automatic tax disabled under PROMO-001 until approved monetary snapshots and policies exist. Exact creator-payload tests cover both current Session creators. The webhook requires a complete Stripe adjustment breakdown and quarantines any nonzero discount, tax, or shipping amount. Pre-change Session/provider inventory, deployment, and live verification remain open.
 - A stable Stripe idempotency key supplied in request options.
 
 Do not put the confirmation bearer token in `success_url`. Use Stripe's `{CHECKOUT_SESSION_ID}` placeholder. The success API retrieves and validates the Session server-side and returns a sanitized business projection. The success page is informational; fulfillment remains webhook-driven.
@@ -387,7 +387,18 @@ Do not create a reusable Payment Link per registrant. Prefer a one-off Checkout 
 
 ### Promotions
 
-The assessment baseline's `allow_promotion_codes: true` was not a complete promotion system. PROMO-001 now disables it in the working tree; before enabling discounts in any future issue:
+The assessment baseline's `allow_promotion_codes: true` was not a complete promotion system. PROMO-001 repository source disables it and records explicit zero adjustments; before enabling discounts in any future issue:
+
+```mermaid
+flowchart LR
+    Create["Server creates Checkout Session"] --> Disabled["Promotion entry and automatic tax disabled"]
+    Disabled --> Event["Signed Stripe event"]
+    Event --> Check{"Complete zero adjustment breakdown?"}
+    Check -- "Yes" --> Continue["Continue normal payment checks"]
+    Check -- "No, unknown, or nonzero" --> Review["Never mark paid or fulfilled; record review evidence"]
+```
+
+Text alternative: the server disables unapproved price adjustments when creating Checkout; the signed webhook continues payment confirmation only with a complete all-zero breakdown. Otherwise it records review evidence and never marks paid or fulfilled; a definitively failed or expired Session still cancels.
 
 - Decide whether codes live in Stripe, Firestore, or both.
 - Restrict eligible products/events, redemption counts, dates, currencies, and customer scope.
@@ -396,7 +407,7 @@ The assessment baseline's `allow_promotion_codes: true` was not a complete promo
 - Include discounts in reconciliation and exports.
 - Audit code creation and changes.
 
-Until that work is complete, keep `allow_promotion_codes: false` and quarantine any nonzero discount.
+Until that work is complete, keep promotion entry and automatic tax disabled and quarantine unknown or nonzero discount, tax, or shipping adjustments.
 
 ### Tax
 
