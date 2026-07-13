@@ -16,14 +16,15 @@ An agent-ready child has one observable outcome, one trust boundary, explicit de
 
 | ID | Status/dependency | Bounded deliverable | Close evidence |
 | --- | --- | --- | --- |
-| CI-001A | published as #103; local baseline slice | Repair Jest browser globals and replace the stale starter test with a deterministic, no-provider-network MPRC app smoke test. Required workflow gating remains under #105. | Node 20 focused/full frontend tests, changed-file lint, clean diff, and diagnostic build pass; do not claim a required CI gate. |
-| CI-001B | owner_action; CI-001A | Protect backend-first staging/production deployment; pin tools/Actions; remove frontend service-account JSON; configure OIDC/WIF, approvals, missing-config failure, smoke and roll-forward. | PR gate and negative credential run; private two-owner IAM review; staging deployment evidence. |
+| CI-001A | merged/closed as #103 | Repair Jest browser globals and replace the stale starter test with a deterministic, no-provider-network MPRC app smoke test. | Node 20 focused/full frontend tests, changed-file lint, clean diff, and diagnostic build pass. |
+| CI-001B1 | published as #124; CI-001A | Run the complete committed frontend Jest suite as a named blocking step in the hosted frontend CI job; update exact officer/engineering truth. | Local Node 20 suite/build plus exact pull-request and post-merge hosted step evidence; no production/provider claim. |
+| CI-001B2 | owner_action; CI-001B1 | Protect backend-first staging/production deployment; make lint/remaining checks fail closed; pin tools/Actions; remove frontend service-account JSON; configure OIDC/WIF, approvals, missing-config failure, smoke and roll-forward. | Required PR gate and negative credential run; private two-owner IAM review; staging deployment evidence. |
 | SUPPLY-001A | ready; CI-001A | Prove `gpxparser` unused and remove its obsolete transitive chain. | `rg`/tree proof, before/after audits, root lockfile diff, full frontend checks. |
 | SUPPLY-001B | ready; CI-001A | Patch React Router within compatible 6.x and resolve/test future flags without route redesign. | Navigation/callback tests, audit delta, build. |
 | SUPPLY-001C | proposed; CI-001A | Upgrade Firebase web SDK within one compatibility boundary. | Auth/Firestore/Functions/App Check/emulator tests and bundle/audit diff. |
 | SUPPLY-001D | proposed; CI-001A | Upgrade Firebase Admin/Functions in one supported set. | Node 20 lint/unit/emulator/trigger tests and deploy compatibility notes. |
 | SUPPLY-001E | proposed; PAY-003C | Upgrade Stripe SDK and deliberately select/test an API version. | Signed fixture/test-mode diff and rollback notes; no live endpoint change. |
-| SUPPLY-001F | proposed; CI-001B, A–C | Replace CRA while preserving env handling, SPA callbacks, sitemap/SEO, code splitting, and deploy output. | Full CI, bundle/SEO comparison, staging dry run. |
+| SUPPLY-001F | proposed; CI-001B2, A–C | Replace CRA while preserving env handling, SPA callbacks, sitemap/SEO, code splitting, and deploy output. | Full CI, bundle/SEO comparison, staging dry run. |
 | SUPPLY-001G | proposed; CI-001A | Add dependency updates, audit exceptions, secret scan, SBOM, and lockfile review policy. | Safe sample update; deliberate secret detection; sanitized SBOM. |
 
 ## Identity, OAuth, and abuse controls
@@ -101,7 +102,7 @@ An agent-ready child has one observable outcome, one trust boundary, explicit de
 | MERCH-002B | proposed; A, MERCH-001B | Apply server shipping/tax config and actual total snapshots/reconciliation. | Test-mode taxable/pickup/shipping/mismatch fixtures. |
 | MERCH-002C | proposed; A/B, ADMIN-001C | Add fulfillment/return/restock state and audited operator actions. | Forbidden transitions and stock adjustment tests. |
 | MERCH-002D | proposed; A–C, MAIL-001B | Add minimum customer communications/UI and address minimization. | Lifecycle/email/PII projection tests. |
-| WEB-001A | owner_action; CI-001B | Provision isolated staging hosting, rewrites, canonical/sitemap behavior, deploy and rollback. | ADR and deep-route staging evidence. |
+| WEB-001A | owner_action; CI-001B2 | Provision isolated staging hosting, rewrites, canonical/sitemap behavior, deploy and rollback. | ADR and deep-route staging evidence. |
 | WEB-001B | proposed; A | Add CSP/HSTS/frame/referrer/permissions/MIME/cache policy. | Automated header/CSP and browser flow smoke. |
 | WEB-001C | proposed; A/B, PAY-001A | Sanitize/validate stored HTML/URLs and migrate unsafe content. | XSS/protocol/legacy content fixtures. |
 | WEB-001D | owner_action; A–C | Execute controlled DNS cutover/rollback and retire old deploy path without enabling commerce. | Dated owner-approved cutover evidence. |

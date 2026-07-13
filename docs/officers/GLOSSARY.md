@@ -32,3 +32,4 @@
 | Rollback or revert | A reviewed change that restores the last known-good version. |
 | DNS | The settings that direct `runmprc.com` to a website host. DNS changes can take the whole site offline. |
 | CI or workflow | Automated checks and build jobs in GitHub. Green means those jobs passed, not necessarily that production changed. |
+| Jest | The automated test tool used to check frontend behavior before the website build. |

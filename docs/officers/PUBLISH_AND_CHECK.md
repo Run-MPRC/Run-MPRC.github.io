@@ -1,15 +1,19 @@
 # Review, Merge, and Check a Change
 
-**Use this when:** a preview is approved and someone asks whether the change is live.
+**Purpose:** Review one approved change, merge it safely, and record what did or did not become live.
 **Approver:** content owner for ordinary content; specialist owners listed in [Events, shop, members, and money](./EVENTS_SHOP_MEMBERS.md) for higher-risk work.
+**Prerequisites:** an approved pull request aimed at `main`, its rollback note, access to its GitHub job details, and a platform maintainer available for merge and live verification.
 
 **Independent officer publication status:** **NOT AVAILABLE YET.** A platform maintainer must own the merge and live verification until the Netlify repository, branch, owner, build, preview, and rollback path are recorded and tested.
 
 ## Current deployment truth
 
-As of **2026-07-12**:
+As of **2026-07-13**:
 
 - Merging to `main` starts GitHub workflows.
+- The `Frontend lint + build` job includes a job-failing step named `Run frontend Jest tests`. A failed step fails that job.
+- Required branch protection is not proven. The Jest step does not by itself prevent someone with merge access from merging a failed change.
+- The same job still has a lint command that can rewrite files and ignore failure. A green job is not proof that lint passed.
 - Merging therefore also authorizes an automatic GitHub Pages publication; there is no separate Pages approval today.
 - The GitHub repository currently opens stale, unprotected `dev` by default; use the explicit `main` branch and do not merge `dev` into `main` as a shortcut.
 - GitHub Pages builds a copy of the website.
@@ -22,12 +26,15 @@ As of **2026-07-12**:
 1. Open the pull request and confirm its destination says `main`.
 2. Confirm it names one issue and one outcome.
 3. Confirm another person or review agent approved it.
-4. Confirm required tests are green without “ignored” failures.
-5. Confirm the officer guide was updated when needed.
-6. Read the rollback note.
-7. Confirm you understand that a merge automatically publishes the GitHub Pages copy.
-8. Ask the platform maintainer whether any outside automation may also publish from the merge.
-9. Do not merge if either automatic publication is unacceptable or unknown.
+4. Open the `Frontend lint + build` job.
+5. Confirm `Run frontend Jest tests` is present and green. Stop if it is missing, skipped, or failed.
+6. Confirm the other required test steps are green.
+7. Ask the platform maintainer for separate non-mutating lint evidence when lint applies. Do not use the green job as lint proof.
+8. Confirm the officer guide was updated when needed.
+9. Read the rollback note.
+10. Confirm you understand that a merge automatically publishes the GitHub Pages copy.
+11. Ask the platform maintainer whether any outside automation may also publish from the merge.
+12. Do not merge if either automatic publication is unacceptable or unknown.
 
 ## Netlify publication — NOT AVAILABLE YET
 
@@ -49,15 +56,28 @@ Before a backup officer can publish independently, a claimed hosting issue must 
 1. Record the pull request number and merged commit.
 2. Wait for the GitHub workflow to finish.
 3. Read the job details, not only the green summary.
-4. Look for “skipping Firebase deploy.” If present, mark the backend **not deployed**.
-5. Ask the platform maintainer which commit Netlify says it deployed.
-6. Open [runmprc.com](https://runmprc.com) in a private/incognito window.
-7. Visit the exact changed page directly.
-8. Check the requested text, link, image, or behavior.
-9. Check one phone-sized view.
-10. Check one normal computer view.
-11. If Firebase or an outside service changed, ask its owner for separate dated proof.
-12. Record the result using the checklist below.
+4. Confirm the merged commit's `Run frontend Jest tests` step is green. Stop and escalate if it is missing, skipped, or failed.
+5. Look for “skipping Firebase deploy.” If present, mark the backend **not deployed**.
+6. Ask the platform maintainer which commit Netlify says it deployed.
+7. Open [runmprc.com](https://runmprc.com) in a private/incognito window.
+8. Visit the exact changed page directly.
+9. Check the requested text, link, image, or behavior.
+10. Check one phone-sized view.
+11. Check one normal computer view.
+12. If Firebase or an outside service changed, ask its owner for separate dated proof.
+13. Record the result using the checklist below.
+
+## Expected result
+
+The named Jest step is green for both the pull-request commit and the merged commit. The delivery record separately says whether GitHub Pages, Netlify, `runmprc.com`, Firebase, and any outside provider were verified.
+
+## Stop conditions
+
+Stop and ask the platform maintainer if the pull request does not target `main`; approval or the rollback note is missing; the named Jest step is missing, skipped, or failed; publication is unexpected; the deployed commit is unknown; or any live surface disagrees with the merged change.
+
+## Success proof
+
+Keep the completed delivery record with links to the pull request, merged commit, and exact GitHub job details. Add dated, separately obtained proof for each live website, Firebase, or outside-provider surface that the change affected.
 
 ## Delivery record
 
@@ -65,7 +85,8 @@ Before a backup officer can publish independently, a claimed hosting issue must 
 Issue:
 Pull request:
 Merged commit:
-Tests passed:
+Hosted frontend Jest step: pass / fail / missing
+Other tests passed:
 GitHub Pages published: yes / no / not relevant
 Netlify intended commit verified: yes / no / unknown
 runmprc.com verified: yes / no

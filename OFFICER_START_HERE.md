@@ -35,12 +35,13 @@ Use the club's approved password manager for access. Share only a public link or
 ## A change is complete only when each line is answered
 
 - **Code changed:** What changed?
-- **Tests passed:** What was checked?
+- **Hosted frontend tests passed:** Did the `Frontend lint + build` job show a green `Run frontend Jest tests` step? Jest is the automated frontend behavior test.
+- **Other tests passed:** What else was checked for this change?
 - **Code merged:** Which pull request was approved?
 - **Website live:** Was the exact change seen on [runmprc.com](https://runmprc.com)?
 - **Backend live:** If Firebase changed, did the log show a real Firebase deployment rather than “skipping” it?
 - **Outside service verified:** If Stripe, Netlify, DNS, Google, or email changed, was that service checked separately?
 
-As of **2026-07-12**, GitHub Pages builds and the live Netlify site are separate. A green GitHub check does **not** by itself prove that `runmprc.com` or Firebase changed.
+As of **2026-07-13**, hosted CI runs the frontend Jest suite, but GitHub Pages and the live Netlify site are still separate. A green test or workflow does **not** by itself prove that `runmprc.com` or Firebase changed.
 
 For the concise handbook, see [OFFICER_HANDBOOK.md](./OFFICER_HANDBOOK.md). The expanded task index is [docs/officers/README.md](./docs/officers/README.md).

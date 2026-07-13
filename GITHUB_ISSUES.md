@@ -14,6 +14,7 @@ Published foundation mapping:
 - PAY-003A → [#101](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/101)
 - PROMO-001 → [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102)
 - CI-001A → [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103)
+- CI-001B1 → [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124)
 - ARCH-001 documentation → [#104](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/104)
 - CI-001 tracker → [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105)
 - PAY-003 tracker → [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106)
@@ -49,7 +50,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | Order | ID | Title | Priority | Size | Status | Depends on |
 | ---: | --- | --- | --- | --- | --- | --- |
 | 1 | SAFETY-001 | Preserve commerce/OAuth callbacks and isolate local Firebase Functions | P0 | S | implemented_locally | — |
-| 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | ready | SAFETY-001 |
+| 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | partial: #103 baseline + #124 hosted Jest; remaining gates open | SAFETY-001 |
 | 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | ready | CI-001 baseline |
 | 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | implemented_locally | — |
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | ready | CI-001A recommended |
@@ -121,12 +122,12 @@ Do not redesign routing or hosting in this issue; WEB-001 owns that. Do not incl
 ## CI-001 — Repair test gates and secure the deployment pipeline
 
 **Labels:** `priority:P0`, `type:security`, `type:testing`, `area:ci`, `size:L`, `needs-external-config`
-**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105); focused child [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) owns the deterministic local frontend Jest baseline. The live issue records its merge state. Required workflow gating and protected deployment remain open under #105, so the current workflow is still non-compliant.
+**Status:** Published as tracker [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105). [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103) merged the deterministic local frontend Jest baseline, and [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124) owns its named blocking hosted-CI step. Fail-closed lint, required branch protection, dependency/secret checks, and protected backend-first deployment remain open, so the delivery pipeline is still non-compliant overall.
 **Depends on:** SAFETY-001
 
 ### Problem
 
-Before #103, frontend tests failed because the Jest environment lacked `TextEncoder`. The focused child repairs that local baseline, but CI still runs a mutating `lint:fix` command, ignores failure with `|| true`, and does not require frontend Jest. Deployment runs independently of CI, gives a full Firebase service-account JSON to the frontend build, installs `firebase-tools@latest`, deploys frontend before backend, and can succeed while silently skipping Firebase deployment.
+Before #103, frontend tests failed because the Jest environment lacked `TextEncoder`. That child repaired the local baseline, and #124 adds it to hosted CI. CI still runs a mutating `lint:fix` command and ignores its failure with `|| true`. Deployment still runs independently of CI, gives a full Firebase service-account JSON to the frontend build, installs `firebase-tools@latest`, deploys frontend before backend, and can skip or fail before proving Firebase deployment.
 
 ### Scope
 
@@ -163,7 +164,7 @@ Before #103, frontend tests failed because the Jest environment lacked `TextEnco
 
 ### Agent handoff
 
-Repository changes can implement tests/workflow shape, but OIDC/IAM/environment protection requires an authorized owner. Split into `CI-001A` (test reliability) and `CI-001B` (deployment identity) if one PR would be too broad.
+Repository changes can implement tests/workflow shape, but OIDC/IAM/environment protection requires an authorized owner. CI-001A/#103 owns test reliability, CI-001B1/#124 owns the hosted frontend-Jest step, and the remaining CI-001B2 deployment-identity/protection work must stay in separately claimed children.
 
 ---
 

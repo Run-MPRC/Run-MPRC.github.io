@@ -177,7 +177,7 @@ npm --prefix functions run test:run -- --runInBand
 CI=true npm test -- --watchAll=false --runInBand
 ```
 
-The SPA navigation command is **NOT AVAILABLE YET** and belongs to #99. The frontend Jest command is a dependable local baseline, but a required CI quality gate is **NOT AVAILABLE YET** and remains under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
+The SPA navigation command is **NOT AVAILABLE YET** and belongs to #99. The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Required branch protection, fail-closed lint, and protected deployment remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105).
 
 ### Firestore Rules
 
@@ -464,5 +464,7 @@ Each isolated issue must publish its own exact base commit, commands, counts, an
 On the isolated #104 branch based at `ce22c110`, Functions lint and 17/17 Functions tests pass, 97/97 Firestore Rules tests pass with Java 17, and the diagnostic production build passes. At that point, frontend Jest ran 15 Login tests but the App suite failed on the known missing `TextEncoder`. These are historical branch checks, not deployment evidence.
 
 On the isolated #103 branch based at `0e03ac1`, Node 20 focused App tests pass 1/1 and the complete frontend suite on the branch passes 16/16. Changed-file lint, diff checks, and the diagnostic production build also pass. Service initialization and provider-network paths are prevented by test mocks; this was not a socket-monitored provider test, and the separately owned #99 Firebase/Sentry tests are not present on the branch. A separate read-only Node 20 compatibility run against the preserved #99 working tree passed those two suites 6/6, but that is not #103 branch or merge coverage. This proves a deterministic local baseline only. It does not prove a required CI gate, website publication, Firebase deployment, provider configuration, or production behavior.
+
+Issue #124 adds that complete committed frontend suite to the hosted frontend job as the named, blocking `Run frontend Jest tests` step. Its pull-request and post-merge runs are the proof that the exact commits executed Jest. Even a green step does not prove branch protection, website publication, Firebase deployment, provider configuration, or production behavior.
 
 Provider configuration, production secrets, Netlify publication, Firebase deployment, and live behavior always require separate dated evidence. Local tests and a green GitHub summary do not prove them.
