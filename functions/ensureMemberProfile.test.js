@@ -324,12 +324,18 @@ describe('signup profile compatibility', () => {
       request: { body: canaries[4] },
       url: canaries[5],
     });
+    const consoleDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const otherConsoleSpies = [consoleDebug, consoleInfo, consoleLog, consoleWarn];
+    const allConsoleSpies = [consoleError, ...otherConsoleSpies];
     const { onSignUp } = require('./signup');
 
     try {
       await onSignUp(AUTH_USER);
-      expect(consoleError).not.toHaveBeenCalled();
+      allConsoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
 
       admin.__mocks.firestoreApi.runTransaction.mockRejectedValueOnce(providerFailure);
       let caught;
@@ -348,15 +354,18 @@ describe('signup profile compatibility', () => {
       expect(consoleError.mock.calls).toEqual([
         ['Member profile setup failed during account creation.'],
       ]);
+      otherConsoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
 
-      const serializedConsole = JSON.stringify(consoleError.mock.calls);
+      const serializedConsole = JSON.stringify(
+        allConsoleSpies.map((spy) => spy.mock.calls),
+      );
       const returnedError = `${caught.code}: ${caught.message}`;
       canaries.forEach((canary) => {
         expect(serializedConsole).not.toContain(canary);
         expect(returnedError).not.toContain(canary);
       });
     } finally {
-      consoleError.mockRestore();
+      allConsoleSpies.forEach((spy) => spy.mockRestore());
     }
   });
 });
