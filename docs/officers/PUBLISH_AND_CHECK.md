@@ -57,6 +57,7 @@ As of **2026-07-13**:
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
 - Git-triggered Netlify production builds are paused. Netlify build hooks are not controlled by that repository rule and remain unverified.
 - Live race signup, merchandise payments, and refunds remain unavailable.
+- CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
 ### Commerce server safety gate — SOURCE ONLY, NOT DEPLOYED
 

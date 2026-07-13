@@ -9,6 +9,10 @@ const {
   Timestamp,
 } = require('./stripeHelpers');
 const { loadCallableServerConfig } = require('./serverConfig');
+const {
+  COMMERCE_OPERATIONS,
+  requireCommerceAdmission,
+} = require('./commerceControl');
 
 const ACTIONS = new Set([
   'mark_fulfilled',
@@ -28,7 +32,10 @@ exports.adminOrderAction = functions
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
     await requireAdmin(context);
-    loadCallableServerConfig({ requireStripeKey: true });
+    const serverConfig = loadCallableServerConfig({
+      requireStripeKey: true,
+      requireCommerceCeiling: true,
+    });
 
     const { orderId, action, payload = {} } = data || {};
     if (!orderId) {
@@ -36,6 +43,15 @@ exports.adminOrderAction = functions
     }
     if (!ACTIONS.has(action)) {
       throw new functions.https.HttpsError('invalid-argument', `Unknown action: ${action}`);
+    }
+
+    const db = admin.firestore();
+    if (action === 'refund_full' || action === 'refund_partial') {
+      await requireCommerceAdmission({
+        db,
+        operation: COMMERCE_OPERATIONS.INCIDENT_REFUND,
+        deploymentEnabled: serverConfig.commerceEnabled,
+      });
     }
 
     const ref = orderRef(orderId);

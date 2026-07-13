@@ -11,6 +11,10 @@ const {
   Timestamp,
 } = require('./stripeHelpers');
 const { loadCallableServerConfig } = require('./serverConfig');
+const {
+  COMMERCE_OPERATIONS,
+  requireCommerceAdmission,
+} = require('./commerceControl');
 
 const ACTIONS = new Set([
   'refund_full',
@@ -156,7 +160,7 @@ async function markComp({ eventId, registration, actor }) {
 }
 
 async function addLateRegistration({
-  stripe, eventId, registration, actor, siteOrigin,
+  stripe, eventId, registration, actor, siteOrigin, eventSnap,
 }) {
   if (!registration || !isValidEmail(registration.runner?.email)) {
     throw new functions.https.HttpsError('invalid-argument', 'registration.runner.email required');
@@ -164,11 +168,6 @@ async function addLateRegistration({
   const amountCents = Number(registration.amountCents) || 0;
   const priceTier = registration.priceTier || 'nonMember';
 
-  const eventSnap = await admin.firestore()
-    .collection('events').doc(eventId).get();
-  if (!eventSnap.exists) {
-    throw new functions.https.HttpsError('not-found', 'Event not found');
-  }
   const event = eventSnap.data();
 
   const newRef = admin.firestore()
@@ -262,7 +261,10 @@ exports.adminRegistrationAction = functions
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
     await requireAdmin(context);
-    const serverConfig = loadCallableServerConfig({ requireStripeKey: true });
+    const serverConfig = loadCallableServerConfig({
+      requireStripeKey: true,
+      requireCommerceCeiling: true,
+    });
 
     const {
       eventId, registrationId, action, payload = {},
@@ -278,12 +280,27 @@ exports.adminRegistrationAction = functions
       uid: context.auth.uid,
       email: context.auth.token?.email || null,
     };
+    const db = admin.firestore();
 
     // Actions that don't need an existing registration doc
     if (action === 'mark_comp') {
+      const eventRef = db.collection('events').doc(eventId);
+      await requireCommerceAdmission({
+        db,
+        operation: COMMERCE_OPERATIONS.RACE_REGISTRATION,
+        deploymentEnabled: serverConfig.commerceEnabled,
+        targetRef: eventRef,
+      });
       return markComp({ eventId, registration: payload.registration, actor });
     }
     if (action === 'add_late_registration') {
+      const eventRef = db.collection('events').doc(eventId);
+      const { targetSnapshot: eventSnap } = await requireCommerceAdmission({
+        db,
+        operation: COMMERCE_OPERATIONS.RACE_REGISTRATION,
+        deploymentEnabled: serverConfig.commerceEnabled,
+        targetRef: eventRef,
+      });
       const stripe = getStripe();
       return addLateRegistration({
         stripe,
@@ -291,12 +308,21 @@ exports.adminRegistrationAction = functions
         registration: payload.registration,
         actor,
         siteOrigin: serverConfig.siteOrigin,
+        eventSnap,
       });
     }
 
     if (!registrationId) {
       throw new functions.https.HttpsError('invalid-argument', 'registrationId required');
     }
+    if (action === 'refund_full' || action === 'refund_partial') {
+      await requireCommerceAdmission({
+        db,
+        operation: COMMERCE_OPERATIONS.INCIDENT_REFUND,
+        deploymentEnabled: serverConfig.commerceEnabled,
+      });
+    }
+
     const ref = regRef(eventId, registrationId);
     const snap = await ref.get();
     if (!snap.exists) {

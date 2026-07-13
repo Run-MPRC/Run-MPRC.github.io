@@ -16,6 +16,10 @@ const {
 } = require('./stripeHelpers');
 const { checkRateLimit, extractIp } = require('./rateLimit');
 const { loadCallableServerConfig } = require('./serverConfig');
+const {
+  COMMERCE_OPERATIONS,
+  requireCommerceAdmission,
+} = require('./commerceControl');
 
 const HOUR_MS = 60 * 60 * 1000;
 const CHECKOUT_PER_IP_PER_HOUR = 20;
@@ -74,7 +78,10 @@ exports.createCheckoutSession = functions
   .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
-    const serverConfig = loadCallableServerConfig({ requireStripeKey: true });
+    const serverConfig = loadCallableServerConfig({
+      requireStripeKey: true,
+      requireCommerceCeiling: true,
+    });
     const {
       eventId,
       runner,
@@ -88,6 +95,14 @@ exports.createCheckoutSession = functions
     if (!eventId || typeof eventId !== 'string') {
       throw new functions.https.HttpsError('invalid-argument', 'eventId is required');
     }
+    const db = admin.firestore();
+    const eventRef = db.collection('events').doc(eventId);
+    const { targetSnapshot: eventSnap } = await requireCommerceAdmission({
+      db,
+      operation: COMMERCE_OPERATIONS.RACE_REGISTRATION,
+      deploymentEnabled: serverConfig.commerceEnabled,
+      targetRef: eventRef,
+    });
     const runnerErrors = validateRunner(runner);
     if (runnerErrors.length) {
       throw new functions.https.HttpsError('invalid-argument', runnerErrors.join('; '));
@@ -115,12 +130,6 @@ exports.createCheckoutSession = functions
       }),
     ]);
 
-    const db = admin.firestore();
-    const eventRef = db.collection('events').doc(eventId);
-    const eventSnap = await eventRef.get();
-    if (!eventSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Event not found');
-    }
     const event = eventSnap.data();
 
     const now = Date.now();

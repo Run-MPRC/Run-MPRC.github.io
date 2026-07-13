@@ -17,6 +17,7 @@ function validEnvironment(overrides = {}) {
     SITE_ORIGIN: 'https://runmprc.test',
     STRIPE_LIVEMODE_EXPECTED: 'false',
     STRIPE_SECRET_KEY: TEST_KEY,
+    COMMERCE_ENABLED: 'false',
     ...overrides,
   };
 }
@@ -84,6 +85,55 @@ describe('serverConfig', () => {
   test('base webhook and mail configuration does not require a Stripe API key', () => {
     const environment = validEnvironment();
     delete environment.STRIPE_SECRET_KEY;
+
+    expect(parseServerConfig(environment)).toEqual({
+      environmentName: 'test',
+      siteOrigin: 'https://runmprc.test',
+      stripeLivemodeExpected: false,
+    });
+  });
+
+  test.each([
+    ['true', true],
+    ['false', false],
+  ])('parses the exact commerce deployment ceiling %s', (value, expected) => {
+    const config = parseServerConfig(
+      validEnvironment({ COMMERCE_ENABLED: value }),
+      { requireStripeKey: true, requireCommerceCeiling: true },
+    );
+
+    expect(config.commerceEnabled).toBe(expected);
+    expect(Object.isFrozen(config)).toBe(true);
+  });
+
+  test.each([
+    ['missing', undefined, 'commerce_enabled_missing'],
+    ['blank', '', 'commerce_enabled_missing'],
+    ['padded', ' true ', 'commerce_enabled_invalid'],
+    ['uppercase', 'TRUE', 'commerce_enabled_invalid'],
+    ['numeric-like', '1-synthetic-canary', 'commerce_enabled_invalid'],
+  ])('rejects %s required commerce ceiling with a fixed safe error', (
+    _name,
+    value,
+    reason,
+  ) => {
+    const environment = validEnvironment({ COMMERCE_ENABLED: value });
+    if (value === undefined) delete environment.COMMERCE_ENABLED;
+
+    const error = captureConfigError(environment, {
+      requireStripeKey: true,
+      requireCommerceCeiling: true,
+    });
+
+    expect(error.message).toBe(CONFIGURATION_ERROR_MESSAGE);
+    expect(error.reason).toBe(reason);
+    expect(JSON.stringify(error)).toBe('{}');
+    expect(error.stack).not.toContain(value || 'unsafe_commerce_value');
+  });
+
+  test('webhook and mail base configuration does not require the commerce ceiling', () => {
+    const environment = validEnvironment();
+    delete environment.COMMERCE_ENABLED;
 
     expect(parseServerConfig(environment)).toEqual({
       environmentName: 'test',

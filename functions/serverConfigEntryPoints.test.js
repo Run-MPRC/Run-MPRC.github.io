@@ -63,6 +63,7 @@ function setValidTestConfig() {
   process.env.ENVIRONMENT_NAME = 'test';
   process.env.SITE_ORIGIN = 'https://runmprc.test';
   process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
+  process.env.COMMERCE_ENABLED = 'true';
   process.env.STRIPE_SECRET_KEY = [
     'sk', 'test', 'synthetic_entrypoint_key',
   ].join('_');
@@ -118,6 +119,7 @@ describe('server configuration entry-point guards', () => {
     delete process.env.ENVIRONMENT_NAME;
     delete process.env.SITE_ORIGIN;
     delete process.env.STRIPE_LIVEMODE_EXPECTED;
+    delete process.env.COMMERCE_ENABLED;
     delete process.env.STRIPE_SECRET_KEY;
   });
 
@@ -194,6 +196,7 @@ describe('server configuration entry-point guards', () => {
     exportName,
     inputFactory,
   ) => {
+    delete process.env.COMMERCE_ENABLED;
     const emailFunctions = require('./sendConfirmationEmail');
 
     await emailFunctions[exportName](

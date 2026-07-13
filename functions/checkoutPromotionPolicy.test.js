@@ -82,6 +82,7 @@ jest.mock('firebase-admin', () => {
 
   const firestore = {
     collection: (name) => new CollectionReference(name),
+    getAll: async (...refs) => refs.map((ref) => new Snapshot(ref)),
   };
 
   return {
@@ -96,6 +97,7 @@ jest.mock('firebase-admin', () => {
       orderSequence = 0;
     },
     __seed: (path, data) => store.set(path, { ...data }),
+    __delete: (path) => store.delete(path),
     __get: (path) => store.get(path),
   };
 });
@@ -127,6 +129,14 @@ const { createMerchCheckout } = require('./createMerchCheckout');
 describe('Checkout promotion policy', () => {
   beforeEach(() => {
     admin.__clear();
+    admin.__seed('systemConfig/commerce', {
+      schemaVersion: 1,
+      revision: 1,
+      newCommerceEnabled: true,
+      raceRegistrationEnabled: true,
+      merchandiseCheckoutEnabled: true,
+      incidentRefundsEnabled: true,
+    });
     mockCheckoutCreate.mockReset();
     mockProductCreate.mockReset();
     mockGetStripe.mockReset();
@@ -144,6 +154,7 @@ describe('Checkout promotion policy', () => {
     process.env.ENVIRONMENT_NAME = 'test';
     process.env.SITE_ORIGIN = 'https://runmprc.test';
     process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
+    process.env.COMMERCE_ENABLED = 'true';
     process.env.STRIPE_SECRET_KEY = [
       'sk', 'test', 'synthetic_checkout_policy',
     ].join('_');
@@ -153,6 +164,7 @@ describe('Checkout promotion policy', () => {
     delete process.env.ENVIRONMENT_NAME;
     delete process.env.SITE_ORIGIN;
     delete process.env.STRIPE_LIVEMODE_EXPECTED;
+    delete process.env.COMMERCE_ENABLED;
     delete process.env.STRIPE_SECRET_KEY;
   });
 
@@ -200,8 +212,75 @@ describe('Checkout promotion policy', () => {
     expect(mockCheckoutCreate).not.toHaveBeenCalled();
   });
 
+  test('deployment ceiling blocks new race commerce before command side effects', async () => {
+    process.env.COMMERCE_ENABLED = 'false';
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      status: 'open',
+      pricing: { nonMemberCents: 5000 },
+      stripeProductId: 'prod_race_policy',
+    });
+
+    await expect(createCheckoutSession({
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'nonMember',
+      acceptedWaiver: true,
+    }, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Commerce is temporarily unavailable',
+    });
+
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['missing', undefined],
+    ['malformed', { schemaVersion: 1, revision: 1 }],
+  ])('%s runtime control blocks merchandise before command side effects', async (
+    _name,
+    runtimeControl,
+  ) => {
+    if (runtimeControl) {
+      admin.__seed('systemConfig/commerce', runtimeControl);
+    } else {
+      admin.__delete('systemConfig/commerce');
+    }
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      status: 'active',
+      priceCents: 2000,
+    });
+
+    await expect(createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Commerce is temporarily unavailable',
+    });
+
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
   test('race checkout sends the exact disabled-adjustment payload', async () => {
     admin.__seed('events/race-1', {
+      checkoutEnabled: true,
       title: 'Synthetic Race',
       description: 'Synthetic test event',
       slug: 'synthetic-race',
@@ -261,8 +340,78 @@ describe('Checkout promotion policy', () => {
     expect(mockProductCreate).not.toHaveBeenCalled();
   });
 
+  test('admitted volunteer signup remains free and does not call Stripe', async () => {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      status: 'open',
+      volunteerEnabled: true,
+      waiverVersion: 'synthetic-v1',
+    });
+
+    const result = await createCheckoutSession({
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Volunteer',
+        email: 'volunteer@example.test',
+      },
+      acceptedWaiver: true,
+      signupType: 'volunteer',
+    }, { auth: null, rawRequest: {} });
+
+    expect(result).toMatchObject({
+      free: true,
+      registrationId: 'reg-new-1',
+    });
+    expect(admin.__get('events/race-1/registrations/reg-new-1')).toMatchObject({
+      signupType: 'volunteer',
+      status: 'paid',
+      amountCents: 0,
+    });
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
+  test('admitted zero-price participant signup remains free and does not call Stripe', async () => {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Free Race',
+      slug: 'synthetic-free-race',
+      status: 'open',
+      pricing: { nonMemberCents: 0 },
+      waiverVersion: 'synthetic-v1',
+    });
+
+    const result = await createCheckoutSession({
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'nonMember',
+      acceptedWaiver: true,
+    }, { auth: null, rawRequest: {} });
+
+    expect(result).toMatchObject({
+      free: true,
+      registrationId: 'reg-new-1',
+    });
+    expect(admin.__get('events/race-1/registrations/reg-new-1')).toMatchObject({
+      signupType: 'participant',
+      status: 'paid',
+      amountCents: 0,
+    });
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
   test('merchandise checkout sends the exact disabled-adjustment payload', async () => {
     admin.__seed('products/hat', {
+      checkoutEnabled: true,
       title: 'Synthetic Hat',
       description: 'Synthetic test product',
       slug: 'hat',
@@ -323,5 +472,92 @@ describe('Checkout promotion policy', () => {
       stripeSessionId: 'cs_order_policy',
     });
     expect(mockProductCreate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['paid race while the global switch is off', createCheckoutSession, {
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'nonMember',
+      acceptedWaiver: true,
+    }, 'events/race-1', {
+      checkoutEnabled: true,
+      status: 'open',
+      pricing: { nonMemberCents: 5000 },
+    }, { newCommerceEnabled: false }],
+    ['zero-price participant while the global switch is off', createCheckoutSession, {
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'nonMember',
+      acceptedWaiver: true,
+    }, 'events/race-1', {
+      checkoutEnabled: true,
+      status: 'open',
+      pricing: { nonMemberCents: 0 },
+    }, { newCommerceEnabled: false }],
+    ['free volunteer while the event switch is off', createCheckoutSession, {
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Volunteer',
+        email: 'volunteer@example.test',
+      },
+      acceptedWaiver: true,
+      signupType: 'volunteer',
+    }, 'events/race-1', {
+      checkoutEnabled: false,
+      status: 'open',
+      volunteerEnabled: true,
+    }, {}],
+    ['merchandise while the merchandise domain is off', createMerchCheckout, {
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, 'products/hat', {
+      checkoutEnabled: true,
+      status: 'active',
+      priceCents: 2000,
+    }, { merchandiseCheckoutEnabled: false }],
+  ])('blocks %s before command side effects', async (
+    _name,
+    handler,
+    data,
+    targetPath,
+    targetData,
+    controlPatch,
+  ) => {
+    admin.__seed(targetPath, targetData);
+    admin.__seed('systemConfig/commerce', {
+      schemaVersion: 1,
+      revision: 2,
+      newCommerceEnabled: true,
+      raceRegistrationEnabled: true,
+      merchandiseCheckoutEnabled: true,
+      incidentRefundsEnabled: true,
+      ...controlPatch,
+    });
+
+    await expect(handler(data, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Commerce is temporarily unavailable',
+    });
+
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+    expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+    expect(admin.__get('orders/order-new-1')).toBeUndefined();
   });
 });

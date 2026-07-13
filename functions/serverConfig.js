@@ -14,6 +14,7 @@ const PRODUCTION_SITE_ORIGIN = 'https://runmprc.com';
  * @property {EnvironmentName} environmentName
  * @property {string} siteOrigin
  * @property {boolean} stripeLivemodeExpected
+ * @property {boolean} [commerceEnabled]
  */
 
 class ServerConfigError extends Error {
@@ -115,14 +116,28 @@ function validateStripeServerKey(environment, expectedLivemode) {
   if (keyLivemode !== expectedLivemode) reject('stripe_key_environment_mismatch');
 }
 
+function parseCommerceCeiling(environment) {
+  const value = requiredExactString(
+    environment,
+    'COMMERCE_ENABLED',
+    'commerce_enabled_missing',
+    'commerce_enabled_invalid',
+  );
+  if (value !== 'true' && value !== 'false') reject('commerce_enabled_invalid');
+  return value === 'true';
+}
+
 /**
  * Parse a supplied environment object without retaining secret material.
  *
  * @param {NodeJS.ProcessEnv|Object<string, string|undefined>} environment
- * @param {{requireStripeKey?: boolean}} options
+ * @param {{requireStripeKey?: boolean, requireCommerceCeiling?: boolean}} options
  * @returns {Readonly<ServerConfig>}
  */
-function parseServerConfig(environment, { requireStripeKey = false } = {}) {
+function parseServerConfig(environment, {
+  requireStripeKey = false,
+  requireCommerceCeiling = false,
+} = {}) {
   const environmentName = requiredExactString(
     environment,
     'ENVIRONMENT_NAME',
@@ -156,11 +171,17 @@ function parseServerConfig(environment, { requireStripeKey = false } = {}) {
 
   if (requireStripeKey) validateStripeServerKey(environment, stripeLivemodeExpected);
 
-  return Object.freeze({
+  const commerceEnabled = requireCommerceCeiling
+    ? parseCommerceCeiling(environment)
+    : undefined;
+
+  const config = {
     environmentName,
     siteOrigin,
     stripeLivemodeExpected,
-  });
+  };
+  if (requireCommerceCeiling) config.commerceEnabled = commerceEnabled;
+  return Object.freeze(config);
 }
 
 function loadServerConfig(options) {

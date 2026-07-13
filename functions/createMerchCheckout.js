@@ -11,6 +11,10 @@ const {
 } = require('./stripeHelpers');
 const { checkRateLimit, extractIp } = require('./rateLimit');
 const { loadCallableServerConfig } = require('./serverConfig');
+const {
+  COMMERCE_OPERATIONS,
+  requireCommerceAdmission,
+} = require('./commerceControl');
 
 const HOUR_MS = 60 * 60 * 1000;
 const MERCH_PER_IP_PER_HOUR = 20;
@@ -34,7 +38,10 @@ exports.createMerchCheckout = functions
   .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
-    const serverConfig = loadCallableServerConfig({ requireStripeKey: true });
+    const serverConfig = loadCallableServerConfig({
+      requireStripeKey: true,
+      requireCommerceCeiling: true,
+    });
 
     const {
       productSlug,
@@ -46,6 +53,14 @@ exports.createMerchCheckout = functions
     if (!productSlug || typeof productSlug !== 'string') {
       throw new functions.https.HttpsError('invalid-argument', 'productSlug required');
     }
+    const db = admin.firestore();
+    const productRef = db.collection('products').doc(productSlug);
+    const { targetSnapshot: productSnap } = await requireCommerceAdmission({
+      db,
+      operation: COMMERCE_OPERATIONS.MERCHANDISE_CHECKOUT,
+      deploymentEnabled: serverConfig.commerceEnabled,
+      targetRef: productRef,
+    });
     if (!buyer || !isValidEmail(buyer.email)
       || !buyer.firstName?.trim() || !buyer.lastName?.trim()) {
       throw new functions.https.HttpsError(
@@ -70,12 +85,6 @@ exports.createMerchCheckout = functions
       }),
     ]);
 
-    const db = admin.firestore();
-    const productRef = db.collection('products').doc(productSlug);
-    const productSnap = await productRef.get();
-    if (!productSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Product not found');
-    }
     const product = productSnap.data();
     if (product.status !== 'active') {
       throw new functions.https.HttpsError(

@@ -200,6 +200,7 @@ describe('products collection', () => {
     ['mismatched creator', { createdBy: 'attacker' }],
     ['non-zero price', { priceCents: 1000 }],
     ['active status', { status: 'active', priceCents: 1000 }],
+    ['checkout enablement', { checkoutEnabled: true }],
     ['Stripe product ID', { stripeProductId: 'prod_test' }],
     ['Stripe price ID', { stripePriceId: 'price_test' }],
     ['inventory state', { inventory: { onHand: 10, reserved: 0 } }],
@@ -217,6 +218,7 @@ describe('products collection', () => {
     ['creator', { createdBy: 'attacker' }],
     ['creation timestamp', { createdAt: new Date(0) }],
     ['availability status', { status: 'active' }],
+    ['checkout enablement', { checkoutEnabled: true }],
     ['Stripe product ID', { stripeProductId: 'prod_test' }],
     ['Stripe price ID', { stripePriceId: 'price_test' }],
     ['inventory state', { inventory: { onHand: 10, reserved: 0 } }],
@@ -322,6 +324,33 @@ describe('orders collection', () => {
 });
 
 describe('server-only operational collections', () => {
+  describe('systemConfig/commerce', () => {
+    const existingPath = 'systemConfig/commerce';
+    const newPath = 'systemConfig/commerce-probe';
+    const control = {
+      schemaVersion: 1,
+      revision: 1,
+      newCommerceEnabled: false,
+      raceRegistrationEnabled: false,
+      merchandiseCheckoutEnabled: false,
+      incidentRefundsEnabled: true,
+    };
+
+    test.each([
+      ['anonymous', undefined],
+      ['member', { uid: 'member-1', role: 'member' }],
+      ['browser admin', { uid: 'admin-1', role: 'admin' }],
+    ])('%s CANNOT read or write the commerce control', async (_label, auth) => {
+      await seed(existingPath, control);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingPath).get());
+      await assertFails(client.doc(newPath).set(control));
+      await assertFails(client.doc(existingPath).update({ newCommerceEnabled: true }));
+      await assertFails(client.doc(existingPath).delete());
+    });
+  });
+
   describe.each([
     ['promoCodes/PROMO1', 'promoCodes/PROMO2', { discountPercent: 10 }],
     ['ratelimits/checkout_ip__1.2.3.4', 'ratelimits/checkout_ip__5.6.7.8', { count: 5 }],

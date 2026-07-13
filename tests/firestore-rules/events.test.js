@@ -467,6 +467,7 @@ describe('events collection', () => {
         pricing: { memberCents: 2500, nonMemberCents: 3500 },
       }],
       ['open status', { status: 'open' }],
+      ['checkout enablement', { checkoutEnabled: true }],
       ['members-only visibility', { visibility: 'members_only' }],
       ['registration window', { registrationOpensAt: NOW }],
       ['waiver configuration', {
@@ -526,6 +527,7 @@ describe('events collection', () => {
       ['capacity', { capacity: 50 }],
       ['pricing', { pricing: { memberCents: 2500, nonMemberCents: 3500 } }],
       ['status', { status: 'open' }],
+      ['checkout enablement', { checkoutEnabled: true }],
       ['visibility', { visibility: 'members_only' }],
       ['registration window', { registrationOpensAt: NOW }],
       ['waiver configuration', {
