@@ -85,6 +85,23 @@ REACT_APP_STRAVA_CLIENT_ID
 
 The Firebase web configuration is public application configuration. It should still be environment-specific and paired with Auth restrictions, Firestore rules, and App Check.
 
+### App Check release state — NOT AVAILABLE YET
+
+ABUSE-001A1 is tracked in live [#159](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/159). It changes only the browser source from the legacy reCAPTCHA v3 provider class to the Firebase SDK's Enterprise provider. It does not create or configure a key.
+
+Protected release `29254280177` stopped before checkout/build because `REACT_APP_RECAPTCHA_SITE_KEY` was absent. Nothing was published. Do not use a placeholder, reuse an unverified v3 key, expose a debug token, or weaken the release check.
+
+The safe sequence remains:
+
+1. Confirm the approved Firebase project and host inventory under #113.
+2. Merge and verify #159 source/tests without a real key.
+3. Have the named owner create the Enterprise site key and allowed-domain policy for the approved environment.
+4. Bind website preparation to the approved protected Actions scope under #133/a dedicated CI child, then store only that public site key there. The current preparation job has no environment binding and can read only repository/organization variables; do not use that gap as a production shortcut.
+5. Rehearse a synthetic staging page, observe App Check metrics, and prove expected token behavior before ABUSE-001A2 enables any callable enforcement.
+6. Publish and verify the website, Firebase, provider, and live behavior as separate states under #136/WEB-001.
+
+A source merge, green CI run, or public-key variable alone does not prove Enterprise is configured or protecting a callable.
+
 ### Server secrets
 
 Store server secrets in Google Secret Manager and bind only to functions that need them:
