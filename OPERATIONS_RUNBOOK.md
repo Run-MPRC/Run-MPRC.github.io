@@ -279,7 +279,22 @@ This requires Java. Rules tests must prove both allowed behavior and explicit de
 
 AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) adds one required role matrix to this check. Every test context using `member` or `admin` must state email verification explicitly. Exact boolean `true` permits only the operation already allowed by that role; missing, false, string, numeric, or profile-document values must not substitute. Unverified users must still be able to read and make the existing name-only update to their own profile, and must remain unable to use role-based access or another UID. Stop a release if any privileged fixture relies on an inferred verification default.
 
-Passing this local/hosted emulator suite proves the reviewed Rules source only. Under #105/#133/#136, deploy and read back the exact Rules revision before publishing a dependent website. Then use made-up accounts to verify one allowed and one denied role case. Never test with a real member/admin account, manually toggle a production role, or treat email verification as membership approval.
+Passing this local/hosted emulator suite proves the reviewed Rules source only. Under #105/#133/#136, deploy and read back the exact Rules revision before publishing a dependent website. Never test with a real member/admin account, manually toggle a production role, or treat email verification as membership approval.
+
+### Current Functions role guards
+
+```bash
+npm --prefix functions run test:run -- --runInBand \
+  verifiedRolePolicy.test.js \
+  stripeHelpers.test.js \
+  exportRegistrationsCsv.test.js \
+  checkoutPromotionPolicy.test.js \
+  adminRegistrationAction.test.js
+```
+
+AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) adds the matching Functions matrix. The shared admin guard, member-only/member-price checkout lookup, and HTTP registration export must accept a role only with exact decoded-token `email_verified === true`. Missing, false, string, numeric, profile-style, inherited, accessor-backed, proxied, unknown, or case-changed claims must deny. Admin and CSV denial must precede their Firestore work. Checkout may complete its existing configuration, event, and rate-limit checks first, but an unverified role must not permit member-only access, member pricing, a registration write, or a Stripe call. Unauthenticated, unauthorized, and non-member responses remain bounded and do not reveal which fact failed. Keep CSV minimization, purpose, recent-auth, audit, and row limits open under #116; this check does not approve roster export.
+
+Passing the focused and full Functions suites proves the reviewed Functions source only. It does not prove the corresponding Rules test, Firebase deployment, or staged behavior. **NOT AVAILABLE YET:** after protected backend-first deployment, run the complete synthetic matrix in [Access Continuity](./docs/officers/ACCESS_CONTINUITY.md#synthetic-role-boundary-drill--not-available-yet). Record separate exact Rules and Functions revisions and results. Stop the release on any mismatch.
 
 ### Production build without changing generated sitemap during a diagnostic check
 

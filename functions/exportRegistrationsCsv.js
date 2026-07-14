@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { isVerifiedAdmin } = require('./verifiedRolePolicy');
 
 const COLUMNS = [
   'registrationId',
@@ -66,7 +67,7 @@ async function verifyAdmin(request) {
   }
   try {
     const decoded = await admin.auth().verifyIdToken(match[1]);
-    return decoded.role === 'admin' ? decoded : null;
+    return isVerifiedAdmin(decoded) ? decoded : null;
   } catch {
     return null;
   }

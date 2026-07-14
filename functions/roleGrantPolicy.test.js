@@ -88,7 +88,10 @@ const { setMemberRole } = require('./setMemberRole');
 const { updateMemberRole } = require('./updatemembers');
 
 const ADMIN_CONTEXT = {
-  auth: { uid: 'caller-admin', token: { role: 'admin' } },
+  auth: {
+    uid: 'caller-admin',
+    token: { email_verified: true, role: 'admin' },
+  },
   app: { appId: 'test-app' },
 };
 

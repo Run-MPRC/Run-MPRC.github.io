@@ -131,7 +131,10 @@ describe('server configuration entry-point guards', () => {
       orderId: 'order-1',
       action: 'refund_full',
     }, {
-      auth: { uid: 'admin-1', token: { role: 'admin' } },
+      auth: {
+        uid: 'admin-1',
+        token: { email_verified: true, role: 'admin' },
+      },
     })).rejects.toMatchObject({
       code: 'failed-precondition',
       message: 'Server configuration is unavailable',

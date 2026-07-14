@@ -127,7 +127,11 @@ function adminContext() {
     app: { appId: 'synthetic-app' },
     auth: {
       uid: 'admin-1',
-      token: { role: 'admin', email: 'officer@example.test' },
+      token: {
+        email_verified: true,
+        role: 'admin',
+        email: 'officer@example.test',
+      },
     },
   };
 }

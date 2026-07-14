@@ -3,6 +3,10 @@ const admin = require('firebase-admin');
 const Stripe = require('stripe');
 const crypto = require('crypto');
 const { loadCallableServerConfig } = require('./serverConfig');
+const {
+  isVerifiedAdmin,
+  resolveVerifiedCallerRole,
+} = require('./verifiedRolePolicy');
 
 const {
   Timestamp, FieldValue,
@@ -38,8 +42,7 @@ async function requireAdmin(context) {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
   }
-  const role = context.auth.token?.role;
-  if (role !== 'admin') {
+  if (!isVerifiedAdmin(context.auth.token)) {
     throw new functions.https.HttpsError('permission-denied', 'Admin role required');
   }
 }
@@ -56,7 +59,7 @@ function requireAppCheck(context) {
 
 async function resolveCallerRole(context) {
   if (!context.auth) return null;
-  return context.auth.token?.role || null;
+  return resolveVerifiedCallerRole(context.auth.token);
 }
 
 function isNonEmptyString(value) {

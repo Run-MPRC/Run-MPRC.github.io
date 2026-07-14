@@ -246,6 +246,27 @@ The current `unverified`, `member`, and `admin` claims should evolve toward capa
 
 The first release may continue using `admin` in the UI, but server endpoints and Firestore rules should be narrowed by resource now so future capability claims can be introduced without rewriting payment logic.
 
+### Current verified-role boundary — source only, not live
+
+AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) requires an authoritative verified target before the existing grant endpoints can add `member` or `admin`. AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) requires exact boolean Firebase token claim `email_verified == true` in addition to the existing role for role-based Firestore access. AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) applies the same second gate to current Functions role consumers: shared admin callables, member-only/member-price checkout decisions, and registration CSV export.
+
+```mermaid
+flowchart LR
+    Token["Server-verified Firebase token"] --> Verified{"email_verified is exactly true?"}
+    Verified -- "No" --> Deny["Deny role-based access"]
+    Verified -- "Yes" --> Role{"Exact member or admin role?"}
+    Role -- "No" --> Deny
+    Role -- "Yes" --> Rules["Specific Firestore rule"]
+    Role -- "Yes" --> Function["Specific Function guard"]
+    Verified -. "never grants" .-> Role
+```
+
+Text alternative: a server-verified Firebase token must contain both the exact verified-email boolean and an already-approved exact role before a specific database rule or Function can use that role; verification alone grants nothing.
+
+The Functions policy reads decoded-token `email_verified`, not the camel-case Auth user-record field used while granting a role and not the `emailVerified` profile mirror. It accepts no request or profile substitute. Missing, false, string, numeric, inherited, accessor-backed, proxied, unknown, or case-changed claims fail closed. Unauthenticated and unauthorized responses remain generic. This does not provide authoritative membership, scoped capabilities, MFA/recent-auth, token revocation, safe roster projection, or legacy-sync retirement.
+
+All three slices are source boundaries until their exact Functions and Rules revisions are deployed through the protected backend-first release and checked with synthetic staged identities. A source merge or green CI run is not live access proof.
+
 ## 6. Domain model and ownership
 
 ### Current collections
