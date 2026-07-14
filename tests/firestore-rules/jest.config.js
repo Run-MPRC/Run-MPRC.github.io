@@ -13,7 +13,7 @@ module.exports = {
   // Add the remaining web-platform globals that Jest 27's node sandbox does
   // not expose. The custom environment supplies Node 20's native fetch API.
   setupFiles: ['<rootDir>/jest.setup.js'],
-  // Tests share a single TestEnvironment (initialized lazily); run sequentially
-  // so we don't fight over the same emulator state across worker processes.
+  // Suites share one emulator project/database; run sequentially so clear and
+  // seed operations cannot race across worker processes.
   maxWorkers: 1,
 };
