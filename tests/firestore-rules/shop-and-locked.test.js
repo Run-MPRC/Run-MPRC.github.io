@@ -443,6 +443,65 @@ describe('server-only operational collections', () => {
     ['anonymous', undefined],
     ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
     ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
+  ])('checkoutRequests authorized provider attempt 2 — %s', (_label, auth) => {
+    const existingHash = 'e'.repeat(64);
+    const newHash = 'f'.repeat(64);
+    const existingPath = `checkoutRequests/${existingHash}/providerAttempts/0000000002`;
+    const newPath = `checkoutRequests/${newHash}/providerAttempts/0000000002`;
+    const collectionPath = `checkoutRequests/${existingHash}/providerAttempts`;
+    const existingAuditPath = 'auditEvents/'
+      + `commerce_provider_attempt_${existingHash}_0000000002`;
+    const newAuditPath = 'auditEvents/'
+      + `commerce_provider_attempt_${newHash}_0000000002`;
+    const providerPlan = {
+      providerPlanSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      provider: 'stripe',
+      providerAttempt: 2,
+      httpMethod: 'POST',
+    };
+    const audit = {
+      providerPlanAuditSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      providerAttempt: 2,
+      eventType: 'provider_plan_bound',
+    };
+
+    test('CANNOT read, create, update, delete, or list the attempt-2 plan', async () => {
+      await seed(existingPath, providerPlan);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingPath).get());
+      await assertFails(client.doc(newPath).set({
+        ...providerPlan,
+        commandKeyHash: newHash,
+      }));
+      await assertFails(client.doc(existingPath).update({ providerAttempt: 3 }));
+      await assertFails(client.doc(existingPath).delete());
+      await assertFails(client.collection(collectionPath).get());
+      await assertFails(client.collectionGroup('providerAttempts').get());
+    });
+
+    test('CANNOT read, create, update, delete, or list the attempt-2 audit', async () => {
+      await seed(existingAuditPath, audit);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingAuditPath).get());
+      await assertFails(client.doc(newAuditPath).set({
+        ...audit,
+        commandKeyHash: newHash,
+      }));
+      await assertFails(client.doc(existingAuditPath).update({ providerAttempt: 3 }));
+      await assertFails(client.doc(existingAuditPath).delete());
+      await assertFails(client.collection('auditEvents').get());
+      await assertFails(client.collectionGroup('auditEvents').get());
+    });
+  });
+
+  describe.each([
+    ['anonymous', undefined],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
   ])('checkoutRequests provider send evidence — %s', (_label, auth) => {
     const existingPath = 'checkoutRequests/synthetic-existing/providerAttempts/0000000001/sendEvidence/first';
     const newPath = 'checkoutRequests/synthetic-new/providerAttempts/0000000001/sendEvidence/first';

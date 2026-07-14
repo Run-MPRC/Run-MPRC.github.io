@@ -237,7 +237,7 @@ Launch with quantity `1` unless cart and multi-line inventory semantics are expl
 }
 ```
 
-Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof and C3C must separately authorize/version any later attempt before returning a new Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
+Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof, C3C must separately authorize/version a later attempt, C4A must bind its immutable plan, and future C4B must record separate pre-send evidence before returning a new Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
 
 ### Pure command identity and provider-key contract (PAY-002B1)
 
@@ -398,12 +398,43 @@ The transaction validates the exact B1/B2/C1/C2/C3B chain and reads both authori
 
 The fixed output is `provider_attempt_authorized` with `requires_plan_binding`. It exposes no path, hash, key, fence, timestamp, evidence, identity, or send/execute flag. #226 creates no attempt-2 plan or pre-send marker, makes no Stripe/network call, changes no business record, and has no endpoint or Functions-index import. Firestore Rules source is unchanged; focused tests prove anonymous, member, and browser-admin clients cannot read, write, list, or collection-group-query the server-only pair. Source/tests/merge do not deploy Firebase, configure Stripe, publish the website, touch production data, or prove live behavior. PAY-002C/D and PAY-003B must adopt this boundary with their own business transaction, plan, send, result, and reconciliation contracts before it can protect a real checkout.
 
+### Immutable authorized attempt-2 plan target (PAY-002B2C4A)
+
+PAY-002B2C4A source/tests are tracked in live [#232](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/232). The unused `bindAuthorizedStripeProviderPlan` API requires the exact complete C3C authorization/audit pair and the exact current active lease. It then creates only this atomic pair, or neither record:
+
+```text
+checkoutRequests/{commandKeyHash}/providerAttempts/0000000002
+auditEvents/commerce_provider_attempt_{commandKeyHash}_0000000002
+```
+
+```mermaid
+flowchart LR
+    A["Exact C3C authorization + audit"] --> G{"Complete chain and current lease valid?"}
+    L["Current active lease"] --> G
+    G -- "No" --> Stop["Fail closed; write nothing"]
+    G -- "Yes" --> P["Create immutable attempt-2 plan + audit"]
+    P --> R["requires_pre_send_evidence"]
+    R -. "No send marker or Stripe call" .-> C4B["Future PAY-002B2C4B"]
+```
+
+Text alternative: the exact saved C3C authorization and current active lease may bind one immutable attempt-2 Checkout Session plan; a separate C4B pre-send boundary is still required before that Session request.
+
+Version 1 is equality-only. The attempt-2 environment, Stripe mode, account commitment, API version, provider operation, HTTP `POST` endpoint, and canonical provider-parameter commitment must equal the validated attempt-1 plan. Attempt `2` is derived internally. Only the deterministic attempt-2 key commitment, current binding fence and trusted time, attempt number, and C3C authorization provenance may differ. A changed amount, currency, expiry, metadata, callback URL, line item, or other provider parameter is not authorized here.
+
+The transaction revalidates B1 through C3C before reading both attempt-2 partners and before writing either one. The current holder and fence must match an unexpired lease; trusted time must not precede lease acquisition or authorization. Both records bind the complete C3C authorization so a coherent replacement cannot detach the plan from its proof. Exact retry and later valid lease observation are read-only. Any valid plan difference conflicts. Missing, orphaned, malformed, future, impossible-chronology, or foundation-mismatched partners fail closed without repair.
+
+The fixed results are `provider_plan_bound` or `provider_plan_existing`, each with `requires_pre_send_evidence`. They expose no attempt, path, key, hash, commitment, fence, timestamp, evidence, account, parameter, or send/execute flag. The stored pair contains no raw account, parameters, key, identity, business/provider object ID, money, URL, response, secret, or personal data.
+
+#232 adds no attempt-2 send evidence, Stripe/network call, business write, response replay, endpoint/index import, provider configuration, migration, production-data action, deployment, website change, live behavior, or officer task. PAY-002B2C4B must separately record and freshness-check pre-send evidence before any attempt-2 Checkout Session request can be considered. PAY-002C/D and PAY-003B still own trusted business-state and runtime adoption.
+
+This version-1 C4A boundary is specific to `checkout_session_create` at `/v1/checkout/sessions`. A future C4B can complete only that Checkout Session path. Stripe Product or Price creation, Session expiry, refunds, and other provider operations each need their own reviewed operation mapping, immutable plan, pre-send, result, and reconciliation boundaries; C3C or this C4A must not be reused as general provider-call permission.
+
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
 
 1. Validate the request and read server-controlled catalog/event state.
-2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, and C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence before any later provider generation.
+2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, and C4A/C4B must separately bind and pre-send-gate any later Checkout Session generation.
 3. In one Firestore transaction:
    - Reuse a matching prior request or reject a conflicting reuse.
    - Lock/read the event capacity counter or SKU variant.
@@ -416,7 +447,7 @@ External Stripe calls cannot be part of a Firestore transaction. Use this sequen
 6. Store Session ID, URL, expiry, and attempt state.
 7. Return the URL.
 8. If Stripe definitively rejects creation, run a compensating transaction that marks the attempt failed and releases the hold once.
-9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize any later generation before completing step 6.
+9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and future C4B must separately record fresh pre-send evidence before completing step 6.
 
 Create the local business record before calling Stripe. That lets a very fast webhook resolve metadata directly and eliminates the current record-not-found race.
 
