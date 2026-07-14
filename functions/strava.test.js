@@ -18,6 +18,8 @@ jest.mock('firebase-functions', () => {
 });
 
 jest.mock('firebase-admin', () => {
+  const deleteFailures = new Map();
+  const deletes = [];
   const documents = new Map();
   const reads = [];
   const writes = [];
@@ -27,6 +29,12 @@ jest.mock('firebase-admin', () => {
       collection: (name) => ({
         doc: (id) => document(`${path}/${name}/${id}`),
       }),
+      delete: async () => {
+        deletes.push(path);
+        if (deleteFailures.has(path)) {
+          throw deleteFailures.get(path);
+        }
+      },
       get: async () => {
         reads.push(path);
         const data = documents.get(path);
@@ -47,11 +55,17 @@ jest.mock('firebase-admin', () => {
         doc: (id) => document(`${name}/${id}`),
       }),
     }),
+    __clearDeletes: () => {
+      deleteFailures.clear();
+      deletes.splice(0, deletes.length);
+    },
     __clearDocuments: () => documents.clear(),
     __clearReads: () => reads.splice(0, reads.length),
     __clearWrites: () => writes.splice(0, writes.length),
+    __getDeletes: () => [...deletes],
     __getReads: () => [...reads],
     __getWrites: () => [...writes],
+    __setDeleteFailure: (path, error) => deleteFailures.set(path, error),
     __setDocument: (path, data) => documents.set(path, data),
   };
 });
@@ -72,11 +86,12 @@ jest.mock('./stripeHelpers', () => ({
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
 const { requireAppCheck } = require('./stripeHelpers');
-const { stravaExchangeCode, stravaFetchStats } = require('./strava');
+const { stravaDisconnect, stravaExchangeCode, stravaFetchStats } = require('./strava');
 
 const FIXED_AUTHORIZATION_ERROR = 'Strava authorization could not be completed.';
 const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
 const FIXED_DATA_ERROR = 'Strava activity data could not be loaded.';
+const FIXED_DISCONNECT_WARNING = 'strava_disconnect_revoke_failed';
 const GUARDED_FETCH = global.fetch;
 const CONTEXT = Object.freeze({
   app: Object.freeze({ appId: 'synthetic-app-check' }),
@@ -834,5 +849,173 @@ describe('Strava activity data failure boundary', () => {
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
+  });
+});
+
+describe('Strava disconnect failure log boundary', () => {
+  let fetchMock;
+  let consoleSpies;
+
+  beforeEach(() => {
+    admin.__clearDeletes();
+    admin.__clearDocuments();
+    admin.__clearReads();
+    admin.__clearWrites();
+    requireAppCheck.mockReset();
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    consoleSpies = Object.fromEntries(
+      ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => [
+          method,
+          jest.spyOn(console, method).mockImplementation(() => undefined),
+        ]),
+    );
+  });
+
+  afterEach(() => {
+    global.fetch = GUARDED_FETCH;
+    Object.values(consoleSpies).forEach((spy) => spy.mockRestore());
+  });
+
+  function seedAccessToken() {
+    admin.__setDocument(SECRET_PATH, {
+      access_token: 'synthetic_disconnect_access_token_test',
+    });
+  }
+
+  function expectLocalDeletes() {
+    expect(admin.__getDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+  }
+
+  function expectNoLogs() {
+    Object.values(consoleSpies).forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  test('runs App Check before Auth, Firestore, provider access, or deletion', async () => {
+    const appCheckFailure = new functions.https.HttpsError(
+      'failed-precondition',
+      'synthetic app check rejection',
+    );
+    requireAppCheck.mockImplementationOnce(() => {
+      throw appCheckFailure;
+    });
+
+    await expect(stravaDisconnect({}, CONTEXT)).rejects.toBe(appCheckFailure);
+
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoLogs();
+  });
+
+  test('rejects a missing caller before Firestore, provider access, or deletion', async () => {
+    await expect(stravaDisconnect({}, { ...CONTEXT, auth: null }))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+
+    expect(requireAppCheck).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoLogs();
+  });
+
+  test('skips provider access when no server-only token exists and still deletes locally', async () => {
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(admin.__getReads()).toEqual([SECRET_PATH]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectLocalDeletes();
+    expectNoLogs();
+  });
+
+  test('preserves the successful best-effort provider POST and local deletes', async () => {
+    seedAccessToken();
+    fetchMock.mockResolvedValue({ ok: true });
+
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(admin.__getReads()).toEqual([SECRET_PATH]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://www.strava.com/oauth/deauthorize',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
+      },
+    );
+    expectLocalDeletes();
+    expectNoLogs();
+  });
+
+  test('preserves current HTTP non-success handling without reading the provider body', async () => {
+    seedAccessToken();
+    const text = jest.fn().mockResolvedValue(
+      'provider-body-canary access_token=provider-secret-canary',
+    );
+    const json = jest.fn();
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 599,
+      text,
+      json,
+    });
+
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
+    expectLocalDeletes();
+    expectNoLogs();
+  });
+
+  test('replaces a raw provider exception with one fixed warning before local deletes', async () => {
+    seedAccessToken();
+    fetchMock.mockRejectedValue(Object.assign(
+      new Error('transport-canary https://provider.example.test/?token=secret-canary'),
+      {
+        cause: new Error('cause-canary'),
+        details: 'details-canary',
+        providerBody: 'provider-body-canary',
+      },
+    ));
+
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+    expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_DISCONNECT_WARNING);
+    expect(JSON.stringify(consoleSpies.warn.mock.calls))
+      .not.toMatch(
+        /transport-canary|provider\.example|secret-canary|cause-canary|details-canary|provider-body-canary/i,
+      );
+    ['debug', 'error', 'info', 'log']
+      .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
+    expectLocalDeletes();
+  });
+
+  test('preserves swallowed local delete failures and the current success result', async () => {
+    admin.__setDeleteFailure(
+      SECRET_PATH,
+      new Error('synthetic secret delete failure'),
+    );
+    admin.__setDeleteFailure(
+      CONNECTION_PATH,
+      new Error('synthetic connection delete failure'),
+    );
+
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectLocalDeletes();
+    expectNoLogs();
   });
 });
