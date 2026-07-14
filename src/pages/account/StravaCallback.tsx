@@ -5,6 +5,8 @@ import { useAuth } from '../../services/hooks/useAuth';
 import SEO from '../../components/SEO';
 import { stravaExchangeCode, verifyStravaState } from '../../services/strava/stravaService';
 
+const STRAVA_CALLBACK_FAILURE = 'We could not connect Strava. Please return to My Account and try again.';
+
 function StravaCallback() {
   const [params] = useSearchParams();
   const { services, isReady } = useServiceLocator();
@@ -25,7 +27,7 @@ function StravaCallback() {
     }
     if (err) {
       setStatus('error');
-      setMessage(`Strava returned an error: ${err}`);
+      setMessage(STRAVA_CALLBACK_FAILURE);
       return;
     }
     if (!code) {
@@ -42,9 +44,9 @@ function StravaCallback() {
 
     stravaExchangeCode(services.firebaseResources.app, code)
       .then(() => setStatus('done'))
-      .catch((e) => {
+      .catch(() => {
         setStatus('error');
-        setMessage(e?.message || 'Failed to exchange code with Strava.');
+        setMessage(STRAVA_CALLBACK_FAILURE);
       });
   }, [services, isReady, isAuthenticated, isLoading, code, state, err]);
 
@@ -65,7 +67,14 @@ function StravaCallback() {
         {status === 'error' && (
           <>
             <h1 className="text-2xl font-bold mb-2 text-red-600">Connection failed</h1>
-            <p className="text-gray-700">{message}</p>
+            <p
+              className="text-gray-700"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+            >
+              {message}
+            </p>
             <a href="/account" className="inline-block mt-4 text-blue-600 hover:underline">
               Back to account
             </a>

@@ -387,6 +387,42 @@ Officer review steps after the source merge:
 
 **Escalation:** membership lead plus treasurer and privacy/security owner. Add the platform owner for source or publication evidence. Use the private incident path if real account or membership data appears.
 
+## Strava callback failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give a member one plain next step when a Strava connection fails without showing a provider message, callback detail, or technical error on the page.
+
+**Approver:** membership lead plus platform/security owner.
+
+**Prerequisites:** issue [#242](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/242) must be merged for source review. Calling the wording live also requires a protected website publication and an exact revision check on `runmprc.com`. This source change does not deploy Firebase, contact Strava, change provider settings, use production data, or prove live behavior.
+
+Officer review steps after the source merge:
+
+1. Keep the callback wording marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #242 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only made-up callback values and a mocked exchange result.
+4. Confirm a signed-out visitor sees only the fixed sign-in instruction.
+5. Confirm a made-up provider query failure shows `We could not connect Strava. Please return to My Account and try again.`
+6. Confirm a made-up exchange failure shows the same sentence.
+7. Confirm no made-up provider detail appears on the page or in browser console output.
+8. Confirm missing-code and failed-security-check results still stop before an exchange.
+9. Confirm only a successful exchange returns to My Account, and the visible `Back to account` link still works without an exchange.
+10. Confirm the failure sentence is announced as an urgent screen-reader alert.
+11. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, failed-security-check, success, and Back-to-account behavior stays in place. This does not remove the callback details from the browser address.
+
+**Stop conditions:** any real member or Strava account; a request for a callback URL, authorization code, state value, provider error, private browser history, or screenshot containing private values; a real provider call; a production Firebase or Strava change; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the wording is live.
+
+**Success proof:** for source completion, record the exact #242 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic callback tests, relevant full checks, and independent privacy review. For live availability, separately record the approved website publication, the published revision, and a dated `runmprc.com` check that uses no real account or callback value. Record Firebase deployment, Strava/provider configuration, and production-data actions as **not performed** for this frontend-only change.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com`. Do not undo by changing a member account, callback value, Firebase record, or Strava setting.
+
+**Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if any callback or provider detail appeared. Do not copy the detail into an issue, message, screenshot, or AI tool.
+
+No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.

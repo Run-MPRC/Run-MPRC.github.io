@@ -6,18 +6,35 @@ import { join } from 'path';
 import {
   act, fireEvent, render, screen, waitFor,
 } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import {
+  MemoryRouter, Route, Routes, useNavigationType,
+} from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
+import { useAuth } from '../../services/hooks/useAuth';
 import {
   ensureMyProfile,
   getMyProfile,
   listMyRegistrations,
   updateMyProfile,
 } from '../../services/account/accountService';
+import {
+  stravaExchangeCode,
+  verifyStravaState,
+} from '../../services/strava/stravaService';
 import { AccountContent } from './Account';
+import StravaCallback from './StravaCallback';
 
 jest.mock('../../services/ServiceLocatorContext', () => ({
   useServiceLocator: jest.fn(),
+}));
+
+jest.mock('../../services/hooks/useAuth', () => ({
+  useAuth: jest.fn(),
+}));
+
+jest.mock('../../services/strava/stravaService', () => ({
+  stravaExchangeCode: jest.fn(),
+  verifyStravaState: jest.fn(),
 }));
 
 jest.mock('../../services/account/accountService', () => {
@@ -460,5 +477,196 @@ describe('Account profile recovery', () => {
     const css = readFileSync(join(__dirname, 'Account.css'), 'utf8');
     expect(css).toMatch(/\.verification-resend__button\s*\{[\s\S]*min-height:\s*3rem;/);
     expect(css).toMatch(/\.verification-resend__button:focus-visible\s*\{[\s\S]*outline:/);
+  });
+});
+
+const STRAVA_CALLBACK_FAILURE = 'We could not connect Strava. Please return to My Account and try again.';
+
+function CallbackAccountDestination() {
+  const navigationType = useNavigationType();
+
+  return (
+    <div>
+      Account destination
+      <span data-testid="callback-navigation-type">{navigationType}</span>
+    </div>
+  );
+}
+
+function renderStravaCallback(
+  entry = '/account/strava/callback?code=synthetic-code&state=synthetic-state',
+) {
+  return render(
+    <MemoryRouter
+      initialEntries={[entry]}
+      future={{
+        v7_relativeSplatPath: true,
+        v7_startTransition: true,
+      }}
+    >
+      <Routes>
+        <Route path="/account/strava/callback" element={<StravaCallback />} />
+        <Route path="/account" element={<CallbackAccountDestination />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe('Strava callback error boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useServiceLocator as jest.Mock).mockReturnValue({
+      services: { firebaseResources: { app } },
+      isReady: true,
+    });
+    (useAuth as jest.Mock).mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    (verifyStravaState as jest.Mock).mockReturnValue(true);
+    (stravaExchangeCode as jest.Mock).mockResolvedValue({
+      ok: true,
+      athleteId: null,
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    ['Firebase services are not ready', false, false],
+    ['authentication is loading', true, true],
+  ])('waits without callback work when %s', async (_case, isReady, isLoading) => {
+    (useServiceLocator as jest.Mock).mockReturnValue({
+      services: isReady ? { firebaseResources: { app } } : null,
+      isReady,
+    });
+    (useAuth as jest.Mock).mockReturnValue({
+      isAuthenticated: true,
+      isLoading,
+    });
+
+    renderStravaCallback();
+
+    expect(await screen.findByText('Connecting your Strava...')).toBeInTheDocument();
+    expect(verifyStravaState).not.toHaveBeenCalled();
+    expect(stravaExchangeCode).not.toHaveBeenCalled();
+  });
+
+  test('requires sign-in before exposing or acting on query failure details', async () => {
+    (useAuth as jest.Mock).mockReturnValue({
+      isAuthenticated: false,
+      isLoading: false,
+    });
+
+    renderStravaCallback(
+      '/account/strava/callback?error=signed-out-provider-canary&code=hidden-code&state=hidden-state',
+    );
+
+    expect(await screen.findByText('You need to be signed in to connect Strava.'))
+      .toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/signed-out-provider-canary|hidden-code|hidden-state/);
+    expect(verifyStravaState).not.toHaveBeenCalled();
+    expect(stravaExchangeCode).not.toHaveBeenCalled();
+  });
+
+  test('replaces a provider query error with one fixed actionable alert', async () => {
+    renderStravaCallback(
+      '/account/strava/callback?error=provider%3Aprivate-query-canary&code=hidden-code&state=hidden-state',
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(/private-query-canary|hidden-code|hidden-state/);
+    expect(verifyStravaState).not.toHaveBeenCalled();
+    expect(stravaExchangeCode).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'Back to account' }))
+      .toHaveAttribute('href', '/account');
+  });
+
+  test('stops a missing code before state verification or exchange', async () => {
+    renderStravaCallback('/account/strava/callback?state=synthetic-state');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Missing authorization code from Strava.',
+    );
+    expect(verifyStravaState).not.toHaveBeenCalled();
+    expect(stravaExchangeCode).not.toHaveBeenCalled();
+  });
+
+  test('stops an invalid state before exchange', async () => {
+    (verifyStravaState as jest.Mock).mockReturnValue(false);
+
+    renderStravaCallback();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Security check failed (state mismatch). Please try connecting again.',
+    );
+    expect(verifyStravaState).toHaveBeenCalledTimes(1);
+    expect(verifyStravaState).toHaveBeenCalledWith('synthetic-state');
+    expect(stravaExchangeCode).not.toHaveBeenCalled();
+  });
+
+  test('verifies state before one exact exchange and replaces the account route on success', async () => {
+    const calls: string[] = [];
+    (verifyStravaState as jest.Mock).mockImplementation(() => {
+      calls.push('verify');
+      return true;
+    });
+    (stravaExchangeCode as jest.Mock).mockImplementation(async () => {
+      calls.push('exchange');
+      return { ok: true, athleteId: null };
+    });
+
+    renderStravaCallback();
+
+    expect(await screen.findByText('Account destination')).toBeInTheDocument();
+    expect(calls).toEqual(['verify', 'exchange']);
+    expect(verifyStravaState).toHaveBeenCalledWith('synthetic-state');
+    expect(stravaExchangeCode).toHaveBeenCalledWith(app, 'synthetic-code');
+    expect(stravaExchangeCode).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('callback-navigation-type')).toHaveTextContent('REPLACE');
+  });
+
+  test('does not navigate while the exchange result is pending', async () => {
+    (stravaExchangeCode as jest.Mock).mockReturnValue(new Promise(() => {
+      // Keep this synthetic exchange pending until the test unmounts the page.
+    }));
+
+    renderStravaCallback();
+
+    await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('Connecting your Strava...')).toBeInTheDocument();
+    expect(screen.queryByText('Account destination')).not.toBeInTheDocument();
+  });
+
+  test.each([
+    ['ordinary error', () => new Error('ordinary-provider-canary')],
+    ['hostile message getter', () => Object.defineProperty({}, 'message', {
+      configurable: true,
+      get() {
+        throw new Error('message-getter-canary');
+      },
+    })],
+  ])('does not inspect or render an %s rejection', async (_case, makeRejection) => {
+    const consoleSpies = [
+      jest.spyOn(console, 'log').mockImplementation(() => undefined),
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined),
+      jest.spyOn(console, 'error').mockImplementation(() => undefined),
+    ];
+    (stravaExchangeCode as jest.Mock).mockRejectedValueOnce(makeRejection());
+
+    renderStravaCallback();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+    expect(document.body).not.toHaveTextContent(/ordinary-provider-canary|message-getter-canary/);
+    expect(screen.queryByText('Account destination')).not.toBeInTheDocument();
+    expect(verifyStravaState).toHaveBeenCalledTimes(1);
+    expect(stravaExchangeCode).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
