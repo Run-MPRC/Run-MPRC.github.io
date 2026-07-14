@@ -69,7 +69,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 15 | RACE-001 | Add transactional race-capacity reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 16 | MERCH-001 | Add SKU variants and transactional inventory reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 17 | PAY-004 | Make cancellation authoritative and replace reusable late Payment Links | P0 | L | proposed | PAY-002, PAY-003, RACE-001 |
-| 18 | PAY-005 | Build idempotent refunds, disputes, and reconciliation | P0 | L | proposed | PAY-002, PAY-003 |
+| 18 | PAY-005 | Build idempotent refunds, disputes, and reconciliation | P0 | L | partial: immediate amount/result containment tracked by #200/#204; complete lifecycle proposed | PAY-002, PAY-003 |
 | 19 | MAIL-001 | Build an escaped, idempotent transactional email outbox | P1 | M | proposed | PAY-003 |
 | 20 | DATA-001 | Replace confirmation bearer URLs and implement PII minimization | P1 | L | proposed | PAY-002, PAY-003 |
 | 21 | DATA-002 | Create immutable, truthful waiver evidence | P1 | M | blocked_owner_decision | RACE-001, LEGAL-001 decision |
@@ -859,7 +859,7 @@ Do not mark local cancelled before considering the live Stripe Session and recov
 ## PAY-005 — Build idempotent refunds, disputes, and reconciliation
 
 **Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:stripe`, `size:L`
-**Status:** Partial. Immediate amount-containment source/tests are tracked in [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200); the broader refund/dispute/reconciliation system remains proposed.
+**Status:** Partial. Immediate amount containment is tracked in [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200), and resolved-result containment source/tests are tracked in [#204](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/204); the broader refund/dispute/reconciliation system remains proposed.
 **Depends on:** PAY-002, PAY-003, AUTH-003 for final permissions
 
 ### Problem
@@ -867,6 +867,8 @@ Do not mark local cancelled before considering the live Stripe Session and recov
 Refund functions call Stripe without idempotency, immediately overwrite local status, weakly validate amount/current state/remaining balance, and do not track cumulative actual refund. Dispute handling is registration-only and audit-only. No scheduled reconciliation proves Stripe and Firestore agree.
 
 PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) is the narrow immediate containment outcome. It makes both current partial-refund entry points accept only a primitive positive safe-integer amount below the stored original cents, requires every admitted partial request to send that exact `amount` to Stripe, and derives partial/full classification from the explicit action. Invalid caller or stored values stop before Stripe construction/refund creation and before business-record writes. A provider exception returns a fixed result-not-confirmed, do-not-retry, and escalate message because Stripe may already have accepted the request. This does not add idempotency, remaining-refundable provider truth, concurrency control, event-finalized totals, capabilities, deployment, or live proof.
+
+PAY-005A2 [#204](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/204) is the companion resolved-result containment outcome. Before Stripe construction, both endpoints require one exact stored `pi_` target, positive safe-integer original cents, and lowercase `usd`. After one provider call, only a plain `refund` object with a bounded `re_` ID, exact `succeeded` status, matching primitive PaymentIntent/currency, and a permitted positive safe-integer amount can reach the local success write. A partial must equal requested cents; an explicit full action accepts Stripe's returned full-remaining amount up to the original total and audits that validated actual amount. A thrown, malformed, mismatched, pending, action-required, failed, cancelled, or unknown Stripe result gets the same fixed do-not-retry response and no local success write is attempted. If the later local write reports an error or its acknowledgement is lost, the same fixed response is returned but the local record is unknown because the write may have committed. This still does not create a durable pre-send operation, idempotency, provider retrieval/reconciliation, event-finalized totals, concurrency control, capabilities, deployment, or live proof.
 
 ### Scope
 
@@ -892,10 +894,11 @@ PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) is t
 
 - Failure injection before/after Stripe response; duplicate/concurrent partials; pending/failed/succeeded events; full-after-partial; dispute lifecycle; reconciliation fixture for every category; repair idempotency.
 - Staging finance review of report totals.
+- PAY-005A2/#204: a 47-case pure validator matrix rejects coercion, prototypes, accessors, malformed/mismatched values, and every non-succeeded status while returning only a frozen validated projection. The initial dual-endpoint red matrix exposed 46 unsafe preflight/result cases, and two additional red cases exposed raw post-provider storage failures. The final 174 focused tests prove no Stripe call for invalid stored targets, one call for admitted requests, no local success write attempt for a rejected Stripe result, no success response after synthetic pre-commit or commit-then-error local-write failures, the same fixed do-not-retry response at both ambiguous boundaries, and validated full-remaining cents in the audit. The commit-then-error case proves why a lost acknowledgement leaves local state unknown and requires reconciliation.
 
 ### Agent handoff
 
-Do not duplicate PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200). After its immediate containment, separate refund command/state from the broader reconciliation worker into sequential PRs. Never hand-edit Firestore to make reconciliation pass.
+Do not duplicate PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) or PAY-005A2 [#204](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/204). These are immediate containment only. Separate durable refund command/state from the broader reconciliation worker into sequential PRs. Never hand-edit Firestore to make reconciliation pass, and never retry an ambiguous provider result blindly.
 
 ---
 

@@ -241,46 +241,52 @@ Officer steps after every prerequisite has proof:
 
 **Escalation:** membership lead plus privacy/platform owner; use the private incident path under #112 if exposure is suspected.
 
-## Partial-refund amount guard — SOURCE ONLY, NOT LIVE
+## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
-**Purpose:** make an invalid partial-refund amount stop. It must never silently become a full refund.
+**Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
 
 **Approver:** treasurer plus platform/security owner.
 
-**Prerequisites:** the pull request for issue [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) is merged, a protected staging Firebase project, both exact refund Functions are deployed and read back there, Stripe test mode, made-up order and race records, and an approved refund policy. The broader safe refund procedure is still **NOT AVAILABLE YET**.
+**Prerequisites:** the pull requests for issues [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) and [#204](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/204) are merged, a protected staging Firebase project, both exact refund Functions are deployed and read back there, Stripe test mode, made-up order and race records, and an approved refund policy. The broader safe refund procedure is still **NOT AVAILABLE YET**.
 
 ```mermaid
 flowchart TD
-    Ask["Request a partial refund"] --> Stored{"Stored original is valid whole cents?"}
+    Ask["Request a partial refund"] --> Stored{"Stored payment, usd currency, and original cents are valid?"}
     Stored -- "No" --> Stop["Stop before Stripe and before a record change"]
     Stored -- "Yes" --> Check{"Requested amount is positive whole cents and lower?"}
     Check -- "No" --> Stop["Stop before Stripe and before a record change"]
     Check -- "Yes" --> Partial["Send the exact partial amount"]
-    Partial --> Result{"Did Stripe return a refund record?"}
-    Result -- "No; outcome is unknown" --> Unknown["Keep local record unchanged\nDo not retry; escalate"]
-    Result -- "Yes" --> Returned["Use returned result\nLater reconciliation still required"]
+    Partial --> Result{"Succeeded result matches payment, currency, and amount rule?"}
+    Result -- "No or unclear" --> Unknown["Do not attempt a local success write\nDo not retry; escalate"]
+    Result -- "Yes" --> Save["Try to save validated refund ID and actual cents"]
+    Save --> Saved{"Local save response confirmed?"}
+    Saved -- "Yes" --> Returned["Return success\nLater reconciliation still required"]
+    Saved -- "No or lost" --> LocalUnknown["Local record state is unknown\nDo not retry; reconcile"]
     Full["Explicit full-refund request"] --> Omit["Only path allowed to omit the amount"]
     Omit --> Result
 ```
 
-In words: a missing or malformed stored original, or an invalid, equal, or over-limit partial amount, stops before Stripe or a record change; only a deliberate full-refund request can omit the amount. If the server cannot confirm whether Stripe accepted the request, the local record stays unchanged, the officer must not retry, and later reconciliation is required.
+In words: a missing or malformed stored payment, currency, or original amount stops before Stripe. An invalid, equal, or over-limit partial amount also stops. A Stripe result that is not a matching final success causes no local success write attempt. A partial must match the requested cents. A full request uses the actual remaining cents Stripe returned. If the later local save reports an error or loses its response, the record may or may not have changed. In either unclear case, the officer must not retry and reconciliation is required.
 
 Officer review steps after every prerequisite has proof:
 
 1. Keep all live website refunds unavailable.
 2. Ask the platform specialist to show the fixed synthetic test report for both race and shop refunds.
-3. Confirm a missing, non-number, non-positive, fraction, non-finite, or too-large stored original stops before any Stripe refund call or record change.
+3. Confirm a missing or malformed stored payment ID, `usd` currency, or original whole-cent amount stops before any Stripe refund call or record change.
 4. Confirm the report rejects missing, non-number, fraction, zero, negative, equal, over-limit, and non-finite partial amounts.
-5. Confirm every rejected caller case also shows no Stripe refund call and no order or registration change.
+5. Confirm every rejected caller or stored-record case shows no Stripe refund call and no order or registration change.
 6. Confirm the smallest valid amount and one cent below the stored original send the exact test-mode amount and stay partial.
-7. Confirm an unconfirmed Stripe test result leaves the made-up record unchanged and says: do not retry; escalate to the treasurer and platform owner.
-8. Stop after this review. Do not approve a production refund until the remaining PAY-005 safety work and provider/deployment proof are complete.
+7. Confirm only a final succeeded result for the same payment, currency, and permitted amount can change the made-up record.
+8. Confirm malformed, mismatched, pending, action-required, failed, cancelled, and unknown Stripe results do not attempt a local success write and say: do not retry; escalate to the treasurer and platform owner.
+9. Confirm a local-save error after a valid Stripe success returns no success response, treats the local record as unknown, and gives the same do-not-retry instruction.
+10. Confirm a full test refund records the actual returned remaining cents, not the original amount guessed from the local record.
+11. Stop after this review. Do not approve a production refund until the remaining PAY-005 safety work and provider/deployment proof are complete.
 
-**Expected result:** a malformed stored original or rejected partial amount causes one fixed error and no provider or record change. An admitted partial request always carries its exact amount. Only the explicit full action can omit it. If the provider result cannot be confirmed, the page says not to retry and to escalate; it does not claim failure.
+**Expected result:** a malformed stored target or rejected partial amount causes one fixed preflight error and no provider or record change. An admitted partial request always carries its exact amount. Only the explicit full action can omit it. A rejected Stripe result causes no local success write attempt. The Function returns success only after a matching final result is saved with its actual cents. If the Stripe result or local save cannot be confirmed, the page says not to retry and to escalate; it does not claim that Stripe failed or whether the local record changed.
 
 **Stop conditions:** any real order, registration, member, card, Stripe payment record, refund, production Firebase project, Stripe live mode, missing deployment/readback, request to edit Firestore by hand, or retry after an unconfirmed result.
 
-**Success proof:** exact #200 pull request and merge commit; red proof showing the old unsafe cases; green focused and full tests; readback of both Functions in staging; made-up Stripe test-mode results; and a dated treasurer/platform review. A green source workflow alone is not deployment or provider proof.
+**Success proof:** exact #200 and #204 pull requests and merge commits; red proof showing the old unsafe amount and returned-result cases; green focused and full tests; readback of both Functions in staging; made-up Stripe test-mode results for every listed final/non-final outcome; and a dated treasurer/platform review. A green source workflow alone is not deployment or provider proof.
 
 **Undo:** use one reviewed two-Function revert or safe roll-forward through the protected backend release. Never undo by issuing another refund or changing a payment record.
 
