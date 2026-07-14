@@ -102,20 +102,25 @@ jest.mock('firebase-admin', () => {
   };
 });
 
-jest.mock('./stripeHelpers', () => ({
-  getStripe: mockGetStripe,
-  generateToken: () => 'synthetic-confirmation-token',
-  resolveCallerRole: async () => null,
-  requireAppCheck: () => {},
-  validateRunner: () => [],
-  pickPriceCents: (event, tier) => event.pricing?.[`${tier}Cents`] ?? null,
-  isEarlyBirdActive: () => false,
-  isRegistrationOpen: () => true,
-  countActiveRegistrations: async () => 0,
-  auditEntry: ({ action, note }) => ({ action, note }),
-  isValidEmail: () => true,
-  Timestamp: { now: () => ({ _milliseconds: 1_800_000_000_000 }) },
-}));
+jest.mock('./stripeHelpers', () => {
+  const { resolveVerifiedCallerRole } = jest.requireActual('./verifiedRolePolicy');
+  return {
+    getStripe: mockGetStripe,
+    generateToken: () => 'synthetic-confirmation-token',
+    resolveCallerRole: async (context) => (
+      resolveVerifiedCallerRole(context?.auth?.token)
+    ),
+    requireAppCheck: () => {},
+    validateRunner: () => [],
+    pickPriceCents: (event, tier) => event.pricing?.[`${tier}Cents`] ?? null,
+    isEarlyBirdActive: () => false,
+    isRegistrationOpen: () => true,
+    countActiveRegistrations: async () => 0,
+    auditEntry: ({ action, note }) => ({ action, note }),
+    isValidEmail: () => true,
+    Timestamp: { now: () => ({ _milliseconds: 1_800_000_000_000 }) },
+  };
+});
 
 jest.mock('./rateLimit', () => ({
   checkRateLimit: mockRateLimit,
@@ -338,6 +343,130 @@ describe('Checkout promotion policy', () => {
       stripeSessionId: 'cs_registration_policy',
     });
     expect(mockProductCreate).not.toHaveBeenCalled();
+  });
+
+  test('an unverified role cannot unlock a members-only event', async () => {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Members Race',
+      slug: 'synthetic-members-race',
+      status: 'open',
+      visibility: 'members_only',
+      pricing: { memberCents: 3000, nonMemberCents: 5000 },
+      stripeProductId: 'prod_members_race_policy',
+      waiverVersion: 'synthetic-v1',
+    });
+
+    await expect(createCheckoutSession({
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'member',
+      acceptedWaiver: true,
+    }, {
+      auth: { uid: 'synthetic-user', token: { role: 'member' } },
+      rawRequest: {},
+    })).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'This event is open to club members only',
+    });
+
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
+  test('malformed verification cannot unlock explicit member pricing', async () => {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Public Race',
+      slug: 'synthetic-public-race',
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 3000, nonMemberCents: 5000 },
+      stripeProductId: 'prod_public_race_policy',
+      waiverVersion: 'synthetic-v1',
+    });
+
+    await expect(createCheckoutSession({
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'member',
+      acceptedWaiver: true,
+    }, {
+      auth: {
+        uid: 'synthetic-user',
+        token: { email_verified: 'true', role: 'admin' },
+      },
+      rawRequest: {},
+    })).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'Sign in as a member to claim the member price',
+    });
+
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
+  test('a verified member preserves the existing member-price path', async () => {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Members Race',
+      slug: 'synthetic-members-race',
+      status: 'open',
+      visibility: 'members_only',
+      pricing: { memberCents: 3000, nonMemberCents: 5000 },
+      stripeProductId: 'prod_members_race_policy',
+      waiverVersion: 'synthetic-v1',
+    });
+
+    await expect(createCheckoutSession({
+      eventId: 'race-1',
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+      },
+      priceTier: 'member',
+      acceptedWaiver: true,
+    }, {
+      auth: {
+        uid: 'synthetic-member',
+        token: { email_verified: true, role: 'member' },
+      },
+      rawRequest: {},
+    })).resolves.toMatchObject({
+      sessionId: 'cs_registration_policy',
+      registrationId: 'reg-new-1',
+    });
+
+    expect(mockCheckoutCreate).toHaveBeenCalledWith(expect.objectContaining({
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          unit_amount: 3000,
+          product: 'prod_members_race_policy',
+        },
+        quantity: 1,
+      }],
+    }));
+    expect(admin.__get('events/race-1/registrations/reg-new-1')).toMatchObject({
+      uid: 'synthetic-member',
+      priceTier: 'member',
+      amountCents: 3000,
+    });
   });
 
   test('admitted volunteer signup remains free and does not call Stripe', async () => {

@@ -80,7 +80,10 @@ describe('adminRegistrationAction authorization', () => {
         },
       },
     }, {
-      auth: { uid: 'admin-1', token: { role: 'admin' } },
+      auth: {
+        uid: 'admin-1',
+        token: { email_verified: true, role: 'admin' },
+      },
     })).rejects.toMatchObject({
       code: 'failed-precondition',
       message: 'Server configuration is unavailable',
@@ -107,9 +110,27 @@ describe('adminRegistrationAction authorization', () => {
     await expect(
       adminRegistrationAction(
         { eventId: 'e1', action: 'cancel', registrationId: 'r1' },
-        { auth: { uid: 'u1', token: { role: 'member' } } },
+        {
+          auth: {
+            uid: 'u1',
+            token: { email_verified: true, role: 'member' },
+          },
+        },
       ),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  test('rejects an unverified admin before Firestore or Stripe access', async () => {
+    const { adminRegistrationAction } = require('./adminRegistrationAction');
+    await expect(
+      adminRegistrationAction(
+        { eventId: 'e1', action: 'cancel', registrationId: 'r1' },
+        { auth: { uid: 'u1', token: { role: 'admin' } } },
+      ),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(mockFirestoreAccess).not.toHaveBeenCalled();
+    expect(mockStripeConstructor).not.toHaveBeenCalled();
   });
 
   test('rejects unknown action', async () => {
@@ -117,7 +138,12 @@ describe('adminRegistrationAction authorization', () => {
     await expect(
       adminRegistrationAction(
         { eventId: 'e1', action: 'nuke_database', registrationId: 'r1' },
-        { auth: { uid: 'u1', token: { role: 'admin' } } },
+        {
+          auth: {
+            uid: 'u1',
+            token: { email_verified: true, role: 'admin' },
+          },
+        },
       ),
     ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
@@ -127,7 +153,12 @@ describe('adminRegistrationAction authorization', () => {
     await expect(
       adminRegistrationAction(
         { action: 'cancel', registrationId: 'r1' },
-        { auth: { uid: 'u1', token: { role: 'admin' } } },
+        {
+          auth: {
+            uid: 'u1',
+            token: { email_verified: true, role: 'admin' },
+          },
+        },
       ),
     ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
