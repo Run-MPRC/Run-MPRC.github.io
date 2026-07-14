@@ -290,6 +290,57 @@ Officer review steps after the source merge:
 
 **Escalation:** membership lead plus treasurer and privacy/security owner. Add the platform owner for source/deployment evidence and use the private incident path if real data or unintended access is involved.
 
+## My Account membership truth — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop My Account from presenting website-account details or a legacy website role as proof of current paid club membership.
+
+**Approver:** membership lead plus treasurer and privacy/security owner.
+
+**Prerequisites:** issue [#221](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/221) must be merged for source review. A protected website release, exact revision check on `runmprc.com`, and made-up account checks are also required before describing the wording as live. A future real membership-status display still requires the policy and server-authority work under #114 and #115; #221 does not provide it.
+
+```mermaid
+flowchart TD
+    Open["Member opens My Account"] --> Load{"Profile loads?"}
+    Load -- "No" --> Retry["Show a plain retry or sign-out path"]
+    Load -- "Yes" --> Details["Show website-account details"]
+    Details --> Created["Label the date Account created"]
+    Details --> Hide["Do not show a website role as Membership"]
+    Details --> Notice["Say paid membership and dues status is unavailable"]
+    Identity["Account creation / email verification / website access"] -. "Not membership proof" .-> Notice
+    Future["Future server-authoritative membership term"] -. "NOT AVAILABLE YET" .-> Notice
+```
+
+In words: My Account may show account details, including when the account was created, but it does not turn a website role, sign-in, email verification, or website access into proof of paid membership; the page says the real membership and dues status is not available there yet.
+
+Officer review steps after the source merge:
+
+1. Keep membership lookup and membership changes marked **NOT AVAILABLE YET**.
+2. Do not infer paid membership from a website role.
+3. Do not infer paid membership from account creation.
+4. Do not infer paid membership from email verification.
+5. Do not infer paid membership from website access.
+6. Ask the platform owner for the exact #221 synthetic test report.
+7. Confirm the report covers made-up pending, member-role, and admin-role profiles.
+8. Confirm `Membership` and `Member since` are absent from each made-up profile view.
+9. Confirm the account date is labeled `Account created`.
+10. Confirm every made-up profile sees the same unavailable-status notice.
+11. Confirm email verification remains a separate account action.
+12. Confirm profile recovery, name editing, phone pause, events, Strava, and sign-out are unchanged.
+13. Require a protected website publication before calling the wording live.
+14. Check the published revision on `runmprc.com` without opening a real member account.
+
+**Expected result:** the source page shows account facts without displaying a legacy role as membership. It uses `Account created`, not `Member since`. Every loaded profile sees one plain notice that paid membership and dues status is not available in My Account and that account creation, email verification, and website use do not prove current club membership. No actual membership, dues, entitlement, payment, role, provider, or member record changes.
+
+**Stop conditions:** a real member account; a request to confirm dues or membership from the page; a manual role or database change; a change to membership policy; a Firebase, payment, Google, WhatsApp, Strava, or other provider action; skipped website publication; or a claim that source, tests, merge, or a green workflow alone proves the wording is live.
+
+**Success proof:** for source completion, record the exact #221 issue, pull request, reviewed commit, focused account tests, full frontend checks, and merge commit. For live availability, separately record the website publication, the published revision, and a dated `runmprc.com` check with made-up accounts. Record Firebase deployment, outside-provider configuration, and production-data changes as **not performed** for this wording-only correction.
+
+**Undo:** before publication, revert or safely roll forward the three #221 source/documentation paths through review. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com`. Never undo by changing a role, membership, payment, or database record.
+
+**Escalation:** membership lead plus treasurer and privacy/security owner. Add the platform owner for source or publication evidence. Use the private incident path if real account or membership data appears.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
