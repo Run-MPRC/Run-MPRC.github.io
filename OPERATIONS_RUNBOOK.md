@@ -298,6 +298,12 @@ npm --prefix functions audit --omit=dev
 
 Do not run `npm audit fix --force` blindly. Review reachability, upgrade direct dependencies deliberately, inspect lockfile changes, and rerun all checks.
 
+SUPPLY-001C [#202](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/202) is the source/test record for the Firebase browser compatibility upgrade. It pins Firebase 11.10.0 and `@firebase/rules-unit-testing` 4.0.1. A clean Node 20 production audit changes from 19 findings (1 critical, 5 high) to 6 (0 critical, 3 high). The remaining findings are not accepted as safe; a dev-only older `protobufjs` also remains under `firebase-tools` and must not be mistaken for the repaired browser path.
+
+The upgraded Rules helper fails before rule evaluation if Jest does not receive Node 20's native `fetch`, `Headers`, `Request`, `Response`, and `FormData`. The repository's dedicated Rules environment exposes those host APIs and no provider credential. The proof is 348/348 Rules cases, 71/71 focused Firebase/Auth/App Check tests, 198/198 frontend tests, 1,077/1,077 applicable Functions unit tests, 11/11 standalone callback cases, and 42/42 workflow/release safety cases. Reproducible clean builds change the optimized main JavaScript from `main.fdd058b4.js` to `main.56edbdb7.js`, +8.29 kB gzip (about 3.3%); total build output grows 180 KiB (about 1.0%).
+
+This is source and synthetic test evidence only. It does not publish the website, deploy Firebase, change an outside provider, or prove production behavior. Use the protected release process and record each affected surface separately before making any live claim.
+
 ### Target payment integration suite
 
 CI/staging must eventually include:
