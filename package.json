@@ -11,7 +11,7 @@
     "@testing-library/react": "^14.1.2",
     "@types/jest": "^29.5.11",
     "eslint-config-react-app": "^7.0.1",
-    "firebase": "^10.7.1",
+    "firebase": "11.10.0",
     "html-react-parser": "^5.1.1",
     "prop-types": "^15.8.1",
     "react": "^18.2.0",
@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
-    "@firebase/rules-unit-testing": "^3.0.4",
+    "@firebase/rules-unit-testing": "4.0.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.59.0",

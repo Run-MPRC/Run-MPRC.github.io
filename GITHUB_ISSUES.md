@@ -16,6 +16,8 @@ Published foundation mapping:
 - CI-001A → [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103)
 - CI-001B1 → [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124)
 - SUPPLY-001A → [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127)
+- SUPPLY-001B → [#192](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/192)
+- SUPPLY-001C → [#202](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/202)
 - ARCH-001 documentation → [#104](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/104)
 - CI-001 tracker → [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105)
 - PAY-003 tracker → [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106)
@@ -52,7 +54,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | ---: | --- | --- | --- | --- | --- | --- |
 | 1 | SAFETY-001 | Preserve commerce/OAuth callbacks and isolate local Firebase Functions | P0 | S | source/test complete under #99; provider/live callback unproven | — |
 | 2 | CI-001 | Repair test gates and secure the deployment pipeline | P0 | L | partial: #103 baseline + #124 hosted Jest; #126 SPA gate and remaining gates open | SAFETY-001 |
-| 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | partial: SUPPLY-001A tracked by #127; remaining upgrade/scanning slices open | CI-001 baseline |
+| 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | partial: A/#127 and B/#192 delivered; C source/tests tracked by #202; D–G open | CI-001 baseline |
 | 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | source merged #123; Firebase live unproven | — |
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | CONFIG-001A merged in #149/PR #150; CONFIG-001B1 tracked in [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151); B2 blocked; not deployed | CI-001A recommended |
 | 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; Rules slice tracked in #196; Firebase live unproven; parent open | SEC-001 recommended |
@@ -186,12 +188,12 @@ Repository changes can implement tests/workflow shape, but OIDC/IAM/environment 
 ## SUPPLY-001 — Remove vulnerable dependency chains and stage SDK/build upgrades
 
 **Labels:** `priority:P0`, `type:maintenance`, `type:security`, `area:web`, `area:firebase`, `area:stripe`, `size:L`
-**Status:** Partial; SUPPLY-001A is represented by [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127), SUPPLY-001B is represented by [#192](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/192), and the remaining upgrade/scanning slices stay open
+**Status:** Partial; SUPPLY-001A is represented by [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127), SUPPLY-001B by [#192](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/192), and SUPPLY-001C source/tests by [#202](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/202); D–G remain open
 **Depends on:** CI-001A
 
 ### Problem
 
-The 2026-07-12 baseline production audit reported 33 root advisories (3 critical, 9 high) and 9 Functions advisories (1 high). SUPPLY-001A/#127 removes the unused `gpxparser` and obsolete `jsdom/request/form-data` chain; on a fresh Node 20 install, the root production audit falls to 22 advisories (1 critical, 8 high) while production bundle hashes remain identical. SUPPLY-001B/#192 pins the compatible React Router 6.30.4 graph and removes all three router findings, reducing that root audit to 19 advisories (1 critical, 5 high). The Firebase client still needs a tested patch, Firebase Admin needs a staged major upgrade, and Create React App remains unmaintained.
+The 2026-07-12 baseline production audit reported 33 root advisories (3 critical, 9 high) and 9 Functions advisories (1 high). SUPPLY-001A/#127 removes the unused `gpxparser` and obsolete `jsdom/request/form-data` chain; on a fresh Node 20 install, the root production audit falls to 22 advisories (1 critical, 8 high) while production bundle hashes remain identical. SUPPLY-001B/#192 pins the compatible React Router 6.30.4 graph and removes all three router findings, reducing that root audit to 19 advisories (1 critical, 5 high). SUPPLY-001C/#202 pins the last Firebase 11 compatibility release and its matching Rules helper; its fresh production audit reports 6 advisories (0 critical, 3 high). Firebase Admin still needs a staged major upgrade, Create React App remains unmaintained, and scanning/policy automation remains open.
 
 ### Scope
 
@@ -199,7 +201,7 @@ Deliver as small ordered PRs:
 
 1. [#127](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/127): prove `gpxparser` is unused, remove it, refresh only its lockfile graph, and retest route behavior.
 2. [#192](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/192): pin `react-router-dom` to 6.30.4 with `react-router` 6.30.4 and `@remix-run/router` 1.23.3; enable and test the two declarative-router future flags without changing the route tree.
-3. Upgrade Firebase web SDK within compatibility, then evaluate/stage the next supported major.
+3. [#202](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/202): pin the Firebase browser SDK to 11.10.0 and `@firebase/rules-unit-testing` to 4.0.1; keep the application on one compatibility boundary and repair only the Node 20 Rules harness needed to prove it.
 4. Upgrade Firebase Admin/Functions with emulator and Auth/Firestore trigger tests.
 5. Upgrade Stripe SDK and deliberately select/test the Stripe API version.
 6. Plan and execute CRA migration to a maintained build tool without mixing payment behavior changes.
@@ -221,10 +223,11 @@ Deliver as small ordered PRs:
 - Bundle/dependency diff and SBOM artifact.
 - SUPPLY-001A/#127: source search finds no runtime use; a fresh Node 20 lockfile install contains no `gpxparser`; 50 entries are removed with no retained package identity change; the root production audit changes from 33 to 22; all 47 frontend and 10 standalone SPA tests pass; and optimized JS/CSS asset hashes match the baseline exactly.
 - SUPPLY-001B/#192: the root declaration and only the three router package records change; a fresh Node 20 production audit changes from 22 findings (1 critical, 8 high, 12 moderate, 1 low) to 19 (1 critical, 5 high, 12 moderate, 1 low), with no remaining router entry. A fail-before/pass-after test covers the compatibility warnings; the focused suite also covers double-slash normalization, wildcard-to-home navigation, login return-path handling, account routing, and the 10-test standalone callback boundary.
+- SUPPLY-001C/#202: exact Firebase 11.10.0 and Rules helper 4.0.1 resolve the root production `protobufjs` path to 7.6.5 and remove Firebase's root `undici` path. The fresh production audit changes from 19 findings (1 critical, 5 high, 12 moderate, 1 low) to 6 (0 critical, 3 high, 2 moderate, 1 low). A red test proves the upgraded Rules helper cannot discover the emulator in the old Jest sandbox; the Node 20 native-web-API environment makes all 348 Rules cases pass. Focused Firebase/Auth/App Check tests pass 71/71, the frontend passes 198/198, Functions pass 1,077/1,077 applicable unit tests, and the callback and release-safety suites pass. The optimized main bundle grows 8.25 kB gzip (about 3.3%); the build grows 172 kB on disk (about 0.9%). A dev-only older `protobufjs` remains nested under `firebase-tools`; the remaining six root and nine Functions production findings are still open.
 
 ### Agent handoff
 
-Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewable lockfile diff. SUPPLY-001A is represented by #127 and SUPPLY-001B by #192; do not publish duplicates. Stop if a major provider SDK change needs a product/runtime decision.
+Never use `npm audit fix --force`. Do not combine all upgrades in one unreviewable lockfile diff. SUPPLY-001A, B, and C are represented by #127, #192, and #202; do not publish duplicates. #202 is source/test evidence only: it does not publish the website, deploy Firebase, change provider settings, or prove live behavior. Stop if a later provider SDK change needs a product/runtime decision.
 
 ---
 

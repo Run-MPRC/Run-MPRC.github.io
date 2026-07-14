@@ -7,11 +7,11 @@
  */
 module.exports = {
   rootDir: __dirname,
-  testEnvironment: 'node',
+  testEnvironment: '<rootDir>/node20-environment.js',
   testMatch: ['<rootDir>/**/*.test.js'],
   testTimeout: 15000,
-  // Polyfill ReadableStream/TextEncoder/etc. that undici (via the firebase
-  // SDK) needs at import time but Jest 27's node sandbox doesn't expose.
+  // Add the remaining web-platform globals that Jest 27's node sandbox does
+  // not expose. The custom environment supplies Node 20's native fetch API.
   setupFiles: ['<rootDir>/jest.setup.js'],
   // Tests share a single TestEnvironment (initialized lazily); run sequentially
   // so we don't fight over the same emulator state across worker processes.
