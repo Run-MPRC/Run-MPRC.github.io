@@ -34,6 +34,7 @@ An agent-ready child has one observable outcome, one trust boundary, explicit de
 
 | ID | Status/dependency | Bounded deliverable | Close evidence |
 | --- | --- | --- | --- |
+| AUTH-001B | source/tests tracked in live [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196); #98/#100; not deployed | Require exact boolean token `email_verified == true` for every current role-based Firestore member/admin decision. Preserve public reads and UID-bound safe profile recovery; verification grants no role. | Old-Rules proof fails the explicit missing/false/string/numeric matrices; focused/full Rules emulator suites pass with every privileged test context stating verification. Firebase deployment/live behavior remain separate. |
 | AUTH-003A | proposed; AUTH-001/002, SEC-001 | Define capability matrix, additive claims, role-change audit, and idempotent legacy-admin migration. | Table-driven claim/action tests and emulator dry-run/rollback. |
 | AUTH-003B | proposed; AUTH-003A | Apply capabilities to server functions and Firestore projections/rules. | Every capability/action pair has allow/deny tests. |
 | AUTH-003C | owner_action; AUTH-003B | Enforce privileged MFA, recent-auth thresholds, revocation, and break-glass/last-admin policy. | Staging failure/success demonstrations and private owner inventory. |

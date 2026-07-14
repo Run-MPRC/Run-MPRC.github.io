@@ -86,6 +86,7 @@ For each system, record only:
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
 13. Confirm Netlify Git-triggered production builds remain paused until a protected live-host path exists.
 14. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
+15. **NOT AVAILABLE YET:** after the exact #196 Rules revision is deployed to protected staging, use a made-up account to confirm that private role access requires both an already-approved member/admin role and a verified email. Verification alone never grants access. Never change a real member's role for this drill.
 
 ## Expected result and success proof
 
@@ -97,6 +98,8 @@ For each system, record only:
 ## Stop conditions
 
 Stop if a service has only one owner, uses Dave's personal recovery channel, has no tested rollback, or asks for a password/code in a shared document. Also stop if a merge can publish unexpectedly, a server credential reaches a website job, a project/scope can be typed freely, a green backend skip is possible, or a website can publish before backend verification. Do not remove an account, token, integration, fork, or billing method until two owners complete a dependency check.
+
+Also stop if a role-bearing Firebase account can open private member/admin data before its email is verified. Do not work around that result by editing a profile, changing a role, or using Firebase Console. Record only the fixed test result and escalate to the platform/security owner.
 
 ## Undo and recovery
 

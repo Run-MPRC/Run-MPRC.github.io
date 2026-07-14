@@ -55,8 +55,8 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 3 | SUPPLY-001 | Remove vulnerable dependency chains and stage SDK/build upgrades | P0 | L | partial: SUPPLY-001A tracked by #127; remaining upgrade/scanning slices open | CI-001 baseline |
 | 4 | SEC-001 | Replace the Firestore admin catch-all with resource-specific rules | P0 | M | source merged #123; Firebase live unproven | — |
 | 5 | CONFIG-001 | Fail closed on server environment and commerce configuration | P0 | M | CONFIG-001A merged in #149/PR #150; CONFIG-001B1 tracked in [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151); B2 blocked; not deployed | CI-001A recommended |
-| 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; backend live unproven; parent open | SEC-001 recommended |
-| 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | ready | AUTH-001 |
+| 6 | AUTH-001 | Require verified email for member and privileged claims | P0 | M | partial: #98 merged; Rules slice tracked in #196; Firebase live unproven; parent open | SEC-001 recommended |
+| 7 | AUTH-002 | Replace the legacy static-key membership synchronization endpoint | P0 | M | waiting on remaining AUTH-001 | AUTH-001 |
 | 8 | OAUTH-001 | Make Strava token lifecycle server-only, transactional, and auditable | P0 | M | represented by live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88); proposed/unclaimed | SAFETY-001/#99; SEC-001 and AUTH-003 for A; staged deferral/cutover with ABUSE-001A for C |
 | 9 | AUTH-003 | Introduce scoped admin capabilities, MFA, and recent authentication | P1 | L | proposed | AUTH-001, AUTH-002, SEC-001 |
 | 10 | ABUSE-001 | Enforce native App Check and privacy-preserving abuse limits | P0 | L | partial: Enterprise browser source/tests tracked in [#159](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/159); provider config, native enforcement, rate limits, and live proof open | CI-001 baseline |
@@ -320,7 +320,7 @@ Implement only the live CONFIG child claimed in `GITHUB_ISSUE_SLICES.md`. Never 
 ## AUTH-001 — Require verified email for member and privileged claims
 
 **Labels:** `priority:P0`, `type:security`, `area:auth`, `area:firebase`, `size:M`
-**Status:** Partial. AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) merged through [PR #107](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/107) as `ce22c110f2132b157bd8a0d43b065585e0b43cb5`; focused source/tests are proven, but Firebase deployment skipped and the parent scope remains open.
+**Status:** Partial. AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) merged through [PR #107](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/107) as `ce22c110f2132b157bd8a0d43b065585e0b43cb5`; its Firebase deployment skipped. AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) tracks the role-based Firestore Rules source/test slice; it has not been deployed. Neither slice is proven live. Remaining Functions/mirror/revocation work is open, and the parent is not complete.
 **Depends on:** SEC-001 recommended
 
 ### Problem
@@ -328,6 +328,8 @@ Implement only the live CONFIG child claimed in `GITHUB_ISSUE_SLICES.md`. Never 
 Both the legacy member synchronization function and admin role callable grant claims based on email without requiring `userRecord.emailVerified`. An attacker can pre-register a known member address, not verify it, and later receive membership when that email is imported. Privileged guards and rules check only the role string.
 
 AUTH-001A now rejects unverified targets at the two existing role-grant endpoints. Do not duplicate that merged slice. It is not proof that Firebase production runs the new code, and it does not complete the remaining parent requirements below.
+
+AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) is the distinct Rules outcome. A `member` or `admin` role authorizes a role-based Firestore operation only when Firebase's token also carries exact boolean `email_verified == true`. Missing, false, string, numeric, or profile-mirror values deny. UID-bound profile read/update and connection-metadata read remain identity self-service so an unverified person can recover; verification never creates membership or admin authority. This source/test boundary is not Firebase deployment or live proof.
 
 Adjacent account-email recovery is represented by canonical live parent [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120), not by a new AUTH-001 role-grant child. AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) merged the account-creation/request split as `46557c7` but is not published. AUTH-MAIL-002B [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) merged the truthful My Account resend result and browser cooldown as `23bca8c8`, but protected release run `29252492614` stopped before build and published nothing. AUTH-MAIL-002C1 [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155) tracks one neutral password-reset request result and repeat-safe browser cooldown. AUTH-MAIL-002C2 is represented by live child [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194): a verification-only `/auth/action` source route that scrubs capability state, requires an explicit click and provider `VERIFY_EMAIL`, and exposes only fixed non-identifying results. It must not be configured as Firebase's project-wide custom handler while reset-password and recover-email modes remain unsupported. None grants membership, proves provider delivery, reconciles the Firestore verification mirror, or proves Firebase API enumeration protection.
 

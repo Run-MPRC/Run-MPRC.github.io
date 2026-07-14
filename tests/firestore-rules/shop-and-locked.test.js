@@ -75,8 +75,29 @@ describe('products collection', () => {
 
   test('admin CAN read draft product through the explicit products rule', async () => {
     await seed('products/secret', { status: 'draft', title: 'Secret', priceCents: 0 });
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('products/secret').get());
+  });
+
+  test.each([
+    ['a missing verification claim', {
+      uid: 'a-missing', role: 'admin', omitEmailVerified: true,
+    }],
+    ['a false verification claim', {
+      uid: 'a-false', role: 'admin', emailVerified: false,
+    }],
+    ['a string verification claim', {
+      uid: 'a-string', role: 'admin', emailVerified: 'true',
+    }],
+    ['a numeric verification claim', {
+      uid: 'a-number', role: 'admin', emailVerified: 1,
+    }],
+  ])('admin with %s CANNOT read draft product data', async (_label, auth) => {
+    await seed('products/secret', { status: 'draft', title: 'Secret', priceCents: 0 });
+    const admin = await db(auth);
+
+    await assertFails(admin.doc('products/secret').get());
+    await assertFails(admin.collection('products').get());
   });
 
   test('anonymous CANNOT create a product', async () => {
@@ -85,30 +106,30 @@ describe('products collection', () => {
   });
 
   test('member CANNOT create a product', async () => {
-    const member = await db({ uid: 'u1', role: 'member' });
+    const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(member.doc('products/new').set({ status: 'active' }));
   });
 
   test('admin CAN create a product', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('products/new').set(adminProduct('new')));
   });
 
   test('admin CAN deliberately create a zero-price draft product', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('products/free').set(adminProduct('free', {
       priceCents: 0,
     })));
   });
 
   test.each(INVALID_SLUGS)('admin CANNOT create a product with invalid slug %s', async (slug) => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc(`products/${slug}`).set(adminProduct(slug)));
   });
 
   test('admin CAN update a product with the current editor payload', async () => {
     await seed('products/hat', adminProduct('hat'));
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('products/hat').update(productEditorUpdate()));
   });
 
@@ -121,7 +142,7 @@ describe('products collection', () => {
       sizes,
       colors,
     }));
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('products/hat').update({
       ...productEditorUpdate({ status: 'active' }),
       priceCents: 1000,
@@ -132,14 +153,14 @@ describe('products collection', () => {
 
   test('admin CANNOT delete a product directly', async () => {
     await seed('products/hat', adminProduct('hat'));
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('products/hat').delete());
   });
 
   test.each([
     ['a user without a role claim', { uid: 'u1' }],
     ['an unverified user', { uid: 'u2', role: 'unverified' }],
-    ['a member', { uid: 'u3', role: 'member' }],
+    ['a member', { uid: 'u3', role: 'member', emailVerified: true }],
   ])('%s CANNOT update or delete a product', async (_label, auth) => {
     await seed('products/hat', adminProduct('hat'));
     const user = await db(auth);
@@ -172,7 +193,7 @@ describe('products collection', () => {
       createdBy: product.createdBy,
     })],
   ])('admin CANNOT create a product with %s', async (_label, buildInvalid) => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     const product = buildInvalid(adminProduct('invalid'));
     await assertFails(admin.doc('products/invalid').set(product));
   });
@@ -191,7 +212,7 @@ describe('products collection', () => {
     ['an invalid updatedAt', { updatedAt: 'not-a-timestamp' }],
   ])('admin CANNOT update a product with %s', async (_label, patch) => {
     await seed('products/hat', adminProduct('hat'));
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('products/hat').update(patch));
   });
 
@@ -207,7 +228,7 @@ describe('products collection', () => {
     ['payment state', { paymentStatus: 'paid' }],
     ['audit data', { auditLog: [{ action: 'created' }] }],
   ])('admin CANNOT create a product containing protected %s', async (_label, patch) => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(
       admin.doc('products/protected').set(adminProduct('protected', patch)),
     );
@@ -227,7 +248,7 @@ describe('products collection', () => {
     ['audit data', { auditLog: [{ action: 'tampered' }] }],
   ])('admin CANNOT update protected product %s', async (_label, patch) => {
     await seed('products/hat', adminProduct('hat'));
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('products/hat').update(patch));
   });
 });
@@ -259,7 +280,7 @@ describe('products list queries (rules-are-not-filters)', () => {
   });
 
   test('admin CAN list all products for the current admin screen', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.collection('products').get());
   });
 });
@@ -280,18 +301,35 @@ describe('orders collection', () => {
   });
 
   test('member CANNOT read an order', async () => {
-    const m = await db({ uid: 'u1', role: 'member' });
+    const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(m.doc('orders/o1').get());
   });
 
   test('admin CAN read an order through the explicit orders rule', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('orders/o1').get());
   });
 
   test('admin CAN list orders for the current admin screen', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.collection('orders').get());
+  });
+
+  test.each([
+    ['a missing verification claim', {
+      uid: 'a-missing', role: 'admin', omitEmailVerified: true,
+    }],
+    ['a false verification claim', {
+      uid: 'a-false', role: 'admin', emailVerified: false,
+    }],
+    ['a malformed verification claim', {
+      uid: 'a-string', role: 'admin', emailVerified: 'true',
+    }],
+  ])('admin with %s CANNOT read or list orders', async (_label, auth) => {
+    const admin = await db(auth);
+
+    await assertFails(admin.doc('orders/o1').get());
+    await assertFails(admin.collection('orders').get());
   });
 
   test('anonymous CANNOT write an order', async () => {
@@ -300,17 +338,17 @@ describe('orders collection', () => {
   });
 
   test('member CANNOT write an order', async () => {
-    const m = await db({ uid: 'u1', role: 'member' });
+    const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(m.doc('orders/o2').set({ status: 'paid' }));
   });
 
   test('admin CANNOT create an order directly', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('orders/o2').set({ status: 'paid' }));
   });
 
   test('admin CANNOT update order financial state directly', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('orders/o1').update({
       status: 'refunded',
       amountCents: 0,
@@ -318,7 +356,7 @@ describe('orders collection', () => {
   });
 
   test('admin CANNOT delete an order directly', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('orders/o1').delete());
   });
 });
@@ -338,8 +376,8 @@ describe('server-only operational collections', () => {
 
     test.each([
       ['anonymous', undefined],
-      ['member', { uid: 'member-1', role: 'member' }],
-      ['browser admin', { uid: 'admin-1', role: 'admin' }],
+      ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+      ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
     ])('%s CANNOT read or write the commerce control', async (_label, auth) => {
       await seed(existingPath, control);
       const client = await db(auth);
@@ -353,8 +391,8 @@ describe('server-only operational collections', () => {
 
   describe.each([
     ['anonymous', undefined],
-    ['member', { uid: 'member-1', role: 'member' }],
-    ['browser admin', { uid: 'admin-1', role: 'admin' }],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
   ])('checkoutRequests lifecycle — %s', (_label, auth) => {
     const existingPath = 'checkoutRequests/synthetic-existing/lifecycle/current';
     const newPath = 'checkoutRequests/synthetic-new/lifecycle/current';
@@ -378,8 +416,8 @@ describe('server-only operational collections', () => {
 
   describe.each([
     ['anonymous', undefined],
-    ['member', { uid: 'member-1', role: 'member' }],
-    ['browser admin', { uid: 'admin-1', role: 'admin' }],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
   ])('checkoutRequests provider attempt — %s', (_label, auth) => {
     const existingPath = 'checkoutRequests/synthetic-existing/providerAttempts/0000000001';
     const newPath = 'checkoutRequests/synthetic-new/providerAttempts/0000000001';
@@ -403,8 +441,8 @@ describe('server-only operational collections', () => {
 
   describe.each([
     ['anonymous', undefined],
-    ['member', { uid: 'member-1', role: 'member' }],
-    ['browser admin', { uid: 'admin-1', role: 'admin' }],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
   ])('checkoutRequests provider send evidence — %s', (_label, auth) => {
     const existingPath = 'checkoutRequests/synthetic-existing/providerAttempts/0000000001/sendEvidence/first';
     const newPath = 'checkoutRequests/synthetic-new/providerAttempts/0000000001/sendEvidence/first';
@@ -451,7 +489,7 @@ describe('server-only operational collections', () => {
 
     test('member CANNOT read', async () => {
       await seed(path_, sample);
-      const m = await db({ uid: 'u1', role: 'member' });
+      const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(m.doc(path_).get());
     });
 
@@ -462,13 +500,13 @@ describe('server-only operational collections', () => {
 
     test('admin CANNOT read', async () => {
       await seed(path_, sample);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc(path_).get());
     });
 
     test('admin CANNOT create, update, or delete', async () => {
       await seed(path_, sample);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc(newPath).set(sample));
       await assertFails(admin.doc(path_).update({ probe: true }));
       await assertFails(admin.doc(path_).delete());
@@ -480,7 +518,7 @@ describe('server-only operational collections', () => {
     ['auditEvents', 'events/e1/auditEvents/audit1', { action: 'edit' }],
   ])('admin CANNOT collectionGroup-list protected %s', async (group, path_, sample) => {
     await seed(path_, sample);
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.collectionGroup(group).get());
   });
 });
@@ -488,13 +526,13 @@ describe('server-only operational collections', () => {
 describe('default-deny boundary', () => {
   test('admin CANNOT read an arbitrary future collection', async () => {
     await seed('totallyMadeUp/x', { foo: 'bar' });
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('totallyMadeUp/x').get());
   });
 
   test('admin CANNOT create, update, or delete in an arbitrary future collection', async () => {
     await seed('totallyMadeUp/x', { foo: 'bar' });
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('totallyMadeUp/new').set({ foo: 'bar' }));
     await assertFails(admin.doc('totallyMadeUp/x').update({ foo: 'changed' }));
     await assertFails(admin.doc('totallyMadeUp/x').delete());
@@ -502,13 +540,13 @@ describe('default-deny boundary', () => {
 
   test('non-admin CANNOT read an arbitrary collection', async () => {
     await seed('totallyMadeUp/x', { foo: 'bar' });
-    const m = await db({ uid: 'u1', role: 'member' });
+    const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(m.doc('totallyMadeUp/x').get());
   });
 
   test('user with role=member is NOT treated as admin', async () => {
     await seed('orders/o1', { status: 'paid' });
-    const m = await db({ uid: 'u1', role: 'member' });
+    const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(m.doc('orders/o1').get());
   });
 

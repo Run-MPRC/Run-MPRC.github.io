@@ -33,27 +33,62 @@ describe('members collection', () => {
 
     test('user CANNOT read another user\'s member doc', async () => {
       await seed('members/u2', SAMPLE_MEMBER);
-      const me = await db({ uid: 'u1', role: 'member' });
+      const me = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(me.doc('members/u2').get());
     });
 
     test('admin CAN read any member doc through the explicit members rule', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('members/u1').get());
     });
 
     test('admin CAN list member docs for the current admin screen', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
       await seed('members/u2', SAMPLE_MEMBER);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.collection('members').get());
+    });
+
+    test.each([
+      ['a missing verification claim', {
+        uid: 'a-missing', role: 'admin', omitEmailVerified: true,
+      }],
+      ['a false verification claim', {
+        uid: 'a-false', role: 'admin', emailVerified: false,
+      }],
+      ['a string verification claim', {
+        uid: 'a-string', role: 'admin', emailVerified: 'true',
+      }],
+      ['a numeric verification claim', {
+        uid: 'a-number', role: 'admin', emailVerified: 1,
+      }],
+    ])('admin with %s CANNOT read or list another member profile', async (_label, auth) => {
+      // A profile mirror is data, not authorization. Seed it true to prove it
+      // cannot replace the signed Firebase token claim.
+      await seed('members/u1', { ...SAMPLE_MEMBER, emailVerified: true });
+      const admin = await db(auth);
+
+      await assertFails(admin.doc('members/u1').get());
+      await assertFails(admin.collection('members').get());
+    });
+
+    test('an unverified user retains UID-bound profile recovery access', async () => {
+      await seed('members/u1', SAMPLE_MEMBER);
+      const me = await db({ uid: 'u1', role: 'member', emailVerified: false });
+
+      await assertSucceeds(me.doc('members/u1').get());
+      await assertSucceeds(me.doc('members/u1').update({
+        fullName: 'Recovery Name',
+        updatedAt: new Date(),
+      }));
+      await assertFails(me.doc('members/u2').get());
     });
 
     test('user CANNOT list the members collection', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
       await seed('members/u2', SAMPLE_MEMBER);
-      const me = await db({ uid: 'u1', role: 'member' });
+      const me = await db({ uid: 'u1', role: 'member', emailVerified: true });
       // No query constraint can satisfy `request.auth.uid == uid` for every
       // doc, so a collection list is denied — users can't enumerate members.
       await assertFails(me.collection('members').get());
@@ -72,8 +107,8 @@ describe('members collection', () => {
     test.each([
       ['a user without a role claim', { uid: 'u1' }],
       ['an unverified user', { uid: 'u1', role: 'unverified' }],
-      ['a member', { uid: 'u1', role: 'member' }],
-      ['an admin editing their own profile', { uid: 'u1', role: 'admin' }],
+      ['a member', { uid: 'u1', role: 'member', emailVerified: true }],
+      ['an admin editing their own profile', { uid: 'u1', role: 'admin', emailVerified: true }],
     ])('%s CAN make the exact existing-profile edit', async (_label, auth) => {
       // Mirrors accountService.updateMyProfile. The role grants no extra write
       // authority; ownership and the exact field/value contract are decisive.
@@ -263,26 +298,26 @@ describe('members collection', () => {
 
     test('user CANNOT update someone else\'s member doc', async () => {
       await seed('members/u2', SAMPLE_MEMBER);
-      const me = await db({ uid: 'u1', role: 'member' });
+      const me = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(me.doc('members/u2').update({ fullName: 'Hax' }));
     });
 
     test('admin CANNOT promote another user\'s role directly', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('members/u1').update({ role: 'admin' }));
     });
 
     test('admin CANNOT update another member profile directly', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('members/u1').update({ fullName: 'Changed by admin' }));
     });
 
     test('user and admin CANNOT delete a member profile directly', async () => {
       await seed('members/u1', SAMPLE_MEMBER);
-      const me = await db({ uid: 'u1', role: 'member' });
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const me = await db({ uid: 'u1', role: 'member', emailVerified: true });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(me.doc('members/u1').delete());
       await assertFails(admin.doc('members/u1').delete());
     });
@@ -295,7 +330,7 @@ describe('members collection', () => {
     });
 
     test('admin CANNOT create a member doc directly', async () => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('members/u9').set(SAMPLE_MEMBER));
     });
   });
@@ -328,7 +363,7 @@ describe('members/{uid}/connections subcollection', () => {
 
   test('admin CANNOT read or write connection metadata without an explicit need', async () => {
     await seed('members/u1/connections/strava', conn);
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('members/u1/connections/strava').get());
     await assertFails(admin.doc('members/u1/connections/strava').update({ athleteId: 99999 }));
   });
@@ -339,14 +374,14 @@ describe('members/{uid}/connections subcollection', () => {
     // cannot harvest everyone's Strava connection metadata.
     await seed('members/u1/connections/strava', conn);
     await seed('members/u2/connections/strava', conn);
-    const me = await db({ uid: 'u1', role: 'member' });
+    const me = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(me.collectionGroup('connections').get());
   });
 
   test('admin CANNOT collectionGroup-query all connections', async () => {
     await seed('members/u1/connections/strava', conn);
     await seed('members/u2/connections/strava', conn);
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.collectionGroup('connections').get());
   });
 });
@@ -371,19 +406,19 @@ describe('members/{uid}/secrets subcollection', () => {
 
   test('member CANNOT read another user\'s secrets', async () => {
     await seed('members/u2/secrets/strava', secret);
-    const m = await db({ uid: 'u1', role: 'member' });
+    const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(m.doc('members/u2/secrets/strava').get());
   });
 
   test('admin CANNOT read OAuth secrets', async () => {
     await seed('members/u1/secrets/strava', secret);
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('members/u1/secrets/strava').get());
   });
 
   test('admin CANNOT create, update, or delete OAuth secrets', async () => {
     await seed('members/u1/secrets/strava', secret);
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('members/u2/secrets/strava').set(secret));
     await assertFails(admin.doc('members/u1/secrets/strava').update({ expires_at: 1 }));
     await assertFails(admin.doc('members/u1/secrets/strava').delete());
@@ -392,14 +427,14 @@ describe('members/{uid}/secrets subcollection', () => {
   test('member CANNOT collectionGroup-query all secrets', async () => {
     await seed('members/u1/secrets/strava', secret);
     await seed('members/u2/secrets/strava', secret);
-    const m = await db({ uid: 'u1', role: 'member' });
+    const m = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(m.collectionGroup('secrets').get());
   });
 
   test('admin CANNOT collectionGroup-query all secrets', async () => {
     await seed('members/u1/secrets/strava', secret);
     await seed('members/u2/secrets/strava', secret);
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.collectionGroup('secrets').get());
   });
 });

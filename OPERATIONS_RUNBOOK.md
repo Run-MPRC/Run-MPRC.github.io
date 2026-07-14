@@ -277,6 +277,10 @@ npm run test:rules
 
 This requires Java. Rules tests must prove both allowed behavior and explicit denial of secret/financial/arbitrary paths for browser admins.
 
+AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) adds one required role matrix to this check. Every test context using `member` or `admin` must state email verification explicitly. Exact boolean `true` permits only the operation already allowed by that role; missing, false, string, numeric, or profile-document values must not substitute. Unverified users must still be able to read and make the existing name-only update to their own profile, and must remain unable to use role-based access or another UID. Stop a release if any privileged fixture relies on an inferred verification default.
+
+Passing this local/hosted emulator suite proves the reviewed Rules source only. Under #105/#133/#136, deploy and read back the exact Rules revision before publishing a dependent website. Then use made-up accounts to verify one allowed and one denied role case. Never test with a real member/admin account, manually toggle a production role, or treat email verification as membership approval.
+
 ### Production build without changing generated sitemap during a diagnostic check
 
 ```bash

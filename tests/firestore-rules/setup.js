@@ -47,10 +47,25 @@ function ctx(role, uid) {
   return { role, uid };
 }
 
-async function db({ uid, role } = {}) {
+async function db(auth = {}) {
+  const {
+    uid, role, emailVerified, omitEmailVerified = false,
+  } = auth;
   const env = await getEnv();
   if (!uid) return env.unauthenticatedContext().firestore();
-  return env.authenticatedContext(uid, role ? { role } : {}).firestore();
+
+  const token = {};
+  if (role) token.role = role;
+
+  const hasEmailVerified = Object.prototype.hasOwnProperty.call(auth, 'emailVerified');
+  if ((role === 'member' || role === 'admin')
+      && !hasEmailVerified
+      && !omitEmailVerified) {
+    throw new Error('Privileged test contexts must state emailVerified explicitly');
+  }
+  if (hasEmailVerified) token.email_verified = emailVerified;
+
+  return env.authenticatedContext(uid, token).firestore();
 }
 
 /**
