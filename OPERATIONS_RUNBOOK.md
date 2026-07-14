@@ -296,6 +296,17 @@ AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) adds
 
 Passing the focused and full Functions suites proves the reviewed Functions source only. It does not prove the corresponding Rules test, Firebase deployment, or staged behavior. **NOT AVAILABLE YET:** after protected backend-first deployment, run the complete synthetic matrix in [Access Continuity](./docs/officers/ACCESS_CONTINUITY.md#synthetic-role-boundary-drill--not-available-yet). Record separate exact Rules and Functions revisions and results. Stop the release on any mismatch.
 
+### Browser role projection
+
+```bash
+CI=true npm test -- --watchAll=false --runInBand \
+  src/services/identity/Identity.test.ts
+```
+
+AUTH-001D1 [#213](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/213) adds the browser-side match to the Rules and Functions checks. One force-refreshed ID-token result may project `member` or `admin` into website state only when its plain claim data contains exact `email_verified === true` and the exact role. Missing, false, string, numeric, profile-style, inherited, accessor-backed, proxied, unknown, or case-changed values project no privileged browser role. Exact `unverified` remains non-authoritative. The test captures the Firebase Auth callback and proves an unverified admin-shaped token emits no admin browser role without printing claims.
+
+Passing this test proves only the reviewed website source. Browser role state never authorizes a database or Function request, and it does not grant, remove, refresh, or revoke a role. A protected release must deploy and read back the exact Rules and Functions first, publish the exact website to protected staging second, and then run the complete made-up-account matrix in [Access Continuity](./docs/officers/ACCESS_CONTINUITY.md#synthetic-role-boundary-drill--not-available-yet). Stop if any layer disagrees. Do not repair a result with a real account, profile edit, or Firebase Console change.
+
 ### Production build without changing generated sitemap during a diagnostic check
 
 ```bash

@@ -248,24 +248,26 @@ The first release may continue using `admin` in the UI, but server endpoints and
 
 ### Current verified-role boundary — source only, not live
 
-AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) requires an authoritative verified target before the existing grant endpoints can add `member` or `admin`. AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) requires exact boolean Firebase token claim `email_verified == true` in addition to the existing role for role-based Firestore access. AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) applies the same second gate to current Functions role consumers: shared admin callables, member-only/member-price checkout decisions, and registration CSV export.
+AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) requires an authoritative verified target before the existing grant endpoints can add `member` or `admin`. AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) requires exact boolean Firebase token claim `email_verified == true` in addition to the existing role for role-based Firestore access. AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) applies the same second gate to current Functions role consumers: shared admin callables, member-only/member-price checkout decisions, and registration CSV export. AUTH-001D1 [#213](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/213) mirrors that decision in the browser so an unverified role-bearing token cannot make member/admin controls look available before the server denies them.
 
 ```mermaid
 flowchart LR
-    Token["Server-verified Firebase token"] --> Verified{"email_verified is exactly true?"}
-    Verified -- "No" --> Deny["Deny role-based access"]
-    Verified -- "Yes" --> Role{"Exact member or admin role?"}
-    Role -- "No" --> Deny
-    Role -- "Yes" --> Rules["Specific Firestore rule"]
-    Role -- "Yes" --> Function["Specific Function guard"]
-    Verified -. "never grants" .-> Role
+    BrowserToken["Browser reads one refreshed ID-token result"] --> BrowserCheck{"Exact verified-email and role claims?"}
+    BrowserCheck -- "No" --> Hide["Project no member/admin browser role"]
+    BrowserCheck -- "Yes" --> UI["Show matching member/admin controls\nUI guidance only"]
+    ServerToken["Firebase verifies token for backend use"] --> ServerCheck{"Exact verified-email and role claims?"}
+    ServerCheck -- "No" --> Deny["Deny role-based access"]
+    ServerCheck -- "Yes" --> Rules["Specific Firestore rule"]
+    ServerCheck -- "Yes" --> Function["Specific Function guard"]
+    BrowserCheck -. "verification never grants" .-> UI
+    ServerCheck -. "verification never grants" .-> Rules
 ```
 
-Text alternative: a server-verified Firebase token must contain both the exact verified-email boolean and an already-approved exact role before a specific database rule or Function can use that role; verification alone grants nothing.
+Text alternative: the browser shows member/admin controls only when one refreshed token result contains exact verified-email and role claims, while Firebase independently verifies the same two facts before a specific database rule or Function uses the role; browser display is not authority and verification alone grants nothing.
 
-The Functions policy reads decoded-token `email_verified`, not the camel-case Auth user-record field used while granting a role and not the `emailVerified` profile mirror. It accepts no request or profile substitute. Missing, false, string, numeric, inherited, accessor-backed, proxied, unknown, or case-changed claims fail closed. Unauthenticated and unauthorized responses remain generic. This does not provide authoritative membership, scoped capabilities, MFA/recent-auth, token revocation, safe roster projection, or legacy-sync retirement.
+The Functions policy reads decoded-token `email_verified`, not the camel-case Auth user-record field used while granting a role and not the `emailVerified` profile mirror. The browser policy also reads only the refreshed ID-token claims. Neither accepts a request or profile substitute. Missing, false, string, numeric, inherited, accessor-backed, proxied, unknown, or case-changed claims fail closed. Exact `unverified` remains a non-authoritative display state. Unauthenticated and unauthorized responses remain generic. This does not provide authoritative membership, scoped capabilities, MFA/recent-auth, token revocation, safe roster projection, or legacy-sync retirement.
 
-All three slices are source boundaries until their exact Functions and Rules revisions are deployed through the protected backend-first release and checked with synthetic staged identities. A source merge or green CI run is not live access proof.
+All four slices are source boundaries until the exact Rules, Functions, and website revisions are deployed through the protected backend-first release and checked with synthetic staged identities. A source merge or green CI run is not live access proof.
 
 ## 6. Domain model and ownership
 

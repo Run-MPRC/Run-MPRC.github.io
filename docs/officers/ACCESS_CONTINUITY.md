@@ -86,42 +86,44 @@ For each system, record only:
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
 13. Confirm Netlify Git-triggered production builds remain paused until a protected live-host path exists.
 14. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
-15. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after both reviewed backend revisions are safely available in protected staging.
+15. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
 
 ### Synthetic role-boundary drill — NOT AVAILABLE YET
 
-**Purpose:** prove that verified email and the already-approved role are both required by the staged database permissions and current server Functions.
+**Purpose:** prove that the staged website, database permissions, and current server Functions all require both verified email and the already-approved role.
 
 **Approver:** platform/security owner plus one backup reviewer.
 
-**Prerequisites:** #196 database-permission source and #209 Function source are merged; protected staging has read back both exact revisions; the platform/security owner has prepared synthetic accounts and synthetic records only; a reviewed backend rollback or safe-roll-forward plan is ready. If any prerequisite is missing, do not start.
+**Prerequisites:** #196 database-permission source, #209 Function source, and #213 website source are merged; protected staging has read back all three exact revisions after a backend-first release; the platform/security owner has prepared synthetic accounts and synthetic records only; reviewed backend and website rollback or safe-roll-forward plans are ready. If any prerequisite is missing, do not start.
 
 1. Ask the platform/security owner to record the exact staged database-permission revision.
 2. Ask the platform/security owner to record the exact staged Function revision.
-3. Confirm the staging records contain no real member, registration, payment, or contact information.
-4. Ask the platform/security owner to run the four identity combinations in the table below.
-5. Observe one private database read for each combination.
-6. Observe one member-only checkout check for each combination.
-7. Observe one member-price check for each combination.
-8. Observe one admin action for each combination.
-9. Observe one registration-export authorization check for each combination.
-10. Record only the date, two approvers, exact revisions, surface name, and fixed allow/deny result.
-11. Do not copy a token, email address, member record, registration row, or CSV content.
+3. Ask the platform/security owner to record the exact staged website revision.
+4. Confirm the staging records contain no real member, registration, payment, or contact information.
+5. Ask the platform/security owner to run the four identity combinations in the table below.
+6. Observe whether the website shows member/admin controls for each combination.
+7. Observe one private database read for each combination.
+8. Observe one member-only checkout check for each combination.
+9. Observe one member-price check for each combination.
+10. Observe one admin action for each combination.
+11. Observe one registration-export authorization check for each combination.
+12. Record only the date, two approvers, exact revisions, surface name, and fixed show/hide or allow/deny result.
+13. Do not copy a token, email address, member record, registration row, or CSV content.
 
-| Made-up account | Private member read | Member-only checkout / price | Admin action / registration export |
-| --- | --- | --- | --- |
-| Verified + approved member role | Allow only the existing member read | Allow the existing member behavior | Deny |
-| Verified + approved admin role | Allow only the existing admin/member read | Allow the existing admin/member behavior | Allow only the existing admin behavior |
-| Unverified + member or admin role | Deny | Deny member treatment | Deny |
-| Verified or unverified + no approved role | Deny role-based read | Deny member treatment | Deny |
+| Made-up account | Website member/admin controls | Private member read | Member-only checkout / price | Admin action / registration export |
+| --- | --- | --- | --- | --- |
+| Verified + approved member role | Show only existing member controls | Allow only the existing member read | Allow the existing member behavior | Deny |
+| Verified + approved admin role | Show existing member/admin controls | Allow only the existing admin/member read | Allow the existing admin/member behavior | Allow only the existing admin behavior |
+| Unverified + member or admin role | Hide member/admin controls | Deny | Deny member treatment | Deny |
+| Verified or unverified + no approved role | Hide member/admin controls | Deny role-based read | Deny member treatment | Deny |
 
 **Expected result:** every observed result matches the table. Verification never creates a role. A member role never becomes admin access.
 
-**Success proof:** the private drill record names both exact backend revisions, both approvers, the check date, and one fixed result for every table cell. It contains no identity, token, member data, registration content, or exported file.
+**Success proof:** the private drill record names the exact database, Function, and website revisions, both approvers, the check date, and one fixed result for every table cell. It contains no identity, token, member data, registration content, or exported file.
 
-**Stop conditions:** stop immediately on an unexpected allow, an unexpected deny for the verified matching role, a missing or different revision, any real data, or any request to repair the result in Firebase Console. Do not continue to website publication.
+**Stop conditions:** stop immediately on an unexpected allow, an unexpected deny for the verified matching role, a missing or different revision, any real data, or any request to repair the result in Firebase Console. Do not continue to production or `runmprc.com` publication.
 
-**Undo and recovery:** ask the platform/security owner to use the reviewed backend rollback or safe-roll-forward plan for both affected Rules and Functions. Keep the website unpublished. Repeat the complete matrix only after both exact revisions are read back again. Do not change a real account or production record.
+**Undo and recovery:** ask the platform/security owner to use the reviewed backend and website rollback or safe-roll-forward plans. Keep the website unpublished outside protected staging. Repeat the complete matrix only after all three exact revisions are read back again. Do not change a real account or production record.
 
 **Escalation:** platform/security owner plus backup. Add the privacy lead if any real or exported data was exposed. Add the club president if neither technical owner is reachable.
 
@@ -136,7 +138,7 @@ For each system, record only:
 
 Stop if a service has only one owner, uses Dave's personal recovery channel, has no tested rollback, or asks for a password/code in a shared document. Also stop if a merge can publish unexpectedly, a server credential reaches a website job, a project/scope can be typed freely, a green backend skip is possible, or a website can publish before backend verification. Do not remove an account, token, integration, fork, or billing method until two owners complete a dependency check.
 
-Also stop if a role-bearing Firebase account can open private member/admin data, call an admin Function, receive member checkout treatment, or export registrations before its email is verified. Do not work around that result by editing a profile, changing a role, or using Firebase Console. Record only the fixed test result and exact tested revision, then escalate to the platform/security owner.
+Also stop if a role-bearing Firebase account can see member/admin website controls, open private member/admin data, call an admin Function, receive member checkout treatment, or export registrations before its email is verified. Do not work around that result by editing a profile, changing a role, or using Firebase Console. Record only the fixed test result and exact tested revision, then escalate to the platform/security owner.
 
 ## Undo and recovery
 
