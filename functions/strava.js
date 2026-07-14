@@ -8,6 +8,7 @@ const STRAVA_DEAUTH_URL = 'https://www.strava.com/oauth/deauthorize';
 const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities';
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
 const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
+const STRAVA_AUTHORIZATION_CODE_MAX_LENGTH = 1_024;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
 
@@ -131,8 +132,12 @@ exports.stravaExchangeCode = functions
       throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
     }
     const { code } = data || {};
-    if (!code || typeof code !== 'string') {
-      throw new functions.https.HttpsError('invalid-argument', 'code required');
+    if (
+      typeof code !== 'string'
+      || code.length === 0
+      || code.length > STRAVA_AUTHORIZATION_CODE_MAX_LENGTH
+    ) {
+      throw stravaAuthorizationError('invalid-argument');
     }
     const { uid } = context.auth;
 
