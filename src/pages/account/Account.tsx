@@ -21,13 +21,6 @@ import StravaSection from './StravaSection';
 import { getLocationReturnPath } from '../login/loginReturnPath';
 import './Account.css';
 
-function roleLabel(role: string) {
-  if (role === 'admin') return 'Admin';
-  if (role === 'member') return 'Member';
-  if (role === 'unverified') return 'Unverified';
-  return role;
-}
-
 function tsToDate(ts: Timestamp | null | undefined) {
   if (!ts) return '';
   const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts as any);
@@ -412,11 +405,7 @@ export function AccountContent({
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500 text-xs">Membership</dt>
-                <dd>{roleLabel(profile.role)}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500 text-xs">Member since</dt>
+                <dt className="text-gray-500 text-xs">Account created</dt>
                 <dd>{tsToDate(profile.createdAt)}</dd>
               </div>
               <div>
@@ -490,10 +479,12 @@ export function AccountContent({
               <ResendVerificationButton key={user.uid} />
             </div>
           )}
-          {profile?.role === 'unverified' && (
+          {profileState === 'ready' && profile && (
             <div className="mt-3 p-3 bg-amber-100 border border-amber-300 rounded text-sm">
-              Your account is pending member verification. An admin will upgrade your
-              membership once dues are confirmed. You can still register for public events.
+              Current paid membership and dues status is not available in My Account yet.
+              {' '}
+              Creating an account, verifying an email address, or using the website does
+              not prove current club membership.
             </div>
           )}
         </section>

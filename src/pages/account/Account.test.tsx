@@ -123,6 +123,39 @@ describe('Account profile recovery', () => {
     expect(getMyProfile).toHaveBeenCalledWith(firestore, USER.uid);
   });
 
+  test.each([
+    ['unverified', 'Unverified'],
+    ['member', 'Member'],
+    ['admin', 'Admin'],
+  ] as const)(
+    'keeps the %s website role separate from paid membership',
+    async (role, displayedRole) => {
+      (getMyProfile as jest.Mock).mockResolvedValue({ ...PROFILE, role });
+
+      const view = renderAccount();
+
+      expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+      const details = view.container.querySelector('dl');
+      expect(details).not.toBeNull();
+      const labels = Array.from(details?.querySelectorAll('dt') || [])
+        .map((label) => label.textContent);
+      const values = Array.from(details?.querySelectorAll('dd') || [])
+        .map((value) => value.textContent);
+
+      expect(labels).toContain('Account created');
+      expect(labels).not.toContain('Membership');
+      expect(labels).not.toContain('Member since');
+      expect(values).not.toContain(displayedRole);
+      expect(document.body).not.toHaveTextContent(/pending member verification/i);
+      expect(document.body).not.toHaveTextContent(/upgrade your membership/i);
+      expect(document.body).not.toHaveTextContent(/dues are confirmed/i);
+      expect(screen.getByText(
+        /current paid membership and dues status is not available in My Account yet/i,
+      )).toBeInTheDocument();
+      expect(screen.getByText(/your email address is unverified/i)).toBeInTheDocument();
+    },
+  );
+
   test('shows a generic recovery state and disables editing when setup fails', async () => {
     (ensureMyProfile as jest.Mock)
       .mockRejectedValueOnce(new Error('Missing or insufficient permissions.'))
