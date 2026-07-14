@@ -76,6 +76,7 @@ const { stravaExchangeCode, stravaFetchStats } = require('./strava');
 
 const FIXED_AUTHORIZATION_ERROR = 'Strava authorization could not be completed.';
 const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
+const FIXED_DATA_ERROR = 'Strava activity data could not be loaded.';
 const GUARDED_FETCH = global.fetch;
 const CONTEXT = Object.freeze({
   app: Object.freeze({ appId: 'synthetic-app-check' }),
@@ -579,5 +580,259 @@ describe('Strava token refresh failure boundary', () => {
       options: { merge: true },
     }]);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});
+
+describe('Strava activity data failure boundary', () => {
+  let fetchMock;
+  let consoleSpies;
+
+  const CONNECTION = Object.freeze({
+    provider: 'strava',
+    athleteId: 123456,
+    firstName: 'Synthetic',
+    lastName: 'Athlete',
+    username: 'synthetic-athlete',
+    profileUrl: 'https://images.example.test/synthetic-athlete.png',
+  });
+  const FRESH_SECRET = Object.freeze({
+    access_token: 'fresh_access_token_test',
+    refresh_token: 'synthetic_refresh_token_test',
+    expires_at: 4_102_444_800,
+    scope: 'read',
+  });
+
+  beforeEach(() => {
+    process.env.STRAVA_CLIENT_ID = 'strava_client_test';
+    process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
+    admin.__clearDocuments();
+    admin.__clearReads();
+    admin.__clearWrites();
+    requireAppCheck.mockReset();
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  });
+
+  afterEach(() => {
+    global.fetch = GUARDED_FETCH;
+    consoleSpies.forEach((spy) => spy.mockRestore());
+    delete process.env.STRAVA_CLIENT_ID;
+    delete process.env.STRAVA_CLIENT_SECRET;
+  });
+
+  function seedFreshConnection() {
+    admin.__setDocument(CONNECTION_PATH, CONNECTION);
+    admin.__setDocument(SECRET_PATH, FRESH_SECRET);
+  }
+
+  function expectTwoFreshBearerReads() {
+    const headers = { Authorization: 'Bearer fresh_access_token_test' };
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+      { headers },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://www.strava.com/api/v3/athletes/123456/stats',
+      { headers },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  }
+
+  function expectNoWritesOrLogs() {
+    expect(admin.__getWrites()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  test('does not read or expose a failed activities response body or status', async () => {
+    seedFreshConnection();
+    const text = jest.fn().mockResolvedValue(
+      'provider-body-canary access_token=provider-secret-canary',
+    );
+    const activitiesJson = jest.fn();
+    const statsJson = jest.fn().mockResolvedValue({});
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 599,
+        text,
+        json: activitiesJson,
+      })
+      .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/599|provider-body-canary|provider-secret-canary/i);
+    expect(text).not.toHaveBeenCalled();
+    expect(activitiesJson).not.toHaveBeenCalled();
+    expect(statsJson).not.toHaveBeenCalled();
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('turns an activities transport failure into one fixed unavailable result', async () => {
+    seedFreshConnection();
+    fetchMock
+      .mockRejectedValueOnce(Object.assign(
+        new Error('activities-transport-canary https://provider.example.test/?token=secret-canary'),
+        { providerBody: 'provider-body-canary' },
+      ))
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({}) });
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/transport-canary|provider\.example|secret-canary|provider-body-canary/i);
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('turns a statistics transport failure into one fixed unavailable result', async () => {
+    seedFreshConnection();
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue([]) })
+      .mockRejectedValueOnce(Object.assign(
+        new Error('stats-transport-canary https://provider.example.test/?token=secret-canary'),
+        { providerBody: 'provider-body-canary' },
+      ));
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/transport-canary|provider\.example|secret-canary|provider-body-canary/i);
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('turns malformed activities JSON into one fixed unavailable result', async () => {
+    seedFreshConnection();
+    const activitiesJson = jest.fn().mockRejectedValue(
+      new Error('activities-json-canary access_token=provider-secret-canary'),
+    );
+    const statsJson = jest.fn().mockResolvedValue({});
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+      .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/json-canary|provider-secret-canary/i);
+    expect(activitiesJson).toHaveBeenCalledTimes(1);
+    expect(statsJson).not.toHaveBeenCalled();
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('turns malformed statistics JSON into one fixed unavailable result', async () => {
+    seedFreshConnection();
+    const activitiesJson = jest.fn().mockResolvedValue([]);
+    const statsJson = jest.fn().mockRejectedValue(
+      new Error('stats-json-canary access_token=provider-secret-canary'),
+    );
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+      .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/json-canary|provider-secret-canary/i);
+    expect(activitiesJson).toHaveBeenCalledTimes(1);
+    expect(statsJson).toHaveBeenCalledTimes(1);
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('preserves recent activities when optional statistics HTTP access fails', async () => {
+    seedFreshConnection();
+    const activitiesJson = jest.fn().mockResolvedValue([{
+      id: 987654,
+      name: 'Synthetic Morning Run',
+      sport_type: 'Run',
+      distance: 5000,
+      moving_time: 1500,
+      start_date: '2026-01-02T12:00:00Z',
+    }]);
+    const statsText = jest.fn().mockResolvedValue(
+      'provider-body-canary access_token=provider-secret-canary',
+    );
+    const statsJson = jest.fn();
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 599,
+        text: statsText,
+        json: statsJson,
+      });
+
+    const result = await stravaFetchStats({}, CONTEXT);
+
+    expect(result).toEqual({
+      connected: true,
+      athlete: {
+        id: 123456,
+        firstName: 'Synthetic',
+        lastName: 'Athlete',
+        username: 'synthetic-athlete',
+        profileUrl: 'https://images.example.test/synthetic-athlete.png',
+      },
+      recentActivities: [{
+        id: 987654,
+        name: 'Synthetic Morning Run',
+        type: 'Run',
+        distanceMeters: 5000,
+        movingTimeSeconds: 1500,
+        startDate: '2026-01-02T12:00:00Z',
+      }],
+      yearToDate: null,
+      allTime: null,
+    });
+    expect(activitiesJson).toHaveBeenCalledTimes(1);
+    expect(statsText).not.toHaveBeenCalled();
+    expect(statsJson).not.toHaveBeenCalled();
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
   });
 });

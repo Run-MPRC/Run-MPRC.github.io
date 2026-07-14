@@ -9,6 +9,7 @@ const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities'
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
 const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
+const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
 
 function stravaAuthorizationError(code) {
   return new functions.https.HttpsError(code, STRAVA_AUTHORIZATION_ERROR_MESSAGE);
@@ -16,6 +17,10 @@ function stravaAuthorizationError(code) {
 
 function stravaRefreshError(code) {
   return new functions.https.HttpsError(code, STRAVA_REFRESH_ERROR_MESSAGE);
+}
+
+function stravaDataError(code) {
+  return new functions.https.HttpsError(code, STRAVA_DATA_ERROR_MESSAGE);
 }
 
 function getStravaCreds() {
@@ -174,16 +179,34 @@ exports.stravaFetchStats = functions
 
     const headers = { Authorization: `Bearer ${token}` };
 
-    const [activitiesResp, statsResp] = await Promise.all([
-      fetch(`${STRAVA_ACTIVITIES_URL}?per_page=5`, { headers }),
-      conn.athleteId ? fetch(STRAVA_STATS_URL(conn.athleteId), { headers }) : null,
-    ]);
-
-    if (!activitiesResp.ok) {
-      throw new functions.https.HttpsError('internal', `Strava activities: ${activitiesResp.status}`);
+    let activitiesResp;
+    let statsResp;
+    try {
+      [activitiesResp, statsResp] = await Promise.all([
+        fetch(`${STRAVA_ACTIVITIES_URL}?per_page=5`, { headers }),
+        conn.athleteId ? fetch(STRAVA_STATS_URL(conn.athleteId), { headers }) : null,
+      ]);
+    } catch (_error) {
+      throw stravaDataError('unavailable');
     }
-    const activities = await activitiesResp.json();
-    const stats = statsResp && statsResp.ok ? await statsResp.json() : null;
+
+    if (!activitiesResp || !activitiesResp.ok) {
+      throw stravaDataError('internal');
+    }
+    let activities;
+    try {
+      activities = await activitiesResp.json();
+    } catch (_error) {
+      throw stravaDataError('unavailable');
+    }
+    let stats = null;
+    if (statsResp && statsResp.ok) {
+      try {
+        stats = await statsResp.json();
+      } catch (_error) {
+        throw stravaDataError('unavailable');
+      }
+    }
 
     return {
       connected: true,
