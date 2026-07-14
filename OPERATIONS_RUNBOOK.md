@@ -351,6 +351,36 @@ Use only made-up event definitions and made-up runner data. The report must prov
 
 This command proves source and synthetic tests only. It does not prove that Firebase received the code or that any live event definition is compatible. PAY-001B2 must add immutable field, price, and waiver snapshots plus compatibility and protected staging proof before this boundary can be treated as live. Do not inspect or copy a real registration to obtain that proof.
 
+### Later Stripe attempt authorization — SOURCE ONLY, UNUSED
+
+PAY-002B2C3C [#226](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/226) adds one server-only authorization record after the existing reconciliation candidate. This code is imported by no endpoint or Functions index. It cannot call Stripe, create an attempt-2 provider plan or pre-send marker, change a registration/order, return a Checkout URL, or send a response to a member.
+
+```mermaid
+flowchart LR
+    C["Exact saved safe candidate"] --> G{"Matching transition and fresh later lease?"}
+    G -- "No" --> S["Stop; no write"]
+    G -- "Yes" --> A["Write immutable authorization + audit"]
+    A --> R["Stop at requires_plan_binding"]
+```
+
+Text alternative: exact saved evidence, a matching closed transition, and a fresh later lease can create only an authorization record; a separate plan and send gate is still required.
+
+Run only with Node 20, Java 17, the repository lockfiles, and synthetic demo data:
+
+```bash
+npm --prefix functions run test:run -- --runInBand commerceCommandJournal.test.js
+REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR=1 \
+  npx --no-install firebase emulators:exec \
+  --project demo-pay002b2-test \
+  --only firestore \
+  "npm --prefix functions run test:run -- --runInBand commerceCommandJournal.emulator.test.js"
+npm run test:rules
+```
+
+Expected proof: both closed safe transitions create one paired record/audit only under the exact current later-fence lease; identical concurrency creates one pair; conflicting commitments produce one winner; unsafe/ambiguous evidence, stale leases, malformed/orphan records, and browser access fail closed. Stop if the emulator names a non-demo project, any provider credential is present, a network/provider call occurs, an attempt-2 plan/send document appears, an earlier record changes, or the Rules suite permits any browser role to access the pair.
+
+This is source and synthetic-test evidence only. It does not prove Firebase deployment, Stripe configuration, a production business transition, production data, website publication, `runmprc.com`, or live behavior. No officer procedure changes because there is no officer action and no live surface. PAY-002C/D and PAY-003B must add reviewed business-state, plan, send, result, and reconciliation adoption before this can protect a real checkout. Do not test it with a real registration, order, Stripe object, customer, or member.
+
 ### Target payment integration suite
 
 CI/staging must eventually include:

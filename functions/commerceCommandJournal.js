@@ -25,6 +25,8 @@ const providerSendEvidenceSchemaVersion = 1;
 const providerSendAuditSchemaVersion = 1;
 const providerReconciliationEvidenceSchemaVersion = 1;
 const providerReconciliationAuditSchemaVersion = 1;
+const providerAttemptAuthorizationSchemaVersion = 1;
+const providerAttemptAuthorizationAuditSchemaVersion = 1;
 const MAXIMUM_ENDPOINT_SCHEMA_VERSION = 1000000;
 const MAXIMUM_LIFECYCLE_NUMBER = 9999999999;
 const LEASE_DURATION_SECONDS = 60;
@@ -40,9 +42,12 @@ const SEND_EVIDENCE_COLLECTION = 'sendEvidence';
 const INITIAL_SEND_EVIDENCE_DOCUMENT = 'first';
 const RECONCILIATION_EVIDENCE_COLLECTION = 'reconciliationEvidence';
 const INITIAL_RECONCILIATION_EVIDENCE_DOCUMENT = '0000000001';
+const NEXT_ATTEMPT_AUTHORIZATION_COLLECTION = 'nextAttemptAuthorizations';
+const NEXT_PROVIDER_ATTEMPT_DOCUMENT = '0000000002';
 const COMMAND_STATE = 'registered';
 const COMMAND_REVISION = 1;
 const INITIAL_PROVIDER_ATTEMPT = 1;
+const NEXT_PROVIDER_ATTEMPT = 2;
 const PROVIDER_PARAMETERS_COMMAND_TYPE = 'stripe.provider.parameters';
 const LOWERCASE_SHA256 = /^[0-9a-f]{64}$/;
 const CANONICAL_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -62,6 +67,8 @@ const HASH_DOMAINS = Object.freeze({
   providerReconciliationEvidence: (
     'mprc.command-provider-reconciliation-evidence-complete.v1'
   ),
+  transitionRecord: 'mprc.command-provider-transition-record.v1',
+  providerAttemptAuthorization: 'mprc.command-provider-attempt-authorization-complete.v1',
 });
 const ENVIRONMENTS = new Set(['local', 'test', 'staging', 'production']);
 const STRIPE_MODES = new Set(['test', 'live']);
@@ -113,6 +120,11 @@ const RECORD_PROVIDER_RECONCILIATION_INPUT_FIELDS = Object.freeze([
   'providerParameters',
   'reconciliationEvidence',
 ]);
+const AUTHORIZE_NEXT_PROVIDER_ATTEMPT_INPUT_FIELDS = Object.freeze([
+  ...BIND_PROVIDER_PLAN_INPUT_FIELDS,
+  'reconciliationEvidence',
+  'transitionAuthorization',
+]);
 const RECONCILIATION_EVIDENCE_INPUT_FIELDS = Object.freeze([
   'reconciliationPolicySchemaVersion',
   'provider',
@@ -128,6 +140,10 @@ const RECONCILIATION_EVIDENCE_INPUT_FIELDS = Object.freeze([
   'eventEvidence',
   'searchEvidence',
   'businessTransitionEvidence',
+]);
+const TRANSITION_AUTHORIZATION_INPUT_FIELDS = Object.freeze([
+  'kind',
+  'recordCommitment',
 ]);
 const CALLER_SCOPE_FIELDS = Object.freeze(['kind', 'value']);
 const COMMAND_FIELDS = Object.freeze([
@@ -291,6 +307,55 @@ const PROVIDER_RECONCILIATION_AUDIT_FIELDS = Object.freeze([
   'observedFenceEpoch',
   'observedLeaseExpiresAt',
   'reconciliationEvidenceCommitment',
+  'occurredAt',
+]);
+const PROVIDER_ATTEMPT_AUTHORIZATION_FIELDS = Object.freeze([
+  'providerAttemptAuthorizationSchemaVersion',
+  'providerPlanSchemaVersion',
+  'providerSendEvidenceSchemaVersion',
+  'providerReconciliationEvidenceSchemaVersion',
+  'reconciliationPolicySchemaVersion',
+  'commandIdentityVersion',
+  'commandKeyHash',
+  'provider',
+  'previousProviderAttempt',
+  'authorizedProviderAttempt',
+  'authorizationRevision',
+  'environment',
+  'stripeMode',
+  'providerOperation',
+  'providerPlanCommitment',
+  'providerSendEvidenceCommitment',
+  'providerReconciliationEvidenceCommitment',
+  'transitionKind',
+  'transitionRecordCommitment',
+  'idempotencyKeyFingerprint',
+  'authorizedFenceEpoch',
+  'authorizedAt',
+]);
+const PROVIDER_ATTEMPT_AUTHORIZATION_AUDIT_FIELDS = Object.freeze([
+  'providerAttemptAuthorizationAuditSchemaVersion',
+  'providerAttemptAuthorizationSchemaVersion',
+  'providerPlanSchemaVersion',
+  'providerSendEvidenceSchemaVersion',
+  'aggregateType',
+  'commandKeyHash',
+  'previousProviderAttempt',
+  'authorizedProviderAttempt',
+  'authorizationRevision',
+  'eventType',
+  'provider',
+  'environment',
+  'stripeMode',
+  'providerOperation',
+  'providerPlanCommitment',
+  'providerSendEvidenceCommitment',
+  'providerReconciliationEvidenceCommitment',
+  'transitionKind',
+  'transitionRecordCommitment',
+  'idempotencyKeyFingerprint',
+  'authorizedFenceEpoch',
+  'providerAttemptAuthorizationCommitment',
   'occurredAt',
 ]);
 
@@ -706,6 +771,54 @@ function createCompleteProviderReconciliationEvidenceCommitment(
   ]);
 }
 
+function createTransitionRecordCommitment(commandKeyHash, transitionKind, recordCommitment) {
+  return digest(HASH_DOMAINS.transitionRecord, [
+    ['version', String(providerAttemptAuthorizationSchemaVersion)],
+    ['commandKeyHash', commandKeyHash],
+    ['transitionKind', transitionKind],
+    ['recordCommitment', recordCommitment],
+  ]);
+}
+
+function createCompleteProviderAttemptAuthorizationCommitment(record, authorizedAt) {
+  if (authorizedAt === null) reject('journal_record_invalid');
+  return digest(HASH_DOMAINS.providerAttemptAuthorization, [
+    ['version', '1'],
+    [
+      'providerAttemptAuthorizationSchemaVersion',
+      String(record.providerAttemptAuthorizationSchemaVersion),
+    ],
+    ['providerPlanSchemaVersion', String(record.providerPlanSchemaVersion)],
+    ['providerSendEvidenceSchemaVersion', String(record.providerSendEvidenceSchemaVersion)],
+    [
+      'providerReconciliationEvidenceSchemaVersion',
+      String(record.providerReconciliationEvidenceSchemaVersion),
+    ],
+    ['reconciliationPolicySchemaVersion', String(record.reconciliationPolicySchemaVersion)],
+    ['commandIdentityVersion', String(record.commandIdentityVersion)],
+    ['commandKeyHash', record.commandKeyHash],
+    ['provider', record.provider],
+    ['previousProviderAttempt', String(record.previousProviderAttempt)],
+    ['authorizedProviderAttempt', String(record.authorizedProviderAttempt)],
+    ['authorizationRevision', String(record.authorizationRevision)],
+    ['environment', record.environment],
+    ['stripeMode', record.stripeMode],
+    ['providerOperation', record.providerOperation],
+    ['providerPlanCommitment', record.providerPlanCommitment],
+    ['providerSendEvidenceCommitment', record.providerSendEvidenceCommitment],
+    [
+      'providerReconciliationEvidenceCommitment',
+      record.providerReconciliationEvidenceCommitment,
+    ],
+    ['transitionKind', record.transitionKind],
+    ['transitionRecordCommitment', record.transitionRecordCommitment],
+    ['idempotencyKeyFingerprint', record.idempotencyKeyFingerprint],
+    ['authorizedFenceEpoch', String(record.authorizedFenceEpoch)],
+    ['authorizedAtSeconds', String(authorizedAt.seconds)],
+    ['authorizedAtNanoseconds', String(authorizedAt.nanoseconds)],
+  ]);
+}
+
 function validStripeAccountId(value) {
   return typeof value === 'string' && SAFE_STRIPE_ACCOUNT_ID.test(value);
 }
@@ -740,6 +853,39 @@ function validLifecycleNumber(value) {
   return Number.isSafeInteger(value)
     && value >= 1
     && value <= MAXIMUM_LIFECYCLE_NUMBER;
+}
+
+function expectedTransitionKindForCandidate(evidence) {
+  const common = evidence.reconciliationPolicySchemaVersion
+      === reconciliationPolicySchemaVersion
+    && evidence.provider === 'stripe'
+    && evidence.providerAttempt === INITIAL_PROVIDER_ATTEMPT
+    && evidence.planBinding === 'exact'
+    && evidence.evidenceCompleteness === 'complete'
+    && evidence.idempotencyEvidence === 'not_relied_upon';
+  if (!common) return null;
+
+  if (evidence.evidenceSource === 'trusted_dispatch_history'
+    && evidence.dispatchEvidence === 'execution_never_began'
+    && evidence.responseEvidence === 'none'
+    && evidence.providerObjectEvidence === 'none'
+    && evidence.paymentEvidence === 'none'
+    && evidence.eventEvidence === 'none'
+    && evidence.searchEvidence === 'none'
+    && evidence.businessTransitionEvidence === 'same_operation_eligible') {
+    return 'retry_same_operation';
+  }
+  if (evidence.evidenceSource === 'verified_provider_and_event'
+    && evidence.dispatchEvidence === 'execution_started'
+    && evidence.responseEvidence === 'accepted'
+    && evidence.providerObjectEvidence === 'exact_expired'
+    && evidence.paymentEvidence === 'unpaid'
+    && evidence.eventEvidence === 'verified_expiry'
+    && evidence.searchEvidence === 'exact_lookup_complete'
+    && evidence.businessTransitionEvidence === 'new_generation_eligible') {
+    return 'replace_expired_unpaid';
+  }
+  return null;
 }
 
 function validEndpointSchemaVersion(value) {
@@ -967,6 +1113,16 @@ function providerReconciliationAuditDocumentId(commandKeyHash) {
   return (
     `commerce_provider_reconciliation_${commandKeyHash}`
     + `_${INITIAL_PROVIDER_ATTEMPT_DOCUMENT}_0000000001`
+  );
+}
+
+function providerAttemptAuthorizationAuditDocumentId(commandKeyHash) {
+  if (typeof commandKeyHash !== 'string' || !LOWERCASE_SHA256.test(commandKeyHash)) {
+    reject('journal_record_invalid');
+  }
+  return (
+    `commerce_provider_authorization_${commandKeyHash}`
+    + `_${INITIAL_PROVIDER_ATTEMPT_DOCUMENT}_0000000001_${NEXT_PROVIDER_ATTEMPT_DOCUMENT}`
   );
 }
 
@@ -1362,6 +1518,96 @@ function prepareProviderReconciliationOperation(input) {
     providerSendAuditRef,
     providerReconciliationRef,
     providerReconciliationAuditRef,
+  });
+}
+
+function prepareNextProviderAttemptAuthorizationOperation(input) {
+  const values = readExactOwnDataObject(
+    input,
+    AUTHORIZE_NEXT_PROVIDER_ATTEMPT_INPUT_FIELDS,
+    'invalid_command_input',
+  );
+  if (typeof values.leaseId !== 'string'
+    || !CANONICAL_UUID_V4.test(values.leaseId)
+    || values.leaseId === values.commandId
+    || !validLifecycleNumber(values.expectedFenceEpoch)) {
+    reject('invalid_command_input');
+  }
+  const transitionValues = readExactOwnDataObject(
+    values.transitionAuthorization,
+    TRANSITION_AUTHORIZATION_INPUT_FIELDS,
+    'invalid_command_input',
+  );
+  if ((transitionValues.kind !== 'retry_same_operation'
+      && transitionValues.kind !== 'replace_expired_unpaid')
+    || typeof transitionValues.recordCommitment !== 'string'
+    || !LOWERCASE_SHA256.test(transitionValues.recordCommitment)) {
+    reject('invalid_command_input');
+  }
+
+  const reconciliationInput = Object.fromEntries(
+    RECORD_PROVIDER_RECONCILIATION_INPUT_FIELDS.map((field) => [field, values[field]]),
+  );
+  const prepared = prepareProviderReconciliationOperation(reconciliationInput);
+  const expectedTransitionKind = expectedTransitionKindForCandidate(
+    prepared.reconciliationEvidence,
+  );
+  if (transitionValues.kind !== expectedTransitionKind) reject('invalid_command_input');
+
+  let stripeIdempotencyKey;
+  try {
+    stripeIdempotencyKey = createStripeIdempotencyKey({
+      stripeMode: values.stripeMode,
+      environment: values.environment,
+      providerOperation: values.providerOperation,
+      commandKeyHash: prepared.commandKeyHash,
+      providerAttempt: NEXT_PROVIDER_ATTEMPT,
+    }).stripeIdempotencyKey;
+  } catch (error) {
+    if (error instanceof CommandIdentityError) reject('invalid_command_input');
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+
+  const leaseOwnerFingerprint = createLeaseOwnerFingerprint(
+    prepared.commandKeyHash,
+    values.leaseId,
+  );
+  const transitionRecordCommitment = createTransitionRecordCommitment(
+    prepared.commandKeyHash,
+    transitionValues.kind,
+    transitionValues.recordCommitment,
+  );
+  const idempotencyKeyFingerprint = createProviderCommitment(
+    HASH_DOMAINS.stripeIdempotencyKey,
+    prepared.commandKeyHash,
+    'stripeIdempotencyKey',
+    stripeIdempotencyKey,
+  );
+
+  let providerAttemptAuthorizationRef;
+  let providerAttemptAuthorizationAuditRef;
+  try {
+    providerAttemptAuthorizationRef = prepared.providerReconciliationRef
+      .collection(NEXT_ATTEMPT_AUTHORIZATION_COLLECTION)
+      .doc(NEXT_PROVIDER_ATTEMPT_DOCUMENT);
+    providerAttemptAuthorizationAuditRef = prepared.db.collection(AUDIT_COLLECTION).doc(
+      providerAttemptAuthorizationAuditDocumentId(prepared.commandKeyHash),
+    );
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+
+  return Object.freeze({
+    ...prepared,
+    expectedFenceEpoch: values.expectedFenceEpoch,
+    leaseOwnerFingerprint,
+    transitionKind: transitionValues.kind,
+    transitionRecordCommitment,
+    idempotencyKeyFingerprint,
+    providerAttemptAuthorizationRef,
+    providerAttemptAuthorizationAuditRef,
   });
 }
 
@@ -2331,6 +2577,231 @@ async function readProviderReconciliationContext(transaction, prepared) {
   return Object.freeze({ ...context, providerReconciliation });
 }
 
+function createProviderAttemptAuthorizationPair(prepared, context) {
+  const reconciliation = context.providerReconciliation;
+  const providerReconciliationEvidenceCommitment = (
+    createCompleteProviderReconciliationEvidenceCommitment(
+      reconciliation.record,
+      reconciliation.observedLeaseExpiresAt,
+      reconciliation.recordedAt,
+    )
+  );
+  const record = Object.freeze({
+    providerAttemptAuthorizationSchemaVersion,
+    providerPlanSchemaVersion,
+    providerSendEvidenceSchemaVersion,
+    providerReconciliationEvidenceSchemaVersion,
+    reconciliationPolicySchemaVersion,
+    commandIdentityVersion,
+    commandKeyHash: prepared.commandKeyHash,
+    provider: 'stripe',
+    previousProviderAttempt: INITIAL_PROVIDER_ATTEMPT,
+    authorizedProviderAttempt: NEXT_PROVIDER_ATTEMPT,
+    authorizationRevision: 1,
+    environment: context.providerPlan.record.environment,
+    stripeMode: context.providerPlan.record.stripeMode,
+    providerOperation: context.providerPlan.record.providerOperation,
+    providerPlanCommitment: reconciliation.record.providerPlanCommitment,
+    providerSendEvidenceCommitment: reconciliation.record.providerSendEvidenceCommitment,
+    providerReconciliationEvidenceCommitment,
+    transitionKind: prepared.transitionKind,
+    transitionRecordCommitment: prepared.transitionRecordCommitment,
+    idempotencyKeyFingerprint: prepared.idempotencyKeyFingerprint,
+    authorizedFenceEpoch: context.lifecycle.record.fenceEpoch,
+    authorizedAt: prepared.occurredAt,
+  });
+  const providerAttemptAuthorizationCommitment = (
+    createCompleteProviderAttemptAuthorizationCommitment(
+      record,
+      prepared.occurredAtParts,
+    )
+  );
+  const audit = Object.freeze({
+    providerAttemptAuthorizationAuditSchemaVersion,
+    providerAttemptAuthorizationSchemaVersion,
+    providerPlanSchemaVersion,
+    providerSendEvidenceSchemaVersion,
+    aggregateType: 'commerce_provider_authorization',
+    commandKeyHash: prepared.commandKeyHash,
+    previousProviderAttempt: INITIAL_PROVIDER_ATTEMPT,
+    authorizedProviderAttempt: NEXT_PROVIDER_ATTEMPT,
+    authorizationRevision: 1,
+    eventType: 'provider_attempt_authorized',
+    provider: 'stripe',
+    environment: context.providerPlan.record.environment,
+    stripeMode: context.providerPlan.record.stripeMode,
+    providerOperation: context.providerPlan.record.providerOperation,
+    providerPlanCommitment: record.providerPlanCommitment,
+    providerSendEvidenceCommitment: record.providerSendEvidenceCommitment,
+    providerReconciliationEvidenceCommitment,
+    transitionKind: prepared.transitionKind,
+    transitionRecordCommitment: prepared.transitionRecordCommitment,
+    idempotencyKeyFingerprint: prepared.idempotencyKeyFingerprint,
+    authorizedFenceEpoch: context.lifecycle.record.fenceEpoch,
+    providerAttemptAuthorizationCommitment,
+    occurredAt: prepared.occurredAt,
+  });
+  return Object.freeze({ record, audit });
+}
+
+async function parseProviderAttemptAuthorizationPair(
+  recordValue,
+  auditValue,
+  prepared,
+  context,
+) {
+  const record = readExactOwnDataObject(
+    recordValue,
+    PROVIDER_ATTEMPT_AUTHORIZATION_FIELDS,
+    'journal_record_invalid',
+  );
+  const audit = readExactOwnDataObject(
+    auditValue,
+    PROVIDER_ATTEMPT_AUTHORIZATION_AUDIT_FIELDS,
+    'journal_record_invalid',
+  );
+  const authorizedAt = readTimestamp(record.authorizedAt);
+  const auditOccurredAt = readTimestamp(audit.occurredAt);
+  const reconciliation = context.providerReconciliation;
+  const expectedTransitionKind = expectedTransitionKindForCandidate(reconciliation.record);
+  const expectedReconciliationCommitment = (
+    createCompleteProviderReconciliationEvidenceCommitment(
+      reconciliation.record,
+      reconciliation.observedLeaseExpiresAt,
+      reconciliation.recordedAt,
+    )
+  );
+
+  if (expectedTransitionKind === null
+    || record.providerAttemptAuthorizationSchemaVersion
+      !== providerAttemptAuthorizationSchemaVersion
+    || record.providerPlanSchemaVersion !== providerPlanSchemaVersion
+    || record.providerSendEvidenceSchemaVersion !== providerSendEvidenceSchemaVersion
+    || record.providerReconciliationEvidenceSchemaVersion
+      !== providerReconciliationEvidenceSchemaVersion
+    || record.reconciliationPolicySchemaVersion !== reconciliationPolicySchemaVersion
+    || record.commandIdentityVersion !== commandIdentityVersion
+    || record.commandKeyHash !== prepared.commandKeyHash
+    || record.provider !== 'stripe'
+    || record.previousProviderAttempt !== INITIAL_PROVIDER_ATTEMPT
+    || record.authorizedProviderAttempt !== NEXT_PROVIDER_ATTEMPT
+    || record.authorizationRevision !== 1
+    || record.environment !== context.providerPlan.record.environment
+    || record.stripeMode !== context.providerPlan.record.stripeMode
+    || record.providerOperation !== context.providerPlan.record.providerOperation
+    || record.providerPlanCommitment !== reconciliation.record.providerPlanCommitment
+    || record.providerSendEvidenceCommitment
+      !== reconciliation.record.providerSendEvidenceCommitment
+    || record.providerReconciliationEvidenceCommitment
+      !== expectedReconciliationCommitment
+    || record.transitionKind !== expectedTransitionKind
+    || typeof record.transitionRecordCommitment !== 'string'
+    || !LOWERCASE_SHA256.test(record.transitionRecordCommitment)
+    || typeof record.idempotencyKeyFingerprint !== 'string'
+    || !LOWERCASE_SHA256.test(record.idempotencyKeyFingerprint)
+    || record.idempotencyKeyFingerprint !== prepared.idempotencyKeyFingerprint
+    || !validLifecycleNumber(record.authorizedFenceEpoch)
+    || record.authorizedFenceEpoch <= reconciliation.record.observedFenceEpoch
+    || record.authorizedFenceEpoch > context.lifecycle.record.fenceEpoch
+    || authorizedAt === null
+    || auditOccurredAt === null
+    || !timestampsEqual(authorizedAt, auditOccurredAt)
+    || compareTimestamps(authorizedAt, reconciliation.recordedAt) < 0
+    || audit.providerAttemptAuthorizationAuditSchemaVersion
+      !== providerAttemptAuthorizationAuditSchemaVersion
+    || audit.providerAttemptAuthorizationSchemaVersion
+      !== providerAttemptAuthorizationSchemaVersion
+    || audit.providerPlanSchemaVersion !== providerPlanSchemaVersion
+    || audit.providerSendEvidenceSchemaVersion !== providerSendEvidenceSchemaVersion
+    || audit.aggregateType !== 'commerce_provider_authorization'
+    || audit.commandKeyHash !== record.commandKeyHash
+    || audit.previousProviderAttempt !== record.previousProviderAttempt
+    || audit.authorizedProviderAttempt !== record.authorizedProviderAttempt
+    || audit.authorizationRevision !== record.authorizationRevision
+    || audit.eventType !== 'provider_attempt_authorized'
+    || audit.provider !== record.provider
+    || audit.environment !== record.environment
+    || audit.stripeMode !== record.stripeMode
+    || audit.providerOperation !== record.providerOperation
+    || audit.providerPlanCommitment !== record.providerPlanCommitment
+    || audit.providerSendEvidenceCommitment !== record.providerSendEvidenceCommitment
+    || audit.providerReconciliationEvidenceCommitment
+      !== record.providerReconciliationEvidenceCommitment
+    || audit.transitionKind !== record.transitionKind
+    || audit.transitionRecordCommitment !== record.transitionRecordCommitment
+    || audit.idempotencyKeyFingerprint !== record.idempotencyKeyFingerprint
+    || audit.authorizedFenceEpoch !== record.authorizedFenceEpoch
+    || typeof audit.providerAttemptAuthorizationCommitment !== 'string'
+    || !LOWERCASE_SHA256.test(audit.providerAttemptAuthorizationCommitment)
+    || audit.providerAttemptAuthorizationCommitment
+      !== createCompleteProviderAttemptAuthorizationCommitment(record, authorizedAt)) {
+    reject('journal_record_invalid');
+  }
+
+  const authorizationLeaseAuditDocument = await context.readRequiredLifecycleAudit(
+    record.authorizedFenceEpoch + 1,
+  );
+  const authorizationLeaseAudit = validateProviderLeaseAudit(
+    authorizationLeaseAuditDocument.value,
+    record.authorizedFenceEpoch,
+    prepared,
+  );
+  let predecessorLeaseAudit = null;
+  if (record.authorizedFenceEpoch > 1) {
+    const predecessorDocument = await context.readRequiredLifecycleAudit(
+      record.authorizedFenceEpoch,
+    );
+    predecessorLeaseAudit = validateProviderLeaseAudit(
+      predecessorDocument.value,
+      record.authorizedFenceEpoch - 1,
+      prepared,
+    );
+  }
+  validateProviderLeaseChronology(
+    authorizationLeaseAudit,
+    predecessorLeaseAudit,
+    context.lifecycle,
+  );
+  validateProviderLeaseAgainstCurrent(authorizationLeaseAudit, context.lifecycle);
+  if (compareTimestamps(authorizationLeaseAudit.occurredAt, reconciliation.recordedAt) < 0
+    || compareTimestamps(authorizedAt, authorizationLeaseAudit.occurredAt) < 0
+    || compareTimestamps(authorizedAt, authorizationLeaseAudit.leaseExpiresAt) >= 0) {
+    reject('journal_record_invalid');
+  }
+
+  if (record.transitionRecordCommitment !== prepared.transitionRecordCommitment) {
+    reject('command_conflict');
+  }
+  return Object.freeze({ record, audit, authorizedAt });
+}
+
+async function readProviderAttemptAuthorizationContext(transaction, prepared) {
+  const context = await readProviderReconciliationContext(transaction, prepared);
+  if (context.providerReconciliation === null) reject('journal_record_invalid');
+
+  const authorizationSnapshot = await transaction.get(
+    prepared.providerAttemptAuthorizationRef,
+  );
+  const authorizationAuditSnapshot = await transaction.get(
+    prepared.providerAttemptAuthorizationAuditRef,
+  );
+  const authorizationDocument = readSnapshot(authorizationSnapshot);
+  const authorizationAudit = readSnapshot(authorizationAuditSnapshot);
+  if (authorizationDocument.exists !== authorizationAudit.exists) {
+    reject('journal_record_invalid');
+  }
+  if (!authorizationDocument.exists) {
+    return Object.freeze({ ...context, providerAttemptAuthorization: null });
+  }
+  const providerAttemptAuthorization = await parseProviderAttemptAuthorizationPair(
+    authorizationDocument.value,
+    authorizationAudit.value,
+    prepared,
+    context,
+  );
+  return Object.freeze({ ...context, providerAttemptAuthorization });
+}
+
 function validateActiveProviderPlanLease(prepared, lifecycle) {
   if (lifecycle.record.state !== 'leased'
     || lifecycle.record.leaseOwnerFingerprint !== prepared.leaseOwnerFingerprint
@@ -2533,6 +3004,59 @@ async function recordInitialStripeReconciliationEvidence(input) {
       reject('journal_unavailable');
     }
     return result.value;
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+}
+
+const PROVIDER_ATTEMPT_AUTHORIZED = Object.freeze({
+  journalSchemaVersion,
+  providerAttemptAuthorizationSchemaVersion,
+  outcome: 'provider_attempt_authorized',
+  state: 'requires_plan_binding',
+});
+
+async function authorizeNextStripeProviderAttempt(input) {
+  const prepared = prepareNextProviderAttemptAuthorizationOperation(input);
+  const permittedTransactionResults = new Set();
+  const permitResult = (authorizedAt) => {
+    const permitted = Object.freeze({ authorizedAt });
+    permittedTransactionResults.add(permitted);
+    return permitted;
+  };
+
+  try {
+    const result = await prepared.db.runTransaction(async (transaction) => {
+      const context = await readProviderAttemptAuthorizationContext(transaction, prepared);
+      if (!validateActiveProviderPlanLease(prepared, context.lifecycle)
+        || context.lifecycle.record.fenceEpoch
+          <= context.providerReconciliation.record.observedFenceEpoch
+        || compareTimestamps(
+          context.lifecycle.leaseAcquiredAt,
+          context.providerReconciliation.recordedAt,
+        ) < 0) {
+        reject('lease_stale');
+      }
+      if (context.providerAttemptAuthorization !== null) {
+        return permitResult(context.providerAttemptAuthorization.authorizedAt);
+      }
+
+      const pair = createProviderAttemptAuthorizationPair(prepared, context);
+      transaction.create(prepared.providerAttemptAuthorizationRef, pair.record);
+      transaction.create(prepared.providerAttemptAuthorizationAuditRef, pair.audit);
+      return permitResult(prepared.occurredAtParts);
+    }, TRANSACTION_OPTIONS);
+
+    if (!permittedTransactionResults.has(result) || result.authorizedAt === null) {
+      reject('journal_unavailable');
+    }
+    const returnedAt = readTimestamp(captureTrustedTimestamp());
+    if (returnedAt === null
+      || compareTimestamps(returnedAt, result.authorizedAt) < 0) {
+      reject('journal_record_invalid');
+    }
+    return PROVIDER_ATTEMPT_AUTHORIZED;
   } catch (error) {
     if (error instanceof CommerceCommandJournalError) throw error;
     reject('journal_unavailable');
@@ -2761,10 +3285,12 @@ Object.freeze(CommerceCommandJournalError);
 module.exports = Object.freeze({
   journalSchemaVersion,
   lifecycleSchemaVersion,
+  providerAttemptAuthorizationSchemaVersion,
   providerReconciliationEvidenceSchemaVersion,
   providerSendEvidenceSchemaVersion,
   CommerceCommandJournalError,
   acquireCommerceCommandLease,
+  authorizeNextStripeProviderAttempt,
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,

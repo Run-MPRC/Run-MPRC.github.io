@@ -365,6 +365,39 @@ C3B reads and validates B1, B2, C1, and both C2 partners before either create. I
 
 The fixed C3B result is `reconciliation_candidate_persisted` with `requires_separate_authorization`. It is durable candidate evidence, not verified provider retrieval, caller authorization, execution permission, response replay, a business transition, or a later attempt. C3C must require this persisted proof, an allowed business transition, and a fresh lease before it can authorize and version any later provider attempt. No endpoint or Functions index imports the journal. #206 makes no Stripe/network call and performs no Firebase/Stripe deployment, provider configuration, production data action, website publication, or live behavior change.
 
+### Fresh-lease later-attempt authorization target (PAY-002B2C3C)
+
+PAY-002B2C3C source/tests are tracked in live [#226](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/226). The unused journal adds `authorizeNextStripeProviderAttempt`, but it does not add a provider plan or permit a Stripe request. The API accepts the exact B1 command identity, C1 plan identity, saved C3A evidence, current B2 lease identity, and one exact `transitionAuthorization` containing only a closed transition kind plus an opaque lowercase SHA-256 record commitment.
+
+```mermaid
+flowchart LR
+    C3B["Exact persisted C3B candidate + audit"] --> Chain{"B1 through C3B valid?"}
+    Lease["Current active lease"] --> Fresh{"Later fence and acquired at or after C3B?"}
+    Transition["Matching closed transition + opaque record commitment"] --> Allowed{"Exact safe mapping?"}
+    Chain --> All{"All gates pass?"}
+    Fresh --> All
+    Allowed --> All
+    All -- "No" --> Stop["Fail closed; write nothing"]
+    All -- "Yes" --> Pair["Create immutable attempt-2 authorization + audit"]
+    Pair --> Result["Fixed requires_plan_binding result"]
+    Result -. "Still no plan, POST, response, or business write" .-> Future["Future reviewed runtime adoption"]
+```
+
+Text alternative: an exact persisted safe candidate, its matching closed transition, and a current later lease are all required to create one immutable attempt-2 authorization pair; the result still cannot plan or send a Stripe request.
+
+The only positive mappings repeat the complete C3A tuples, not just their final business label:
+
+- `retry_same_operation` requires exact trusted proof that endpoint execution never began and that the same operation remains eligible.
+- `replace_expired_unpaid` requires the exact attempt-1 Session to be verified expired and unpaid, verified expiry evidence, a complete exact lookup, and an eligible new logical generation.
+
+Timeout, connection loss, Stripe `5xx`, an old or pruned key, a missing reference, not-found or incomplete search, processing/unknown payment state, and every mismatch remain ineligible. The supplied transition-record commitment is command-bound before storage. It is equality evidence only—not proof that the business record is current or that a transition occurred. A future trusted runtime must derive that input from a transactionally verified server-side business record.
+
+The authorization record is stored at `checkoutRequests/{commandKeyHash}/providerAttempts/0000000001/reconciliationEvidence/0000000001/nextAttemptAuthorizations/0000000002`. Its deterministic partner is `auditEvents/commerce_provider_authorization_{commandKeyHash}_0000000001_0000000001_0000000002`. The pair binds the complete C1 plan, C2 send, and C3B reconciliation commitments; the command identity; environment, Stripe mode, and operation; attempts `1` and `2`; the closed transition; a command-bound attempt-2 idempotency-key fingerprint; and the authorizing lease fence and trusted time. It stores no raw key, account, parameters, provider/business/member ID, money, URL, free text, response, or personal data.
+
+The transaction validates the exact B1/B2/C1/C2/C3B chain and reads both authorization partners before either create. The current holder/fence must be leased and unexpired. Its fence must be later than C3B's observed fence, and its deterministic lease audit must show acquisition at or after C3B persistence with valid predecessor chronology. Exact retry is read-only. A later valid lease may observe the same pair without rewriting it. A changed transition commitment conflicts; malformed, orphaned, future, or foundation-mismatched data fails closed without repair. Transaction retries reuse one prepared time and pair; commit failure creates neither partner; a lost acknowledgement recovers through exact retry.
+
+The fixed output is `provider_attempt_authorized` with `requires_plan_binding`. It exposes no path, hash, key, fence, timestamp, evidence, identity, or send/execute flag. #226 creates no attempt-2 plan or pre-send marker, makes no Stripe/network call, changes no business record, and has no endpoint or Functions-index import. Firestore Rules source is unchanged; focused tests prove anonymous, member, and browser-admin clients cannot read, write, list, or collection-group-query the server-only pair. Source/tests/merge do not deploy Firebase, configure Stripe, publish the website, touch production data, or prove live behavior. PAY-002C/D and PAY-003B must adopt this boundary with their own business transaction, plan, send, result, and reconciliation contracts before it can protect a real checkout.
+
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
