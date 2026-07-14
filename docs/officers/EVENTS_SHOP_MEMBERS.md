@@ -457,6 +457,43 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Strava disconnect failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give a signed-in member one safe next step when My Account cannot confirm a Strava disconnect, without showing a provider or technical error or guessing whether the disconnect completed.
+
+**Approver:** membership lead plus platform/security owner.
+
+**Prerequisites:** issue [#252](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/252) must be merged for source review. Calling the sentence live also requires a protected website publication and an exact revision check on `runmprc.com`. This source change does not deploy Firebase, contact Strava, change provider settings, revoke access, use production data, or prove live behavior.
+
+Officer review steps after the source merge:
+
+1. Keep the disconnect-failure sentence marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #252 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up connection, made-up activity, a mocked confirmation, and a mocked disconnect result.
+4. Confirm cancelling the browser question sends no disconnect request and shows no failure.
+5. Confirm a made-up rejected request shows `We could not confirm the Strava disconnect. Please refresh this page before trying again.`
+6. Confirm the connected athlete and activity remain visible because the actual result is not known.
+7. Confirm the Disconnect button becomes available again, but the instructions say to refresh before another attempt.
+8. Confirm a later activity-load failure cannot replace the disconnect refresh instruction.
+9. Confirm no made-up provider detail appears on the page or in browser console output.
+10. Confirm a hostile rejected value is not inspected.
+11. Confirm a successful made-up result still changes the page to `Connect Strava` and clears the old activity view.
+12. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** the reviewed source uses one fixed refresh-before-retry sentence for a rejected disconnect request. It does not inspect, display, or log the rejected value, and a later activity-load failure cannot replace that higher-priority instruction. It keeps the current connected view because the result is unknown, ends the busy state, and preserves the existing successful disconnect transition. This source slice does not prove that Strava access was revoked or that a retry is safe.
+
+**Stop conditions:** any real member or Strava account; a request for a token, provider error, private account detail, or screenshot containing private values; a real disconnect or provider call; a production Firebase or Strava change; a raw detail on the page or in the console; an immediate retry without first refreshing; or a claim that source, tests, merge, or a green workflow proves the sentence or disconnect behavior is live.
+
+**Success proof:** for source completion, record the exact #252 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic tests, relevant full checks, and independent privacy review. For live availability, separately record the approved website publication, published revision, and a dated `runmprc.com` check using no real account. Record Firebase deployment, Strava/provider configuration, revoke actions, and production-data actions as **not performed** for this frontend-only change.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com`. Do not undo by disconnecting an account, changing a member record, editing Firebase, or changing a Strava setting.
+
+**Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if any provider or technical detail appeared. If a disconnect result is unclear after refresh, stop and escalate; do not repeat the request. Do not copy private detail into an issue, message, screenshot, or AI tool.
+
+No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.

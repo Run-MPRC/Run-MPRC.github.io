@@ -19,6 +19,7 @@ import {
 } from '../../services/account/accountService';
 import {
   getStravaConnection,
+  stravaDisconnect,
   stravaExchangeCode,
   stravaFetchStats,
   verifyStravaState,
@@ -39,6 +40,7 @@ jest.mock('../../services/strava/stravaService', () => {
   return {
     ...actual,
     getStravaConnection: jest.fn(),
+    stravaDisconnect: jest.fn(),
     stravaExchangeCode: jest.fn(),
     stravaFetchStats: jest.fn(),
     verifyStravaState: jest.fn(),
@@ -627,6 +629,141 @@ describe('Strava activity browser failure boundary', () => {
     expect(document.body).not.toHaveTextContent('message-getter-canary');
     expect(screen.queryByText('Loading recent activity...')).not.toBeInTheDocument();
     expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+});
+
+const STRAVA_DISCONNECT_FAILURE = 'We could not confirm the Strava disconnect. Please refresh this page before trying again.';
+
+describe('Strava disconnect browser failure boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useServiceLocator as jest.Mock).mockReturnValue({
+      services: { firebaseResources: { app, firestore } },
+      isReady: true,
+    });
+    (getStravaConnection as jest.Mock).mockResolvedValue(STRAVA_CONNECTION);
+    (stravaFetchStats as jest.Mock).mockResolvedValue(STRAVA_STATS);
+    (stravaDisconnect as jest.Mock).mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected disconnect details with one fixed refresh-before-retry alert', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+    let rejectDisconnect: ((reason?: unknown) => void) | undefined;
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (stravaDisconnect as jest.Mock).mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectDisconnect = reject;
+    }));
+    const privateFailure = Object.assign(
+      new Error('disconnect-private-canary member@example.test'),
+      {
+        code: 'functions/disconnect-private-canary',
+        endpoint: 'https://provider.example.test/?token=secret-canary',
+      },
+    );
+
+    renderActualStravaSection();
+    expect(await screen.findByText('Synthetic Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    const pendingButton = screen.getByRole('button', { name: 'Disconnecting...' });
+    expect(pendingButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    expect(stravaDisconnect).toHaveBeenCalledTimes(1);
+    await act(async () => { rejectDisconnect?.(privateFailure); });
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(STRAVA_DISCONNECT_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).toHaveTextContent('Synthetic Athlete');
+    expect(document.body).toHaveTextContent('Synthetic Morning Run');
+    expect(document.body).not.toHaveTextContent(
+      /disconnect-private-canary|member@example\.test|provider\.example|secret-canary/i,
+    );
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+    expect(stravaDisconnect).toHaveBeenCalledWith(app);
+    expect(stravaDisconnect).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect a hostile disconnect rejection', async () => {
+    const messageGetter = jest.fn(() => {
+      throw new Error('disconnect-message-getter-canary');
+    });
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (stravaDisconnect as jest.Mock).mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderActualStravaSection();
+    expect(await screen.findByText('Synthetic Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(STRAVA_DISCONNECT_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('disconnect-message-getter-canary');
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+  });
+
+  test('keeps the disconnect warning when a pending stats request later fails', async () => {
+    let rejectStats: ((reason?: unknown) => void) | undefined;
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (stravaFetchStats as jest.Mock).mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectStats = reject;
+    }));
+    (stravaDisconnect as jest.Mock).mockRejectedValueOnce(
+      new Error('disconnect-priority-canary'),
+    );
+
+    renderActualStravaSection();
+    expect(await screen.findByText('Loading recent activity...')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(STRAVA_DISCONNECT_FAILURE);
+    await act(async () => { rejectStats?.(new Error('stats-priority-canary')); });
+
+    expect(screen.getByRole('alert').textContent).toBe(STRAVA_DISCONNECT_FAILURE);
+    expect(document.body).not.toHaveTextContent(
+      /disconnect-priority-canary|stats-priority-canary/i,
+    );
+    expect(document.body).toHaveTextContent('Synthetic Athlete');
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+    expect(stravaDisconnect).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not request a disconnect when confirmation is cancelled', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(false);
+
+    renderActualStravaSection();
+    expect(await screen.findByText('Synthetic Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    expect(stravaDisconnect).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+  });
+
+  test('preserves the successful disconnect transition', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderActualStravaSection();
+    expect(await screen.findByText('Synthetic Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    expect(await screen.findByRole('button', { name: 'Connect Strava' })).toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Athlete')).not.toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Morning Run')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(stravaDisconnect).toHaveBeenCalledWith(app);
+    expect(stravaDisconnect).toHaveBeenCalledTimes(1);
   });
 });
 
