@@ -203,11 +203,14 @@ Safe officer steps:
 
 **Approver:** membership lead plus privacy/platform owner.
 
-**Prerequisites:** claimed issue [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178), a private redacted incident record under #112, the authorized service inventory under #113, made-up test data, and the protected backend-first release path. Do not put a member's number, spam message, screenshot, or provider record in GitHub, email, or AI.
+**Prerequisites:** reviewed source issues [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) and [#197](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/197), a private redacted incident record under #112, the authorized service inventory under #113, made-up test data, and the protected backend-first release path. Do not put a member's number, spam message, screenshot, or provider record in GitHub, email, or AI.
 
 ```mermaid
 flowchart LR
-    Account["Member opens My Account"] --> Read["Read this member's profile"]
+    Account["Member opens My Account"] --> Setup{"Profile exists?"}
+    Setup -- "Yes" --> Read["Read this member's profile"]
+    Setup -- "No" --> New["Create one pending profile\nwith an empty phone field"]
+    New --> Read
     Read --> Name["Display and edit name"]
     Read --> Pause["Do not display or accept phone"]
     Name --> Rules["Firebase Rules allow name-only update"]
@@ -215,7 +218,7 @@ flowchart LR
     Pause --> Existing["Existing stored value stays unchanged"]
 ```
 
-In words: My Account shows and edits the member's name, does not display or accept a phone number, and leaves any existing stored value unchanged; the reviewed Rules deny a browser phone change.
+In words: signup or profile recovery creates a missing pending profile without copying a phone from Firebase Auth; My Account shows and edits the member's name, does not display or accept a phone number, and leaves every existing profile unchanged; the reviewed Rules deny a browser phone change.
 
 Officer steps after every prerequisite has proof:
 
@@ -223,18 +226,18 @@ Officer steps after every prerequisite has proof:
 2. Do not ask whether a member already has a number stored.
 3. Do not copy a number or spam message into an issue, email, screenshot, or AI tool.
 4. Keep the Google membership form, event registration, shop, and provider review separate; this source change does not alter them.
-5. Ask the platform owner to identify the exact merged website and Rules revisions.
-6. Require the reviewed Rules to deploy and pass readback before the website is published.
-7. Use one made-up staged profile to prove name-only editing and phone-write denial.
+5. Ask the platform owner to identify the exact merged website, Rules, and profile-Function revisions.
+6. Require the reviewed Rules and both profile Functions to deploy and pass readback before the website is published.
+7. Ask the platform owner to use one made-up staged Auth account with a synthetic phone and no profile to prove the new pending profile stores no copied phone; then prove name-only editing and browser phone-write denial.
 8. Check the exact website revision on `runmprc.com` without opening a real member profile.
 
-**Expected result:** My Account contains no phone value, phone input, or phone browser autocomplete. A name-only change succeeds. A direct non-empty phone change is denied. Existing stored data, membership, payment status, and external forms/providers remain unchanged.
+**Expected result:** a newly created pending profile has the empty phone field even if the made-up Auth account has a phone. My Account contains no phone value, phone input, or phone browser autocomplete. A name-only change succeeds. A direct non-empty phone change is denied. Existing profiles, membership, payment status, and external forms/providers remain unchanged.
 
-**Stop conditions:** a real member profile, a provider Console change, a database export, a request to inspect or delete stored numbers, skipped/partial Rules deployment, website publication before Rules proof, or a proposal to treat spam timing as proof of a breach.
+**Stop conditions:** a real member profile, a provider Console change, a database export, a request to inspect or delete stored numbers, skipped/partial Rules or profile-Function deployment, website publication before backend proof, or a proposal to treat spam timing as proof of a breach.
 
-**Success proof:** exact #178 pull request and merge commit; green synthetic frontend and Rules tests; exact Rules deployment/readback; later website publication record; separate `runmprc.com` revision check; and a dated made-up name-only/phone-denial check. Google, Firebase, Sentry, Stripe, and other provider evidence remains separate and private.
+**Success proof:** exact #178 and #197 pull requests and merge commits; green synthetic frontend, Functions, emulator, and Rules tests; exact Rules and profile-Function deployment/readback; later website publication record; separate `runmprc.com` revision check; and a dated made-up phone-free bootstrap/name-only/phone-denial check. Google, Sentry, Stripe, and other provider evidence remains separate and private.
 
-**Undo:** use one reviewed revert or safe roll-forward through the same backend-first gate. Do not restore phone collection until #110 approves its purpose, notice, access, and retention, and #113/#133/#136 prove the intended live boundary.
+**Undo:** use one reviewed revert or safe roll-forward through the same backend-first gate. Do not restore browser collection or Auth-phone copying until #110 approves its purpose, notice, access, and retention, and #113/#133/#136 prove the intended live boundary.
 
 **Escalation:** membership lead plus privacy/platform owner; use the private incident path under #112 if exposure is suspected.
 

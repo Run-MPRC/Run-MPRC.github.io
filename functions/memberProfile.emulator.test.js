@@ -31,7 +31,7 @@ describeWithEmulator('member profile Firestore transaction', () => {
       email: 'synthetic@example.test',
       emailVerified: true,
       displayName: 'Synthetic Runner',
-      phoneNumber: '+16505550123',
+      phoneNumber: '+12025550197',
       providerData: [{ providerId: 'password' }],
     };
 
@@ -41,6 +41,9 @@ describeWithEmulator('member profile Firestore transaction', () => {
     expect(results.filter((result) => result.created)).toHaveLength(1);
 
     const ref = db.collection('members').doc(uid);
+    expect((await ref.get()).data()).toMatchObject({ phoneNumber: '' });
+    expect(JSON.stringify((await ref.get()).data()))
+      .not.toContain('+12025550197');
     await ref.update({
       fullName: 'Member-edited name',
       phoneNumber: 'Member-edited phone',

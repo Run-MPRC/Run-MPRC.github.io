@@ -84,12 +84,14 @@ jest.mock('./stripeHelpers', () => ({
 const admin = require('firebase-admin');
 const { requireAppCheck } = require('./stripeHelpers');
 
+const AUTH_PHONE_CANARY = '+12025550197';
+
 const AUTH_USER = {
   uid: 'caller-uid',
   email: 'member@example.com',
   emailVerified: true,
   displayName: 'Synthetic Member',
-  phoneNumber: '+16505550123',
+  phoneNumber: AUTH_PHONE_CANARY,
   providerData: [{ providerId: 'password' }],
 };
 
@@ -105,7 +107,7 @@ describe('ensureMemberProfile callable', () => {
     admin.__mocks.getUser.mockResolvedValue(AUTH_USER);
   });
 
-  test('creates one exact pending profile from the authenticated Firebase user', async () => {
+  test('creates one exact phone-free pending profile from the authenticated Firebase user', async () => {
     const { ensureMemberProfile } = require('./ensureMemberProfile');
 
     await expect(ensureMemberProfile({}, CONTEXT)).resolves.toEqual({ ready: true });
@@ -117,12 +119,33 @@ describe('ensureMemberProfile callable', () => {
       email: 'member@example.com',
       createdAt: admin.__timestamp,
       lastLogin: admin.__timestamp,
-      phoneNumber: '+16505550123',
+      phoneNumber: '',
       role: 'unverified',
       emailVerified: true,
       provider: 'password',
     });
+    expect(JSON.stringify(admin.__read(AUTH_USER.uid)))
+      .not.toContain(AUTH_PHONE_CANARY);
     expect(admin.__mocks.setCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  test('does not read the Firebase Auth phone while building a profile', async () => {
+    let phoneReads = 0;
+    const authUser = { ...AUTH_USER };
+    Object.defineProperty(authUser, 'phoneNumber', {
+      enumerable: true,
+      get: () => {
+        phoneReads += 1;
+        return AUTH_PHONE_CANARY;
+      },
+    });
+    admin.__mocks.getUser.mockResolvedValue(authUser);
+    const { ensureMemberProfile } = require('./ensureMemberProfile');
+
+    await expect(ensureMemberProfile({}, CONTEXT)).resolves.toEqual({ ready: true });
+
+    expect(phoneReads).toBe(0);
+    expect(admin.__read(AUTH_USER.uid)).toMatchObject({ phoneNumber: '' });
   });
 
   test.each([undefined, null, {}])('accepts an empty request shape: %p', async (data) => {
@@ -168,12 +191,12 @@ describe('ensureMemberProfile callable', () => {
     expect(admin.__mocks.setCustomUserClaims).not.toHaveBeenCalled();
   });
 
-  test('bounds Auth-derived editable fields without truncating identity data', async () => {
+  test('bounds the Auth display name without retaining an Auth phone', async () => {
     admin.__mocks.getUser.mockResolvedValue({
       ...AUTH_USER,
       email: ' Member@Example.COM ',
       displayName: '🏃'.repeat(101),
-      phoneNumber: '📞'.repeat(21),
+      phoneNumber: AUTH_PHONE_CANARY,
     });
     const { ensureMemberProfile } = require('./ensureMemberProfile');
 
@@ -188,13 +211,12 @@ describe('ensureMemberProfile callable', () => {
     expect(admin.__mocks.setCustomUserClaims).not.toHaveBeenCalled();
   });
 
-  test('preserves Auth-derived fields at the exact Unicode boundaries', async () => {
+  test('preserves the Auth display name at its exact Unicode boundary', async () => {
     const displayName = '🏃'.repeat(100);
-    const phoneNumber = '📞'.repeat(20);
     admin.__mocks.getUser.mockResolvedValue({
       ...AUTH_USER,
       displayName,
-      phoneNumber,
+      phoneNumber: AUTH_PHONE_CANARY,
     });
     const { ensureMemberProfile } = require('./ensureMemberProfile');
 
@@ -202,7 +224,7 @@ describe('ensureMemberProfile callable', () => {
 
     expect(admin.__read(AUTH_USER.uid)).toMatchObject({
       fullName: displayName,
-      phoneNumber,
+      phoneNumber: '',
       role: 'unverified',
     });
   });
@@ -293,7 +315,12 @@ describe('signup profile compatibility', () => {
 
     await onSignUp(AUTH_USER);
 
-    expect(admin.__read(AUTH_USER.uid)).toMatchObject({ role: 'unverified' });
+    expect(admin.__read(AUTH_USER.uid)).toMatchObject({
+      phoneNumber: '',
+      role: 'unverified',
+    });
+    expect(JSON.stringify(admin.__read(AUTH_USER.uid)))
+      .not.toContain(AUTH_PHONE_CANARY);
     expect(admin.__mocks.setCustomUserClaims).not.toHaveBeenCalled();
   });
 

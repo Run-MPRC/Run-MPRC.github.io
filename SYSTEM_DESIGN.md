@@ -256,7 +256,7 @@ The first release may continue using `admin` in the UI, but server endpoints and
 | `events/{eventId}/registrations/{registrationId}` | Participant identity, waiver evidence, payment references, lifecycle | Cloud Functions and admins today; target Cloud Functions only | Restricted PII and financial metadata |
 | `products/{productId}` | Merchandise catalog | Admin client today | Public plus internal configuration |
 | `orders/{orderId}` | Buyer, shipping, payment, and fulfillment data | Cloud Functions and admins today; target Cloud Functions only | Restricted PII and financial metadata |
-| `members/{uid}` | Profile and role mirror | Create-once signup/recovery Functions; self-service name-only allowlist while #178 pauses phone collection; server role operations | Confidential |
+| `members/{uid}` | Profile and role mirror | Create-once signup/recovery Functions create phone-free pending profiles; self-service name-only allowlist while #178/#197 pause phone collection; server role operations | Confidential |
 | `members/{uid}/connections/{provider}` | Non-secret connection metadata | Cloud Functions | Confidential |
 | `members/{uid}/secrets/{provider}` | OAuth tokens | Cloud Functions | Restricted secret |
 | `promoCodes/{id}` | Intended promotion configuration | Admin only | Confidential; currently not integrated into checkout validation |
@@ -352,7 +352,7 @@ sequenceDiagram
             F-->>W: ready=true; no write or claim change
         else profile missing
             F->>A: Load caller's authoritative Auth record
-            F->>D: Transactionally recheck and create pending profile once
+            F->>D: Transactionally create one phone-free pending profile
             F-->>W: ready=true
         end
         W->>D: Read caller profile through Firestore Rules
@@ -366,9 +366,9 @@ sequenceDiagram
     end
 ```
 
-The callable accepts no UID or profile fields. A missing record receives identity fields from Firebase Auth and `role: unverified`; it never copies a member/admin claim, dues, payment, or discount state. Existing records and claims remain unchanged. This may expose a pre-existing claim/profile mismatch instead of guessing how to repair it; the identity/membership workflow must resolve that mismatch explicitly. App Check is required by the shared boundary only when deployed enforcement is configured, so release evidence must prove that setting before calling App Check live.
+The callable accepts no UID or profile fields. A missing record receives bounded name, email, verification, and provider fields from Firebase Auth plus `role: unverified`; while phone collection is paused, the server writes the existing schema-compatible empty phone field instead of copying `user.phoneNumber`. It never copies a member/admin claim, dues, payment, or discount state. Existing records and claims remain byte-for-byte unchanged. This may expose a pre-existing claim/profile mismatch instead of guessing how to repair it; the identity/membership workflow must resolve that mismatch explicitly. App Check is required by the shared boundary only when deployed enforcement is configured, so release evidence must prove that setting before calling App Check live.
 
-DATA-001C1 [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) pauses optional phone display and collection in My Account. The owner-profile projection omits `phoneNumber`, the client validates and writes only `fullName`, and the Rules source rejects every browser phone mutation while allowing an existing phone value to remain unchanged during a name edit. Firestore still authorizes and transports the owner's complete document at its document-level boundary; #116 retains the future server-projection work for broader administrative reads. There is no migration, deletion, export, Function/Auth change, Google Forms change, or provider action in this slice. The source is not live protection until the exact Rules are deployed and read back before the dependent website revision is published and verified.
+DATA-001C1 [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) pauses optional phone display and collection in My Account. The owner-profile projection omits `phoneNumber`, the client validates and writes only `fullName`, and the Rules source rejects every browser phone mutation while allowing an existing phone value to remain unchanged during a name edit. DATA-001C2 [#197](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/197) extends the same pause to the shared signup/recovery helper: a new profile keeps the empty phone schema field even when Firebase Auth already has a phone. The create-once transaction leaves every existing profile unchanged. Firestore still authorizes and transports the owner's complete document at its document-level boundary; #116 retains future server projections for broader administrative reads. Neither slice deletes, migrates, exports, or inspects existing phone data, changes Google Forms/providers, or proves spam causation. Source is not live protection until the exact Rules and both profile Functions are deployed/read back before the dependent website revision is published and verified.
 
 The server chooses initial timestamps. The current self-edit path sends a Firestore server timestamp, but the Rules source type-checks rather than independently proves that edit timestamp. Do not describe arbitrary profile edit timestamps as server-authoritative until a coordinated Rules/API issue closes that residual.
 
