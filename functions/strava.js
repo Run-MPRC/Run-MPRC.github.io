@@ -7,6 +7,11 @@ const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
 const STRAVA_DEAUTH_URL = 'https://www.strava.com/oauth/deauthorize';
 const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities';
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
+const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
+
+function stravaAuthorizationError(code) {
+  return new functions.https.HttpsError(code, STRAVA_AUTHORIZATION_ERROR_MESSAGE);
+}
 
 function getStravaCreds() {
   const clientId = process.env.STRAVA_CLIENT_ID;
@@ -34,24 +39,29 @@ function secretDocRef(uid) {
 
 async function exchangeCode(code) {
   const { clientId, clientSecret } = getStravaCreds();
-  const resp = await fetch(STRAVA_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      grant_type: 'authorization_code',
-    }),
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new functions.https.HttpsError(
-      'invalid-argument',
-      `Strava token exchange failed: ${resp.status} ${text.slice(0, 200)}`,
-    );
+  let resp;
+  try {
+    resp = await fetch(STRAVA_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+      }),
+    });
+  } catch (_error) {
+    throw stravaAuthorizationError('unavailable');
   }
-  return resp.json();
+  if (!resp || resp.ok !== true) {
+    throw stravaAuthorizationError('invalid-argument');
+  }
+  try {
+    return await resp.json();
+  } catch (_error) {
+    throw stravaAuthorizationError('unavailable');
+  }
 }
 
 async function refreshToken(refresh) {
