@@ -143,6 +143,64 @@ function registrationInput(amountCents) {
   };
 }
 
+const REFUND_ENTRY_POINTS = [
+  {
+    name: 'registration',
+    handler: adminRegistrationAction,
+    data: {
+      eventId: 'race-1',
+      registrationId: 'reg-1',
+    },
+    recordPath: 'events/race-1/registrations/reg-1',
+  },
+  {
+    name: 'order',
+    handler: adminOrderAction,
+    data: { orderId: 'order-1' },
+    recordPath: 'orders/order-1',
+  },
+];
+
+const INVALID_PARTIAL_REFUND_AMOUNTS = [
+  ['missing', undefined],
+  ['null', null],
+  ['zero', 0],
+  ['negative zero', -0],
+  ['negative', -1],
+  ['equal to original', 2500],
+  ['over original', 2501],
+  ['fraction', 1.5],
+  ['NaN', Number.NaN],
+  ['positive infinity', Number.POSITIVE_INFINITY],
+  ['negative infinity', Number.NEGATIVE_INFINITY],
+  ['numeric string', '1'],
+  ['infinity string', 'Infinity'],
+  ['boolean', true],
+  ['array', [1]],
+  ['object', { amount: 1 }],
+  ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+];
+
+const INVALID_STORED_REFUND_TOTALS = [
+  ['missing', undefined],
+  ['null', null],
+  ['zero', 0],
+  ['negative', -1],
+  ['string', '2500'],
+  ['fraction', 2500.5],
+  ['NaN', Number.NaN],
+  ['infinity', Number.POSITIVE_INFINITY],
+  ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+];
+
+function partialRefundData(entry, amountCents) {
+  return {
+    ...entry.data,
+    action: 'refund_partial',
+    payload: { amountCents },
+  };
+}
+
 describe('commerce admission at admin entry points', () => {
   beforeEach(() => {
     admin.__clear();
@@ -182,6 +240,74 @@ describe('commerce admission at admin entry points', () => {
     delete process.env.STRIPE_SECRET_KEY;
     delete process.env.COMMERCE_ENABLED;
     delete process.env.ENFORCE_APP_CHECK;
+  });
+
+  // Keep these before every admitted provider path. stripeHelpers caches its client,
+  // so this ordering makes the constructor assertion prove validation runs first.
+  test.each(REFUND_ENTRY_POINTS.flatMap((entry) => (
+    INVALID_PARTIAL_REFUND_AMOUNTS.map(([caseName, amountCents]) => ([
+      entry.name,
+      caseName,
+      entry,
+      amountCents,
+    ]))
+  )))('%s rejects %s partial-refund input before side effects', async (
+    _entryName,
+    _caseName,
+    entry,
+    amountCents,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed(entry.recordPath, {
+      status: 'paid',
+      amountCents: 2500,
+      stripePaymentIntentId: 'pi_synthetic',
+    });
+
+    await expect(entry.handler(
+      partialRefundData(entry, amountCents),
+      adminContext(),
+    )).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message: 'Invalid partial refund amount',
+    });
+
+    expect(mockStripeConstructor).not.toHaveBeenCalled();
+    expect(mockRefundCreate).not.toHaveBeenCalled();
+    expect(mockBusinessWrite).not.toHaveBeenCalled();
+  });
+
+  test.each(REFUND_ENTRY_POINTS.flatMap((entry) => (
+    INVALID_STORED_REFUND_TOTALS.map(([caseName, originalAmountCents]) => ([
+      entry.name,
+      caseName,
+      entry,
+      originalAmountCents,
+    ]))
+  )))('%s rejects %s stored refund total before side effects', async (
+    _entryName,
+    _caseName,
+    entry,
+    originalAmountCents,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed(entry.recordPath, {
+      status: 'paid',
+      amountCents: originalAmountCents,
+      stripePaymentIntentId: 'pi_synthetic',
+    });
+
+    await expect(entry.handler(
+      partialRefundData(entry, 1),
+      adminContext(),
+    )).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Stored refund total is unavailable',
+    });
+
+    expect(mockStripeConstructor).not.toHaveBeenCalled();
+    expect(mockRefundCreate).not.toHaveBeenCalled();
+    expect(mockBusinessWrite).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -252,10 +378,12 @@ describe('commerce admission at admin entry points', () => {
       eventId: 'race-1',
       registrationId: 'reg-1',
       action: 'refund_full',
+      payload: { amountCents: 1 },
     }, 'events/race-1/registrations/reg-1'],
     ['order', adminOrderAction, {
       orderId: 'order-1',
       action: 'refund_full',
+      payload: { amountCents: 1 },
     }, 'orders/order-1'],
   ])('blocks %s refund when incident refunds are off', async (
     _name,
@@ -284,10 +412,12 @@ describe('commerce admission at admin entry points', () => {
       eventId: 'race-1',
       registrationId: 'reg-1',
       action: 'refund_full',
+      payload: { amountCents: 1 },
     }, 'events/race-1/registrations/reg-1'],
     ['order', adminOrderAction, {
       orderId: 'order-1',
       action: 'refund_full',
+      payload: { amountCents: 1 },
     }, 'orders/order-1'],
   ])('admits %s refund independently while new commerce is off', async (
     _name,
@@ -316,8 +446,88 @@ describe('commerce admission at admin entry points', () => {
     expect(mockRefundCreate).toHaveBeenCalledWith({
       payment_intent: 'pi_synthetic',
     });
+    expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+    expect(admin.__get(recordPath)).toMatchObject({
+      status: 'refunded',
+      auditLog: [{ action: 'admin.refund_full' }],
+    });
     expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
   });
+
+  test.each(REFUND_ENTRY_POINTS.flatMap((entry) => ([1, 2499].map((amountCents) => ([
+    entry.name,
+    amountCents,
+    entry,
+  ])))))('%s sends exact valid partial amount %i', async (
+    _entryName,
+    amountCents,
+    entry,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed(entry.recordPath, {
+      status: 'paid',
+      amountCents: 2500,
+      stripePaymentIntentId: 'pi_synthetic',
+    });
+
+    await expect(entry.handler(
+      partialRefundData(entry, amountCents),
+      adminContext(),
+    )).resolves.toEqual({ ok: true, refundId: 're_synthetic' });
+
+    expect(mockRefundCreate).toHaveBeenCalledWith({
+      payment_intent: 'pi_synthetic',
+      amount: amountCents,
+    });
+    expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+    expect(admin.__get(entry.recordPath)).toMatchObject({
+      status: 'partially_refunded',
+      auditLog: [{ action: 'admin.refund_partial' }],
+    });
+    expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(REFUND_ENTRY_POINTS.map((entry) => [entry.name, entry]))(
+    '%s leaves business state unchanged when Stripe rejects a valid partial refund',
+    async (_entryName, entry) => {
+      admin.__seed('systemConfig/commerce', control());
+      admin.__seed(entry.recordPath, {
+        status: 'paid',
+        amountCents: 2500,
+        stripePaymentIntentId: 'pi_synthetic',
+      });
+      const hostileProviderDetail = [
+        'synthetic provider failure',
+        'amount=7777',
+        'payment=pi_must_not_escape',
+      ].join(' ');
+      mockRefundCreate.mockRejectedValueOnce(new Error(hostileProviderDetail));
+
+      const error = await entry.handler(
+        partialRefundData(entry, 1),
+        adminContext(),
+      ).catch((received) => received);
+
+      expect(error).toMatchObject({
+        code: 'internal',
+        message: 'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+      });
+      expect(error.message).not.toContain(hostileProviderDetail);
+      expect(error.message).not.toContain('pi_must_not_escape');
+      expect(error.message).not.toContain('7777');
+
+      expect(mockRefundCreate).toHaveBeenCalledWith({
+        payment_intent: 'pi_synthetic',
+        amount: 1,
+      });
+      expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+      expect(mockBusinessWrite).not.toHaveBeenCalled();
+      expect(admin.__get(entry.recordPath)).toMatchObject({
+        status: 'paid',
+        amountCents: 2500,
+      });
+    },
+  );
 
   test('existing-record note bypasses an absent runtime commerce control', async () => {
     process.env.COMMERCE_ENABLED = 'false';

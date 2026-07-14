@@ -856,12 +856,14 @@ Do not mark local cancelled before considering the live Stripe Session and recov
 ## PAY-005 — Build idempotent refunds, disputes, and reconciliation
 
 **Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:stripe`, `size:L`
-**Status:** Proposed
+**Status:** Partial. Immediate amount-containment source/tests are tracked in [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200); the broader refund/dispute/reconciliation system remains proposed.
 **Depends on:** PAY-002, PAY-003, AUTH-003 for final permissions
 
 ### Problem
 
 Refund functions call Stripe without idempotency, immediately overwrite local status, weakly validate amount/current state/remaining balance, and do not track cumulative actual refund. Dispute handling is registration-only and audit-only. No scheduled reconciliation proves Stripe and Firestore agree.
+
+PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) is the narrow immediate containment outcome. It makes both current partial-refund entry points accept only a primitive positive safe-integer amount below the stored original cents, requires every admitted partial request to send that exact `amount` to Stripe, and derives partial/full classification from the explicit action. Invalid caller or stored values stop before Stripe construction/refund creation and before business-record writes. A provider exception returns a fixed result-not-confirmed, do-not-retry, and escalate message because Stripe may already have accepted the request. This does not add idempotency, remaining-refundable provider truth, concurrency control, event-finalized totals, capabilities, deployment, or live proof.
 
 ### Scope
 
@@ -890,7 +892,7 @@ Refund functions call Stripe without idempotency, immediately overwrite local st
 
 ### Agent handoff
 
-Separate refund command/state from the broader reconciliation worker into sequential PRs if necessary. Never hand-edit Firestore to make reconciliation pass.
+Do not duplicate PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200). After its immediate containment, separate refund command/state from the broader reconciliation worker into sequential PRs. Never hand-edit Firestore to make reconciliation pass.
 
 ---
 

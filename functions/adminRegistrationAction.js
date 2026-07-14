@@ -15,6 +15,10 @@ const {
   COMMERCE_OPERATIONS,
   requireCommerceAdmission,
 } = require('./commerceControl');
+const {
+  REFUND_VALIDATION_REASONS,
+  validatePartialRefundAmount,
+} = require('./refundValidation');
 
 const ACTIONS = new Set([
   'refund_full',
@@ -33,21 +37,23 @@ function regRef(eventId, registrationId) {
 }
 
 async function refund({
-  stripe, doc, reg, actor, amountCents,
+  stripe, doc, reg, actor, action, amountCents,
 }) {
-  if (!reg.stripePaymentIntentId) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'No Stripe payment intent recorded for this registration',
-    );
-  }
   const refundPayload = { payment_intent: reg.stripePaymentIntentId };
-  if (amountCents && amountCents > 0 && amountCents < reg.amountCents) {
+  if (action === 'refund_partial') {
     refundPayload.amount = amountCents;
   }
-  const stripeRefund = await stripe.refunds.create(refundPayload);
+  let stripeRefund;
+  try {
+    stripeRefund = await stripe.refunds.create(refundPayload);
+  } catch {
+    throw new functions.https.HttpsError(
+      'internal',
+      'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+    );
+  }
 
-  const isFull = !refundPayload.amount;
+  const isFull = action === 'refund_full';
   await doc.ref.update({
     status: isFull ? 'refunded' : 'partially_refunded',
     refundedAt: Timestamp.now(),
@@ -58,7 +64,7 @@ async function refund({
         actorUid: actor.uid,
         actorEmail: actor.email,
         action: isFull ? 'admin.refund_full' : 'admin.refund_partial',
-        note: `refund=${stripeRefund.id} amount=${refundPayload.amount || reg.amountCents}`,
+        note: `refund=${stripeRefund.id} amount=${isFull ? reg.amountCents : amountCents}`,
       }),
     ),
   });
@@ -351,16 +357,34 @@ exports.adminRegistrationAction = functions
     }
 
     if (action === 'refund_full' || action === 'refund_partial') {
-      const stripe = getStripe();
-      const amountCents = action === 'refund_partial' ? Number(payload.amountCents) : null;
-      if (action === 'refund_partial' && (!amountCents || amountCents <= 0)) {
+      if (!reg.stripePaymentIntentId) {
         throw new functions.https.HttpsError(
-          'invalid-argument',
-          'amountCents required for partial refund',
+          'failed-precondition',
+          'No Stripe payment intent recorded for this registration',
         );
       }
+      let amountCents = null;
+      if (action === 'refund_partial') {
+        const validation = validatePartialRefundAmount({
+          amountCents: payload?.amountCents,
+          originalAmountCents: reg.amountCents,
+        });
+        if (!validation.ok) {
+          const invalidStoredTotal = (
+            validation.reason === REFUND_VALIDATION_REASONS.INVALID_STORED_TOTAL
+          );
+          throw new functions.https.HttpsError(
+            invalidStoredTotal ? 'failed-precondition' : 'invalid-argument',
+            invalidStoredTotal
+              ? 'Stored refund total is unavailable'
+              : 'Invalid partial refund amount',
+          );
+        }
+        amountCents = validation.amountCents;
+      }
+      const stripe = getStripe();
       return refund({
-        stripe, doc: snap, reg, actor, amountCents,
+        stripe, doc: snap, reg, actor, action, amountCents,
       });
     }
 
