@@ -23,6 +23,9 @@ const providerPlanSchemaVersion = 1;
 const providerPlanAuditSchemaVersion = 1;
 const providerSendEvidenceSchemaVersion = 1;
 const providerSendAuditSchemaVersion = 1;
+const authorizedProviderPlanCommitmentSchemaVersion = 2;
+const authorizedProviderSendEvidenceSchemaVersion = 2;
+const authorizedProviderSendAuditSchemaVersion = 2;
 const providerReconciliationEvidenceSchemaVersion = 1;
 const providerReconciliationAuditSchemaVersion = 1;
 const providerAttemptAuthorizationSchemaVersion = 1;
@@ -63,6 +66,7 @@ const HASH_DOMAINS = Object.freeze({
   stripeParameters: 'mprc.command-provider-plan-stripe-parameters.v1',
   stripeIdempotencyKey: 'mprc.command-provider-plan-stripe-idempotency-key.v1',
   providerPlan: 'mprc.command-provider-plan-complete.v1',
+  authorizedProviderPlan: 'mprc.command-authorized-provider-plan-complete.v2',
   providerSendEvidence: 'mprc.command-provider-send-evidence-complete.v1',
   providerReconciliationEvidence: (
     'mprc.command-provider-reconciliation-evidence-complete.v1'
@@ -265,6 +269,41 @@ const PROVIDER_SEND_AUDIT_FIELDS = Object.freeze([
   'stripeMode',
   'providerOperation',
   'providerPlanCommitment',
+  'prePostFenceEpoch',
+  'automaticRetryDeadlineAt',
+  'occurredAt',
+]);
+const AUTHORIZED_PROVIDER_SEND_FIELDS = Object.freeze([
+  'providerSendEvidenceSchemaVersion',
+  'providerPlanSchemaVersion',
+  'providerPlanCommitmentSchemaVersion',
+  'providerAttemptAuthorizationSchemaVersion',
+  'commandIdentityVersion',
+  'commandKeyHash',
+  'providerAttempt',
+  'provider',
+  'providerPlanCommitment',
+  'providerAttemptAuthorizationCommitment',
+  'prePostFenceEpoch',
+  'prePostRecordedAt',
+  'automaticRetryDeadlineAt',
+]);
+const AUTHORIZED_PROVIDER_SEND_AUDIT_FIELDS = Object.freeze([
+  'providerSendAuditSchemaVersion',
+  'providerSendEvidenceSchemaVersion',
+  'providerPlanSchemaVersion',
+  'providerPlanCommitmentSchemaVersion',
+  'providerAttemptAuthorizationSchemaVersion',
+  'aggregateType',
+  'commandKeyHash',
+  'providerAttempt',
+  'eventType',
+  'provider',
+  'environment',
+  'stripeMode',
+  'providerOperation',
+  'providerPlanCommitment',
+  'providerAttemptAuthorizationCommitment',
   'prePostFenceEpoch',
   'automaticRetryDeadlineAt',
   'occurredAt',
@@ -570,6 +609,23 @@ function captureTrustedTimestamp() {
   return timestamp;
 }
 
+function capturePostTransactionTimestampParts() {
+  let timestamp;
+  try {
+    timestamp = Timestamp.now();
+  } catch {
+    return null;
+  }
+  const parts = readTimestamp(timestamp);
+  if (parts === null) return null;
+  try {
+    Object.freeze(timestamp);
+  } catch {
+    return null;
+  }
+  return parts;
+}
+
 function addTimestampSeconds(timestamp, seconds) {
   const parts = readTimestamp(timestamp);
   if (!Number.isSafeInteger(seconds)
@@ -684,6 +740,70 @@ function createCompleteProviderPlanCommitment(plan, boundAt) {
     ['boundFenceEpoch', String(plan.boundFenceEpoch)],
     ['boundAtSeconds', String(boundAt.seconds)],
     ['boundAtNanoseconds', String(boundAt.nanoseconds)],
+  ]);
+}
+
+function createCompleteAuthorizedProviderPlanCommitment(providerPlan) {
+  const record = providerPlan.record;
+  const audit = providerPlan.audit;
+  const boundAt = providerPlan.boundAt;
+  const auditOccurredAt = readTimestamp(audit.occurredAt);
+  if (boundAt === null
+    || auditOccurredAt === null
+    || !timestampsEqual(boundAt, auditOccurredAt)) {
+    reject('journal_record_invalid');
+  }
+  return digest(HASH_DOMAINS.authorizedProviderPlan, [
+    ['version', String(authorizedProviderPlanCommitmentSchemaVersion)],
+    [
+      'providerPlanCommitmentSchemaVersion',
+      String(authorizedProviderPlanCommitmentSchemaVersion),
+    ],
+    ['providerPlanSchemaVersion', String(record.providerPlanSchemaVersion)],
+    ['commandIdentityVersion', String(record.commandIdentityVersion)],
+    ['commandKeyHash', record.commandKeyHash],
+    ['environment', record.environment],
+    ['provider', record.provider],
+    ['providerAttempt', String(record.providerAttempt)],
+    ['providerOperation', record.providerOperation],
+    ['stripeMode', record.stripeMode],
+    ['stripeAccountFingerprint', record.stripeAccountFingerprint],
+    ['stripeApiVersion', record.stripeApiVersion],
+    ['httpMethod', record.httpMethod],
+    ['endpointPath', record.endpointPath],
+    ['parametersFingerprint', record.parametersFingerprint],
+    ['idempotencyKeyFingerprint', record.idempotencyKeyFingerprint],
+    ['boundFenceEpoch', String(record.boundFenceEpoch)],
+    ['boundAtSeconds', String(boundAt.seconds)],
+    ['boundAtNanoseconds', String(boundAt.nanoseconds)],
+    [
+      'providerAttemptAuthorizationSchemaVersion',
+      String(record.providerAttemptAuthorizationSchemaVersion),
+    ],
+    [
+      'providerAttemptAuthorizationCommitment',
+      record.providerAttemptAuthorizationCommitment,
+    ],
+    ['auditProviderPlanAuditSchemaVersion', String(audit.providerPlanAuditSchemaVersion)],
+    ['auditAggregateType', audit.aggregateType],
+    ['auditCommandKeyHash', audit.commandKeyHash],
+    ['auditProviderAttempt', String(audit.providerAttempt)],
+    ['auditEventType', audit.eventType],
+    ['auditProvider', audit.provider],
+    ['auditEnvironment', audit.environment],
+    ['auditStripeMode', audit.stripeMode],
+    ['auditProviderOperation', audit.providerOperation],
+    ['auditBoundFenceEpoch', String(audit.boundFenceEpoch)],
+    ['auditOccurredAtSeconds', String(auditOccurredAt.seconds)],
+    ['auditOccurredAtNanoseconds', String(auditOccurredAt.nanoseconds)],
+    [
+      'auditProviderAttemptAuthorizationSchemaVersion',
+      String(audit.providerAttemptAuthorizationSchemaVersion),
+    ],
+    [
+      'auditProviderAttemptAuthorizationCommitment',
+      audit.providerAttemptAuthorizationCommitment,
+    ],
   ]);
 }
 
@@ -1117,11 +1237,19 @@ function providerPlanAuditDocumentId(
   return `commerce_provider_attempt_${commandKeyHash}_${attemptDocument}`;
 }
 
-function providerSendAuditDocumentId(commandKeyHash) {
+function providerSendAuditDocumentId(
+  commandKeyHash,
+  providerAttempt = INITIAL_PROVIDER_ATTEMPT,
+) {
   if (typeof commandKeyHash !== 'string' || !LOWERCASE_SHA256.test(commandKeyHash)) {
     reject('journal_record_invalid');
   }
-  return `commerce_provider_send_${commandKeyHash}_${INITIAL_PROVIDER_ATTEMPT_DOCUMENT}`;
+  if (providerAttempt !== INITIAL_PROVIDER_ATTEMPT
+    && providerAttempt !== NEXT_PROVIDER_ATTEMPT) {
+    reject('journal_record_invalid');
+  }
+  const attemptDocument = String(providerAttempt).padStart(10, '0');
+  return `commerce_provider_send_${commandKeyHash}_${attemptDocument}`;
 }
 
 function providerReconciliationAuditDocumentId(commandKeyHash) {
@@ -1639,6 +1767,30 @@ function prepareNextProviderAttemptAuthorizationOperation(input) {
   });
 }
 
+function prepareAuthorizedProviderSendOperation(input) {
+  const prepared = prepareNextProviderAttemptAuthorizationOperation(input);
+  let authorizedProviderSendRef;
+  let authorizedProviderSendAuditRef;
+  try {
+    authorizedProviderSendRef = prepared.authorizedProviderPlanRef
+      .collection(SEND_EVIDENCE_COLLECTION)
+      .doc(INITIAL_SEND_EVIDENCE_DOCUMENT);
+    authorizedProviderSendAuditRef = prepared.db.collection(AUDIT_COLLECTION).doc(
+      providerSendAuditDocumentId(prepared.commandKeyHash, NEXT_PROVIDER_ATTEMPT),
+    );
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+  const automaticRetryDeadlineAt = addProviderSendRetryWindow(prepared.occurredAt);
+  return Object.freeze({
+    ...prepared,
+    authorizedProviderSendRef,
+    authorizedProviderSendAuditRef,
+    automaticRetryDeadlineAt,
+  });
+}
+
 function createProviderSendPair(prepared, providerPlan) {
   const providerPlanCommitment = createCompleteProviderPlanCommitment(
     providerPlan.record,
@@ -1672,6 +1824,52 @@ function createProviderSendPair(prepared, providerPlan) {
     occurredAt: prepared.occurredAt,
   });
 
+  return Object.freeze({ record, audit });
+}
+
+function createAuthorizedProviderSendPair(prepared, context) {
+  const providerPlan = context.authorizedProviderPlan;
+  const providerPlanCommitment = createCompleteAuthorizedProviderPlanCommitment(
+    providerPlan,
+  );
+  const providerAttemptAuthorizationCommitment = (
+    providerPlan.record.providerAttemptAuthorizationCommitment
+  );
+  const record = Object.freeze({
+    providerSendEvidenceSchemaVersion: authorizedProviderSendEvidenceSchemaVersion,
+    providerPlanSchemaVersion,
+    providerPlanCommitmentSchemaVersion: authorizedProviderPlanCommitmentSchemaVersion,
+    providerAttemptAuthorizationSchemaVersion,
+    commandIdentityVersion,
+    commandKeyHash: prepared.commandKeyHash,
+    providerAttempt: NEXT_PROVIDER_ATTEMPT,
+    provider: 'stripe',
+    providerPlanCommitment,
+    providerAttemptAuthorizationCommitment,
+    prePostFenceEpoch: prepared.expectedFenceEpoch,
+    prePostRecordedAt: prepared.occurredAt,
+    automaticRetryDeadlineAt: prepared.automaticRetryDeadlineAt,
+  });
+  const audit = Object.freeze({
+    providerSendAuditSchemaVersion: authorizedProviderSendAuditSchemaVersion,
+    providerSendEvidenceSchemaVersion: authorizedProviderSendEvidenceSchemaVersion,
+    providerPlanSchemaVersion,
+    providerPlanCommitmentSchemaVersion: authorizedProviderPlanCommitmentSchemaVersion,
+    providerAttemptAuthorizationSchemaVersion,
+    aggregateType: 'commerce_provider_send',
+    commandKeyHash: prepared.commandKeyHash,
+    providerAttempt: NEXT_PROVIDER_ATTEMPT,
+    eventType: 'provider_pre_send_recorded',
+    provider: 'stripe',
+    environment: providerPlan.record.environment,
+    stripeMode: providerPlan.record.stripeMode,
+    providerOperation: providerPlan.record.providerOperation,
+    providerPlanCommitment,
+    providerAttemptAuthorizationCommitment,
+    prePostFenceEpoch: prepared.expectedFenceEpoch,
+    automaticRetryDeadlineAt: prepared.automaticRetryDeadlineAt,
+    occurredAt: prepared.occurredAt,
+  });
   return Object.freeze({ record, audit });
 }
 
@@ -3011,6 +3209,168 @@ async function readAuthorizedProviderPlanContext(transaction, prepared) {
   return Object.freeze({ ...context, authorizedProviderPlan });
 }
 
+function parseAuthorizedProviderSendPair(recordValue, auditValue, prepared, context) {
+  const record = readExactObjectWithOptionalTimeFields(
+    recordValue,
+    AUTHORIZED_PROVIDER_SEND_FIELDS,
+    ['prePostRecordedAt', 'automaticRetryDeadlineAt'],
+    'journal_record_invalid',
+  );
+  const audit = readExactObjectWithOptionalTimeFields(
+    auditValue,
+    AUTHORIZED_PROVIDER_SEND_AUDIT_FIELDS,
+    ['occurredAt', 'automaticRetryDeadlineAt'],
+    'journal_record_invalid',
+  );
+  const providerPlan = context.authorizedProviderPlan;
+  const expectedProviderPlanCommitment = (
+    createCompleteAuthorizedProviderPlanCommitment(providerPlan)
+  );
+  const expectedAuthorizationCommitment = (
+    providerPlan.record.providerAttemptAuthorizationCommitment
+  );
+
+  if (record.providerSendEvidenceSchemaVersion
+      !== authorizedProviderSendEvidenceSchemaVersion
+    || record.providerPlanSchemaVersion !== providerPlanSchemaVersion
+    || record.providerPlanCommitmentSchemaVersion
+      !== authorizedProviderPlanCommitmentSchemaVersion
+    || record.providerAttemptAuthorizationSchemaVersion
+      !== providerAttemptAuthorizationSchemaVersion
+    || record.commandIdentityVersion !== commandIdentityVersion
+    || record.commandKeyHash !== prepared.commandKeyHash
+    || record.providerAttempt !== NEXT_PROVIDER_ATTEMPT
+    || record.provider !== 'stripe'
+    || typeof record.providerPlanCommitment !== 'string'
+    || !LOWERCASE_SHA256.test(record.providerPlanCommitment)
+    || record.providerPlanCommitment !== expectedProviderPlanCommitment
+    || typeof record.providerAttemptAuthorizationCommitment !== 'string'
+    || !LOWERCASE_SHA256.test(record.providerAttemptAuthorizationCommitment)
+    || record.providerAttemptAuthorizationCommitment !== expectedAuthorizationCommitment
+    || !validLifecycleNumber(record.prePostFenceEpoch)
+    || record.prePostFenceEpoch < providerPlan.record.boundFenceEpoch
+    || record.prePostFenceEpoch > context.lifecycle.record.fenceEpoch
+    || audit.providerSendAuditSchemaVersion !== authorizedProviderSendAuditSchemaVersion
+    || audit.providerSendEvidenceSchemaVersion !== record.providerSendEvidenceSchemaVersion
+    || audit.providerPlanSchemaVersion !== record.providerPlanSchemaVersion
+    || audit.providerPlanCommitmentSchemaVersion
+      !== record.providerPlanCommitmentSchemaVersion
+    || audit.providerAttemptAuthorizationSchemaVersion
+      !== record.providerAttemptAuthorizationSchemaVersion
+    || audit.aggregateType !== 'commerce_provider_send'
+    || audit.commandKeyHash !== record.commandKeyHash
+    || audit.providerAttempt !== record.providerAttempt
+    || audit.eventType !== 'provider_pre_send_recorded'
+    || audit.provider !== record.provider
+    || audit.environment !== providerPlan.record.environment
+    || audit.stripeMode !== providerPlan.record.stripeMode
+    || audit.providerOperation !== providerPlan.record.providerOperation
+    || audit.providerPlanCommitment !== record.providerPlanCommitment
+    || audit.providerAttemptAuthorizationCommitment
+      !== record.providerAttemptAuthorizationCommitment
+    || audit.prePostFenceEpoch !== record.prePostFenceEpoch) {
+    reject('journal_record_invalid');
+  }
+
+  const prePostRecordedAt = readTimestamp(record.prePostRecordedAt);
+  const automaticRetryDeadlineAt = readTimestamp(record.automaticRetryDeadlineAt);
+  const auditOccurredAt = readTimestamp(audit.occurredAt);
+  const auditRetryDeadlineAt = readTimestamp(audit.automaticRetryDeadlineAt);
+  const timeUnknown = prePostRecordedAt === null
+    || automaticRetryDeadlineAt === null
+    || auditOccurredAt === null
+    || auditRetryDeadlineAt === null
+    || !timestampsEqual(prePostRecordedAt, auditOccurredAt)
+    || !timestampsEqual(automaticRetryDeadlineAt, auditRetryDeadlineAt)
+    || !timestampExactlySecondsAfter(
+      automaticRetryDeadlineAt,
+      prePostRecordedAt,
+      PROVIDER_SEND_RETRY_WINDOW_SECONDS,
+    )
+    || compareTimestamps(prePostRecordedAt, providerPlan.boundAt) < 0;
+  if (timeUnknown) {
+    return Object.freeze({
+      record,
+      audit,
+      timeUnknown: true,
+      prePostRecordedAt: null,
+      automaticRetryDeadlineAt: null,
+    });
+  }
+  return Object.freeze({
+    record,
+    audit,
+    timeUnknown: false,
+    prePostRecordedAt,
+    automaticRetryDeadlineAt,
+  });
+}
+
+async function readAuthorizedProviderSendContext(transaction, prepared) {
+  const context = await readAuthorizedProviderPlanContext(transaction, prepared);
+  if (context.authorizedProviderPlan === null) reject('journal_record_invalid');
+
+  const sendSnapshot = await transaction.get(prepared.authorizedProviderSendRef);
+  const sendAuditSnapshot = await transaction.get(prepared.authorizedProviderSendAuditRef);
+  const sendDocument = readSnapshot(sendSnapshot);
+  const sendAuditDocument = readSnapshot(sendAuditSnapshot);
+  if (sendDocument.exists !== sendAuditDocument.exists) {
+    reject('journal_record_invalid');
+  }
+  if (!sendDocument.exists) {
+    return Object.freeze({ ...context, authorizedProviderSend: null });
+  }
+
+  const authorizedProviderSend = parseAuthorizedProviderSendPair(
+    sendDocument.value,
+    sendAuditDocument.value,
+    prepared,
+    context,
+  );
+  const bindingAuditDocument = await context.readRequiredLifecycleAudit(
+    authorizedProviderSend.record.prePostFenceEpoch + 1,
+  );
+  const bindingAudit = validateProviderLeaseAudit(
+    bindingAuditDocument.value,
+    authorizedProviderSend.record.prePostFenceEpoch,
+    prepared,
+  );
+  let predecessorAudit = null;
+  if (authorizedProviderSend.record.prePostFenceEpoch > 1) {
+    const predecessorDocument = await context.readRequiredLifecycleAudit(
+      authorizedProviderSend.record.prePostFenceEpoch,
+    );
+    predecessorAudit = validateProviderLeaseAudit(
+      predecessorDocument.value,
+      authorizedProviderSend.record.prePostFenceEpoch - 1,
+      prepared,
+    );
+  }
+  validateProviderLeaseChronology(bindingAudit, predecessorAudit, context.lifecycle);
+  validateProviderLeaseAgainstCurrent(bindingAudit, context.lifecycle);
+  if (authorizedProviderSend.timeUnknown) {
+    return Object.freeze({ ...context, authorizedProviderSend });
+  }
+  if (compareTimestamps(
+    authorizedProviderSend.prePostRecordedAt,
+    bindingAudit.occurredAt,
+  ) < 0 || compareTimestamps(
+    authorizedProviderSend.prePostRecordedAt,
+    bindingAudit.leaseExpiresAt,
+  ) >= 0) {
+    return Object.freeze({
+      ...context,
+      authorizedProviderSend: Object.freeze({
+        ...authorizedProviderSend,
+        timeUnknown: true,
+        prePostRecordedAt: null,
+        automaticRetryDeadlineAt: null,
+      }),
+    });
+  }
+  return Object.freeze({ ...context, authorizedProviderSend });
+}
+
 function validateActiveProviderPlanLease(prepared, lifecycle) {
   if (lifecycle.record.state !== 'leased'
     || lifecycle.record.leaseOwnerFingerprint !== prepared.leaseOwnerFingerprint
@@ -3336,6 +3696,95 @@ async function bindAuthorizedStripeProviderPlan(input) {
   }
 }
 
+const AUTHORIZED_PROVIDER_SEND_PERMITTED = Object.freeze({
+  journalSchemaVersion,
+  providerPlanSchemaVersion,
+  providerPlanCommitmentSchemaVersion: authorizedProviderPlanCommitmentSchemaVersion,
+  providerSendEvidenceSchemaVersion: authorizedProviderSendEvidenceSchemaVersion,
+  outcome: 'send_permitted',
+  state: 'pre_send_recorded',
+});
+const AUTHORIZED_PROVIDER_RECONCILIATION_REQUIRED = Object.freeze({
+  journalSchemaVersion,
+  providerPlanSchemaVersion,
+  providerPlanCommitmentSchemaVersion: authorizedProviderPlanCommitmentSchemaVersion,
+  providerSendEvidenceSchemaVersion: authorizedProviderSendEvidenceSchemaVersion,
+  outcome: 'reconciliation_required',
+  state: 'provider_outcome_unknown',
+});
+
+async function recordAuthorizedStripeSendEvidence(input) {
+  const prepared = prepareAuthorizedProviderSendOperation(input);
+  const permittedTransactionResults = new Set();
+
+  try {
+    const result = await prepared.db.runTransaction(async (transaction) => {
+      const context = await readAuthorizedProviderSendContext(transaction, prepared);
+      if (!validateActiveProviderPlanLease(prepared, context.lifecycle)) {
+        reject('lease_stale');
+      }
+      const createPermittedResult = (prePostRecordedAt, automaticRetryDeadlineAt) => {
+        const permitted = Object.freeze({
+          transactionCheckedAt: prepared.occurredAtParts,
+          leaseExpiresAt: context.lifecycle.leaseExpiresAt,
+          planBoundAt: context.authorizedProviderPlan.boundAt,
+          prePostRecordedAt,
+          automaticRetryDeadlineAt,
+        });
+        permittedTransactionResults.add(permitted);
+        return permitted;
+      };
+
+      if (context.authorizedProviderSend === null) {
+        if (compareTimestamps(
+          prepared.occurredAtParts,
+          context.authorizedProviderPlan.boundAt,
+        ) < 0) {
+          return AUTHORIZED_PROVIDER_RECONCILIATION_REQUIRED;
+        }
+        const pair = createAuthorizedProviderSendPair(prepared, context);
+        const deadline = readTimestamp(pair.record.automaticRetryDeadlineAt);
+        if (deadline === null) reject('journal_unavailable');
+        transaction.create(prepared.authorizedProviderSendRef, pair.record);
+        transaction.create(prepared.authorizedProviderSendAuditRef, pair.audit);
+        return createPermittedResult(prepared.occurredAtParts, deadline);
+      }
+
+      if (context.authorizedProviderSend.timeUnknown
+        || compareTimestamps(
+          prepared.occurredAtParts,
+          context.authorizedProviderSend.prePostRecordedAt,
+        ) < 0
+        || compareTimestamps(
+          prepared.occurredAtParts,
+          context.authorizedProviderSend.automaticRetryDeadlineAt,
+        ) >= 0) {
+        return AUTHORIZED_PROVIDER_RECONCILIATION_REQUIRED;
+      }
+      return createPermittedResult(
+        context.authorizedProviderSend.prePostRecordedAt,
+        context.authorizedProviderSend.automaticRetryDeadlineAt,
+      );
+    }, TRANSACTION_OPTIONS);
+
+    if (result === AUTHORIZED_PROVIDER_RECONCILIATION_REQUIRED) return result;
+    if (!permittedTransactionResults.has(result)) reject('journal_unavailable');
+    const returnedAt = capturePostTransactionTimestampParts();
+    if (returnedAt === null
+      || compareTimestamps(returnedAt, result.transactionCheckedAt) < 0
+      || compareTimestamps(returnedAt, result.planBoundAt) < 0
+      || compareTimestamps(returnedAt, result.prePostRecordedAt) < 0
+      || compareTimestamps(returnedAt, result.leaseExpiresAt) >= 0
+      || compareTimestamps(returnedAt, result.automaticRetryDeadlineAt) >= 0) {
+      return AUTHORIZED_PROVIDER_RECONCILIATION_REQUIRED;
+    }
+    return AUTHORIZED_PROVIDER_SEND_PERMITTED;
+  } catch (error) {
+    if (error instanceof CommerceCommandJournalError) throw error;
+    reject('journal_unavailable');
+  }
+}
+
 const REGISTERED_NEW = Object.freeze({
   journalSchemaVersion,
   outcome: 'registered_new',
@@ -3570,5 +4019,6 @@ module.exports = Object.freeze({
   failCommerceCommand,
   recordInitialStripeReconciliationEvidence,
   recordInitialStripeSendEvidence,
+  recordAuthorizedStripeSendEvidence,
   registerCommerceCommand,
 });

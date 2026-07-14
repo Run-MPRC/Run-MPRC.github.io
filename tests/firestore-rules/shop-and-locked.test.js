@@ -533,6 +533,79 @@ describe('server-only operational collections', () => {
     ['anonymous', undefined],
     ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
     ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
+  ])('checkoutRequests authorized attempt-2 send evidence — %s', (_label, auth) => {
+    const existingHash = '8'.repeat(64);
+    const newHash = '9'.repeat(64);
+    const existingPath = `checkoutRequests/${existingHash}/providerAttempts/0000000002/`
+      + 'sendEvidence/first';
+    const newPath = `checkoutRequests/${newHash}/providerAttempts/0000000002/`
+      + 'sendEvidence/first';
+    const collectionPath = `checkoutRequests/${existingHash}/providerAttempts/0000000002/`
+      + 'sendEvidence';
+    const existingAuditPath = 'auditEvents/'
+      + `commerce_provider_send_${existingHash}_0000000002`;
+    const newAuditPath = 'auditEvents/'
+      + `commerce_provider_send_${newHash}_0000000002`;
+    const evidence = {
+      providerSendEvidenceSchemaVersion: 2,
+      providerPlanCommitmentSchemaVersion: 2,
+      providerAttemptAuthorizationSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      providerAttempt: 2,
+      provider: 'stripe',
+      providerPlanCommitment: 'c'.repeat(64),
+      providerAttemptAuthorizationCommitment: 'd'.repeat(64),
+      prePostFenceEpoch: 2,
+    };
+    const audit = {
+      providerSendAuditSchemaVersion: 2,
+      providerPlanCommitmentSchemaVersion: 2,
+      providerAttemptAuthorizationSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      providerAttempt: 2,
+      eventType: 'provider_pre_send_recorded',
+      providerPlanCommitment: 'c'.repeat(64),
+      providerAttemptAuthorizationCommitment: 'd'.repeat(64),
+    };
+
+    test(
+      'CANNOT read, create, update, delete, list, or collection-group-list the marker',
+      async () => {
+        await seed(existingPath, evidence);
+        const client = await db(auth);
+
+        await assertFails(client.doc(existingPath).get());
+        await assertFails(client.doc(newPath).set({
+          ...evidence,
+          commandKeyHash: newHash,
+        }));
+        await assertFails(client.doc(existingPath).update({ prePostFenceEpoch: 3 }));
+        await assertFails(client.doc(existingPath).delete());
+        await assertFails(client.collection(collectionPath).get());
+        await assertFails(client.collectionGroup('sendEvidence').get());
+      },
+    );
+
+    test('CANNOT read, create, update, delete, or list the deterministic audit', async () => {
+      await seed(existingAuditPath, audit);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingAuditPath).get());
+      await assertFails(client.doc(newAuditPath).set({
+        ...audit,
+        commandKeyHash: newHash,
+      }));
+      await assertFails(client.doc(existingAuditPath).update({ providerAttempt: 3 }));
+      await assertFails(client.doc(existingAuditPath).delete());
+      await assertFails(client.collection('auditEvents').get());
+      await assertFails(client.collectionGroup('auditEvents').get());
+    });
+  });
+
+  describe.each([
+    ['anonymous', undefined],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
   ])('checkoutRequests provider reconciliation evidence — %s', (_label, auth) => {
     const existingHash = 'a'.repeat(64);
     const newHash = 'b'.repeat(64);

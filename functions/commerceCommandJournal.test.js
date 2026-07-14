@@ -23,6 +23,7 @@ const {
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
+  recordAuthorizedStripeSendEvidence,
   recordInitialStripeReconciliationEvidence,
   recordInitialStripeSendEvidence,
   registerCommerceCommand,
@@ -108,6 +109,58 @@ function reconciliationEvidenceCommitment(record) {
     ['observedLeaseExpiresAtNanoseconds', String(record.observedLeaseExpiresAt.nanoseconds)],
     ['recordedAtSeconds', String(record.recordedAt.seconds)],
     ['recordedAtNanoseconds', String(record.recordedAt.nanoseconds)],
+  ]);
+}
+
+function authorizedProviderPlanCommitment(record, audit) {
+  return testDigest('mprc.command-authorized-provider-plan-complete.v2', [
+    ['version', '2'],
+    ['providerPlanCommitmentSchemaVersion', '2'],
+    ['providerPlanSchemaVersion', String(record.providerPlanSchemaVersion)],
+    ['commandIdentityVersion', String(record.commandIdentityVersion)],
+    ['commandKeyHash', record.commandKeyHash],
+    ['environment', record.environment],
+    ['provider', record.provider],
+    ['providerAttempt', String(record.providerAttempt)],
+    ['providerOperation', record.providerOperation],
+    ['stripeMode', record.stripeMode],
+    ['stripeAccountFingerprint', record.stripeAccountFingerprint],
+    ['stripeApiVersion', record.stripeApiVersion],
+    ['httpMethod', record.httpMethod],
+    ['endpointPath', record.endpointPath],
+    ['parametersFingerprint', record.parametersFingerprint],
+    ['idempotencyKeyFingerprint', record.idempotencyKeyFingerprint],
+    ['boundFenceEpoch', String(record.boundFenceEpoch)],
+    ['boundAtSeconds', String(record.boundAt.seconds)],
+    ['boundAtNanoseconds', String(record.boundAt.nanoseconds)],
+    [
+      'providerAttemptAuthorizationSchemaVersion',
+      String(record.providerAttemptAuthorizationSchemaVersion),
+    ],
+    [
+      'providerAttemptAuthorizationCommitment',
+      record.providerAttemptAuthorizationCommitment,
+    ],
+    ['auditProviderPlanAuditSchemaVersion', String(audit.providerPlanAuditSchemaVersion)],
+    ['auditAggregateType', audit.aggregateType],
+    ['auditCommandKeyHash', audit.commandKeyHash],
+    ['auditProviderAttempt', String(audit.providerAttempt)],
+    ['auditEventType', audit.eventType],
+    ['auditProvider', audit.provider],
+    ['auditEnvironment', audit.environment],
+    ['auditStripeMode', audit.stripeMode],
+    ['auditProviderOperation', audit.providerOperation],
+    ['auditBoundFenceEpoch', String(audit.boundFenceEpoch)],
+    ['auditOccurredAtSeconds', String(audit.occurredAt.seconds)],
+    ['auditOccurredAtNanoseconds', String(audit.occurredAt.nanoseconds)],
+    [
+      'auditProviderAttemptAuthorizationSchemaVersion',
+      String(audit.providerAttemptAuthorizationSchemaVersion),
+    ],
+    [
+      'auditProviderAttemptAuthorizationCommitment',
+      audit.providerAttemptAuthorizationCommitment,
+    ],
   ]);
 }
 
@@ -467,6 +520,10 @@ function authorizedProviderPlanPaths(input) {
       `commerce_provider_attempt_${paths.commandKeyHash}_0000000002`,
     ),
     authorizedProviderSendPath: `${providerPlanPath}/sendEvidence/first`,
+    authorizedProviderSendAuditPath: documentPath(
+      'auditEvents',
+      `commerce_provider_send_${paths.commandKeyHash}_0000000002`,
+    ),
   });
 }
 
@@ -5002,6 +5059,849 @@ describe('fresh-lease authorization for one later Stripe provider attempt', () =
       expect(mock.store.size).toBe(0);
     });
   });
+
+  describe('authorized attempt-2 pre-POST evidence', () => {
+    async function createAuthorizedSendFoundation(mock, options = {}) {
+      const foundation = await createAuthorizationFoundation(mock, options);
+      await authorizeNextStripeProviderAttempt(foundation.input);
+      await bindAuthorizedStripeProviderPlan(foundation.input);
+      return Object.freeze({
+        input: foundation.input,
+        paths: authorizedProviderPlanPaths(foundation.input),
+      });
+    }
+
+    function expectAuthorizedSendResult(result, outcome) {
+      expect(result).toEqual({
+        journalSchemaVersion: 1,
+        providerPlanSchemaVersion: 1,
+        providerPlanCommitmentSchemaVersion: 2,
+        providerSendEvidenceSchemaVersion: 2,
+        outcome,
+        state: outcome === 'send_permitted'
+          ? 'pre_send_recorded'
+          : 'provider_outcome_unknown',
+      });
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(Reflect.ownKeys(result).sort()).toEqual([
+        'journalSchemaVersion',
+        'outcome',
+        'providerPlanCommitmentSchemaVersion',
+        'providerPlanSchemaVersion',
+        'providerSendEvidenceSchemaVersion',
+        'state',
+      ]);
+    }
+
+    test.each([
+      [
+        'never-began retry',
+        candidateReconciliationEvidence(),
+        'retry_same_operation',
+      ],
+      [
+        'verified expired/unpaid replacement',
+        expiredReconciliationEvidence(),
+        'replace_expired_unpaid',
+      ],
+    ])('atomically records one complete C4A-bound marker for the %s transition', async (
+      _label,
+      reconciliationEvidence,
+      transitionKind,
+    ) => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock, {
+        reconciliationEvidence,
+        transitionKind,
+      });
+      const preserved = cloneStore(mock.store);
+      const plan = preserved.get(paths.authorizedProviderPlanPath);
+      const planAudit = preserved.get(paths.authorizedProviderPlanAuditPath);
+      const initialSend = preserved.get(paths.providerSendPath);
+      const initialSendAudit = preserved.get(paths.providerSendAuditPath);
+
+      const result = await recordAuthorizedStripeSendEvidence(input);
+
+      expectAuthorizedSendResult(result, 'send_permitted');
+      const transactionRun = mock.callbackRuns.at(-1);
+      expect(transactionRun.transaction.get).toHaveBeenCalledTimes(17);
+      expect(transactionRun.transaction.create).toHaveBeenCalledTimes(2);
+      expect(Math.max(...transactionRun.transaction.get.mock.invocationCallOrder))
+        .toBeLessThan(Math.min(...transactionRun.transaction.create.mock.invocationCallOrder));
+      expect(transactionRun.writes.map((write) => write.ref.path)).toEqual([
+        paths.authorizedProviderSendPath,
+        paths.authorizedProviderSendAuditPath,
+      ]);
+
+      const record = mock.store.get(paths.authorizedProviderSendPath);
+      const audit = mock.store.get(paths.authorizedProviderSendAuditPath);
+      const completePlanCommitment = authorizedProviderPlanCommitment(plan, planAudit);
+      expect(record).toEqual({
+        providerSendEvidenceSchemaVersion: 2,
+        providerPlanSchemaVersion: 1,
+        providerPlanCommitmentSchemaVersion: 2,
+        providerAttemptAuthorizationSchemaVersion: 1,
+        commandIdentityVersion: 1,
+        commandKeyHash: paths.commandKeyHash,
+        providerAttempt: 2,
+        provider: 'stripe',
+        providerPlanCommitment: completePlanCommitment,
+        providerAttemptAuthorizationCommitment: (
+          plan.providerAttemptAuthorizationCommitment
+        ),
+        prePostFenceEpoch: 2,
+        prePostRecordedAt: expect.any(Timestamp),
+        automaticRetryDeadlineAt: expect.any(Timestamp),
+      });
+      expect(audit).toEqual({
+        providerSendAuditSchemaVersion: 2,
+        providerSendEvidenceSchemaVersion: 2,
+        providerPlanSchemaVersion: 1,
+        providerPlanCommitmentSchemaVersion: 2,
+        providerAttemptAuthorizationSchemaVersion: 1,
+        aggregateType: 'commerce_provider_send',
+        commandKeyHash: paths.commandKeyHash,
+        providerAttempt: 2,
+        eventType: 'provider_pre_send_recorded',
+        provider: 'stripe',
+        environment: 'test',
+        stripeMode: 'test',
+        providerOperation: PROVIDER_OPERATION,
+        providerPlanCommitment: completePlanCommitment,
+        providerAttemptAuthorizationCommitment: (
+          plan.providerAttemptAuthorizationCommitment
+        ),
+        prePostFenceEpoch: 2,
+        automaticRetryDeadlineAt: expect.any(Timestamp),
+        occurredAt: expect.any(Timestamp),
+      });
+      expect(record.prePostRecordedAt).toBe(audit.occurredAt);
+      expect(record.automaticRetryDeadlineAt).toBe(audit.automaticRetryDeadlineAt);
+      expect(record.prePostRecordedAt.toMillis()).toBe(nowMillis);
+      expect(record.prePostRecordedAt.toMillis()).toBeGreaterThanOrEqual(
+        plan.boundAt.toMillis(),
+      );
+      expect(record.automaticRetryDeadlineAt.toMillis()
+        - record.prePostRecordedAt.toMillis()).toBe(PROVIDER_SEND_RETRY_WINDOW_MILLIS);
+      expect(Object.isFrozen(record)).toBe(true);
+      expect(Object.isFrozen(audit)).toBe(true);
+      expect(mock.store.size).toBe(preserved.size + 2);
+      for (const [path_, value] of preserved) expect(mock.store.get(path_)).toBe(value);
+      expect(mock.store.get(paths.providerSendPath)).toBe(initialSend);
+      expect(mock.store.get(paths.providerSendAuditPath)).toBe(initialSendAudit);
+      expect(mock.store.has(`${paths.commandPath}/providerAttempts/0000000003`)).toBe(false);
+
+      const rawAttemptTwoKey = createStripeIdempotencyKey({
+        stripeMode: input.stripeMode,
+        environment: input.environment,
+        providerOperation: input.providerOperation,
+        commandKeyHash: paths.commandKeyHash,
+        providerAttempt: 2,
+      }).stripeIdempotencyKey;
+      const rendered = JSON.stringify({ result, record, audit });
+      for (const forbidden of [
+        STRIPE_ACCOUNT_ID,
+        rawAttemptTwoKey,
+        HOSTILE_CANARY,
+        RAW_CALLER,
+        COMMAND_ID,
+        OTHER_LEASE_ID,
+        TRANSITION_RECORD_COMMITMENT,
+      ]) expect(rendered).not.toContain(forbidden);
+      for (const value of [result, record, audit]) {
+        expect(value).not.toHaveProperty('shouldSend');
+        expect(value).not.toHaveProperty('shouldExecute');
+        expect(value).not.toHaveProperty('executeProvider');
+        expect(value).not.toHaveProperty('response');
+      }
+    });
+
+    test('uses the independent v2 golden digest while leaving the v1 C2 pair unchanged', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      const initialRecord = mock.store.get(paths.providerSendPath);
+      const initialAudit = mock.store.get(paths.providerSendAuditPath);
+      const plan = mock.store.get(paths.authorizedProviderPlanPath);
+      const planAudit = mock.store.get(paths.authorizedProviderPlanAuditPath);
+      const expectedCommitment = authorizedProviderPlanCommitment(plan, planAudit);
+
+      await recordAuthorizedStripeSendEvidence(input);
+
+      expect(expectedCommitment).toBe(
+        'eda65ceed6d371418e0bc661853e54c243c580ddf60bc1806c5fd60409791c74',
+      );
+      expect(mock.store.get(paths.authorizedProviderSendPath).providerPlanCommitment)
+        .toBe(expectedCommitment);
+      expect(mock.store.get(paths.authorizedProviderSendAuditPath).providerPlanCommitment)
+        .toBe(expectedCommitment);
+      expect(mock.store.get(paths.providerSendPath)).toBe(initialRecord);
+      expect(mock.store.get(paths.providerSendAuditPath)).toBe(initialAudit);
+      expect(initialRecord).toMatchObject({
+        providerSendEvidenceSchemaVersion: 1,
+        providerPlanSchemaVersion: 1,
+        providerAttempt: 1,
+      });
+      expect(initialRecord).not.toHaveProperty('providerPlanCommitmentSchemaVersion');
+      expect(initialRecord).not.toHaveProperty('providerAttemptAuthorizationCommitment');
+    });
+
+    test('exact, canonically equivalent, and later-lease retries are read-only', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      await recordAuthorizedStripeSendEvidence(input);
+      const markerBefore = mock.store.get(paths.authorizedProviderSendPath);
+      const auditBefore = mock.store.get(paths.authorizedProviderSendAuditPath);
+      const planBefore = mock.store.get(paths.authorizedProviderPlanPath);
+      const planAuditBefore = mock.store.get(paths.authorizedProviderPlanAuditPath);
+
+      nowMillis += 1;
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(input),
+        'send_permitted',
+      );
+      expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence({
+          ...input,
+          providerParameters: validProviderParameters([
+            ['synthetic_reference', HOSTILE_CANARY],
+            ['currency', 'usd'],
+            ['amount_total', 2500],
+          ]),
+        }),
+        'send_permitted',
+      );
+      expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+
+      nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+      await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: THIRD_LEASE_ID }));
+      nowMillis += 1;
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence({
+          ...input,
+          leaseId: THIRD_LEASE_ID,
+          expectedFenceEpoch: 3,
+        }),
+        'send_permitted',
+      );
+      expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+      expect(mock.store.get(paths.authorizedProviderSendPath)).toBe(markerBefore);
+      expect(mock.store.get(paths.authorizedProviderSendAuditPath)).toBe(auditBefore);
+      expect(mock.store.get(paths.authorizedProviderPlanPath)).toBe(planBefore);
+      expect(mock.store.get(paths.authorizedProviderPlanAuditPath)).toBe(planAuditBefore);
+    });
+
+    test.each([
+      ['account', { stripeAccountId: OTHER_STRIPE_ACCOUNT_ID }, 'command_conflict'],
+      ['API version', { stripeApiVersion: '2025-07-01.basil' }, 'command_conflict'],
+      ['parameters', {
+        providerParameters: validProviderParameters([
+          ['amount_total', 2600],
+          ['currency', 'usd'],
+          ['synthetic_reference', HOSTILE_CANARY],
+        ]),
+      }, 'command_conflict'],
+      ['authorization', {
+        transitionAuthorization: {
+          kind: 'retry_same_operation',
+          recordCommitment: OTHER_TRANSITION_RECORD_COMMITMENT,
+        },
+      }, 'command_conflict'],
+      ['mode', { stripeMode: 'live' }, 'invalid_command_input'],
+      ['endpoint', { endpointPath: '/v1/payment_intents' }, 'invalid_command_input'],
+      ['operation', {
+        providerOperation: 'payment_intent_create',
+        endpointPath: '/v1/payment_intents',
+      }, 'invalid_command_input'],
+      ['environment', { environment: 'staging' }, 'command_not_registered'],
+    ])('rejects %s drift without creating or changing C4B evidence', async (
+      _label,
+      change,
+      reason,
+    ) => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      const before = cloneStore(mock.store);
+
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence({ ...input, ...change }),
+        reason,
+        [STRIPE_ACCOUNT_ID, OTHER_STRIPE_ACCOUNT_ID],
+      );
+      expect(mock.store).toEqual(before);
+      expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(false);
+      expect(mock.store.has(paths.authorizedProviderSendAuditPath)).toBe(false);
+    });
+
+    test('transaction retries reuse one trusted time, deadline, and complete pair', async () => {
+      const foundation = createMockDb();
+      const ready = await createAuthorizedSendFoundation(foundation);
+      const mock = createMockDb([...foundation.store], { callbackRuns: 4 });
+      const input = { ...ready.input, db: mock.db };
+      Timestamp.now.mockClear();
+
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(input),
+        'send_permitted',
+      );
+
+      expect(mock.callbackRuns).toHaveLength(4);
+      for (const { transaction, writes } of mock.callbackRuns) {
+        expect(transaction.get).toHaveBeenCalledTimes(17);
+        expect(transaction.create).toHaveBeenCalledTimes(2);
+        expect(writes).toHaveLength(2);
+        expect(writes[0].value.prePostRecordedAt).toEqual(Timestamp.fromMillis(nowMillis));
+        expect(writes[0].value.automaticRetryDeadlineAt.toMillis())
+          .toBe(nowMillis + PROVIDER_SEND_RETRY_WINDOW_MILLIS);
+        expect(writes[1].value.occurredAt).toBe(writes[0].value.prePostRecordedAt);
+        expect(writes[1].value.automaticRetryDeadlineAt)
+          .toBe(writes[0].value.automaticRetryDeadlineAt);
+      }
+      const records = mock.callbackRuns.map(({ writes }) => writes[0].value);
+      const audits = mock.callbackRuns.map(({ writes }) => writes[1].value);
+      expect(records.every((value) => JSON.stringify(value) === JSON.stringify(records[0])))
+        .toBe(true);
+      expect(audits.every((value) => JSON.stringify(value) === JSON.stringify(audits[0])))
+        .toBe(true);
+      expect(Timestamp.now).toHaveBeenCalledTimes(2);
+    });
+
+    test('post-transaction lease equality downgrades a committed marker before send', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      const checkedAt = Timestamp.fromMillis(nowMillis);
+      const leaseExpiry = mock.store.get(paths.lifecyclePath).leaseExpiresAt;
+      Timestamp.now
+        .mockImplementationOnce(() => checkedAt)
+        .mockImplementationOnce(() => leaseExpiry);
+
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(input),
+        'reconciliation_required',
+      );
+      expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(true);
+      expect(mock.store.has(paths.authorizedProviderSendAuditPath)).toBe(true);
+    });
+
+    test('post-transaction deadline equality and clock rollback downgrade retries', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      await recordAuthorizedStripeSendEvidence(input);
+      const marker = mock.store.get(paths.authorizedProviderSendPath);
+      const deadline = marker.automaticRetryDeadlineAt;
+      const immediatelyBeforeDeadline = new Timestamp(
+        deadline.seconds,
+        deadline.nanoseconds - 1,
+      );
+      const beforeMarker = new Timestamp(
+        marker.prePostRecordedAt.seconds,
+        marker.prePostRecordedAt.nanoseconds === 0
+          ? 0
+          : marker.prePostRecordedAt.nanoseconds - 1,
+      );
+
+      nowMillis = deadline.toMillis() - 1000;
+      await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: THIRD_LEASE_ID }));
+      const takeoverInput = {
+        ...input,
+        leaseId: THIRD_LEASE_ID,
+        expectedFenceEpoch: 3,
+      };
+      const before = cloneStore(mock.store);
+
+      Timestamp.now
+        .mockImplementationOnce(() => immediatelyBeforeDeadline)
+        .mockImplementationOnce(() => deadline);
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(takeoverInput),
+        'reconciliation_required',
+      );
+
+      Timestamp.now
+        .mockImplementationOnce(() => immediatelyBeforeDeadline)
+        .mockImplementationOnce(() => beforeMarker);
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(takeoverInput),
+        'reconciliation_required',
+      );
+      expect(mock.store).toEqual(before);
+    });
+
+    test('unknown or hostile post-transaction time always downgrades to reconciliation', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      const markerTime = Timestamp.fromMillis(nowMillis);
+
+      Timestamp.now
+        .mockImplementationOnce(() => markerTime)
+        .mockImplementationOnce(() => {
+          throw new Error(HOSTILE_CANARY);
+        });
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(input),
+        'reconciliation_required',
+      );
+      expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(true);
+      expect(mock.store.has(paths.authorizedProviderSendAuditPath)).toBe(true);
+
+      const before = cloneStore(mock.store);
+      Timestamp.now
+        .mockImplementationOnce(() => markerTime)
+        .mockImplementationOnce(() => ({
+          _seconds: markerTime.seconds,
+          _nanoseconds: markerTime.nanoseconds,
+        }));
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(input),
+        'reconciliation_required',
+      );
+
+      const hostileTimestamp = new Proxy(markerTime, {});
+      Timestamp.now
+        .mockImplementationOnce(() => markerTime)
+        .mockImplementationOnce(() => hostileTimestamp);
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(input),
+        'reconciliation_required',
+      );
+      expect(mock.store).toEqual(before);
+    });
+
+    test('permits only strictly before the attempt-2 23-hour deadline at nanosecond precision', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      await recordAuthorizedStripeSendEvidence(input);
+      const marker = mock.store.get(paths.authorizedProviderSendPath);
+      const deadline = marker.automaticRetryDeadlineAt;
+      const immediatelyBeforeDeadline = new Timestamp(
+        deadline.seconds,
+        deadline.nanoseconds - 1,
+      );
+
+      nowMillis = deadline.toMillis() - 1000;
+      await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: THIRD_LEASE_ID }));
+      const takeoverInput = {
+        ...input,
+        leaseId: THIRD_LEASE_ID,
+        expectedFenceEpoch: 3,
+      };
+      const before = cloneStore(mock.store);
+
+      Timestamp.now
+        .mockImplementationOnce(() => immediatelyBeforeDeadline)
+        .mockImplementationOnce(() => immediatelyBeforeDeadline);
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(takeoverInput),
+        'send_permitted',
+      );
+      Timestamp.now.mockImplementationOnce(() => deadline);
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(takeoverInput),
+        'reconciliation_required',
+      );
+      Timestamp.now.mockImplementationOnce(() => new Timestamp(
+        deadline.seconds,
+        deadline.nanoseconds + 1,
+      ));
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence(takeoverInput),
+        'reconciliation_required',
+      );
+      expect(mock.store).toEqual(before);
+    });
+
+    test('lease-expiry equality and terminal lifecycle never create or reveal C4B evidence', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      const ready = cloneStore(mock.store);
+      nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence(input),
+        'lease_stale',
+      );
+      expect(mock.store).toEqual(ready);
+
+      nowMillis = NOW_MILLIS;
+      const terminal = createMockDb();
+      const terminalFoundation = await createAuthorizedSendFoundation(terminal);
+      nowMillis += 1;
+      await completeCommerceCommand(completionInput(terminal.db, {
+        leaseId: OTHER_LEASE_ID,
+        expectedFenceEpoch: 2,
+      }));
+      const terminalBefore = cloneStore(terminal.store);
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence(terminalFoundation.input),
+        'lease_stale',
+      );
+      expect(terminal.store).toEqual(terminalBefore);
+      expect(terminal.store.has(
+        terminalFoundation.paths.authorizedProviderSendPath,
+      )).toBe(false);
+    });
+
+    test('a retry-window timestamp overflow fails before Firestore', async () => {
+      const mock = createMockDb();
+      Timestamp.now.mockImplementationOnce(() => new Timestamp(253402300790, 0));
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence(providerAuthorizationInput(mock.db)),
+        'journal_unavailable',
+      );
+      expect(mock.db.runTransaction).not.toHaveBeenCalled();
+      expect(mock.store.size).toBe(0);
+    });
+
+    test('requires every B1-C4A partner and never repairs a missing foundation', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(foundation);
+      const complete = cloneStore(foundation.store);
+      const requiredPaths = [
+        paths.commandPath,
+        paths.auditPath,
+        paths.lifecyclePath,
+        paths.providerPlanPath,
+        paths.providerPlanAuditPath,
+        paths.providerSendPath,
+        paths.providerSendAuditPath,
+        paths.providerReconciliationPath,
+        paths.providerReconciliationAuditPath,
+        paths.providerAuthorizationPath,
+        paths.providerAuthorizationAuditPath,
+        paths.authorizedProviderPlanPath,
+        paths.authorizedProviderPlanAuditPath,
+        lifecyclePaths(input, 3).lifecycleAuditPath,
+      ];
+
+      for (const path_ of requiredPaths) {
+        const seed = cloneStore(complete);
+        seed.delete(path_);
+        const mock = createMockDb([...seed]);
+        const before = cloneStore(mock.store);
+        await expectSafeError(
+          () => recordAuthorizedStripeSendEvidence({ ...input, db: mock.db }),
+          'journal_record_invalid',
+        );
+        expect(mock.store).toEqual(before);
+        expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(false);
+        expect(mock.store.has(paths.authorizedProviderSendAuditPath)).toBe(false);
+      }
+    });
+
+    test('orphaned, malformed, future, or provenance-detached C4B pairs are never repaired', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(foundation);
+      await recordAuthorizedStripeSendEvidence(input);
+      const complete = cloneStore(foundation.store);
+      const record = complete.get(paths.authorizedProviderSendPath);
+      const audit = complete.get(paths.authorizedProviderSendAuditPath);
+      const variants = [];
+
+      const missingRecord = cloneStore(complete);
+      missingRecord.delete(paths.authorizedProviderSendPath);
+      variants.push(missingRecord);
+      const missingAudit = cloneStore(complete);
+      missingAudit.delete(paths.authorizedProviderSendAuditPath);
+      variants.push(missingAudit);
+      const extraRecord = cloneStore(complete);
+      extraRecord.set(paths.authorizedProviderSendPath, Object.freeze({
+        ...record,
+        extra: HOSTILE_CANARY,
+      }));
+      variants.push(extraRecord);
+      const futureRecord = cloneStore(complete);
+      futureRecord.set(paths.authorizedProviderSendPath, Object.freeze({
+        ...record,
+        providerSendEvidenceSchemaVersion: 3,
+      }));
+      variants.push(futureRecord);
+      const futureAudit = cloneStore(complete);
+      futureAudit.set(paths.authorizedProviderSendAuditPath, Object.freeze({
+        ...audit,
+        providerSendAuditSchemaVersion: 3,
+      }));
+      variants.push(futureAudit);
+      const wrongCommitment = cloneStore(complete);
+      wrongCommitment.set(paths.authorizedProviderSendPath, Object.freeze({
+        ...record,
+        providerPlanCommitment: 'a'.repeat(64),
+      }));
+      wrongCommitment.set(paths.authorizedProviderSendAuditPath, Object.freeze({
+        ...audit,
+        providerPlanCommitment: 'a'.repeat(64),
+      }));
+      variants.push(wrongCommitment);
+      const detached = cloneStore(complete);
+      detached.set(paths.authorizedProviderSendPath, Object.freeze({
+        ...record,
+        providerAttemptAuthorizationCommitment: 'b'.repeat(64),
+      }));
+      detached.set(paths.authorizedProviderSendAuditPath, Object.freeze({
+        ...audit,
+        providerAttemptAuthorizationCommitment: 'b'.repeat(64),
+      }));
+      variants.push(detached);
+      const wrongAttempt = cloneStore(complete);
+      wrongAttempt.set(paths.authorizedProviderSendPath, Object.freeze({
+        ...record,
+        providerAttempt: 1,
+      }));
+      wrongAttempt.set(paths.authorizedProviderSendAuditPath, Object.freeze({
+        ...audit,
+        providerAttempt: 1,
+      }));
+      variants.push(wrongAttempt);
+
+      for (const seed of variants) {
+        const mock = createMockDb([...seed]);
+        const before = cloneStore(mock.store);
+        nowMillis += 1;
+        await expectSafeError(
+          () => recordAuthorizedStripeSendEvidence({ ...input, db: mock.db }),
+          'journal_record_invalid',
+        );
+        expect(mock.store).toEqual(before);
+        expect(mock.callbackRuns.at(-1).transaction.create).not.toHaveBeenCalled();
+      }
+    });
+
+    test('missing, unreadable, mismatched, or future paired times reconcile without mutation', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(foundation);
+      await recordAuthorizedStripeSendEvidence(input);
+      const complete = cloneStore(foundation.store);
+      const record = complete.get(paths.authorizedProviderSendPath);
+      const audit = complete.get(paths.authorizedProviderSendAuditPath);
+      const futureTime = Timestamp.fromMillis(record.prePostRecordedAt.toMillis() + 1000);
+      const futureDeadline = Timestamp.fromMillis(
+        record.automaticRetryDeadlineAt.toMillis() + 1000,
+      );
+      const variants = [
+        (() => {
+          const nextRecord = { ...record };
+          const nextAudit = { ...audit };
+          delete nextRecord.prePostRecordedAt;
+          delete nextAudit.occurredAt;
+          return [Object.freeze(nextRecord), Object.freeze(nextAudit)];
+        })(),
+        [Object.freeze({
+          ...record,
+          automaticRetryDeadlineAt: { _seconds: 1, _nanoseconds: 0 },
+        }), audit],
+        [record, Object.freeze({
+          ...audit,
+          occurredAt: Timestamp.fromMillis(record.prePostRecordedAt.toMillis() + 1),
+        })],
+        [Object.freeze({
+          ...record,
+          prePostRecordedAt: futureTime,
+          automaticRetryDeadlineAt: futureDeadline,
+        }), Object.freeze({
+          ...audit,
+          occurredAt: futureTime,
+          automaticRetryDeadlineAt: futureDeadline,
+        })],
+      ];
+
+      for (const [nextRecord, nextAudit] of variants) {
+        const seed = cloneStore(complete);
+        seed.set(paths.authorizedProviderSendPath, nextRecord);
+        seed.set(paths.authorizedProviderSendAuditPath, nextAudit);
+        const mock = createMockDb([...seed]);
+        const before = cloneStore(mock.store);
+        expectAuthorizedSendResult(
+          await recordAuthorizedStripeSendEvidence({ ...input, db: mock.db }),
+          'reconciliation_required',
+        );
+        expect(mock.store).toEqual(before);
+        expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+      }
+    });
+
+    test('a self-consistent replacement C4A pair cannot reuse surviving C4B evidence', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      await recordAuthorizedStripeSendEvidence(input);
+      const markerBefore = mock.store.get(paths.authorizedProviderSendPath);
+      const markerAuditBefore = mock.store.get(paths.authorizedProviderSendAuditPath);
+      const plan = mock.store.get(paths.authorizedProviderPlanPath);
+      const planAudit = mock.store.get(paths.authorizedProviderPlanAuditPath);
+      const replacedAt = Timestamp.fromMillis(plan.boundAt.toMillis() + 1);
+      mock.store.set(paths.authorizedProviderPlanPath, Object.freeze({
+        ...plan,
+        boundAt: replacedAt,
+      }));
+      mock.store.set(paths.authorizedProviderPlanAuditPath, Object.freeze({
+        ...planAudit,
+        occurredAt: replacedAt,
+      }));
+      const before = cloneStore(mock.store);
+      nowMillis = replacedAt.toMillis() + 1;
+
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence(input),
+        'journal_record_invalid',
+      );
+      expect(mock.store).toEqual(before);
+      expect(mock.store.get(paths.authorizedProviderSendPath)).toBe(markerBefore);
+      expect(mock.store.get(paths.authorizedProviderSendAuditPath)).toBe(markerAuditBefore);
+    });
+
+    test('wrong holder, wrong fence, and rolled-back time cannot create C4B evidence', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(mock);
+      const before = cloneStore(mock.store);
+      for (const change of [
+        { leaseId: THIRD_LEASE_ID },
+        { expectedFenceEpoch: 1 },
+        { expectedFenceEpoch: 3 },
+        { leaseId: THIRD_LEASE_ID, expectedFenceEpoch: 3 },
+      ]) {
+        await expectSafeError(
+          () => recordAuthorizedStripeSendEvidence({ ...input, ...change }),
+          'lease_stale',
+        );
+        expect(mock.store).toEqual(before);
+      }
+      nowMillis = mock.store.get(paths.authorizedProviderPlanPath).boundAt.toMillis() - 1;
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence(input),
+        'lease_stale',
+      );
+      expect(mock.store).toEqual(before);
+      expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(false);
+    });
+
+    test('commit failure is atomic, lost acknowledgement recovers, and forged output fails', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(foundation);
+
+      const commitFailure = createMockDb([...foundation.store], {
+        rejectCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+      });
+      const commitBefore = cloneStore(commitFailure.store);
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence({ ...input, db: commitFailure.db }),
+        'journal_unavailable',
+        [STRIPE_ACCOUNT_ID],
+      );
+      expect(commitFailure.store).toEqual(commitBefore);
+      expect(commitFailure.store.has(paths.authorizedProviderSendPath)).toBe(false);
+      expect(commitFailure.store.has(paths.authorizedProviderSendAuditPath)).toBe(false);
+
+      const lostAcknowledgement = createMockDb([...foundation.store], {
+        rejectAfterCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+      });
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence({ ...input, db: lostAcknowledgement.db }),
+        'journal_unavailable',
+        [STRIPE_ACCOUNT_ID],
+      );
+      expect(lostAcknowledgement.store.has(paths.authorizedProviderSendPath)).toBe(true);
+      expect(lostAcknowledgement.store.has(paths.authorizedProviderSendAuditPath)).toBe(true);
+      nowMillis += 1;
+      expectAuthorizedSendResult(
+        await recordAuthorizedStripeSendEvidence({
+          ...input,
+          db: lostAcknowledgement.db,
+        }),
+        'send_permitted',
+      );
+      expect(lostAcknowledgement.callbackRuns.at(-1).writes).toEqual([]);
+
+      const forged = createMockDb([...foundation.store], {
+        returnedValue: Object.freeze({
+          outcome: HOSTILE_CANARY,
+          shouldSend: true,
+        }),
+      });
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence({ ...input, db: forged.db }),
+        'journal_unavailable',
+      );
+      expect(forged.store.has(paths.authorizedProviderSendPath)).toBe(true);
+      expect(forged.store.has(paths.authorizedProviderSendAuditPath)).toBe(true);
+    });
+
+    test('rejects caller-selected send, key, time, result, and shape controls before Firestore', async () => {
+      const mock = createMockDb();
+      const base = providerAuthorizationInput(mock.db);
+      const missing = { ...base };
+      delete missing.transitionAuthorization;
+      const inherited = Object.assign(Object.create({ inherited: true }), base);
+      const badInputs = [
+        { ...base, providerAttempt: 2 },
+        { ...base, stripeIdempotencyKey: HOSTILE_CANARY },
+        { ...base, prePostRecordedAt: Timestamp.fromMillis(NOW_MILLIS) },
+        { ...base, automaticRetryDeadlineAt: Timestamp.fromMillis(NOW_MILLIS) },
+        { ...base, retryWindowSeconds: 23 * 60 * 60 },
+        { ...base, providerPlanCommitment: 'a'.repeat(64) },
+        { ...base, providerPlanCommitmentSchemaVersion: 2 },
+        { ...base, providerSendEvidenceSchemaVersion: 2 },
+        { ...base, shouldSend: true },
+        { ...base, executeProvider: true },
+        { ...base, providerOutcome: 'timeout' },
+        { ...base, providerResponse: { id: HOSTILE_CANARY } },
+        { ...base, providerHttpStatus: 500 },
+        missing,
+        inherited,
+        new Proxy(base, {}),
+      ];
+
+      for (const badInput of badInputs) {
+        await expectSafeError(
+          () => recordAuthorizedStripeSendEvidence(badInput),
+          'invalid_command_input',
+        );
+      }
+      expect(mock.db.runTransaction).not.toHaveBeenCalled();
+      expect(mock.store.size).toBe(0);
+    });
+
+    test('stored C4B accessors and proxies fail without invoking traps or mutating evidence', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createAuthorizedSendFoundation(foundation);
+      await recordAuthorizedStripeSendEvidence(input);
+
+      let getterCalls = 0;
+      const accessor = { ...foundation.store.get(paths.authorizedProviderSendPath) };
+      Object.defineProperty(accessor, 'provider', {
+        enumerable: true,
+        get() {
+          getterCalls += 1;
+          return HOSTILE_CANARY;
+        },
+      });
+      let mock = createMockDb([...foundation.store]);
+      mock.store.set(paths.authorizedProviderSendPath, accessor);
+      const accessorBefore = cloneStore(mock.store);
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence({ ...input, db: mock.db }),
+        'journal_record_invalid',
+      );
+      expect(getterCalls).toBe(0);
+      expect(mock.store).toEqual(accessorBefore);
+
+      let trapCalls = 0;
+      const proxy = new Proxy(
+        foundation.store.get(paths.authorizedProviderSendAuditPath),
+        {
+          ownKeys() {
+            trapCalls += 1;
+            return [];
+          },
+        },
+      );
+      mock = createMockDb([...foundation.store]);
+      mock.store.set(paths.authorizedProviderSendAuditPath, proxy);
+      const proxyBefore = cloneStore(mock.store);
+      await expectSafeError(
+        () => recordAuthorizedStripeSendEvidence({ ...input, db: mock.db }),
+        'journal_record_invalid',
+      );
+      expect(trapCalls).toBe(0);
+      expect(mock.store).toEqual(proxyBefore);
+    });
+  });
 });
 
 describe('exact existing identity and partner validation', () => {
@@ -5274,6 +6174,7 @@ describe('closed source and export boundary', () => {
       'providerAttemptAuthorizationSchemaVersion',
       'providerReconciliationEvidenceSchemaVersion',
       'providerSendEvidenceSchemaVersion',
+      'recordAuthorizedStripeSendEvidence',
       'recordInitialStripeReconciliationEvidence',
       'recordInitialStripeSendEvidence',
       'registerCommerceCommand',
@@ -5326,8 +6227,9 @@ describe('closed source and export boundary', () => {
       'shouldExecute',
     ]) expect(source).not.toContain(forbidden);
     expect(source).toContain('maxAttempts: 10');
-    expect((source.match(/Timestamp\.now\(\)/g) || [])).toHaveLength(1);
-    expect(source.indexOf('Timestamp.now()')).toBeLessThan(source.indexOf('.runTransaction('));
+    expect((source.match(/Timestamp\.now\(\)/g) || [])).toHaveLength(2);
+    expect(source.lastIndexOf('Timestamp.now()'))
+      .toBeLessThan(source.indexOf('.runTransaction('));
   });
 
   test('is not imported by the Functions index or any runtime module', () => {

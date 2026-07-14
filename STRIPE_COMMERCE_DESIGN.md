@@ -237,7 +237,7 @@ Launch with quantity `1` unless cart and multi-line inventory semantics are expl
 }
 ```
 
-Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof, C3C must separately authorize/version a later attempt, C4A must bind its immutable plan, and future C4B must record separate pre-send evidence before returning a new Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
+Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof, C3C must separately authorize/version a later attempt, C4A must bind its immutable plan, and C4B [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238) must record separate pre-send evidence before returning a new Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
 
 ### Pure command identity and provider-key contract (PAY-002B1)
 
@@ -414,7 +414,7 @@ flowchart LR
     G -- "No" --> Stop["Fail closed; write nothing"]
     G -- "Yes" --> P["Create immutable attempt-2 plan + audit"]
     P --> R["requires_pre_send_evidence"]
-    R -. "No send marker or Stripe call" .-> C4B["Future PAY-002B2C4B"]
+    R -. "No send marker or Stripe call" .-> C4B["C4B attempt-2 pre-send evidence"]
 ```
 
 Text alternative: the exact saved C3C authorization and current active lease may bind one immutable attempt-2 Checkout Session plan; a separate C4B pre-send boundary is still required before that Session request.
@@ -425,9 +425,46 @@ The transaction revalidates B1 through C3C before reading both attempt-2 partner
 
 The fixed results are `provider_plan_bound` or `provider_plan_existing`, each with `requires_pre_send_evidence`. They expose no attempt, path, key, hash, commitment, fence, timestamp, evidence, account, parameter, or send/execute flag. The stored pair contains no raw account, parameters, key, identity, business/provider object ID, money, URL, response, secret, or personal data.
 
-#232 adds no attempt-2 send evidence, Stripe/network call, business write, response replay, endpoint/index import, provider configuration, migration, production-data action, deployment, website change, live behavior, or officer task. PAY-002B2C4B must separately record and freshness-check pre-send evidence before any attempt-2 Checkout Session request can be considered. PAY-002C/D and PAY-003B still own trusted business-state and runtime adoption.
+#232 adds no attempt-2 send evidence, Stripe/network call, business write, response replay, endpoint/index import, provider configuration, migration, production-data action, deployment, website change, live behavior, or officer task. PAY-002B2C4B [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238) owns the separate pre-send record and freshness check described below. PAY-002C/D and PAY-003B still own trusted business-state and runtime adoption.
 
-This version-1 C4A boundary is specific to `checkout_session_create` at `/v1/checkout/sessions`. A future C4B can complete only that Checkout Session path. Stripe Product or Price creation, Session expiry, refunds, and other provider operations each need their own reviewed operation mapping, immutable plan, pre-send, result, and reconciliation boundaries; C3C or this C4A must not be reused as general provider-call permission.
+This version-1 C4A boundary is specific to `checkout_session_create` at `/v1/checkout/sessions`. C4B can complete only that Checkout Session pre-send path. Stripe Product or Price creation, Session expiry, refunds, and other provider operations each need their own reviewed operation mapping, immutable plan, pre-send, result, and reconciliation boundaries; C3C, C4A, or C4B must not be reused as general provider-call permission.
+
+### Attempt-2 pre-POST send-evidence target (PAY-002B2C4B)
+
+PAY-002B2C4B source/tests are tracked in live [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238). The unused `recordAuthorizedStripeSendEvidence` API revalidates the complete B1-through-C4A chain and the exact current active lease. It may create only this atomic pair, or neither record:
+
+```text
+checkoutRequests/{commandKeyHash}/providerAttempts/0000000002/sendEvidence/first
+auditEvents/commerce_provider_send_{commandKeyHash}_0000000002
+```
+
+```mermaid
+flowchart TD
+    P["Exact C4A attempt-2 plan + audit"] --> V{"Complete chain and current lease valid?"}
+    L["Current active holder and fence"] --> V
+    V -- "No" --> Stop["Stop; write nothing"]
+    V -- "Yes; pair missing" --> W["Create pre-send marker + audit atomically"]
+    V -- "Yes; exact pair exists" --> Read["Read only"]
+    W --> Clock["Second trusted-time check"]
+    Read --> Clock
+    Clock -- "Before lease expiry and 23-hour deadline" --> Permit["send_permitted / pre_send_recorded"]
+    Clock -- "Equality, later time, or rollback" --> Reconcile["reconciliation_required"]
+    Permit -. "No Stripe call in C4B" .-> Runtime["Future trusted runtime beside POST"]
+```
+
+Text alternative: the exact attempt-2 Checkout Session plan and current active lease may create one immutable pre-send pair; a second clock check must still be before both captured limits, and this source makes no Stripe request.
+
+C4B does not change the existing version-1 complete-plan commitment. That byte contract protects attempt-1 C2/C3 evidence and does not include the two C4A authorization-provenance fields. The attempt-2 send record and audit use their own schema version 2 and a separate `providerPlanCommitmentSchemaVersion: 2` commitment. It command-binds every authorized C4A plan field, its nanosecond binding time, `providerAttemptAuthorizationSchemaVersion`, and `providerAttemptAuthorizationCommitment`. Both C4B partners carry the version-2 plan commitment and the validated authorization provenance. A coherent plan replacement therefore cannot detach the pre-send pair from the authorization that allowed attempt `2`. The audit event is `provider_pre_send_recorded`, never “sent” or “completed.”
+
+The marker time is captured once before the transaction and reused if Firestore reruns the callback. Its immutable automatic-retry deadline is exactly 23 hours later. The transaction validates every B1-through-C4A partner, both C4B partners, the exact holder/fence, `leaseAcquiredAt <= marker time < leaseExpiresAt`, and `C4A boundAt <= marker time` before a write. An exact existing pair is read-only. A later valid lease may observe it only inside the original deadline; retry never extends that deadline.
+
+After the transaction, a fresh trusted time is captured without re-reading lifecycle state. `send_permitted` is returned only when that time has not rolled back and remains strictly before both the lease expiry captured by the transaction and the persisted deadline. Lease/deadline equality, later time, rollback, or missing/unreadable paired time returns the fixed `reconciliation_required` classification without repair. A stale holder/fence fails as `lease_stale`; changed valid input conflicts; orphaned, extra-field, future-version, malformed, detached-provenance, or commitment-mismatched partners fail closed. Commit failure creates neither partner, and a retry after a lost acknowledgement may only observe the exact pair.
+
+The fixed permitted output contains only schema versions, `send_permitted`, and `pre_send_recorded`. The fixed ambiguous output contains only schema versions, `reconciliation_required`, and `provider_outcome_unknown`. These are retry-safety classifications, not caller authorization, current business-state proof, Stripe-account control, proof that a request began, or a provider result. The pair stores no raw account, parameters, key, caller, UUID, transition value, provider/business/member ID, money, URL, response, secret, or personal data.
+
+#238 is limited to `checkout_session_create` with `POST /v1/checkout/sessions`. It cannot create attempt `3`, call Stripe/network code, write a registration/order/hold, replay a result, or enter an endpoint/Functions index. Attempt-2 result and reconciliation work remains separate. Product/Price creation, Session expiry, refunds, and privileged provider operations still need their own operation-specific plan, pre-send, result, and reconciliation boundaries.
+
+This is source and synthetic-test design evidence only. Source changed, tests passed, code merged, Firebase deployed, Stripe configured, production data changed, website published, `runmprc.com` verified, and live behavior verified are separate states. #238 does not by itself prove any deployment, provider setting, production behavior, or officer action.
 
 ## 7. Persistence-first checkout saga
 
@@ -447,7 +484,7 @@ External Stripe calls cannot be part of a Firestore transaction. Use this sequen
 6. Store Session ID, URL, expiry, and attempt state.
 7. Return the URL.
 8. If Stripe definitively rejects creation, run a compensating transaction that marks the attempt failed and releases the hold once.
-9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and future C4B must separately record fresh pre-send evidence before completing step 6.
+9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and C4B/#238 must separately record fresh pre-send evidence before completing step 6.
 
 Create the local business record before calling Stripe. That lets a very fast webhook resolve metadata directly and eliminates the current record-not-found race.
 
