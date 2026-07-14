@@ -15,7 +15,7 @@ function Shop() {
     if (!isReady || !services) return;
     listActiveProducts(services.firebaseResources.firestore)
       .then((ps) => { setProducts(ps); setLoading(false); })
-      .catch((err) => { setError(err.message); setLoading(false); });
+      .catch(() => { setError('We could not load the shop right now. Please try again later.'); setLoading(false); });
   }, [services, isReady]);
 
   return (
@@ -29,7 +29,7 @@ function Shop() {
       <div className="container mx-auto p-4 max-w-5xl">
         <h1 className="text-2xl font-bold mb-4">MPRC Shop</h1>
         {loading && <p className="text-gray-500">Loading...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {error && <p role="alert" aria-live="assertive" aria-atomic="true" className="text-red-500">{error}</p>}
         {!loading && !error && products.length === 0 && (
           <p className="text-gray-600">No items available right now. Check back soon.</p>
         )}
