@@ -473,6 +473,8 @@ Capture the commit, test IDs, timestamps, screenshots without secrets/PII, and t
 
 ## 12. Refund procedure
 
+**Status: NOT AVAILABLE YET.** PAY-005A1 [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) adds one source safeguard: an invalid partial amount stops instead of being omitted and becoming a full refund. It accepts only a positive whole number of cents below the stored original total, and only the explicit full-refund action may omit an amount. An unconfirmed provider result says do not retry and escalate because Stripe may already have accepted it. This source guard is not deployed or proven live and does not supply idempotency, remaining-balance/concurrency protection, verified final totals, finance capabilities, or approved policy. Do not use the steps below in production.
+
 1. Authenticate with finance capability and satisfy recent-auth/MFA policy.
 2. Locate the local business record and corresponding Stripe PaymentIntent/Charge.
 3. Confirm identity using the approved support procedure without asking for card data.

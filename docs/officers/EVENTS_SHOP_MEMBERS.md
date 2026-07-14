@@ -241,6 +241,51 @@ Officer steps after every prerequisite has proof:
 
 **Escalation:** membership lead plus privacy/platform owner; use the private incident path under #112 if exposure is suspected.
 
+## Partial-refund amount guard — SOURCE ONLY, NOT LIVE
+
+**Purpose:** make an invalid partial-refund amount stop. It must never silently become a full refund.
+
+**Approver:** treasurer plus platform/security owner.
+
+**Prerequisites:** the pull request for issue [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200) is merged, a protected staging Firebase project, both exact refund Functions are deployed and read back there, Stripe test mode, made-up order and race records, and an approved refund policy. The broader safe refund procedure is still **NOT AVAILABLE YET**.
+
+```mermaid
+flowchart TD
+    Ask["Request a partial refund"] --> Stored{"Stored original is valid whole cents?"}
+    Stored -- "No" --> Stop["Stop before Stripe and before a record change"]
+    Stored -- "Yes" --> Check{"Requested amount is positive whole cents and lower?"}
+    Check -- "No" --> Stop["Stop before Stripe and before a record change"]
+    Check -- "Yes" --> Partial["Send the exact partial amount"]
+    Partial --> Result{"Did Stripe return a refund record?"}
+    Result -- "No; outcome is unknown" --> Unknown["Keep local record unchanged\nDo not retry; escalate"]
+    Result -- "Yes" --> Returned["Use returned result\nLater reconciliation still required"]
+    Full["Explicit full-refund request"] --> Omit["Only path allowed to omit the amount"]
+    Omit --> Result
+```
+
+In words: a missing or malformed stored original, or an invalid, equal, or over-limit partial amount, stops before Stripe or a record change; only a deliberate full-refund request can omit the amount. If the server cannot confirm whether Stripe accepted the request, the local record stays unchanged, the officer must not retry, and later reconciliation is required.
+
+Officer review steps after every prerequisite has proof:
+
+1. Keep all live website refunds unavailable.
+2. Ask the platform specialist to show the fixed synthetic test report for both race and shop refunds.
+3. Confirm a missing, non-number, non-positive, fraction, non-finite, or too-large stored original stops before any Stripe refund call or record change.
+4. Confirm the report rejects missing, non-number, fraction, zero, negative, equal, over-limit, and non-finite partial amounts.
+5. Confirm every rejected caller case also shows no Stripe refund call and no order or registration change.
+6. Confirm the smallest valid amount and one cent below the stored original send the exact test-mode amount and stay partial.
+7. Confirm an unconfirmed Stripe test result leaves the made-up record unchanged and says: do not retry; escalate to the treasurer and platform owner.
+8. Stop after this review. Do not approve a production refund until the remaining PAY-005 safety work and provider/deployment proof are complete.
+
+**Expected result:** a malformed stored original or rejected partial amount causes one fixed error and no provider or record change. An admitted partial request always carries its exact amount. Only the explicit full action can omit it. If the provider result cannot be confirmed, the page says not to retry and to escalate; it does not claim failure.
+
+**Stop conditions:** any real order, registration, member, card, Stripe payment record, refund, production Firebase project, Stripe live mode, missing deployment/readback, request to edit Firestore by hand, or retry after an unconfirmed result.
+
+**Success proof:** exact #200 pull request and merge commit; red proof showing the old unsafe cases; green focused and full tests; readback of both Functions in staging; made-up Stripe test-mode results; and a dated treasurer/platform review. A green source workflow alone is not deployment or provider proof.
+
+**Undo:** use one reviewed two-Function revert or safe roll-forward through the protected backend release. Never undo by issuing another refund or changing a payment record.
+
+**Escalation:** treasurer plus platform/security owner. Use the private incident path if any unexpected refund or real record was involved.
+
 ## Admin screens — NOT AVAILABLE YET
 
 Admin event and product editors exist in source, but their live permissions, backup, preview, and rollback behavior have not been approved. Saving can write directly to production Firestore. Officers must not use these screens as a continuity procedure yet.

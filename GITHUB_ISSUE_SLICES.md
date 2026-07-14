@@ -95,6 +95,7 @@ An agent-ready child has one observable outcome, one trust boundary, explicit de
 
 | ID | Status/dependency | Bounded deliverable | Close evidence |
 | --- | --- | --- | --- |
+| PAY-005A1 | tracked by [#200](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/200); immediate containment only | Reject malformed/equal/over partial amounts in both existing admin Functions before Stripe/write side effects; every admitted partial request carries the exact integer amount and only explicit full refund omits it. | Red/green dual-endpoint matrices for caller/stored values, valid boundaries, provider failure, exact payload/classification; source/merge/deploy/provider/live states separated. |
 | PAY-005A | proposed; PAY-001D, PAY-002A1, PAY-002B2C3C, PAY-003B | Add idempotent refund commands, remaining-balance/concurrency validation, stable Stripe keys, and event-finalized totals. | Same/conflicting/concurrent partial/full/timeout and repeated `partially_refunded` status with increasing confirmed total tests. |
 | PAY-005B | proposed; PAY-003B | Model per-dispute lifecycle for orders and registrations with finance alert references. | Duplicate/reordered warning lifecycle, inquiry escalation, created/updated/lost/won, rare lost-to-won late win, and `prevented` only under an explicitly validated upgraded webhook Event version. |
 | PAY-005C | proposed; A/B | Build read-only scheduled/operator reconciliation and mismatch/quarantine report. | Orphan/mismatch/refund/event/counter synthetic report. |

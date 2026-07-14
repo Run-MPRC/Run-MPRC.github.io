@@ -13,6 +13,10 @@ const {
   COMMERCE_OPERATIONS,
   requireCommerceAdmission,
 } = require('./commerceControl');
+const {
+  REFUND_VALIDATION_REASONS,
+  validatePartialRefundAmount,
+} = require('./refundValidation');
 
 const ACTIONS = new Set([
   'mark_fulfilled',
@@ -127,20 +131,40 @@ exports.adminOrderAction = functions
           'No Stripe payment intent on this order',
         );
       }
-      const amountCents = action === 'refund_partial' ? Number(payload.amountCents) : null;
-      if (action === 'refund_partial' && (!amountCents || amountCents <= 0)) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          'amountCents required for partial refund',
-        );
+      let amountCents = null;
+      if (action === 'refund_partial') {
+        const validation = validatePartialRefundAmount({
+          amountCents: payload?.amountCents,
+          originalAmountCents: order.amountCents,
+        });
+        if (!validation.ok) {
+          const invalidStoredTotal = (
+            validation.reason === REFUND_VALIDATION_REASONS.INVALID_STORED_TOTAL
+          );
+          throw new functions.https.HttpsError(
+            invalidStoredTotal ? 'failed-precondition' : 'invalid-argument',
+            invalidStoredTotal
+              ? 'Stored refund total is unavailable'
+              : 'Invalid partial refund amount',
+          );
+        }
+        amountCents = validation.amountCents;
       }
       const stripe = getStripe();
       const refundPayload = { payment_intent: order.stripePaymentIntentId };
-      if (amountCents && amountCents < order.amountCents) {
+      if (action === 'refund_partial') {
         refundPayload.amount = amountCents;
       }
-      const stripeRefund = await stripe.refunds.create(refundPayload);
-      const isFull = !refundPayload.amount;
+      let stripeRefund;
+      try {
+        stripeRefund = await stripe.refunds.create(refundPayload);
+      } catch {
+        throw new functions.https.HttpsError(
+          'internal',
+          'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+        );
+      }
+      const isFull = action === 'refund_full';
       await ref.update({
         status: isFull ? 'refunded' : 'partially_refunded',
         refundedAt: Timestamp.now(),
@@ -151,7 +175,7 @@ exports.adminOrderAction = functions
             actorUid: actor.uid,
             actorEmail: actor.email,
             action: isFull ? 'admin.refund_full' : 'admin.refund_partial',
-            note: `refund=${stripeRefund.id} amount=${refundPayload.amount || order.amountCents}`,
+            note: `refund=${stripeRefund.id} amount=${isFull ? order.amountCents : amountCents}`,
           }),
         ),
       });
