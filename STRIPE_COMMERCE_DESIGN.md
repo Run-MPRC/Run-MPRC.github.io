@@ -328,7 +328,31 @@ The final row includes timeout, connection loss, conflict, external-dependency f
 
 All three results are frozen and contain only the policy version, classification, and state. Invalid or hostile input produces one fixed non-identifying error. The module has no Firebase, Stripe, network, logger, environment, clock, random, filesystem, persistence, or runtime/index edge. It cannot return send/execute/advance permission, create an attempt-2 plan/key/document, replay a response, or apply a business transition.
 
-This child does not complete PAY-002B2C3. C3B must append immutable paired reconciliation evidence only after a trusted verifier can produce it. C3C must require that persisted proof, an allowed business transition, and a fresh lease before it can authorize and version a later provider attempt. Runtime adoption, Firebase/Stripe deployment, provider configuration, production data, and live behavior remain unchanged.
+### Immutable candidate-evidence target (PAY-002B2C3B)
+
+PAY-002B2C3B source/tests are tracked in live [#206](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/206). The unused journal accepts the same immutable Stripe plan-identity fields as C1 plus one exact C3A evidence object. It snapshots and classifies that object once before Firestore. It never accepts a caller-selected lease, fence, attempt, key, time, path, authorization, provider result, or action flag.
+
+```mermaid
+flowchart LR
+    C1["Exact attempt-1 plan"] --> C2["Complete pre-send record + audit"]
+    C2 --> Cutoff{"23-hour cutoff reached?"}
+    Lease["Current validated lease"] --> Expired{"Lease expired?"}
+    Evidence["Exact C3A closed evidence"] --> Candidate{"Candidate?"}
+    Cutoff --> All{"All three conditions true?"}
+    Expired --> All
+    Candidate --> All
+    All --> Pair["Create immutable evidence + audit pair"]
+    Pair --> Stop["Persisted; separate authorization still required"]
+    Stop -. "No attempt 2 or Stripe call" .-> C3C["Future C3C fresh-lease decision"]
+```
+
+Text alternative: C3B creates one immutable evidence/audit pair only when the exact C1 plan and complete C2 pair validate, the stored 23-hour cutoff is reached, the current validated lease is expired, and C3A returns the exact candidate classification; the result still cannot send or advance.
+
+The record path is `checkoutRequests/{commandKeyHash}/providerAttempts/0000000001/reconciliationEvidence/0000000001`. Its deterministic partner is `auditEvents/commerce_provider_reconciliation_{commandKeyHash}_0000000001_0000000001`. The record stores only schema versions, closed evidence enums, command-bound C1/C2 commitments, observed fence/lease expiry, and trusted record time. The audit repeats the non-identifying binding and carries a complete-record commitment. It contains no raw account, key, parameters, provider/business/member ID, amount, URL, free text, provider response, or attempt `2`.
+
+C3B reads and validates B1, B2, C1, and both C2 partners before either create. It may create only when the trusted time is at or after both the persisted C2 deadline and the current lease expiry. Before either gate, a candidate is returned unchanged with no write. At equality, persistence is safe because C2 already denies automatic POST and the lease is no longer active. An exact persisted retry is read-only. Any valid evidence change conflicts; orphan, malformed, future, or foundation-mismatched partners fail closed and are never repaired. Transaction retry callbacks reuse the same snapshot and time, and an acknowledged-lost commit is recovered through an exact read-only retry.
+
+The fixed C3B result is `reconciliation_candidate_persisted` with `requires_separate_authorization`. It is durable candidate evidence, not verified provider retrieval, caller authorization, execution permission, response replay, a business transition, or a later attempt. C3C must require this persisted proof, an allowed business transition, and a fresh lease before it can authorize and version any later provider attempt. No endpoint or Functions index imports the journal. #206 makes no Stripe/network call and performs no Firebase/Stripe deployment, provider configuration, production data action, website publication, or live behavior change.
 
 ## 7. Persistence-first checkout saga
 

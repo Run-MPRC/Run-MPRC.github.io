@@ -15,6 +15,7 @@ const {
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
+  recordInitialStripeReconciliationEvidence,
   recordInitialStripeSendEvidence,
   registerCommerceCommand,
 } = require('./commerceCommandJournal');
@@ -74,6 +75,13 @@ const COMMAND_IDS = Object.freeze({
   providerSendReplacement: '76ace024-7913-4bdf-8ace-68ace0247913',
   providerSendCommitFailure: '74ace024-7913-4bdf-8ace-68ace0247913',
   providerSendOrphan: '75ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationConcurrent: '81ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationConflict: '82ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationLostResponse: '83ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationTakeover: '84ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationCommitFailure: '85ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationOrphan: '86ace024-7913-4bdf-8ace-68ace0247913',
+  providerReconciliationMalformedSend: '87ace024-7913-4bdf-8ace-68ace0247913',
 });
 const BASE_NOW_MILLIS = 1800000000123;
 const LEASE_DURATION_MILLIS = 60000;
@@ -170,6 +178,63 @@ function providerPlanArgs(
     providerParameters: parameters,
     ...overrides,
   };
+}
+
+function reconciliationArgs(providerArgs, reconciliationEvidence) {
+  return {
+    db: providerArgs.db,
+    environment: providerArgs.environment,
+    callerScope: providerArgs.callerScope,
+    commandId: providerArgs.commandId,
+    commandType: providerArgs.commandType,
+    endpointSchemaVersion: providerArgs.endpointSchemaVersion,
+    payload: providerArgs.payload,
+    stripeAccountId: providerArgs.stripeAccountId,
+    stripeMode: providerArgs.stripeMode,
+    stripeApiVersion: providerArgs.stripeApiVersion,
+    endpointPath: providerArgs.endpointPath,
+    providerOperation: providerArgs.providerOperation,
+    providerParameters: providerArgs.providerParameters,
+    reconciliationEvidence,
+  };
+}
+
+function dispatchNeverBeganCandidate() {
+  return Object.freeze({
+    reconciliationPolicySchemaVersion: 1,
+    provider: 'stripe',
+    providerAttempt: 1,
+    planBinding: 'exact',
+    evidenceSource: 'trusted_dispatch_history',
+    evidenceCompleteness: 'complete',
+    dispatchEvidence: 'execution_never_began',
+    responseEvidence: 'none',
+    idempotencyEvidence: 'not_relied_upon',
+    providerObjectEvidence: 'none',
+    paymentEvidence: 'none',
+    eventEvidence: 'none',
+    searchEvidence: 'none',
+    businessTransitionEvidence: 'same_operation_eligible',
+  });
+}
+
+function expiredAttemptCandidate() {
+  return Object.freeze({
+    reconciliationPolicySchemaVersion: 1,
+    provider: 'stripe',
+    providerAttempt: 1,
+    planBinding: 'exact',
+    evidenceSource: 'verified_provider_and_event',
+    evidenceCompleteness: 'complete',
+    dispatchEvidence: 'execution_started',
+    responseEvidence: 'accepted',
+    idempotencyEvidence: 'not_relied_upon',
+    providerObjectEvidence: 'exact_expired',
+    paymentEvidence: 'unpaid',
+    eventEvidence: 'verified_expiry',
+    searchEvidence: 'exact_lookup_complete',
+    businessTransitionEvidence: 'new_generation_eligible',
+  });
 }
 
 function assertExactSafeEmulator() {
@@ -289,6 +354,10 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     const providerSendRef = trackRef(providerPlanRef.collection('sendEvidence').doc('first'));
     const providerSendAuditRef = trackRef(db.collection('auditEvents')
       .doc(`commerce_provider_send_${commandKeyHash}_0000000001`));
+    const providerReconciliationRef = trackRef(providerPlanRef
+      .collection('reconciliationEvidence').doc('0000000001'));
+    const providerReconciliationAuditRef = trackRef(db.collection('auditEvents')
+      .doc(`commerce_provider_reconciliation_${commandKeyHash}_0000000001_0000000001`));
     const auditRef = auditRefFor(commandKeyHash, 1);
     // Track every revision this focused suite can create before a concurrent
     // assertion runs, so even an early failure cannot leak synthetic audits.
@@ -302,6 +371,8 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       providerAuditRef,
       providerSendRef,
       providerSendAuditRef,
+      providerReconciliationRef,
+      providerReconciliationAuditRef,
     };
   }
 
@@ -347,6 +418,17 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     const [evidenceSnapshot, auditSnapshot] = await Promise.all([
       pair.providerSendRef.get(),
       pair.providerSendAuditRef.get(),
+    ]);
+    return {
+      evidence: snapshotEvidence(evidenceSnapshot),
+      audit: snapshotEvidence(auditSnapshot),
+    };
+  }
+
+  async function readProviderReconciliationEvidence(pair) {
+    const [evidenceSnapshot, auditSnapshot] = await Promise.all([
+      pair.providerReconciliationRef.get(),
+      pair.providerReconciliationAuditRef.get(),
     ]);
     return {
       evidence: snapshotEvidence(evidenceSnapshot),
@@ -437,6 +519,26 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     expect(Object.isFrozen(result)).toBe(true);
   }
 
+  function expectProviderReconciliationResult(result) {
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      providerReconciliationEvidenceSchemaVersion: 1,
+      reconciliationPolicySchemaVersion: 1,
+      outcome: 'reconciliation_candidate_persisted',
+      state: 'requires_separate_authorization',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  }
+
+  function expectNewAttemptCandidate(result) {
+    expect(result).toEqual({
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  }
+
   async function setupLeasedCommand(commandId, reference, leaseIndex) {
     const commandPayload = payload(reference);
     const leaseId = deterministicLeaseId(leaseIndex);
@@ -469,6 +571,21 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       'provider_plan_bound',
     );
     return { ...setup, args };
+  }
+
+  async function setupProviderReconciliationFoundation(
+    commandId,
+    reference,
+    leaseIndex,
+  ) {
+    const setup = await setupBoundProviderPlan(commandId, reference, leaseIndex);
+    expectProviderSendResult(
+      await recordInitialStripeSendEvidence(setup.args),
+      'send_permitted',
+    );
+    const send = await readProviderSendEvidence(setup.pair);
+    const automaticRetryDeadlineAt = send.evidence.data.automaticRetryDeadlineAt;
+    return { ...setup, send, automaticRetryDeadlineAt };
   }
 
   async function cleanupTrackedRefs() {
@@ -2252,5 +2369,359 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       'reconciliation_required',
     );
     expect(await readProviderSendEvidence(setup.pair)).toEqual(unknownBefore);
+  });
+
+  test('cutoff blocks early persistence and 24 identical calls create one immutable pair', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationConcurrent,
+      'provider-reconciliation-concurrent',
+      330,
+    );
+    const args = reconciliationArgs(setup.args, dispatchNeverBeganCandidate());
+    const deadlineMillis = setup.automaticRetryDeadlineAt.toMillis();
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+    const providerBefore = await readProviderEvidence(setup.pair);
+    const sendBefore = await readProviderSendEvidence(setup.pair);
+
+    setTrustedNow(deadlineMillis - 1);
+    expectNewAttemptCandidate(
+      await recordInitialStripeReconciliationEvidence(args),
+    );
+    expect(await readProviderReconciliationEvidence(setup.pair)).toEqual({
+      evidence: {
+        exists: false,
+        data: undefined,
+        createTime: undefined,
+        updateTime: undefined,
+      },
+      audit: {
+        exists: false,
+        data: undefined,
+        createTime: undefined,
+        updateTime: undefined,
+      },
+    });
+
+    setTrustedNow(deadlineMillis);
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENT_CALLS }, () => retryWholeOperationAfterUnavailable(
+        () => recordInitialStripeReconciliationEvidence(args),
+        retryEvidence,
+      )),
+    );
+    for (const result of results) expectProviderReconciliationResult(result);
+
+    const reconciliation = await readProviderReconciliationEvidence(setup.pair);
+    expect(setup.pair.providerReconciliationRef.path).toBe(
+      `checkoutRequests/${setup.pair.commandKeyHash}`
+      + '/providerAttempts/0000000001/reconciliationEvidence/0000000001',
+    );
+    expect(setup.pair.providerReconciliationAuditRef.path).toBe(
+      `auditEvents/commerce_provider_reconciliation_${setup.pair.commandKeyHash}`
+      + '_0000000001_0000000001',
+    );
+    expect(reconciliation.evidence.exists).toBe(true);
+    expect(reconciliation.audit.exists).toBe(true);
+    expect(Object.keys(reconciliation.evidence.data).sort()).toEqual([
+      'businessTransitionEvidence',
+      'classification',
+      'commandIdentityVersion',
+      'commandKeyHash',
+      'dispatchEvidence',
+      'eventEvidence',
+      'evidenceCompleteness',
+      'evidenceRevision',
+      'evidenceSource',
+      'idempotencyEvidence',
+      'observedFenceEpoch',
+      'observedLeaseExpiresAt',
+      'paymentEvidence',
+      'planBinding',
+      'provider',
+      'providerAttempt',
+      'providerObjectEvidence',
+      'providerPlanCommitment',
+      'providerPlanSchemaVersion',
+      'providerReconciliationEvidenceSchemaVersion',
+      'providerSendEvidenceCommitment',
+      'providerSendEvidenceSchemaVersion',
+      'reconciliationPolicySchemaVersion',
+      'recordedAt',
+      'responseEvidence',
+      'searchEvidence',
+      'state',
+    ].sort());
+    expect(reconciliation.evidence.data).toMatchObject({
+      providerReconciliationEvidenceSchemaVersion: 1,
+      reconciliationPolicySchemaVersion: 1,
+      providerPlanSchemaVersion: 1,
+      providerSendEvidenceSchemaVersion: 1,
+      commandIdentityVersion: 1,
+      commandKeyHash: setup.pair.commandKeyHash,
+      providerAttempt: 1,
+      provider: 'stripe',
+      evidenceRevision: 1,
+      providerPlanCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      providerSendEvidenceCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+      ...dispatchNeverBeganCandidate(),
+      observedFenceEpoch: 1,
+    });
+    expect(reconciliation.evidence.data.recordedAt.toMillis()).toBe(deadlineMillis);
+    expect(reconciliation.evidence.data.observedLeaseExpiresAt.toMillis())
+      .toBe(BASE_NOW_MILLIS + LEASE_DURATION_MILLIS);
+    expect(reconciliation.audit.data).toMatchObject({
+      providerReconciliationAuditSchemaVersion: 1,
+      providerReconciliationEvidenceSchemaVersion: 1,
+      aggregateType: 'commerce_provider_reconciliation',
+      commandKeyHash: setup.pair.commandKeyHash,
+      providerAttempt: 1,
+      evidenceRevision: 1,
+      eventType: 'provider_reconciliation_candidate_recorded',
+      provider: 'stripe',
+      environment: 'test',
+      stripeMode: 'test',
+      providerOperation: STRIPE_OPERATION,
+      providerPlanCommitment: reconciliation.evidence.data.providerPlanCommitment,
+      providerSendEvidenceCommitment: (
+        reconciliation.evidence.data.providerSendEvidenceCommitment
+      ),
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      observedFenceEpoch: 1,
+      reconciliationEvidenceCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(reconciliation.audit.data.occurredAt.toMillis()).toBe(deadlineMillis);
+    expect(reconciliation.audit.data.observedLeaseExpiresAt.toMillis())
+      .toBe(BASE_NOW_MILLIS + LEASE_DURATION_MILLIS);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBefore);
+    expect(await readProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(5);
+    const rendered = JSON.stringify({ results, reconciliation });
+    expect(rendered).not.toContain(STRIPE_ACCOUNT_ID);
+    expect(rendered).not.toContain('provider-reconciliation-concurrent');
+    expect(rendered).not.toContain(setup.leaseId);
+  });
+
+  test('12-v-12 valid candidates persist one winner and conflict without overwrite', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationConflict,
+      'provider-reconciliation-conflict',
+      331,
+    );
+    const firstArgs = reconciliationArgs(setup.args, dispatchNeverBeganCandidate());
+    const secondArgs = reconciliationArgs(setup.args, expiredAttemptCandidate());
+    setTrustedNow(setup.automaticRetryDeadlineAt.toMillis());
+
+    const settled = await Promise.allSettled([
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => recordInitialStripeReconciliationEvidence(firstArgs),
+        retryEvidence,
+      )),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => recordInitialStripeReconciliationEvidence(secondArgs),
+        retryEvidence,
+      )),
+    ]);
+    const fulfilled = settled.filter(({ status }) => status === 'fulfilled');
+    const rejected = settled.filter(({ status }) => status === 'rejected');
+    expect(fulfilled).toHaveLength(12);
+    for (const result of fulfilled) expectProviderReconciliationResult(result.value);
+    expect(rejected).toHaveLength(12);
+    for (const result of rejected) expectJournalError(result.reason, 'command_conflict');
+
+    const firstHalfWon = settled.slice(0, 12)
+      .every(({ status }) => status === 'fulfilled');
+    const secondHalfWon = settled.slice(12)
+      .every(({ status }) => status === 'fulfilled');
+    expect(firstHalfWon).not.toBe(secondHalfWon);
+    const winningArgs = firstHalfWon ? firstArgs : secondArgs;
+    const losingArgs = firstHalfWon ? secondArgs : firstArgs;
+    const winnerBeforeProbes = await readProviderReconciliationEvidence(setup.pair);
+    expectProviderReconciliationResult(
+      await recordInitialStripeReconciliationEvidence(winningArgs),
+    );
+    await expect(recordInitialStripeReconciliationEvidence(losingArgs))
+      .rejects.toMatchObject({
+        code: 'commerce_command_journal_error',
+        reason: 'command_conflict',
+      });
+    expect(await readProviderReconciliationEvidence(setup.pair))
+      .toEqual(winnerBeforeProbes);
+    expect((await matchingAudits(setup.pair)).size).toBe(5);
+  });
+
+  test('a retry after a lost reconciliation response is exact and read-only', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationLostResponse,
+      'provider-reconciliation-lost-response',
+      332,
+    );
+    const args = reconciliationArgs(setup.args, expiredAttemptCandidate());
+    setTrustedNow(setup.automaticRetryDeadlineAt.toMillis());
+    expectProviderReconciliationResult(
+      await recordInitialStripeReconciliationEvidence(args),
+    );
+    const reconciliationBefore = await readProviderReconciliationEvidence(setup.pair);
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+    const providerBefore = await readProviderEvidence(setup.pair);
+    const sendBefore = await readProviderSendEvidence(setup.pair);
+
+    const retries = await Promise.all(Array.from(
+      { length: 8 },
+      () => recordInitialStripeReconciliationEvidence(args),
+    ));
+    for (const result of retries) expectProviderReconciliationResult(result);
+    expect(await readProviderReconciliationEvidence(setup.pair))
+      .toEqual(reconciliationBefore);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBefore);
+    expect(await readProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(5);
+  });
+
+  test('a takeover stays blocked while active and persists at its expiry equality', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationTakeover,
+      'provider-reconciliation-takeover',
+      333,
+    );
+    const deadlineMillis = setup.automaticRetryDeadlineAt.toMillis();
+    const takeoverLeaseId = deterministicLeaseId(334);
+    setTrustedNow(deadlineMillis);
+    expectLeaseResult(await acquireCommerceCommandLease(acquireArgs(
+      db,
+      COMMAND_IDS.providerReconciliationTakeover,
+      setup.commandPayload,
+      takeoverLeaseId,
+    )), 2);
+    const args = reconciliationArgs(setup.args, dispatchNeverBeganCandidate());
+    const takeoverExpiryMillis = deadlineMillis + LEASE_DURATION_MILLIS;
+
+    setTrustedNow(takeoverExpiryMillis - 1);
+    expectNewAttemptCandidate(
+      await recordInitialStripeReconciliationEvidence(args),
+    );
+    expect((await readProviderReconciliationEvidence(setup.pair)).evidence.exists)
+      .toBe(false);
+
+    setTrustedNow(takeoverExpiryMillis);
+    expectProviderReconciliationResult(
+      await recordInitialStripeReconciliationEvidence(args),
+    );
+    const reconciliation = await readProviderReconciliationEvidence(setup.pair);
+    expect(reconciliation.evidence.data.observedFenceEpoch).toBe(2);
+    expect(reconciliation.evidence.data.observedLeaseExpiresAt.toMillis())
+      .toBe(takeoverExpiryMillis);
+    expect(reconciliation.evidence.data.recordedAt.toMillis()).toBe(takeoverExpiryMillis);
+    expect(reconciliation.audit.data.observedFenceEpoch).toBe(2);
+    expect(reconciliation.audit.data.observedLeaseExpiresAt.toMillis())
+      .toBe(takeoverExpiryMillis);
+    expect((await matchingAudits(setup.pair)).size).toBe(6);
+  });
+
+  test('an injected commit failure leaves neither reconciliation partner', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationCommitFailure,
+      'provider-reconciliation-commit-failure',
+      335,
+    );
+    const args = reconciliationArgs(setup.args, dispatchNeverBeganCandidate());
+    setTrustedNow(setup.automaticRetryDeadlineAt.toMillis());
+    const reconciliationBefore = await readProviderReconciliationEvidence(setup.pair);
+    const foundationBefore = await readFoundationEvidence(setup.pair, 2);
+    const providerBefore = await readProviderEvidence(setup.pair);
+    const sendBefore = await readProviderSendEvidence(setup.pair);
+    const auditsBefore = await matchingAudits(setup.pair);
+    const commitFailure = jest.spyOn(FirestoreTransaction.prototype, 'commit')
+      .mockRejectedValueOnce(new Error('synthetic reconciliation commit failure'));
+    let commitCalls = 0;
+
+    try {
+      const error = await recordInitialStripeReconciliationEvidence(args).then(
+        () => null,
+        (reason) => reason,
+      );
+      expectJournalError(error, 'journal_unavailable');
+      commitCalls = commitFailure.mock.calls.length;
+    } finally {
+      commitFailure.mockRestore();
+    }
+    expect(commitCalls).toBe(1);
+    expect(await readProviderReconciliationEvidence(setup.pair))
+      .toEqual(reconciliationBefore);
+    expect(await readFoundationEvidence(setup.pair, 2)).toEqual(foundationBefore);
+    expect(await readProviderEvidence(setup.pair)).toEqual(providerBefore);
+    expect(await readProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(auditsBefore.size);
+    expect(reconciliationBefore.evidence.exists).toBe(false);
+    expect(reconciliationBefore.audit.exists).toBe(false);
+  });
+
+  test('both reconciliation orphan directions fail closed without repair', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationOrphan,
+      'provider-reconciliation-orphan',
+      336,
+    );
+    const args = reconciliationArgs(setup.args, dispatchNeverBeganCandidate());
+    setTrustedNow(setup.automaticRetryDeadlineAt.toMillis());
+    await setup.pair.providerReconciliationAuditRef.create({
+      providerReconciliationAuditSchemaVersion: 1,
+      syntheticOrphan: true,
+    });
+    const auditOrphanBefore = await readProviderReconciliationEvidence(setup.pair);
+    await expect(recordInitialStripeReconciliationEvidence(args)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderReconciliationEvidence(setup.pair))
+      .toEqual(auditOrphanBefore);
+
+    await setup.pair.providerReconciliationAuditRef.delete();
+    expectProviderReconciliationResult(
+      await recordInitialStripeReconciliationEvidence(args),
+    );
+    await setup.pair.providerReconciliationAuditRef.delete();
+    const recordOrphanBefore = await readProviderReconciliationEvidence(setup.pair);
+    await expect(recordInitialStripeReconciliationEvidence(args)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderReconciliationEvidence(setup.pair))
+      .toEqual(recordOrphanBefore);
+    expect(recordOrphanBefore.evidence.exists).toBe(true);
+    expect(recordOrphanBefore.audit.exists).toBe(false);
+  });
+
+  test('a malformed C2 foundation blocks reconciliation without creating a pair', async () => {
+    const setup = await setupProviderReconciliationFoundation(
+      COMMAND_IDS.providerReconciliationMalformedSend,
+      'provider-reconciliation-malformed-send',
+      337,
+    );
+    const args = reconciliationArgs(setup.args, expiredAttemptCandidate());
+    const validSend = await setup.pair.providerSendRef.get();
+    await setup.pair.providerSendRef.set({
+      ...validSend.data(),
+      providerSendEvidenceSchemaVersion: 2,
+    });
+    setTrustedNow(setup.automaticRetryDeadlineAt.toMillis());
+    const malformedSendBefore = await readProviderSendEvidence(setup.pair);
+    const reconciliationBefore = await readProviderReconciliationEvidence(setup.pair);
+    const auditsBefore = await matchingAudits(setup.pair);
+
+    await expect(recordInitialStripeReconciliationEvidence(args)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'journal_record_invalid',
+    });
+    expect(await readProviderSendEvidence(setup.pair)).toEqual(malformedSendBefore);
+    expect(await readProviderReconciliationEvidence(setup.pair))
+      .toEqual(reconciliationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(auditsBefore.size);
+    expect(reconciliationBefore.evidence.exists).toBe(false);
+    expect(reconciliationBefore.audit.exists).toBe(false);
   });
 });

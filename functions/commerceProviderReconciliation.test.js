@@ -477,15 +477,21 @@ describe('immutability, redaction, and zero-side-effect boundary', () => {
     }
   });
 
-  test('no runtime or index entry point adopts the inert policy module', () => {
+  test('only the unused journal persistence boundary adopts the policy module', () => {
     const files = fs.readdirSync(__dirname)
       .filter((fileName) => fileName.endsWith('.js'))
-      .filter((fileName) => fileName !== 'commerceProviderReconciliation.js')
-      .filter((fileName) => fileName !== 'commerceProviderReconciliation.test.js');
+      .filter((fileName) => !fileName.endsWith('.test.js'))
+      .filter((fileName) => fileName !== 'commerceProviderReconciliation.js');
+    const importers = [];
     for (const fileName of files) {
       const source = fs.readFileSync(path.join(__dirname, fileName), 'utf8');
-      expect({ fileName, importsPolicy: source.includes('commerceProviderReconciliation') })
-        .toEqual({ fileName, importsPolicy: false });
+      if (source.includes('commerceProviderReconciliation')) {
+        importers.push(fileName);
+      }
     }
+    expect(importers).toEqual(['commerceCommandJournal.js']);
+    const indexSource = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+    expect(indexSource).not.toContain('commerceCommandJournal');
+    expect(indexSource).not.toContain('commerceProviderReconciliation');
   });
 });
