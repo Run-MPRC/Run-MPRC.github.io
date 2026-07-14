@@ -377,6 +377,30 @@ DATA-001C1 [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) pau
 
 The server chooses initial timestamps. The current self-edit path sends a Firestore server timestamp, but the Rules source type-checks rather than independently proves that edit timestamp. Do not describe arbitrary profile edit timestamps as server-authoritative until a coordinated Rules/API issue closes that residual.
 
+### 8.0a Provider-neutral membership authority and entitlement — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001A [#208](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/208) defines one unused pure contract that keeps a stable MPRC membership separate from the Firebase account used to sign in. A membership record can exist without a UID. Such a record grants no website entitlement. Google, WhatsApp, Strava, email equality, a profile role, and any browser field remain projections or inputs to future reviewed workflows; none is membership authority.
+
+```mermaid
+flowchart LR
+    M["Stable opaque MPRC membership ID"] --> L{"Explicit UID association recorded?"}
+    A["Firebase account"] --> L
+    L -- "No or conflicting" --> N["Not entitled"]
+    L -- "Yes" --> T{"Versioned term decision complete?"}
+    T -- "Missing or decision pending" --> P["Policy decision pending"]
+    T -- "Suspended, ended, future, or expired" --> N
+    T -- "Approved and inside explicit start/end" --> E["Fixed current-member result"]
+    X["Google / WhatsApp / Strava / email / role"] -. "Never grants membership" .-> N
+```
+
+Text alternative: a stable membership receives the fixed current-member result only after an explicit UID association and a complete approved term whose explicit half-open time range contains the evaluation time. Missing, conflicting, suspended, ended, future, expired, or undecided state fails closed. External identities, channels, matching email, and roles never grant membership.
+
+The CommonJS module creates an account-independent revision-1 snapshot, records one explicit account association, records already-decided term references monotonically, and derives one of three frozen non-identifying results: current member, not entitled, or decision pending. It accepts exact plain objects, bounded server-minted opaque identifiers, safe-integer time values, one current term rather than an unbounded mutable history, and a last-command marker for immediate idempotent retry. An exact last-command retry is read-only. A changed last-command retry, a second/different UID association within the snapshot, a stale record revision, an exhausted safe-integer revision, a skipped or repeated term revision, a reversed time range, an unsupported version/state, an extra field, an accessor, or a proxy fails through one fixed error.
+
+This contract does not verify a person, payment, plan, evidence item, refund, dispute, or policy decision. It does not choose calendar-year versus anniversary terms, grace, prices, plan eligibility, retention, or legacy disposition. Its identifier grammar is not a semantic privacy classifier; a future trusted server must mint opaque values and establish every referenced fact. The last-command marker prevents only an immediate changed retry; command IDs are not a durable global replay registry. Durable cross-record UID uniqueness, full command replay history, append-only audit, Firestore schema/Rules, custom claims, token refresh/revocation, runtime authorization, migration, and deployment are later children behind #110, #113, #114, AUTH-003/ADMIN, and the protected release work.
+
+The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ### 8.1 Paid race registration
 
 ```mermaid

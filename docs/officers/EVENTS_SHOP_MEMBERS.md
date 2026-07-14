@@ -241,6 +241,55 @@ Officer steps after every prerequisite has proof:
 
 **Escalation:** membership lead plus privacy/platform owner; use the private incident path under #112 if exposure is suspected.
 
+## Provider-neutral membership authority — SOURCE ONLY, UNUSED
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep a club membership separate from the account or outside service a person uses, so email, Google, WhatsApp, Strava, and a website role cannot accidentally grant membership, discounts, or officer access.
+
+**Approver:** membership lead plus treasurer and privacy/security owner.
+
+**Prerequisites:** issue [#208](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/208) must be merged for source review. Before any officer or member can use this model, #110 must approve data purposes and retention, a focused #114 child must approve term/payment rules, the identity/admin work must approve who may link or remove a website account, and reviewed Firebase schema, Rules, Functions, deployment, readback, and made-up staged behavior must all have proof. #113 separately owns legacy-source disposition. None of those runtime prerequisites is completed by #208.
+
+```mermaid
+flowchart TD
+    Record["Stable club membership"] --> Link{"Explicitly linked to this website account?"}
+    Link -- "No or conflict" --> No["No member access"]
+    Link -- "Yes" --> Term{"Approved term is current?"}
+    Term -- "Decision pending" --> Wait["No access decision yet"]
+    Term -- "Future, expired, suspended, or ended" --> No
+    Term -- "Yes" --> Current["Current-member result"]
+    Outside["Email / Google / WhatsApp / Strava / website role"] -. "Cannot grant membership" .-> No
+```
+
+In words: the future system starts with a stable club membership, links it deliberately to one website account, and grants a current-member result only for a complete approved term. Missing, conflicting, undecided, future, expired, suspended, or ended state does not grant access. Email, sign-in method, community channels, and website roles are never proof of membership.
+
+Officer review steps after the source merge:
+
+1. Keep every membership activation, renewal, discount, roster, and outside-channel action marked **NOT AVAILABLE YET**.
+2. Do not grant a website role as a workaround.
+3. Do not edit a database record as a workaround.
+4. Do not match an account by email as a workaround.
+5. Do not create a second account as a workaround.
+6. Ask the platform owner to show the fixed #208 report using only made-up, non-identifying reference values.
+7. Confirm a membership with no account link returns no website entitlement.
+8. Confirm an explicit made-up account link still returns `decision pending` until a complete term decision is supplied.
+9. Confirm only an approved term inside its explicit start/end range returns the fixed current-member result.
+10. Confirm a different account, missing decision, future or expired range, suspension, ending, out-of-date or conflicting update, or changed immediate retry fails closed without exposing an identifier.
+11. Confirm a second attempt to link the same or another website account to one membership fails, even when the update is otherwise current.
+12. Confirm the report contains no provider call, database write, claim/role change, migration, log, website route, or production record.
+13. End the source review without describing the contract as a working membership system or choosing calendar, grace, price, plan, refund, dispute, or retention policy.
+
+**Expected result:** officers can explain the future authority boundary in plain language. The unused source accepts only the narrow synthetic contract, preserves an account-independent membership, and returns a fixed non-identifying result. Current website accounts, roles, dues forms, discounts, and external channels behave exactly as before.
+
+**Stop conditions:** any real member/account/payment/provider data; a request to infer membership from email or role; an unresolved policy choice; a direct Auth, Firestore, claim, or production edit; missing dependency/deployment proof; or a statement that green tests mean member access is live.
+
+**Success proof:** exact #208 issue, pull request, reviewed commit, 46-case focused synthetic report, full repository checks, two independent exact-diff reviews, and a source scan showing the module is not connected to any live Function entry point. Future availability additionally requires separately approved policy, schema, authorization, cross-record account-link uniqueness, durable command replay protection, migration decision, protected Firebase deployment/readback, made-up staging test, website publication, `runmprc.com` verification, and backup-officer walkthrough.
+
+**Undo:** before runtime adoption, revert or safely roll forward only the two unused module/test files and these named documentation sections through a reviewed pull request. There is no production record to repair. After any future adoption, use that child's documented rollback; never undo membership by changing a claim or database record by hand.
+
+**Escalation:** membership lead plus treasurer and privacy/security owner. Add the platform owner for source/deployment evidence and use the private incident path if real data or unintended access is involved.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
