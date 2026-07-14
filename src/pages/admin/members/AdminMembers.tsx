@@ -57,7 +57,6 @@ function Inner() {
   useEffect(() => {
     if (!isReady || !services) return;
     reload();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services, isReady]);
 
   async function changeRole(email: string, role: MemberRole) {
