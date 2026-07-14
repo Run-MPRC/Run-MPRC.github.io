@@ -534,6 +534,74 @@ describe('server-only operational collections', () => {
   });
 
   describe.each([
+    ['anonymous', undefined],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
+  ])('checkoutRequests next-attempt authorization — %s', (_label, auth) => {
+    const existingHash = 'c'.repeat(64);
+    const newHash = 'd'.repeat(64);
+    const existingPath = `checkoutRequests/${existingHash}/providerAttempts/0000000001/`
+      + 'reconciliationEvidence/0000000001/nextAttemptAuthorizations/0000000002';
+    const newPath = `checkoutRequests/${newHash}/providerAttempts/0000000001/`
+      + 'reconciliationEvidence/0000000001/nextAttemptAuthorizations/0000000002';
+    const collectionPath = `checkoutRequests/${existingHash}/providerAttempts/0000000001/`
+      + 'reconciliationEvidence/0000000001/nextAttemptAuthorizations';
+    const existingAuditPath = 'auditEvents/'
+      + `commerce_provider_authorization_${existingHash}`
+      + '_0000000001_0000000001_0000000002';
+    const newAuditPath = 'auditEvents/'
+      + `commerce_provider_authorization_${newHash}`
+      + '_0000000001_0000000001_0000000002';
+    const authorization = {
+      providerAttemptAuthorizationSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      provider: 'stripe',
+      previousProviderAttempt: 1,
+      authorizedProviderAttempt: 2,
+      transitionKind: 'retry_same_operation',
+    };
+    const audit = {
+      providerAttemptAuthorizationAuditSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      authorizedProviderAttempt: 2,
+      eventType: 'provider_attempt_authorized',
+    };
+
+    test('CANNOT read, create, update, or delete the authorization', async () => {
+      await seed(existingPath, authorization);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingPath).get());
+      await assertFails(client.doc(newPath).set({
+        ...authorization,
+        commandKeyHash: newHash,
+      }));
+      await assertFails(client.doc(existingPath).update({ authorizedProviderAttempt: 3 }));
+      await assertFails(client.doc(existingPath).delete());
+    });
+
+    test('CANNOT list authorizations by collection or collection group', async () => {
+      await seed(existingPath, authorization);
+      const client = await db(auth);
+
+      await assertFails(client.collection(collectionPath).get());
+      await assertFails(client.collectionGroup('nextAttemptAuthorizations').get());
+    });
+
+    test('CANNOT read or write the deterministic authorization audit', async () => {
+      await seed(existingAuditPath, audit);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingAuditPath).get());
+      await assertFails(client.doc(newAuditPath).set({ ...audit, commandKeyHash: newHash }));
+      await assertFails(client.doc(existingAuditPath).update({ authorizedProviderAttempt: 3 }));
+      await assertFails(client.doc(existingAuditPath).delete());
+      await assertFails(client.collection('auditEvents').get());
+      await assertFails(client.collectionGroup('auditEvents').get());
+    });
+  });
+
+  describe.each([
     ['promoCodes/PROMO1', 'promoCodes/PROMO2', { discountPercent: 10 }],
     ['ratelimits/checkout_ip__1.2.3.4', 'ratelimits/checkout_ip__5.6.7.8', { count: 5 }],
     ['mail/message1', 'mail/message2', { to: ['runner@example.com'] }],
