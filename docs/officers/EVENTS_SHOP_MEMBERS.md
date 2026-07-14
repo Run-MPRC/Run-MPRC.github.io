@@ -150,6 +150,52 @@ Officer steps:
 
 **Escalation:** treasurer plus platform owner; add security if an adjustment reached paid/fulfilled state.
 
+## Race signup data guard — SOURCE ONLY, NOT LIVE
+
+**Purpose:** stop malformed or unexpected race and volunteer signup data before anything is saved or sent to Stripe.
+
+**Approver:** event lead plus privacy/platform owner. Add the treasurer when a price path is involved.
+
+**Prerequisites for this source review:** issue [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) merged; the exact reviewed commit; and a redacted synthetic test report made with invented events and invented people only. This review makes no Firebase or Stripe call.
+
+```mermaid
+flowchart LR
+    A["Made-up form state"] --> P["Website keeps active answers; omits volunteer tier"]
+    P --> B{"Exact safe request shape?"}
+    B -- "No" --> X["Fixed message; no save; no Stripe call"]
+    B -- "Yes" --> C["Read the admitted event"]
+    C --> D{"Answers match that event's fields?"}
+    D -- "No" --> X
+    D -- "Yes" --> E["Later price, capacity, and payment checks may continue"]
+```
+
+In words: the server checks the request first, then checks its answers against the admitted event; any mismatch stops with no save or Stripe call.
+
+The website source first drops answers from the inactive participant or volunteer form and sends no price tier for a volunteer. The server still repeats every check. This source behavior is not live.
+
+Officer source-review steps:
+
+1. Keep live race and volunteer checkout unavailable.
+2. Ask the specialist for the synthetic test report from the exact reviewed commit.
+3. Confirm the report uses made-up people and made-up events only.
+4. Confirm unknown fields and missing required answers are denied.
+5. Confirm wrong answer types and invalid choices are denied.
+6. Confirm a denial makes no registration write, rate-limit write, capacity check, token creation, Product call, or Checkout call.
+7. Confirm the report contains no submitted names, email addresses, phone numbers, answers, or event field labels.
+8. Record the result as source proof only.
+
+**Expected result:** only an exact bounded request whose answers match the admitted event may reach later commerce checks. Every denial uses the same plain message and has no mutable or provider side effect.
+
+**Stop conditions:** real member or runner data, an attempt to call Firebase or Stripe, a detailed error containing submitted data, a missing exact commit, or any side effect on denial.
+
+**Success proof for this source review:** exact pull request and commit, green exact-commit tests, a redacted synthetic report, and a written note that Firebase, Stripe, and live behavior were not tested.
+
+**Undo:** use one reviewed source revert or safe roll-forward. Do not edit a registration, event, payment, rate-limit record, or Stripe object by hand.
+
+**Escalation:** event lead plus privacy/platform owner; add the treasurer and security lead if any denied request caused a write or Stripe call.
+
+**Live-release gate: NOT AVAILABLE YET.** PAY-001B2 must first add immutable field, price, and waiver snapshots and prove compatibility without opening real registrations. A separate protected race-checkout release plan must explicitly name `createCheckoutSession`, the exact commit, an isolated staging project, Stripe test mode, owner approval, provider and Firebase readback, paid/free/volunteer checks, and rollback. No current release issue or workflow supplies that plan. Source review does not authorize deployment.
+
 ## Profile permission error
 
 **Status: AUTOMATIC REPAIR NOT LIVE YET**

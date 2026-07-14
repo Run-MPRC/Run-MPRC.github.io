@@ -426,6 +426,8 @@ The module is imported by no runtime or Functions index. It reads no clock or en
 
 ### 8.1 Paid race registration
 
+PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.
+
 ```mermaid
 sequenceDiagram
     actor R as Runner
@@ -436,7 +438,12 @@ sequenceDiagram
     participant H as Webhook processor
 
     R->>W: Submit identity, waiver acceptance, request ID
+    W->>W: Keep active answers; omit volunteer price tier
     W->>F: Callable request + Auth/App Check when available
+    F->>F: Validate exact bounded request envelope
+    F->>D: Read commerce control and event
+    D-->>F: Admitted server event field schema
+    F->>F: Match participant or volunteer answers
     F->>D: Transaction: validate event snapshot, reserve capacity, create pending registration
     F->>S: Create Session after command gate; later generation also needs reconciliation gate
     F->>D: Attach Session ID and expiry
@@ -450,6 +457,8 @@ sequenceDiagram
     F->>S: Retrieve/verify Session if reconciliation is needed
     F-->>W: Confirmed, processing, failed, or support-required state
 ```
+
+Text alternative: the website sends only the active signup fields; the server then accepts only a small exact request, preserves and safely encodes the event identity, and matches answers to the selected server fields; the target flow later reserves locally before Stripe, accepts payment only through the signed webhook, and returns only a sanitized result.
 
 If Stripe Session creation fails, the function releases the reservation in a compensating transaction. If the function crashes after Stripe creates the Session, PAY-002B2C2 retries only the exact B2C1 plan/key inside its stored safe-send window. After that deadline—or when first-send time is unknown—it stops POSTing. C3A can classify already-verified evidence, and C3B can persist only a candidate after the retry and lease gates; neither retrieves provider truth, authorizes, or advances. C3C must complete the separate fresh-lease authorization gate before a later POST. A scheduled job releases abandoned reservations and reconciles records that missed a webhook.
 

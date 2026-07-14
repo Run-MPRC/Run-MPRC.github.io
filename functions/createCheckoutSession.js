@@ -6,7 +6,6 @@ const {
   generateToken,
   resolveCallerRole,
   requireAppCheck,
-  validateRunner,
   pickPriceCents,
   isEarlyBirdActive,
   isRegistrationOpen,
@@ -20,6 +19,11 @@ const {
   COMMERCE_OPERATIONS,
   requireCommerceAdmission,
 } = require('./commerceControl');
+const {
+  RaceCheckoutValidationError,
+  parseRaceCheckoutRequest,
+  parseRaceCheckoutAnswers,
+} = require('./raceCheckoutValidation');
 
 const HOUR_MS = 60 * 60 * 1000;
 const CHECKOUT_PER_IP_PER_HOUR = 20;
@@ -27,6 +31,33 @@ const CHECKOUT_PER_EMAIL_PER_HOUR = 10;
 
 const SUCCESS_PATH = '/register/success';
 const CANCEL_PATH_PREFIX = '/events/';
+const INVALID_REQUEST_MESSAGE = 'Request data is invalid';
+
+function mapValidationError(error) {
+  if (error instanceof RaceCheckoutValidationError) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      INVALID_REQUEST_MESSAGE,
+    );
+  }
+  throw error;
+}
+
+function parseRequest(data) {
+  try {
+    return parseRaceCheckoutRequest(data);
+  } catch (error) {
+    return mapValidationError(error);
+  }
+}
+
+function parseAnswers(input) {
+  try {
+    return parseRaceCheckoutAnswers(input);
+  } catch (error) {
+    return mapValidationError(error);
+  }
+}
 
 function resolvePriceTier({ requestedTier, event, callerRole, now }) {
   const pricing = event.pricing || {};
@@ -85,16 +116,10 @@ exports.createCheckoutSession = functions
     const {
       eventId,
       runner,
-      customFields = {},
+      customFields,
       priceTier: requestedTier,
-      acceptedWaiver,
-      signupType: requestedSignupType,
-    } = data || {};
-    const signupType = requestedSignupType === 'volunteer' ? 'volunteer' : 'participant';
-
-    if (!eventId || typeof eventId !== 'string') {
-      throw new functions.https.HttpsError('invalid-argument', 'eventId is required');
-    }
+      signupType,
+    } = parseRequest(data);
     const db = admin.firestore();
     const eventRef = db.collection('events').doc(eventId);
     const { targetSnapshot: eventSnap } = await requireCommerceAdmission({
@@ -103,18 +128,17 @@ exports.createCheckoutSession = functions
       deploymentEnabled: serverConfig.commerceEnabled,
       targetRef: eventRef,
     });
-    const runnerErrors = validateRunner(runner);
-    if (runnerErrors.length) {
-      throw new functions.https.HttpsError('invalid-argument', runnerErrors.join('; '));
-    }
-    if (!acceptedWaiver) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Waiver acceptance is required',
-      );
-    }
+    const event = eventSnap.data();
+    const normalizedCustomFields = parseAnswers({
+      signupType,
+      customFields,
+      eventCustomFields: event.customFields === undefined ? [] : event.customFields,
+      volunteerCustomFields: event.volunteerFields === undefined
+        ? []
+        : event.volunteerFields,
+    });
 
-    const normalizedEmail = runner.email.trim().toLowerCase();
+    const normalizedEmail = runner.email;
     await Promise.all([
       checkRateLimit({
         scope: 'checkout_ip',
@@ -129,8 +153,6 @@ exports.createCheckoutSession = functions
         windowMs: HOUR_MS,
       }),
     ]);
-
-    const event = eventSnap.data();
 
     const now = Date.now();
     if (!isRegistrationOpen(event, now)) {
@@ -191,15 +213,15 @@ exports.createCheckoutSession = functions
     const regBase = {
       eventId,
       runner: {
-        firstName: runner.firstName.trim(),
-        lastName: runner.lastName.trim(),
-        email: runner.email.trim().toLowerCase(),
-        phone: runner.phone?.trim() || null,
+        firstName: runner.firstName,
+        lastName: runner.lastName,
+        email: runner.email,
+        phone: runner.phone || null,
         dob: runner.dob || null,
-        emergencyContactName: runner.emergencyContactName?.trim() || null,
-        emergencyContactPhone: runner.emergencyContactPhone?.trim() || null,
+        emergencyContactName: runner.emergencyContactName || null,
+        emergencyContactPhone: runner.emergencyContactPhone || null,
         shirtSize: runner.shirtSize || null,
-        extras: customFields,
+        extras: normalizedCustomFields,
       },
       uid: context.auth?.uid || null,
       priceTier,
@@ -223,7 +245,7 @@ exports.createCheckoutSession = functions
       cancelledAt: null,
       auditLog: [auditEntry({
         actorUid: context.auth?.uid,
-        actorEmail: runner.email,
+        actorEmail: normalizedEmail,
         action: 'registration.created',
         note: `type=${signupType} tier=${priceTier} amount=${amountCents}`,
       })],
@@ -238,14 +260,21 @@ exports.createCheckoutSession = functions
       };
     }
 
-    const stripe = getStripe();
-    const productId = await ensureStripeProduct(stripe, eventRef, event);
     const origin = serverConfig.siteOrigin;
     const eventSlug = event.slug || eventId;
+    const successQuery = [
+      'session_id={CHECKOUT_SESSION_ID}',
+      `reg=${encodeURIComponent(regRef.id)}`,
+      `token=${encodeURIComponent(confirmationToken)}`,
+      `event=${encodeURIComponent(eventId)}`,
+    ].join('&');
+    const cancelUrl = `${origin}${CANCEL_PATH_PREFIX}${encodeURIComponent(eventSlug)}?cancelled=1`;
+    const stripe = getStripe();
+    const productId = await ensureStripeProduct(stripe, eventRef, event);
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      customer_email: runner.email.trim().toLowerCase(),
+      customer_email: normalizedEmail,
       line_items: [{
         price_data: {
           currency: 'usd',
@@ -258,8 +287,8 @@ exports.createCheckoutSession = functions
       // and reconciliation contract is implemented (PROMO-001).
       allow_promotion_codes: false,
       automatic_tax: { enabled: false },
-      success_url: `${origin}${SUCCESS_PATH}?session_id={CHECKOUT_SESSION_ID}&reg=${regRef.id}&token=${confirmationToken}&event=${eventId}`,
-      cancel_url: `${origin}${CANCEL_PATH_PREFIX}${eventSlug}?cancelled=1`,
+      success_url: `${origin}${SUCCESS_PATH}?${successQuery}`,
+      cancel_url: cancelUrl,
       metadata: {
         schemaVersion: '1',
         eventId,

@@ -3,6 +3,10 @@ const mockProductCreate = jest.fn();
 const mockGetStripe = jest.fn();
 const mockRateLimit = jest.fn();
 const mockFirestoreAccess = jest.fn();
+const mockFirestoreWrite = jest.fn();
+const mockGenerateToken = jest.fn();
+const mockResolveCallerRole = jest.fn();
+const mockCountActiveRegistrations = jest.fn();
 
 jest.mock('firebase-functions', () => {
   class HttpsError extends Error {
@@ -54,10 +58,12 @@ jest.mock('firebase-admin', () => {
     }
 
     async set(data) {
+      mockFirestoreWrite(this.path);
       store.set(this.path, { ...data });
     }
 
     async update(data) {
+      mockFirestoreWrite(this.path);
       store.set(this.path, { ...(store.get(this.path) || {}), ...data });
     }
   }
@@ -106,16 +112,17 @@ jest.mock('./stripeHelpers', () => {
   const { resolveVerifiedCallerRole } = jest.requireActual('./verifiedRolePolicy');
   return {
     getStripe: mockGetStripe,
-    generateToken: () => 'synthetic-confirmation-token',
-    resolveCallerRole: async (context) => (
-      resolveVerifiedCallerRole(context?.auth?.token)
-    ),
+    generateToken: mockGenerateToken,
+    resolveCallerRole: async (context) => {
+      mockResolveCallerRole(context);
+      return resolveVerifiedCallerRole(context?.auth?.token);
+    },
     requireAppCheck: () => {},
     validateRunner: () => [],
     pickPriceCents: (event, tier) => event.pricing?.[`${tier}Cents`] ?? null,
     isEarlyBirdActive: () => false,
     isRegistrationOpen: () => true,
-    countActiveRegistrations: async () => 0,
+    countActiveRegistrations: mockCountActiveRegistrations,
     auditEntry: ({ action, note }) => ({ action, note }),
     isValidEmail: () => true,
     Timestamp: { now: () => ({ _milliseconds: 1_800_000_000_000 }) },
@@ -130,6 +137,33 @@ jest.mock('./rateLimit', () => ({
 const admin = require('firebase-admin');
 const { createCheckoutSession } = require('./createCheckoutSession');
 const { createMerchCheckout } = require('./createMerchCheckout');
+
+function validRaceRequest(overrides = {}) {
+  return {
+    eventId: 'race-1',
+    runner: {
+      firstName: 'Test',
+      lastName: 'Runner',
+      email: 'runner@example.test',
+    },
+    priceTier: 'nonMember',
+    acceptedWaiver: true,
+    ...overrides,
+  };
+}
+
+function expectNoRaceCommandSideEffects(expectedFirestoreAccesses) {
+  expect(mockFirestoreAccess).toHaveBeenCalledTimes(expectedFirestoreAccesses);
+  expect(mockFirestoreWrite).not.toHaveBeenCalled();
+  expect(mockRateLimit).not.toHaveBeenCalled();
+  expect(mockResolveCallerRole).not.toHaveBeenCalled();
+  expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+  expect(mockGenerateToken).not.toHaveBeenCalled();
+  expect(mockGetStripe).not.toHaveBeenCalled();
+  expect(mockProductCreate).not.toHaveBeenCalled();
+  expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+}
 
 describe('Checkout promotion policy', () => {
   beforeEach(() => {
@@ -147,11 +181,17 @@ describe('Checkout promotion policy', () => {
     mockGetStripe.mockReset();
     mockRateLimit.mockReset();
     mockFirestoreAccess.mockClear();
+    mockFirestoreWrite.mockClear();
+    mockGenerateToken.mockReset();
+    mockResolveCallerRole.mockReset();
+    mockCountActiveRegistrations.mockReset();
     mockGetStripe.mockReturnValue({
       checkout: { sessions: { create: mockCheckoutCreate } },
       products: { create: mockProductCreate },
     });
     mockRateLimit.mockResolvedValue(undefined);
+    mockGenerateToken.mockReturnValue('synthetic-confirmation-token');
+    mockCountActiveRegistrations.mockResolvedValue(0);
     mockCheckoutCreate.mockImplementation(async (payload) => ({
       id: payload.metadata.type === 'merch' ? 'cs_order_policy' : 'cs_registration_policy',
       url: 'https://checkout.stripe.test/synthetic-session',
@@ -215,6 +255,152 @@ describe('Checkout promotion policy', () => {
     expect(mockGetStripe).not.toHaveBeenCalled();
     expect(mockProductCreate).not.toHaveBeenCalled();
     expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['an unexpected outer field', validRaceRequest({
+      unexpected: 'checkout_secret_canary',
+    })],
+    ['an unknown signup type', validRaceRequest({
+      signupType: 'waitlist',
+    })],
+    ['a truthy non-boolean waiver', validRaceRequest({
+      acceptedWaiver: 'true',
+    })],
+    ['a nested runner value', validRaceRequest({
+      runner: {
+        firstName: 'Test',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+        phone: { value: 'checkout_secret_canary' },
+      },
+    })],
+    ['a nested custom answer', validRaceRequest({
+      customFields: { note: { value: 'checkout_secret_canary' } },
+    })],
+  ])('rejects %s before Firestore and command side effects', async (_name, request) => {
+    await expect(createCheckoutSession(
+      request,
+      { auth: null, rawRequest: {} },
+    )).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message: 'Request data is invalid',
+    });
+
+    expectNoRaceCommandSideEffects(0);
+  });
+
+  test('rejects accessor and proxy envelopes without invoking attacker code', async () => {
+    let getterCalls = 0;
+    let trapCalls = 0;
+    const accessorRequest = validRaceRequest();
+    Object.defineProperty(accessorRequest, 'eventId', {
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        return 'checkout_secret_canary';
+      },
+    });
+    const proxyRequest = new Proxy(validRaceRequest(), {
+      get() {
+        trapCalls += 1;
+        return 'checkout_secret_canary';
+      },
+      getOwnPropertyDescriptor() {
+        trapCalls += 1;
+        return undefined;
+      },
+      ownKeys() {
+        trapCalls += 1;
+        return [];
+      },
+    });
+
+    for (const request of [accessorRequest, proxyRequest]) {
+      await expect(createCheckoutSession(
+        request,
+        { auth: null, rawRequest: {} },
+      )).rejects.toMatchObject({
+        code: 'invalid-argument',
+        message: 'Request data is invalid',
+      });
+    }
+
+    expect(getterCalls).toBe(0);
+    expect(trapCalls).toBe(0);
+    expectNoRaceCommandSideEffects(0);
+  });
+
+  test.each([
+    ['a falsy malformed event field definition', null, {}],
+    ['a malformed event field definition', [
+      {
+        key: 'distance',
+        label: 'Distance',
+        type: 'select',
+        required: 'true',
+        options: ['5K', '10K'],
+      },
+    ], { distance: '5K' }],
+    ['an unknown answer', [
+      {
+        key: 'distance',
+        label: 'Distance',
+        type: 'select',
+        required: true,
+        options: ['5K', '10K'],
+      },
+    ], { distance: '5K', unexpected: 'checkout_secret_canary' }],
+    ['a missing required answer', [
+      {
+        key: 'distance',
+        label: 'Distance',
+        type: 'select',
+        required: true,
+        options: ['5K', '10K'],
+      },
+    ], {}],
+    ['a wrong answer type', [
+      {
+        key: 'distance',
+        label: 'Distance',
+        type: 'select',
+        required: true,
+        options: ['5K', '10K'],
+      },
+    ], { distance: true }],
+    ['an unavailable select option', [
+      {
+        key: 'distance',
+        label: 'Distance',
+        type: 'select',
+        required: true,
+        options: ['5K', '10K'],
+      },
+    ], { distance: 'checkout_secret_canary' }],
+  ])('rejects %s after admission but before command side effects', async (
+    _name,
+    customFields,
+    answers,
+  ) => {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      status: 'open',
+      pricing: { nonMemberCents: 5000 },
+      stripeProductId: 'prod_race_policy',
+      customFields,
+    });
+
+    await expect(createCheckoutSession(
+      validRaceRequest({ customFields: answers }),
+      { auth: null, rawRequest: {} },
+    )).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message: 'Request data is invalid',
+    });
+
+    expectNoRaceCommandSideEffects(1);
   });
 
   test('deployment ceiling blocks new race commerce before command side effects', async () => {
@@ -343,6 +529,40 @@ describe('Checkout promotion policy', () => {
       stripeSessionId: 'cs_registration_policy',
     });
     expect(mockProductCreate).not.toHaveBeenCalled();
+  });
+
+  test('race checkout preserves an opaque event ID and URL-encodes callback values', async () => {
+    const eventId = 'race?wave=1&return=#finish%25';
+    const encodedEventId = encodeURIComponent(eventId);
+    admin.__seed(`events/${eventId}`, {
+      checkoutEnabled: true,
+      title: 'Synthetic Opaque-ID Race',
+      status: 'open',
+      visibility: 'public',
+      pricing: { nonMemberCents: 5000 },
+      stripeProductId: 'prod_opaque_event_policy',
+      waiverVersion: 'synthetic-v1',
+    });
+
+    await createCheckoutSession(validRaceRequest({ eventId }), {
+      auth: null,
+      rawRequest: {},
+    });
+
+    const payload = mockCheckoutCreate.mock.calls[0][0];
+    expect(payload.metadata.eventId).toBe(eventId);
+    expect(payload.success_url).toBe(
+      `https://runmprc.test/register/success?session_id={CHECKOUT_SESSION_ID}`
+      + `&reg=reg-new-1&token=synthetic-confirmation-token&event=${encodedEventId}`,
+    );
+    expect(payload.cancel_url).toBe(
+      `https://runmprc.test/events/${encodedEventId}?cancelled=1`,
+    );
+    expect(payload.success_url).not.toContain(`event=${eventId}`);
+    expect(admin.__get(`events/${eventId}/registrations/reg-new-1`)).toMatchObject({
+      eventId,
+      stripeSessionId: 'cs_registration_policy',
+    });
   });
 
   test('an unverified role cannot unlock a members-only event', async () => {
