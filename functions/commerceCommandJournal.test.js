@@ -19,6 +19,7 @@ const {
   CommerceCommandJournalError,
   acquireCommerceCommandLease,
   authorizeNextStripeProviderAttempt,
+  bindAuthorizedStripeProviderPlan,
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
@@ -452,6 +453,20 @@ function providerAuthorizationPaths(input) {
       `commerce_provider_authorization_${paths.commandKeyHash}`
         + '_0000000001_0000000001_0000000002',
     ),
+  });
+}
+
+function authorizedProviderPlanPaths(input) {
+  const paths = providerAuthorizationPaths(input);
+  const providerPlanPath = `${paths.commandPath}/providerAttempts/0000000002`;
+  return Object.freeze({
+    ...paths,
+    authorizedProviderPlanPath: providerPlanPath,
+    authorizedProviderPlanAuditPath: documentPath(
+      'auditEvents',
+      `commerce_provider_attempt_${paths.commandKeyHash}_0000000002`,
+    ),
+    authorizedProviderSendPath: `${providerPlanPath}/sendEvidence/first`,
   });
 }
 
@@ -4404,6 +4419,589 @@ describe('fresh-lease authorization for one later Stripe provider attempt', () =
     expect(mock.db.runTransaction).not.toHaveBeenCalled();
     expect(mock.store.size).toBe(0);
   });
+
+  describe('authorized attempt-2 provider plan binding', () => {
+    async function createPlanFoundation(mock, options = {}) {
+      const foundation = await createAuthorizationFoundation(mock, options);
+      await authorizeNextStripeProviderAttempt(foundation.input);
+      return Object.freeze({
+        input: foundation.input,
+        paths: authorizedProviderPlanPaths(foundation.input),
+      });
+    }
+
+    function attemptTwoKey(input, commandKeyHash) {
+      return createStripeIdempotencyKey({
+        stripeMode: input.stripeMode,
+        environment: input.environment,
+        providerOperation: input.providerOperation,
+        commandKeyHash,
+        providerAttempt: 2,
+      }).stripeIdempotencyKey;
+    }
+
+    function attemptTwoKeyFingerprint(input, commandKeyHash) {
+      return testDigest('mprc.command-provider-plan-stripe-idempotency-key.v1', [
+        ['version', '1'],
+        ['commandKeyHash', commandKeyHash],
+        ['stripeIdempotencyKey', attemptTwoKey(input, commandKeyHash)],
+      ]);
+    }
+
+    test.each([
+      [
+        'never-began retry',
+        candidateReconciliationEvidence(),
+        'retry_same_operation',
+      ],
+      [
+        'verified expired/unpaid replacement',
+        expiredReconciliationEvidence(),
+        'replace_expired_unpaid',
+      ],
+    ])('binds one constrained attempt-2 plan for the closed %s authorization', async (
+      _label,
+      reconciliationEvidence,
+      transitionKind,
+    ) => {
+      const mock = createMockDb();
+      const { input, paths } = await createPlanFoundation(mock, {
+        reconciliationEvidence,
+        transitionKind,
+      });
+      const preserved = cloneStore(mock.store);
+      const initialPlan = preserved.get(paths.providerPlanPath);
+      const authorization = preserved.get(paths.providerAuthorizationPath);
+      const authorizationAudit = preserved.get(paths.providerAuthorizationAuditPath);
+      const lifecycle = preserved.get(paths.lifecyclePath);
+
+      const result = await bindAuthorizedStripeProviderPlan(input);
+
+      expect(result).toEqual({
+        journalSchemaVersion: 1,
+        providerPlanSchemaVersion: 1,
+        outcome: 'provider_plan_bound',
+        state: 'requires_pre_send_evidence',
+      });
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(Reflect.ownKeys(result).sort()).toEqual([
+        'journalSchemaVersion',
+        'outcome',
+        'providerPlanSchemaVersion',
+        'state',
+      ]);
+
+      const transactionRun = mock.callbackRuns.at(-1);
+      expect(transactionRun.transaction.get).toHaveBeenCalledTimes(15);
+      expect(transactionRun.transaction.create).toHaveBeenCalledTimes(2);
+      expect(Math.max(...transactionRun.transaction.get.mock.invocationCallOrder))
+        .toBeLessThan(Math.min(...transactionRun.transaction.create.mock.invocationCallOrder));
+      expect(transactionRun.writes.map((write) => write.ref.path)).toEqual([
+        paths.authorizedProviderPlanPath,
+        paths.authorizedProviderPlanAuditPath,
+      ]);
+
+      const record = mock.store.get(paths.authorizedProviderPlanPath);
+      const audit = mock.store.get(paths.authorizedProviderPlanAuditPath);
+      const expectedIdempotencyKeyFingerprint = attemptTwoKeyFingerprint(
+        input,
+        paths.commandKeyHash,
+      );
+      expect(record).toEqual({
+        providerPlanSchemaVersion: 1,
+        providerAttemptAuthorizationSchemaVersion: 1,
+        providerAttemptAuthorizationCommitment: (
+          authorizationAudit.providerAttemptAuthorizationCommitment
+        ),
+        commandIdentityVersion: 1,
+        commandKeyHash: paths.commandKeyHash,
+        environment: initialPlan.environment,
+        provider: 'stripe',
+        providerAttempt: 2,
+        providerOperation: initialPlan.providerOperation,
+        stripeMode: initialPlan.stripeMode,
+        stripeAccountFingerprint: initialPlan.stripeAccountFingerprint,
+        stripeApiVersion: initialPlan.stripeApiVersion,
+        httpMethod: 'POST',
+        endpointPath: initialPlan.endpointPath,
+        parametersFingerprint: initialPlan.parametersFingerprint,
+        idempotencyKeyFingerprint: expectedIdempotencyKeyFingerprint,
+        boundFenceEpoch: 2,
+        boundAt: expect.any(Timestamp),
+      });
+      expect(audit).toEqual({
+        providerPlanAuditSchemaVersion: 1,
+        providerAttemptAuthorizationSchemaVersion: 1,
+        providerAttemptAuthorizationCommitment: (
+          authorizationAudit.providerAttemptAuthorizationCommitment
+        ),
+        aggregateType: 'commerce_provider_attempt',
+        commandKeyHash: paths.commandKeyHash,
+        providerAttempt: 2,
+        eventType: 'provider_plan_bound',
+        provider: 'stripe',
+        environment: initialPlan.environment,
+        stripeMode: initialPlan.stripeMode,
+        providerOperation: initialPlan.providerOperation,
+        boundFenceEpoch: 2,
+        occurredAt: expect.any(Timestamp),
+      });
+      expect(record.boundAt).toBe(audit.occurredAt);
+      expect(record.boundAt.toMillis()).toBe(nowMillis);
+      expect(record.boundAt.toMillis()).toBeGreaterThanOrEqual(
+        authorization.authorizedAt.toMillis(),
+      );
+      expect(record.boundAt.toMillis()).toBeGreaterThanOrEqual(
+        lifecycle.leaseAcquiredAt.toMillis(),
+      );
+      expect(record.boundAt.toMillis()).toBeLessThan(lifecycle.leaseExpiresAt.toMillis());
+      expect(record.idempotencyKeyFingerprint).not.toBe(initialPlan.idempotencyKeyFingerprint);
+      expect(record.providerAttemptAuthorizationCommitment).toBe(
+        authorizationAudit.providerAttemptAuthorizationCommitment,
+      );
+      expect(Object.isFrozen(record)).toBe(true);
+      expect(Object.isFrozen(audit)).toBe(true);
+      expect(mock.store.size).toBe(preserved.size + 2);
+      for (const [path_, value] of preserved) expect(mock.store.get(path_)).toBe(value);
+      expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(false);
+
+      for (const field of [
+        'providerPlanSchemaVersion',
+        'commandIdentityVersion',
+        'commandKeyHash',
+        'environment',
+        'provider',
+        'providerOperation',
+        'stripeMode',
+        'stripeAccountFingerprint',
+        'stripeApiVersion',
+        'httpMethod',
+        'endpointPath',
+        'parametersFingerprint',
+      ]) expect(record[field]).toBe(initialPlan[field]);
+
+      const rendered = JSON.stringify({ result, record, audit });
+      const rawAttemptOneKey = createStripeIdempotencyKey({
+        stripeMode: input.stripeMode,
+        environment: input.environment,
+        providerOperation: input.providerOperation,
+        commandKeyHash: paths.commandKeyHash,
+        providerAttempt: 1,
+      }).stripeIdempotencyKey;
+      for (const forbidden of [
+        rawAttemptOneKey,
+        attemptTwoKey(input, paths.commandKeyHash),
+        STRIPE_ACCOUNT_ID,
+        HOSTILE_CANARY,
+        RAW_CALLER,
+        COMMAND_ID,
+        OTHER_LEASE_ID,
+        TRANSITION_RECORD_COMMITMENT,
+      ]) expect(rendered).not.toContain(forbidden);
+      for (const value of [result, record, audit]) {
+        expect(value).not.toHaveProperty('shouldSend');
+        expect(value).not.toHaveProperty('shouldExecute');
+        expect(value).not.toHaveProperty('sendAuthorized');
+        expect(value).not.toHaveProperty('executeProvider');
+        expect(value).not.toHaveProperty('response');
+      }
+    });
+
+    test('binds under a current later fence, then exact and newer-lease observations are read-only', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createPlanFoundation(mock);
+      const preserved = cloneStore(mock.store);
+
+      nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+      await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: THIRD_LEASE_ID }));
+      nowMillis += 1;
+      const laterInput = {
+        ...input,
+        leaseId: THIRD_LEASE_ID,
+        expectedFenceEpoch: 3,
+      };
+      const first = await bindAuthorizedStripeProviderPlan(laterInput);
+      const planBefore = mock.store.get(paths.authorizedProviderPlanPath);
+      const auditBefore = mock.store.get(paths.authorizedProviderPlanAuditPath);
+      expect(first).toMatchObject({
+        outcome: 'provider_plan_bound',
+        state: 'requires_pre_send_evidence',
+      });
+      expect(planBefore.boundFenceEpoch).toBe(3);
+      expect(mock.store.get(paths.providerAuthorizationPath))
+        .toBe(preserved.get(paths.providerAuthorizationPath));
+
+      nowMillis += 1;
+      const exact = await bindAuthorizedStripeProviderPlan(laterInput);
+      expect(exact).toMatchObject({ outcome: 'provider_plan_existing' });
+      expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+
+      nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+      await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: FOURTH_LEASE_ID }));
+      nowMillis += 1;
+      const observed = await bindAuthorizedStripeProviderPlan({
+        ...laterInput,
+        leaseId: FOURTH_LEASE_ID,
+        expectedFenceEpoch: 4,
+      });
+      expect(observed).toBe(exact);
+      expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+      expect(mock.store.get(paths.authorizedProviderPlanPath)).toBe(planBefore);
+      expect(mock.store.get(paths.authorizedProviderPlanAuditPath)).toBe(auditBefore);
+      expect(mock.store.has(paths.authorizedProviderSendPath)).toBe(false);
+    });
+
+    test.each([
+      ['account', { stripeAccountId: OTHER_STRIPE_ACCOUNT_ID }, 'command_conflict'],
+      ['API version', { stripeApiVersion: '2025-07-01.basil' }, 'command_conflict'],
+      ['parameters', {
+        providerParameters: validProviderParameters([
+          ['amount_total', 2600],
+          ['currency', 'usd'],
+          ['synthetic_reference', HOSTILE_CANARY],
+        ]),
+      }, 'command_conflict'],
+      ['mode', { stripeMode: 'live' }, 'invalid_command_input'],
+      ['endpoint', { endpointPath: '/v1/payment_intents' }, 'invalid_command_input'],
+      ['operation', {
+        providerOperation: 'payment_intent_create',
+        endpointPath: '/v1/payment_intents',
+      }, 'invalid_command_input'],
+      ['environment', { environment: 'staging' }, 'command_not_registered'],
+    ])('rejects attempt-1 %s drift before any attempt-2 write', async (
+      _label,
+      change,
+      reason,
+    ) => {
+      const mock = createMockDb();
+      const { input, paths } = await createPlanFoundation(mock);
+      const before = cloneStore(mock.store);
+
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan({ ...input, ...change }),
+        reason,
+        [STRIPE_ACCOUNT_ID, OTHER_STRIPE_ACCOUNT_ID],
+      );
+      expect(mock.store).toEqual(before);
+      expect(mock.store.has(paths.authorizedProviderPlanPath)).toBe(false);
+      expect(mock.store.has(paths.authorizedProviderPlanAuditPath)).toBe(false);
+    });
+
+    test('changed valid authorization input conflicts while preserving the immutable plan', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createPlanFoundation(mock);
+      await bindAuthorizedStripeProviderPlan(input);
+      const planBefore = mock.store.get(paths.authorizedProviderPlanPath);
+      const auditBefore = mock.store.get(paths.authorizedProviderPlanAuditPath);
+      const sizeBefore = mock.store.size;
+      nowMillis += 1;
+
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan({
+          ...input,
+          transitionAuthorization: {
+            ...input.transitionAuthorization,
+            recordCommitment: OTHER_TRANSITION_RECORD_COMMITMENT,
+          },
+        }),
+        'command_conflict',
+      );
+      expect(mock.store.size).toBe(sizeBefore);
+      expect(mock.store.get(paths.authorizedProviderPlanPath)).toBe(planBefore);
+      expect(mock.store.get(paths.authorizedProviderPlanAuditPath)).toBe(auditBefore);
+    });
+
+    test('requires the complete B1-C3C chain and never repairs a missing partner', async () => {
+      const noAuthorization = createMockDb();
+      const unapproved = await createAuthorizationFoundation(noAuthorization);
+      const unapprovedPaths = authorizedProviderPlanPaths(unapproved.input);
+      const unapprovedBefore = cloneStore(noAuthorization.store);
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan(unapproved.input),
+        'journal_record_invalid',
+      );
+      expect(noAuthorization.store).toEqual(unapprovedBefore);
+      expect(noAuthorization.store.has(unapprovedPaths.providerAuthorizationPath)).toBe(false);
+      expect(noAuthorization.store.has(unapprovedPaths.authorizedProviderPlanPath)).toBe(false);
+
+      nowMillis = NOW_MILLIS;
+      const foundation = createMockDb();
+      const { input, paths } = await createPlanFoundation(foundation);
+      const complete = cloneStore(foundation.store);
+      const variants = [];
+      for (const path_ of [
+        paths.commandPath,
+        paths.auditPath,
+        paths.providerPlanPath,
+        paths.providerPlanAuditPath,
+        paths.providerSendPath,
+        paths.providerSendAuditPath,
+        paths.providerReconciliationPath,
+        paths.providerReconciliationAuditPath,
+        paths.providerAuthorizationPath,
+        paths.providerAuthorizationAuditPath,
+        lifecyclePaths(input, 3).lifecycleAuditPath,
+      ]) {
+        const missing = cloneStore(complete);
+        missing.delete(path_);
+        variants.push(missing);
+      }
+      const changedFoundation = cloneStore(complete);
+      changedFoundation.set(paths.providerPlanPath, Object.freeze({
+        ...changedFoundation.get(paths.providerPlanPath),
+        parametersFingerprint: 'a'.repeat(64),
+      }));
+
+      for (const seed of variants) {
+        const mock = createMockDb([...seed]);
+        const before = cloneStore(mock.store);
+        await expectSafeError(
+          () => bindAuthorizedStripeProviderPlan({ ...input, db: mock.db }),
+          'journal_record_invalid',
+        );
+        expect(mock.store).toEqual(before);
+        expect(mock.store.has(paths.authorizedProviderPlanPath)).toBe(false);
+        expect(mock.store.has(paths.authorizedProviderPlanAuditPath)).toBe(false);
+      }
+
+      const changed = createMockDb([...changedFoundation]);
+      const changedBefore = cloneStore(changed.store);
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan({ ...input, db: changed.db }),
+        'command_conflict',
+      );
+      expect(changed.store).toEqual(changedBefore);
+      expect(changed.store.has(paths.authorizedProviderPlanPath)).toBe(false);
+      expect(changed.store.has(paths.authorizedProviderPlanAuditPath)).toBe(false);
+    });
+
+    test('wrong, rolled-back, expired, or terminal lease state cannot bind or observe a plan', async () => {
+      const mock = createMockDb();
+      const { input, paths } = await createPlanFoundation(mock);
+      const ready = cloneStore(mock.store);
+      for (const change of [
+        { leaseId: THIRD_LEASE_ID },
+        { expectedFenceEpoch: 1 },
+        { expectedFenceEpoch: 3 },
+        { leaseId: THIRD_LEASE_ID, expectedFenceEpoch: 3 },
+      ]) {
+        await expectSafeError(
+          () => bindAuthorizedStripeProviderPlan({ ...input, ...change }),
+          'lease_stale',
+        );
+        expect(mock.store).toEqual(ready);
+      }
+
+      const authorization = mock.store.get(paths.providerAuthorizationPath);
+      nowMillis = authorization.authorizedAt.toMillis() - 1;
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan(input),
+        'lease_stale',
+      );
+      nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan(input),
+        'lease_stale',
+      );
+      expect(mock.store).toEqual(ready);
+
+      nowMillis = NOW_MILLIS;
+      const terminal = createMockDb();
+      const terminalFoundation = await createPlanFoundation(terminal);
+      nowMillis += 1;
+      await completeCommerceCommand(completionInput(terminal.db, {
+        leaseId: OTHER_LEASE_ID,
+        expectedFenceEpoch: 2,
+      }));
+      const terminalBefore = cloneStore(terminal.store);
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan(terminalFoundation.input),
+        'lease_stale',
+      );
+      expect(terminal.store).toEqual(terminalBefore);
+      expect(terminal.store.has(terminalFoundation.paths.authorizedProviderPlanPath)).toBe(false);
+    });
+
+    test('orphaned, malformed, future, or authorization-detached plan pairs are never repaired', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createPlanFoundation(foundation);
+      await bindAuthorizedStripeProviderPlan(input);
+      const complete = cloneStore(foundation.store);
+      const plan = complete.get(paths.authorizedProviderPlanPath);
+      const audit = complete.get(paths.authorizedProviderPlanAuditPath);
+      const variants = [];
+
+      const missingPlan = cloneStore(complete);
+      missingPlan.delete(paths.authorizedProviderPlanPath);
+      variants.push(missingPlan);
+      const missingAudit = cloneStore(complete);
+      missingAudit.delete(paths.authorizedProviderPlanAuditPath);
+      variants.push(missingAudit);
+      const extraPlan = cloneStore(complete);
+      extraPlan.set(paths.authorizedProviderPlanPath, Object.freeze({
+        ...plan,
+        extra: HOSTILE_CANARY,
+      }));
+      variants.push(extraPlan);
+      const futurePlanSchema = cloneStore(complete);
+      futurePlanSchema.set(paths.authorizedProviderPlanPath, Object.freeze({
+        ...plan,
+        providerPlanSchemaVersion: 2,
+      }));
+      variants.push(futurePlanSchema);
+      const futureAuditSchema = cloneStore(complete);
+      futureAuditSchema.set(paths.authorizedProviderPlanAuditPath, Object.freeze({
+        ...audit,
+        providerPlanAuditSchemaVersion: 2,
+      }));
+      variants.push(futureAuditSchema);
+      const detached = cloneStore(complete);
+      detached.set(paths.authorizedProviderPlanPath, Object.freeze({
+        ...plan,
+        providerAttemptAuthorizationCommitment: 'a'.repeat(64),
+      }));
+      detached.set(paths.authorizedProviderPlanAuditPath, Object.freeze({
+        ...audit,
+        providerAttemptAuthorizationCommitment: 'a'.repeat(64),
+      }));
+      variants.push(detached);
+      const wrongAttempt = cloneStore(complete);
+      wrongAttempt.set(paths.authorizedProviderPlanPath, Object.freeze({
+        ...plan,
+        providerAttempt: 1,
+      }));
+      wrongAttempt.set(paths.authorizedProviderPlanAuditPath, Object.freeze({
+        ...audit,
+        providerAttempt: 1,
+      }));
+      variants.push(wrongAttempt);
+      const futureTime = Timestamp.fromMillis(plan.boundAt.toMillis() + 1);
+      const future = cloneStore(complete);
+      future.set(paths.authorizedProviderPlanPath, Object.freeze({
+        ...plan,
+        boundAt: futureTime,
+      }));
+      future.set(paths.authorizedProviderPlanAuditPath, Object.freeze({
+        ...audit,
+        occurredAt: futureTime,
+      }));
+      variants.push(future);
+
+      for (const seed of variants) {
+        const mock = createMockDb([...seed]);
+        const before = cloneStore(mock.store);
+        await expectSafeError(
+          () => bindAuthorizedStripeProviderPlan({ ...input, db: mock.db }),
+          'journal_record_invalid',
+        );
+        expect(mock.store).toEqual(before);
+      }
+    });
+
+    test('transaction retries reuse one trusted time and one deterministic pair', async () => {
+      const foundation = createMockDb();
+      const ready = await createPlanFoundation(foundation);
+      const mock = createMockDb([...foundation.store], { callbackRuns: 4 });
+      const input = { ...ready.input, db: mock.db };
+      Timestamp.now.mockClear();
+
+      await expect(bindAuthorizedStripeProviderPlan(input)).resolves.toMatchObject({
+        outcome: 'provider_plan_bound',
+      });
+
+      expect(mock.callbackRuns).toHaveLength(4);
+      for (const { transaction, writes } of mock.callbackRuns) {
+        expect(transaction.get).toHaveBeenCalledTimes(15);
+        expect(transaction.create).toHaveBeenCalledTimes(2);
+        expect(writes).toHaveLength(2);
+        expect(writes[0].value.boundAt).toEqual(Timestamp.fromMillis(nowMillis));
+        expect(writes[1].value.occurredAt).toBe(writes[0].value.boundAt);
+      }
+      const records = mock.callbackRuns.map(({ writes }) => writes[0].value);
+      const audits = mock.callbackRuns.map(({ writes }) => writes[1].value);
+      expect(records.every((value) => JSON.stringify(value) === JSON.stringify(records[0])))
+        .toBe(true);
+      expect(audits.every((value) => JSON.stringify(value) === JSON.stringify(audits[0])))
+        .toBe(true);
+      expect(Timestamp.now).toHaveBeenCalledTimes(2);
+    });
+
+    test('commit failure is atomic, lost acknowledgement recovers, and forged output fails', async () => {
+      const foundation = createMockDb();
+      const { input, paths } = await createPlanFoundation(foundation);
+
+      const commitFailure = createMockDb([...foundation.store], {
+        rejectCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+      });
+      const commitBefore = cloneStore(commitFailure.store);
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan({ ...input, db: commitFailure.db }),
+        'journal_unavailable',
+        [STRIPE_ACCOUNT_ID],
+      );
+      expect(commitFailure.store).toEqual(commitBefore);
+      expect(commitFailure.store.has(paths.authorizedProviderPlanPath)).toBe(false);
+      expect(commitFailure.store.has(paths.authorizedProviderPlanAuditPath)).toBe(false);
+
+      const lostAcknowledgement = createMockDb([...foundation.store], {
+        rejectAfterCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+      });
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan({ ...input, db: lostAcknowledgement.db }),
+        'journal_unavailable',
+        [STRIPE_ACCOUNT_ID],
+      );
+      expect(lostAcknowledgement.store.has(paths.authorizedProviderPlanPath)).toBe(true);
+      expect(lostAcknowledgement.store.has(paths.authorizedProviderPlanAuditPath)).toBe(true);
+      nowMillis += 1;
+      await expect(bindAuthorizedStripeProviderPlan({
+        ...input,
+        db: lostAcknowledgement.db,
+      })).resolves.toMatchObject({ outcome: 'provider_plan_existing' });
+      expect(lostAcknowledgement.callbackRuns.at(-1).writes).toEqual([]);
+
+      const forged = createMockDb([...foundation.store], {
+        returnedValue: Object.freeze({
+          outcome: HOSTILE_CANARY,
+          shouldSend: true,
+        }),
+      });
+      await expectSafeError(
+        () => bindAuthorizedStripeProviderPlan({ ...input, db: forged.db }),
+        'journal_unavailable',
+      );
+      expect(forged.store.has(paths.authorizedProviderPlanPath)).toBe(true);
+      expect(forged.store.has(paths.authorizedProviderPlanAuditPath)).toBe(true);
+      expect(forged.store.has(paths.authorizedProviderSendPath)).toBe(false);
+    });
+
+    test('rejects caller-selected plan, send, key, and shape controls before Firestore', async () => {
+      const mock = createMockDb();
+      const base = providerAuthorizationInput(mock.db);
+      const missing = { ...base };
+      delete missing.transitionAuthorization;
+      const inherited = Object.assign(Object.create({ inherited: true }), base);
+      const badInputs = [
+        { ...base, providerAttempt: 2 },
+        { ...base, stripeIdempotencyKey: HOSTILE_CANARY },
+        { ...base, boundAt: Timestamp.fromMillis(NOW_MILLIS) },
+        { ...base, shouldSend: true },
+        { ...base, executeProvider: true },
+        missing,
+        inherited,
+        new Proxy(base, {}),
+      ];
+
+      for (const badInput of badInputs) {
+        await expectSafeError(
+          () => bindAuthorizedStripeProviderPlan(badInput),
+          'invalid_command_input',
+        );
+      }
+      expect(mock.db.runTransaction).not.toHaveBeenCalled();
+      expect(mock.store.size).toBe(0);
+    });
+  });
 });
 
 describe('exact existing identity and partner validation', () => {
@@ -4667,6 +5265,7 @@ describe('closed source and export boundary', () => {
       'CommerceCommandJournalError',
       'acquireCommerceCommandLease',
       'authorizeNextStripeProviderAttempt',
+      'bindAuthorizedStripeProviderPlan',
       'bindInitialStripeProviderPlan',
       'completeCommerceCommand',
       'failCommerceCommand',
