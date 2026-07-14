@@ -46,6 +46,8 @@ const PRODUCTION_FIREBASE_CONFIG = {
 const FIREBASE_CONFIG = isLocalRuntime
   ? LOCAL_FIREBASE_CONFIG
   : PRODUCTION_FIREBASE_CONFIG;
+const initialPageHadCapabilityCallbackState = typeof window !== 'undefined'
+  && hasCapabilityCallbackState(window.location);
 
 class FirebaseResources {
   readonly app: FirebaseApp;
@@ -81,6 +83,7 @@ class FirebaseResources {
     // while an initial OAuth/checkout capability remains in the page URL.
     if (
       isLocalRuntime
+      || initialPageHadCapabilityCallbackState
       || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
     ) return;
 

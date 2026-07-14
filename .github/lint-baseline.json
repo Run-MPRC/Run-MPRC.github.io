@@ -10,12 +10,12 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 102,
+  "scannedFileCount": 104,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
     ".ts": 31,
-    ".tsx": 24
+    ".tsx": 26
   },
   "errorCount": 125,
   "warningCount": 7,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 7
   },
-  "fingerprint": "sha256:47721020c5ff47ef62494b6dcc6f7b806a4d446d32ef5f9193b1437a324c69b0",
+  "fingerprint": "sha256:7ddc6bb58cff269cf95dc05fc7e649f1f91c551e972afb5d7a0d1db5e0a1c964",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -90,6 +90,8 @@
     "src/pages/legal/Terms.jsx",
     "src/pages/login/LoginForm.jsx",
     "src/pages/login/LoginForm.test.jsx",
+    "src/pages/login/VerifyEmailAction.test.tsx",
+    "src/pages/login/VerifyEmailAction.tsx",
     "src/pages/login/loginReturnPath.ts",
     "src/pages/notFound/NotFound.jsx",
     "src/pages/officers/Committee.jsx",

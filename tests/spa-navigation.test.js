@@ -78,6 +78,34 @@ test('restores the exact same-origin route and clears temporary state', () => {
   assert.equal(storage.has(STORAGE_KEY), false);
 });
 
+test('preserves an Auth action query only for the app to scrub after restoration', () => {
+  const target = '/auth/action?mode=verifyEmail&oobCode=synthetic-action-code#private';
+  const storage = storageWith();
+  const captureWindow = {
+    location: {
+      pathname: '/auth/action',
+      search: '?mode=verifyEmail&oobCode=synthetic-action-code',
+      hash: '#private',
+      replace: () => undefined,
+    },
+    sessionStorage: storage,
+  };
+
+  assert.equal(captureRedirect(captureWindow), true);
+  assert.equal(storage.getItem(STORAGE_KEY), target);
+
+  const historyCalls = [];
+  const restoreWindow = {
+    location: { origin: 'https://runmprc.com' },
+    sessionStorage: storage,
+    history: { replaceState: (...args) => historyCalls.push(args) },
+  };
+
+  assert.equal(restoreRedirect(restoreWindow), true);
+  assert.deepEqual(historyCalls, [[null, '', target]]);
+  assert.equal(storage.has(STORAGE_KEY), false);
+});
+
 test('rejects cross-origin, protocol-relative, and malformed stored targets', () => {
   UNSAFE_STORED_TARGETS.forEach((target) => {
     assert.equal(parseSameOriginTarget(target, 'https://runmprc.com'), null);

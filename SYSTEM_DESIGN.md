@@ -130,6 +130,29 @@ flowchart LR
 
 Text alternative: the 404 page temporarily carries the complete return route to the root page; an early referrer policy keeps the path/query/fragment out of subresource request headers, and the root page deletes the temporary value before accepting only a same-origin route. App Check, Analytics, and Sentry stay off on that initial capability-bearing callback. The bridge does not prove payment, OAuth state, or identity. Server/provider verification still decides the result.
 
+### Firebase Auth action link — source only, not live
+
+```mermaid
+flowchart LR
+    Mail["Private Firebase email link"] --> Bridge["Same-origin Pages handoff"]
+    Bridge --> Route["/auth/action captures one code in memory"]
+    Route --> Scrub["Remove query and fragment from browser history"]
+    Scrub --> Wait["Wait for the member to choose Verify email"]
+    Scanner["Mail scanner opens the page"] --> Wait
+    Wait --> Check{"Provider says VERIFY_EMAIL?"}
+    Check -- "No" --> Stop["Fixed unusable result; no account change"]
+    Check -- "Yes" --> Match{"Signed-in account is safe to continue?"}
+    Match -- "No" --> Stop
+    Match -- "Yes or signed out" --> Apply["Apply the one-time code"]
+    Apply --> Result["Fixed public result; no email or code shown"]
+```
+
+Text alternative: after the website hands off the action route, the app keeps one code only in component memory, removes it from both the visible address and router location, makes no account change when a scanner merely opens the page, and applies it only after a person chooses the button and Firebase confirms the verification operation. The result never grants membership or writes a member profile.
+
+AUTH-MAIL-002C2 [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) owns this verification-only source route. It ignores query-provided API keys and continuation URLs, suppresses Sentry and App Check startup while the initial capability is present, and returns only small non-identifying states. Its fixed `/account` exit performs a full clean-page load so App Check can start only after the private query is gone. Firebase configures one custom handler for verification, password reset, and email recovery. Therefore [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119) must not point the project-wide action URL at this partial route. Keep Firebase's default multi-mode handler or wait for separately reviewed coverage of every enabled mode. Website publication, provider configuration, action-link reachability, and the Firestore verification mirror remain unproven.
+
+The direct-rewrite hosting path does not need browser storage. The existing GitHub Pages fallback from #99 briefly places the complete return route in tab-local `sessionStorage`, then its first root-page script reads and deletes that value before React starts. If the root page never loads, the value can remain until the tab closes. #194 accepts that already-merged residual only for Pages compatibility; it does not call this “memory only.” A future direct SPA rewrite should remove the bridge. The component itself never writes the code to storage or router state.
+
 ## 4. Target deployment topology
 
 The target keeps React, Firebase, and Stripe, but places stronger boundaries around them. Migrating the frontend from GitHub Pages to Firebase Hosting is recommended before live commerce because it supports controlled SPA rewrites, preview channels, and security headers. That hosting migration is not required to design or test the backend, and must be executed as its own issue.

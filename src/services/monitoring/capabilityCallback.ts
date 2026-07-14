@@ -6,6 +6,7 @@ type BrowserLocationState = {
 
 const CAPABILITY_CALLBACK_PATHS = new Set([
   '/account/strava/callback',
+  '/auth/action',
   '/register/success',
   '/shop/purchase/success',
 ]);

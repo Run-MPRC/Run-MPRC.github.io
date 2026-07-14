@@ -1,5 +1,8 @@
 import {
+  ActionCodeOperation,
   Auth,
+  applyActionCode,
+  checkActionCode,
   createUserWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
@@ -20,6 +23,53 @@ import FirebaseResources from '../firebase/FirebaseResources';
 export type UserRole = 'admin' | 'member' | 'unverified' | null;
 
 export type VerificationEmailRequestStatus = 'accepted' | 'unavailable';
+
+export type EmailVerificationActionResult =
+  | 'verified'
+  | 'already-complete'
+  | 'wrong-account'
+  | 'unusable'
+  | 'unavailable';
+
+const UNUSABLE_ACTION_CODE_ERRORS = new Set([
+  'auth/expired-action-code',
+  'auth/invalid-action-code',
+  'auth/user-disabled',
+  'auth/user-not-found',
+]);
+
+export function isValidEmailActionCode(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
+    return false;
+  }
+  // Firebase action codes use its web-safe Base64 alphabet. The dot is the
+  // web-safe padding character; percent escapes and decoded Unicode are not
+  // provider codes and must fail before a network call.
+  return /^[A-Za-z0-9._-]+$/u.test(value);
+}
+
+function readProviderErrorCode(error: unknown): string | null {
+  try {
+    if (typeof error !== 'object' || error === null || !('code' in error)) {
+      return null;
+    }
+    const { code } = error as { code?: unknown };
+    return typeof code === 'string' ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+function actionFailureResult(error: unknown): EmailVerificationActionResult {
+  const code = readProviderErrorCode(error);
+  return code !== null && UNUSABLE_ACTION_CODE_ERRORS.has(code)
+    ? 'unusable'
+    : 'unavailable';
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLocaleLowerCase('en-US');
+}
 
 export interface RegistrationResult {
   credential: UserCredential;
@@ -174,6 +224,53 @@ class IdentityService {
       throw new Error('Not signed in');
     }
     await sendEmailVerification(user);
+  }
+
+  async verifyEmailAction(actionCode: string): Promise<EmailVerificationActionResult> {
+    if (!isValidEmailActionCode(actionCode)) {
+      return 'unusable';
+    }
+
+    let actionInfo;
+    try {
+      actionInfo = await checkActionCode(this.auth, actionCode);
+    } catch (error: unknown) {
+      return actionFailureResult(error);
+    }
+
+    if (actionInfo.operation !== ActionCodeOperation.VERIFY_EMAIL) {
+      return 'unusable';
+    }
+
+    const { email: targetEmail } = actionInfo.data;
+    if (typeof targetEmail !== 'string' || targetEmail.trim() === '') {
+      return 'unusable';
+    }
+
+    try {
+      await this.auth.authStateReady();
+    } catch {
+      return 'unavailable';
+    }
+    const { currentUser } = this.auth;
+    if (currentUser) {
+      if (
+        typeof currentUser.email !== 'string'
+        || normalizeEmail(currentUser.email) !== normalizeEmail(targetEmail)
+      ) {
+        return 'wrong-account';
+      }
+      if (currentUser.emailVerified) {
+        return 'already-complete';
+      }
+    }
+
+    try {
+      await applyActionCode(this.auth, actionCode);
+      return 'verified';
+    } catch (error: unknown) {
+      return actionFailureResult(error);
+    }
   }
 
   async refreshToken(): Promise<string | null> {

@@ -18,6 +18,7 @@ flowchart TD
     Site --> Committee["Committee"]
     Site --> Contact["Contact Us"]
     Site --> Account["Login and Account"]
+    Account --> AuthAction["Verification link page — source only, not live"]
     Site --> Legal["Terms and Privacy"]
     Account --> Admin["Restricted /admin pages — direct link"]
 ```
@@ -101,6 +102,23 @@ flowchart TD
 In words: a signed-in member gets their existing profile unchanged or one new pending profile; the website permits only name editing after the normal permission check succeeds, while phone display and entry stay paused without changing an existing stored value. The repair does not change actual access. If displayed profile status and actual access disagree, stop and escalate.
 
 Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair, and [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) owns the temporary phone-collection pause. Source code and local tests do not make either live. The website, server Function, database permissions, and made-up live check must each be proven separately.
+
+## Verification email action — SOURCE ONLY, NOT LIVE
+
+```mermaid
+flowchart LR
+    Email["Private Firebase email"] --> Page["/auth/action"]
+    Page --> Remove["Remove query and fragment"]
+    Remove --> Button["Wait for Verify email button"]
+    Scanner["Mail scanner opens page"] --> NoChange["No account change"]
+    Button --> Firebase["Firebase confirms verification operation"]
+    Firebase --> Plain["Plain result; no email or code"]
+    Plain -. "does not grant" .-> Access["Membership, payment, discounts, or admin"]
+```
+
+In words: the source page removes the private code, waits for the member to choose one button, and shows a plain result; simply opening the page does nothing and verification never grants club access.
+
+Issue [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) owns only the verification path. Firebase's single custom handler also receives password-reset and email-recovery links, so [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119) must keep the default handler or wait for safe coverage of every mode before enabling this route. Website, provider, and live behavior remain separate proof.
 
 ## Emergency decision
 

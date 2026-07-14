@@ -87,3 +87,25 @@ test('navigates from the wildcard route to home with future behavior enabled', a
   })).toBeInTheDocument();
   expect(window.location.pathname).toBe('/');
 });
+
+test('renders the Auth action route and removes its query and fragment before use', () => {
+  window.history.pushState(
+    {},
+    '',
+    '/auth/action?mode=verifyEmail&oobCode=synthetic-action-code#private-fragment',
+  );
+
+  render(<App />);
+
+  expect(screen.getByRole('heading', {
+    level: 1,
+    name: /email verification/i,
+  })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', {
+    level: 2,
+    name: /page not found/i,
+  })).not.toBeInTheDocument();
+  expect(window.location.pathname).toBe('/auth/action');
+  expect(window.location.search).toBe('');
+  expect(window.location.hash).toBe('');
+});
