@@ -18,6 +18,8 @@ jest.mock('firebase-functions', () => {
 });
 
 jest.mock('firebase-admin', () => {
+  const documents = new Map();
+  const reads = [];
   const writes = [];
 
   function document(path) {
@@ -25,6 +27,14 @@ jest.mock('firebase-admin', () => {
       collection: (name) => ({
         doc: (id) => document(`${path}/${name}/${id}`),
       }),
+      get: async () => {
+        reads.push(path);
+        const data = documents.get(path);
+        return {
+          exists: data !== undefined,
+          data: () => data,
+        };
+      },
       set: async (data, options) => {
         writes.push({ path, data, options });
       },
@@ -37,8 +47,12 @@ jest.mock('firebase-admin', () => {
         doc: (id) => document(`${name}/${id}`),
       }),
     }),
+    __clearDocuments: () => documents.clear(),
+    __clearReads: () => reads.splice(0, reads.length),
     __clearWrites: () => writes.splice(0, writes.length),
+    __getReads: () => [...reads],
     __getWrites: () => [...writes],
+    __setDocument: (path, data) => documents.set(path, data),
   };
 });
 
@@ -58,15 +72,18 @@ jest.mock('./stripeHelpers', () => ({
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
 const { requireAppCheck } = require('./stripeHelpers');
-const { stravaExchangeCode } = require('./strava');
+const { stravaExchangeCode, stravaFetchStats } = require('./strava');
 
 const FIXED_AUTHORIZATION_ERROR = 'Strava authorization could not be completed.';
+const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
 const GUARDED_FETCH = global.fetch;
 const CONTEXT = Object.freeze({
   app: Object.freeze({ appId: 'synthetic-app-check' }),
   auth: Object.freeze({ uid: 'synthetic-member-000001' }),
 });
 const CODE = 'synthetic_authorization_code';
+const CONNECTION_PATH = 'members/synthetic-member-000001/connections/strava';
+const SECRET_PATH = 'members/synthetic-member-000001/secrets/strava';
 
 function publicError(error) {
   return {
@@ -83,7 +100,7 @@ async function captureFailure(action) {
   } catch (error) {
     return error;
   }
-  throw new Error('Expected Strava exchange to fail.');
+  throw new Error('Expected Strava request to fail.');
 }
 
 describe('Strava authorization exchange failure boundary', () => {
@@ -93,6 +110,8 @@ describe('Strava authorization exchange failure boundary', () => {
   beforeEach(() => {
     process.env.STRAVA_CLIENT_ID = 'strava_client_test';
     process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
+    admin.__clearDocuments();
+    admin.__clearReads();
     admin.__clearWrites();
     requireAppCheck.mockReset();
     fetchMock = jest.fn();
@@ -109,6 +128,7 @@ describe('Strava authorization exchange failure boundary', () => {
   });
 
   function expectNoSideEffects() {
+    expect(admin.__getReads()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
@@ -280,6 +300,284 @@ describe('Strava authorization exchange failure boundary', () => {
         options: { merge: true },
       },
     ]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});
+
+describe('Strava token refresh failure boundary', () => {
+  let fetchMock;
+  let consoleSpies;
+
+  const CONNECTION = Object.freeze({
+    provider: 'strava',
+    athleteId: 123456,
+    firstName: 'Synthetic',
+    lastName: 'Athlete',
+    username: 'synthetic-athlete',
+    profileUrl: 'https://images.example.test/synthetic-athlete.png',
+  });
+  const EXPIRED_SECRET = Object.freeze({
+    access_token: 'expired_access_token_test',
+    refresh_token: 'synthetic_refresh_token_test',
+    expires_at: 1,
+    scope: 'read',
+  });
+
+  beforeEach(() => {
+    process.env.STRAVA_CLIENT_ID = 'strava_client_test';
+    process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
+    admin.__clearDocuments();
+    admin.__clearReads();
+    admin.__clearWrites();
+    requireAppCheck.mockReset();
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  });
+
+  afterEach(() => {
+    global.fetch = GUARDED_FETCH;
+    consoleSpies.forEach((spy) => spy.mockRestore());
+    delete process.env.STRAVA_CLIENT_ID;
+    delete process.env.STRAVA_CLIENT_SECRET;
+  });
+
+  function seedExpiredConnection() {
+    admin.__setDocument(CONNECTION_PATH, CONNECTION);
+    admin.__setDocument(SECRET_PATH, EXPIRED_SECRET);
+  }
+
+  function expectNoWritesOrLogs() {
+    expect(admin.__getWrites()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  test('runs App Check before Auth, Firestore, or provider access', async () => {
+    const appCheckFailure = new functions.https.HttpsError(
+      'failed-precondition',
+      'synthetic app check rejection',
+    );
+    requireAppCheck.mockImplementationOnce(() => {
+      throw appCheckFailure;
+    });
+
+    await expect(stravaFetchStats({}, CONTEXT)).rejects.toBe(appCheckFailure);
+
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.__getReads()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoWritesOrLogs();
+  });
+
+  test('rejects a missing caller before Firestore or provider access', async () => {
+    await expect(stravaFetchStats({}, { ...CONTEXT, auth: null }))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+
+    expect(requireAppCheck).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoWritesOrLogs();
+  });
+
+  test('stops when the Strava connection record is missing', async () => {
+    await expect(stravaFetchStats({}, CONTEXT)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Strava not connected',
+    });
+
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoWritesOrLogs();
+  });
+
+  test('stops when the server-only token record is missing', async () => {
+    admin.__setDocument(CONNECTION_PATH, CONNECTION);
+
+    await expect(stravaFetchStats({}, CONTEXT)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Strava not connected',
+    });
+
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoWritesOrLogs();
+  });
+
+  test('does not read or expose a failed refresh response body or status', async () => {
+    seedExpiredConnection();
+    const text = jest.fn().mockResolvedValue(
+      'provider-body-canary refresh_token=provider-secret-canary',
+    );
+    const json = jest.fn();
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 599,
+      text,
+      json,
+    });
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'failed-precondition',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/599|provider-body-canary|provider-secret-canary/i);
+    expect(text).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('turns a refresh transport failure into one fixed unavailable result', async () => {
+    seedExpiredConnection();
+    fetchMock.mockRejectedValue(Object.assign(
+      new Error('transport-canary https://provider.example.test/?token=secret-canary'),
+      { providerBody: 'provider-body-canary' },
+    ));
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/transport-canary|provider\.example|secret-canary|provider-body-canary/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('turns malformed refresh JSON into one fixed unavailable result', async () => {
+    seedExpiredConnection();
+    const json = jest.fn().mockRejectedValue(
+      new Error('json-canary access_token=provider-secret-canary'),
+    );
+    fetchMock.mockResolvedValue({ ok: true, json });
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/json-canary|provider-secret-canary/i);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  });
+
+  test('preserves successful refresh, secret update, and downstream stats result', async () => {
+    seedExpiredConnection();
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          access_token: 'refreshed_access_token_test',
+          refresh_token: 'refreshed_refresh_token_test',
+          expires_at: 1_900_000_000,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue([{
+          id: 987654,
+          name: 'Synthetic Morning Run',
+          sport_type: 'Run',
+          distance: 5000,
+          moving_time: 1500,
+          start_date: '2026-01-02T12:00:00Z',
+        }]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          ytd_run_totals: { distance: 12000, count: 3 },
+          ytd_ride_totals: { distance: 20000, count: 2 },
+          all_run_totals: { distance: 345000, count: 84 },
+        }),
+      });
+
+    const result = await stravaFetchStats({}, CONTEXT);
+
+    expect(result).toEqual({
+      connected: true,
+      athlete: {
+        id: 123456,
+        firstName: 'Synthetic',
+        lastName: 'Athlete',
+        username: 'synthetic-athlete',
+        profileUrl: 'https://images.example.test/synthetic-athlete.png',
+      },
+      recentActivities: [{
+        id: 987654,
+        name: 'Synthetic Morning Run',
+        type: 'Run',
+        distanceMeters: 5000,
+        movingTimeSeconds: 1500,
+        startDate: '2026-01-02T12:00:00Z',
+      }],
+      yearToDate: {
+        runMeters: 12000,
+        runCount: 3,
+        rideMeters: 20000,
+        rideCount: 2,
+      },
+      allTime: {
+        runMeters: 345000,
+        runCount: 84,
+      },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://www.strava.com/api/v3/oauth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: 'strava_client_test',
+          client_secret: 'strava_secret_test',
+          refresh_token: 'synthetic_refresh_token_test',
+          grant_type: 'refresh_token',
+        }),
+      },
+    );
+    const bearerHeaders = { Authorization: 'Bearer refreshed_access_token_test' };
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+      { headers: bearerHeaders },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://www.strava.com/api/v3/athletes/123456/stats',
+      { headers: bearerHeaders },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expect(admin.__getWrites()).toEqual([{
+      path: SECRET_PATH,
+      data: {
+        access_token: 'refreshed_access_token_test',
+        refresh_token: 'refreshed_refresh_token_test',
+        expires_at: 1_900_000_000,
+        scope: 'read',
+        updatedAt: expect.any(Object),
+      },
+      options: { merge: true },
+    }]);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });

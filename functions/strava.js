@@ -8,9 +8,14 @@ const STRAVA_DEAUTH_URL = 'https://www.strava.com/oauth/deauthorize';
 const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities';
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
 const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
+const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 
 function stravaAuthorizationError(code) {
   return new functions.https.HttpsError(code, STRAVA_AUTHORIZATION_ERROR_MESSAGE);
+}
+
+function stravaRefreshError(code) {
+  return new functions.https.HttpsError(code, STRAVA_REFRESH_ERROR_MESSAGE);
 }
 
 function getStravaCreds() {
@@ -66,24 +71,29 @@ async function exchangeCode(code) {
 
 async function refreshToken(refresh) {
   const { clientId, clientSecret } = getStravaCreds();
-  const resp = await fetch(STRAVA_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refresh,
-      grant_type: 'refresh_token',
-    }),
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      `Strava token refresh failed: ${resp.status} ${text.slice(0, 200)}`,
-    );
+  let resp;
+  try {
+    resp = await fetch(STRAVA_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refresh,
+        grant_type: 'refresh_token',
+      }),
+    });
+  } catch (_error) {
+    throw stravaRefreshError('unavailable');
   }
-  return resp.json();
+  if (!resp || resp.ok !== true) {
+    throw stravaRefreshError('failed-precondition');
+  }
+  try {
+    return await resp.json();
+  } catch (_error) {
+    throw stravaRefreshError('unavailable');
+  }
 }
 
 async function getFreshAccessToken(uid) {
