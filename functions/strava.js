@@ -255,8 +255,8 @@ exports.stravaDisconnect = functions
             method: 'POST',
             headers: { Authorization: `Bearer ${accessToken}` },
           });
-        } catch (err) {
-          console.warn('Strava deauth failed (continuing):', err.message);
+        } catch (_error) {
+          console.warn('strava_disconnect_revoke_failed');
         }
       }
     }
