@@ -19,6 +19,11 @@ const {
   REFUND_VALIDATION_REASONS,
   validatePartialRefundAmount,
 } = require('./refundValidation');
+const {
+  REFUND_RESULT_NOT_CONFIRMED_MESSAGE,
+  buildRefundExpectation,
+  validateSucceededRefundResponse,
+} = require('./refundResponseValidation');
 
 const ACTIONS = new Set([
   'refund_full',
@@ -37,11 +42,11 @@ function regRef(eventId, registrationId) {
 }
 
 async function refund({
-  stripe, doc, reg, actor, action, amountCents,
+  stripe, doc, actor, action, expectation,
 }) {
-  const refundPayload = { payment_intent: reg.stripePaymentIntentId };
+  const refundPayload = { payment_intent: expectation.paymentIntentId };
   if (action === 'refund_partial') {
-    refundPayload.amount = amountCents;
+    refundPayload.amount = expectation.requestedAmountCents;
   }
   let stripeRefund;
   try {
@@ -49,27 +54,44 @@ async function refund({
   } catch {
     throw new functions.https.HttpsError(
       'internal',
-      'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+      REFUND_RESULT_NOT_CONFIRMED_MESSAGE,
+    );
+  }
+  const validatedRefund = validateSucceededRefundResponse({
+    refund: stripeRefund,
+    expectation,
+  });
+  if (!validatedRefund.ok) {
+    throw new functions.https.HttpsError(
+      'internal',
+      REFUND_RESULT_NOT_CONFIRMED_MESSAGE,
     );
   }
 
   const isFull = action === 'refund_full';
-  await doc.ref.update({
-    status: isFull ? 'refunded' : 'partially_refunded',
-    refundedAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-    stripeRefundIds: admin.firestore.FieldValue.arrayUnion(stripeRefund.id),
-    auditLog: admin.firestore.FieldValue.arrayUnion(
-      auditEntry({
-        actorUid: actor.uid,
-        actorEmail: actor.email,
-        action: isFull ? 'admin.refund_full' : 'admin.refund_partial',
-        note: `refund=${stripeRefund.id} amount=${isFull ? reg.amountCents : amountCents}`,
-      }),
-    ),
-  });
+  try {
+    await doc.ref.update({
+      status: isFull ? 'refunded' : 'partially_refunded',
+      refundedAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      stripeRefundIds: admin.firestore.FieldValue.arrayUnion(validatedRefund.refundId),
+      auditLog: admin.firestore.FieldValue.arrayUnion(
+        auditEntry({
+          actorUid: actor.uid,
+          actorEmail: actor.email,
+          action: isFull ? 'admin.refund_full' : 'admin.refund_partial',
+          note: `refund=${validatedRefund.refundId} amount=${validatedRefund.amountCents}`,
+        }),
+      ),
+    });
+  } catch {
+    throw new functions.https.HttpsError(
+      'internal',
+      REFUND_RESULT_NOT_CONFIRMED_MESSAGE,
+    );
+  }
 
-  return { ok: true, refundId: stripeRefund.id };
+  return { ok: true, refundId: validatedRefund.refundId };
 }
 
 async function cancel({ doc, actor, note }) {
@@ -357,12 +379,6 @@ exports.adminRegistrationAction = functions
     }
 
     if (action === 'refund_full' || action === 'refund_partial') {
-      if (!reg.stripePaymentIntentId) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'No Stripe payment intent recorded for this registration',
-        );
-      }
       let amountCents = null;
       if (action === 'refund_partial') {
         const validation = validatePartialRefundAmount({
@@ -382,9 +398,22 @@ exports.adminRegistrationAction = functions
         }
         amountCents = validation.amountCents;
       }
+      const expectation = buildRefundExpectation({
+        action,
+        paymentIntentId: reg.stripePaymentIntentId,
+        currency: reg.currency,
+        originalAmountCents: reg.amountCents,
+        requestedAmountCents: amountCents,
+      });
+      if (!expectation.ok) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Stored refund target is unavailable',
+        );
+      }
       const stripe = getStripe();
       return refund({
-        stripe, doc: snap, reg, actor, action, amountCents,
+        stripe, doc: snap, actor, action, expectation,
       });
     }
 

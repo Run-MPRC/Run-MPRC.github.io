@@ -61,8 +61,9 @@ jest.mock('firebase-admin', () => {
     }
 
     async update(data) {
-      mockBusinessWrite('update', this.path, data);
+      const postCommitFailure = mockBusinessWrite('update', this.path, data);
       store.set(this.path, { ...(store.get(this.path) || {}), ...data });
+      if (postCommitFailure instanceof Error) throw postCommitFailure;
     }
   }
 
@@ -201,6 +202,63 @@ function partialRefundData(entry, amountCents) {
   };
 }
 
+function refundResponse(overrides = {}) {
+  return {
+    id: 're_synthetic',
+    object: 'refund',
+    amount: 2500,
+    currency: 'usd',
+    payment_intent: 'pi_synthetic',
+    status: 'succeeded',
+    ...overrides,
+  };
+}
+
+function accessorRefundResponse() {
+  const refund = refundResponse();
+  Object.defineProperty(refund, 'id', {
+    enumerable: true,
+    get() {
+      throw new Error('refund accessor must not run');
+    },
+  });
+  return refund;
+}
+
+const INVALID_STORED_REFUND_TARGETS = [
+  ['missing PaymentIntent', { stripePaymentIntentId: undefined }],
+  ['non-string PaymentIntent', { stripePaymentIntentId: ['pi_synthetic'] }],
+  ['malformed PaymentIntent', { stripePaymentIntentId: 'payment-1' }],
+  ['missing currency', { currency: undefined }],
+  ['uppercase currency', { currency: 'USD' }],
+  ['different currency', { currency: 'eur' }],
+  ['missing original amount', { amountCents: undefined }],
+  ['zero original amount', { amountCents: 0 }],
+  ['fractional original amount', { amountCents: 2500.5 }],
+];
+
+const INVALID_RESOLVED_REFUNDS = [
+  ['missing response', undefined],
+  ['primitive response', 'refund'],
+  ['surprising-prototype response', Object.assign(
+    Object.create({ inherited: true }),
+    refundResponse(),
+  )],
+  ['accessor-backed response', accessorRefundResponse()],
+  ['wrong object type', refundResponse({ object: 'payment_intent' })],
+  ['malformed refund ID', refundResponse({ id: 'refund-1' })],
+  ['wrong PaymentIntent', refundResponse({ payment_intent: 'pi_different123' })],
+  ['expanded PaymentIntent', refundResponse({ payment_intent: { id: 'pi_synthetic' } })],
+  ['wrong currency', refundResponse({ currency: 'cad' })],
+  ['wrong partial amount', refundResponse({ amount: 999 })],
+  ['over-original amount', refundResponse({ amount: 2501 })],
+  ['pending status', refundResponse({ status: 'pending' })],
+  ['action-required status', refundResponse({ status: 'requires_action' })],
+  ['failed status', refundResponse({ status: 'failed' })],
+  ['canceled status', refundResponse({ status: 'canceled' })],
+  ['unknown status', refundResponse({ status: 'future_status' })],
+];
+
 describe('commerce admission at admin entry points', () => {
   beforeEach(() => {
     admin.__clear();
@@ -216,7 +274,7 @@ describe('commerce admission at admin entry points', () => {
       prices: { create: mockPriceCreate },
       paymentLinks: { create: mockPaymentLinkCreate },
     });
-    mockRefundCreate.mockResolvedValue({ id: 're_synthetic' });
+    mockRefundCreate.mockResolvedValue(refundResponse());
     mockProductCreate.mockResolvedValue({ id: 'prod_synthetic' });
     mockPriceCreate.mockResolvedValue({ id: 'price_synthetic' });
     mockPaymentLinkCreate.mockResolvedValue({
@@ -261,6 +319,7 @@ describe('commerce admission at admin entry points', () => {
     admin.__seed(entry.recordPath, {
       status: 'paid',
       amountCents: 2500,
+      currency: 'usd',
       stripePaymentIntentId: 'pi_synthetic',
     });
 
@@ -294,6 +353,7 @@ describe('commerce admission at admin entry points', () => {
     admin.__seed(entry.recordPath, {
       status: 'paid',
       amountCents: originalAmountCents,
+      currency: 'usd',
       stripePaymentIntentId: 'pi_synthetic',
     });
 
@@ -303,6 +363,41 @@ describe('commerce admission at admin entry points', () => {
     )).rejects.toMatchObject({
       code: 'failed-precondition',
       message: 'Stored refund total is unavailable',
+    });
+
+    expect(mockStripeConstructor).not.toHaveBeenCalled();
+    expect(mockRefundCreate).not.toHaveBeenCalled();
+    expect(mockBusinessWrite).not.toHaveBeenCalled();
+  });
+
+  test.each(REFUND_ENTRY_POINTS.flatMap((entry) => (
+    INVALID_STORED_REFUND_TARGETS.map(([caseName, overrides]) => ([
+      entry.name,
+      caseName,
+      entry,
+      overrides,
+    ]))
+  )))('%s rejects a %s before Stripe or business writes', async (
+    _entryName,
+    _caseName,
+    entry,
+    overrides,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed(entry.recordPath, {
+      status: 'paid',
+      amountCents: 2500,
+      currency: 'usd',
+      stripePaymentIntentId: 'pi_synthetic',
+      ...overrides,
+    });
+
+    await expect(entry.handler({
+      ...entry.data,
+      action: 'refund_full',
+    }, adminContext())).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Stored refund target is unavailable',
     });
 
     expect(mockStripeConstructor).not.toHaveBeenCalled();
@@ -395,6 +490,7 @@ describe('commerce admission at admin entry points', () => {
     admin.__seed(recordPath, {
       status: 'paid',
       amountCents: 2500,
+      currency: 'usd',
       stripePaymentIntentId: 'pi_synthetic',
     });
 
@@ -435,6 +531,7 @@ describe('commerce admission at admin entry points', () => {
     admin.__seed(recordPath, {
       status: 'paid',
       amountCents: 2500,
+      currency: 'usd',
       stripePaymentIntentId: 'pi_synthetic',
     });
 
@@ -467,8 +564,10 @@ describe('commerce admission at admin entry points', () => {
     admin.__seed(entry.recordPath, {
       status: 'paid',
       amountCents: 2500,
+      currency: 'usd',
       stripePaymentIntentId: 'pi_synthetic',
     });
+    mockRefundCreate.mockResolvedValueOnce(refundResponse({ amount: amountCents }));
 
     await expect(entry.handler(
       partialRefundData(entry, amountCents),
@@ -494,6 +593,7 @@ describe('commerce admission at admin entry points', () => {
       admin.__seed(entry.recordPath, {
         status: 'paid',
         amountCents: 2500,
+        currency: 'usd',
         stripePaymentIntentId: 'pi_synthetic',
       });
       const hostileProviderDetail = [
@@ -526,6 +626,148 @@ describe('commerce admission at admin entry points', () => {
         status: 'paid',
         amountCents: 2500,
       });
+    },
+  );
+
+  test.each(REFUND_ENTRY_POINTS.map((entry) => [entry.name, entry]))(
+    '%s returns do-not-retry when the local write fails before commit',
+    async (_entryName, entry) => {
+      admin.__seed('systemConfig/commerce', control());
+      admin.__seed(entry.recordPath, {
+        status: 'paid',
+        amountCents: 2500,
+        currency: 'usd',
+        stripePaymentIntentId: 'pi_synthetic',
+      });
+      mockRefundCreate.mockResolvedValueOnce(refundResponse({ amount: 1000 }));
+      const hostileStorageDetail = 'synthetic storage failure record=private-1';
+      mockBusinessWrite.mockImplementationOnce(() => {
+        throw new Error(hostileStorageDetail);
+      });
+
+      const error = await entry.handler(
+        partialRefundData(entry, 1000),
+        adminContext(),
+      ).catch((received) => received);
+
+      expect(error).toMatchObject({
+        code: 'internal',
+        message: 'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+      });
+      expect(error.message).not.toContain(hostileStorageDetail);
+      expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+      expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
+      expect(admin.__get(entry.recordPath)).toMatchObject({
+        status: 'paid',
+        amountCents: 2500,
+      });
+    },
+  );
+
+  test.each(REFUND_ENTRY_POINTS.map((entry) => [entry.name, entry]))(
+    '%s returns do-not-retry when the local write commits but loses its response',
+    async (_entryName, entry) => {
+      admin.__seed('systemConfig/commerce', control());
+      admin.__seed(entry.recordPath, {
+        status: 'paid',
+        amountCents: 2500,
+        currency: 'usd',
+        stripePaymentIntentId: 'pi_synthetic',
+      });
+      mockRefundCreate.mockResolvedValueOnce(refundResponse({ amount: 1000 }));
+      const hostileStorageDetail = 'synthetic lost acknowledgement record=private-1';
+      mockBusinessWrite.mockReturnValueOnce(new Error(hostileStorageDetail));
+
+      const error = await entry.handler(
+        partialRefundData(entry, 1000),
+        adminContext(),
+      ).catch((received) => received);
+
+      expect(error).toMatchObject({
+        code: 'internal',
+        message: 'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+      });
+      expect(error.message).not.toContain(hostileStorageDetail);
+      expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+      expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
+      expect(admin.__get(entry.recordPath)).toMatchObject({
+        status: 'partially_refunded',
+        amountCents: 2500,
+        stripeRefundIds: ['re_synthetic'],
+      });
+    },
+  );
+
+  test.each(REFUND_ENTRY_POINTS.flatMap((entry) => (
+    INVALID_RESOLVED_REFUNDS.map(([caseName, refund]) => ([
+      entry.name,
+      caseName,
+      entry,
+      refund,
+    ]))
+  )))('%s rejects a resolved %s without recording local success', async (
+    _entryName,
+    _caseName,
+    entry,
+    refund,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed(entry.recordPath, {
+      status: 'paid',
+      amountCents: 2500,
+      currency: 'usd',
+      stripePaymentIntentId: 'pi_synthetic',
+    });
+    mockRefundCreate.mockResolvedValueOnce(refund);
+
+    const error = await entry.handler(
+      partialRefundData(entry, 1000),
+      adminContext(),
+    ).catch((received) => received);
+
+    expect(error).toMatchObject({
+      code: 'internal',
+      message: 'Refund result could not be confirmed. Do not retry. Escalate to the treasurer and platform owner.',
+    });
+    expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+    expect(mockBusinessWrite).not.toHaveBeenCalled();
+    expect(admin.__get(entry.recordPath)).toMatchObject({
+      status: 'paid',
+      amountCents: 2500,
+      currency: 'usd',
+      stripePaymentIntentId: 'pi_synthetic',
+    });
+  });
+
+  test.each(REFUND_ENTRY_POINTS.map((entry) => [entry.name, entry]))(
+    '%s records the validated full-remaining amount returned by Stripe',
+    async (_entryName, entry) => {
+      admin.__seed('systemConfig/commerce', control());
+      admin.__seed(entry.recordPath, {
+        status: 'partially_refunded',
+        amountCents: 2500,
+        currency: 'usd',
+        stripePaymentIntentId: 'pi_synthetic',
+        stripeRefundIds: ['re_prior123'],
+      });
+      mockRefundCreate.mockResolvedValueOnce(refundResponse({ amount: 500 }));
+
+      await expect(entry.handler({
+        ...entry.data,
+        action: 'refund_full',
+      }, adminContext())).resolves.toEqual({ ok: true, refundId: 're_synthetic' });
+
+      expect(mockRefundCreate).toHaveBeenCalledWith({ payment_intent: 'pi_synthetic' });
+      expect(mockRefundCreate).toHaveBeenCalledTimes(1);
+      expect(admin.__get(entry.recordPath)).toMatchObject({
+        status: 'refunded',
+        stripeRefundIds: ['re_synthetic'],
+        auditLog: [{
+          action: 'admin.refund_full',
+          note: 'refund=re_synthetic amount=500',
+        }],
+      });
+      expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
     },
   );
 
