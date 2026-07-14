@@ -17,6 +17,7 @@ const {
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
+  recordAuthorizedStripeSendEvidence,
   recordInitialStripeReconciliationEvidence,
   recordInitialStripeSendEvidence,
   registerCommerceCommand,
@@ -98,6 +99,17 @@ const COMMAND_IDS = Object.freeze({
   providerNextPlanLostResponse: 'a4ace024-7913-4bdf-8ace-68ace0247913',
   providerNextPlanCommitFailure: 'a5ace024-7913-4bdf-8ace-68ace0247913',
   providerNextPlanConflict: 'a6ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendNeverBegan: 'b1ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendExpired: 'b2ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendConcurrent: 'b3ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendConflict: 'b4ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendLostResponse: 'b5ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendBoundary: 'b6ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendPostLease: 'b7ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendPostRollback: 'b8ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendReplacement: 'b9ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendCommitFailure: 'baace024-7913-4bdf-8ace-68ace0247913',
+  providerNextSendOrphan: 'bbace024-7913-4bdf-8ace-68ace0247913',
 });
 const BASE_NOW_MILLIS = 1800000000123;
 const LEASE_DURATION_MILLIS = 60000;
@@ -397,6 +409,8 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       .collection('sendEvidence').doc('first'));
     const providerSendAuditRef = trackRef(db.collection('auditEvents')
       .doc(`commerce_provider_send_${commandKeyHash}_0000000001`));
+    const nextProviderSendAuditRef = trackRef(db.collection('auditEvents')
+      .doc(`commerce_provider_send_${commandKeyHash}_0000000002`));
     const providerReconciliationRef = trackRef(providerPlanRef
       .collection('reconciliationEvidence').doc('0000000001'));
     const providerReconciliationAuditRef = trackRef(db.collection('auditEvents')
@@ -424,6 +438,7 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       providerSendRef,
       nextProviderSendRef,
       providerSendAuditRef,
+      nextProviderSendAuditRef,
       providerReconciliationRef,
       providerReconciliationAuditRef,
       providerAuthorizationRef,
@@ -491,6 +506,17 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     };
   }
 
+  async function readNextProviderSendEvidence(pair) {
+    const [evidenceSnapshot, auditSnapshot] = await Promise.all([
+      pair.nextProviderSendRef.get(),
+      pair.nextProviderSendAuditRef.get(),
+    ]);
+    return {
+      evidence: snapshotEvidence(evidenceSnapshot),
+      audit: snapshotEvidence(auditSnapshot),
+    };
+  }
+
   async function readProviderReconciliationEvidence(pair) {
     const [evidenceSnapshot, auditSnapshot] = await Promise.all([
       pair.providerReconciliationRef.get(),
@@ -546,6 +572,14 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       reconciliation,
       authorization,
     };
+  }
+
+  async function readAuthorizedProviderPlanFoundationEvidence(pair) {
+    const [foundation, nextProvider] = await Promise.all([
+      readAuthorizedProviderFoundationEvidence(pair),
+      readNextProviderEvidence(pair),
+    ]);
+    return { ...foundation, nextProvider };
   }
 
   async function matchingAudits(pair) {
@@ -646,6 +680,20 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
       providerPlanSchemaVersion: 1,
       outcome,
       state: 'requires_pre_send_evidence',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  }
+
+  function expectAuthorizedProviderSendResult(result, outcome) {
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      providerPlanSchemaVersion: 1,
+      providerPlanCommitmentSchemaVersion: 2,
+      providerSendEvidenceSchemaVersion: 2,
+      outcome,
+      state: outcome === 'send_permitted'
+        ? 'pre_send_recorded'
+        : 'provider_outcome_unknown',
     });
     expect(Object.isFrozen(result)).toBe(true);
   }
@@ -766,6 +814,25 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     );
     expectProviderAuthorizationResult(
       await authorizeNextStripeProviderAttempt(setup.authorizationArgs),
+    );
+    return setup;
+  }
+
+  async function setupBoundAuthorizedProviderPlan(
+    commandId,
+    reference,
+    leaseIndex,
+    reconciliationEvidence,
+  ) {
+    const setup = await setupAuthorizedProviderCandidate(
+      commandId,
+      reference,
+      leaseIndex,
+      reconciliationEvidence,
+    );
+    expectAuthorizedProviderPlanResult(
+      await bindAuthorizedStripeProviderPlan(setup.authorizationArgs),
+      'provider_plan_bound',
     );
     return setup;
   }
@@ -3631,5 +3698,579 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     expect((await matchingAudits(setup.pair)).size).toBe(auditsBefore.size);
     expect(nextProviderBefore.plan.exists).toBe(false);
     expect(nextProviderBefore.audit.exists).toBe(false);
+  });
+
+  test.each([
+    [
+      'execution-never-began authorization',
+      COMMAND_IDS.providerNextSendNeverBegan,
+      'provider-next-send-never-began',
+      380,
+      dispatchNeverBeganCandidate,
+      'retry_same_operation',
+    ],
+    [
+      'expired-and-unpaid authorization',
+      COMMAND_IDS.providerNextSendExpired,
+      'provider-next-send-expired',
+      382,
+      expiredAttemptCandidate,
+      'replace_expired_unpaid',
+    ],
+  ])('records attempt-2 pre-send evidence from %s without changing B1-C4A', async (
+    _label,
+    commandId,
+    reference,
+    leaseIndex,
+    evidenceFactory,
+    expectedTransitionKind,
+  ) => {
+    const setup = await setupBoundAuthorizedProviderPlan(
+      commandId,
+      reference,
+      leaseIndex,
+      evidenceFactory(),
+    );
+    const foundationBefore = await readAuthorizedProviderPlanFoundationEvidence(
+      setup.pair,
+    );
+    const nextProvider = foundationBefore.nextProvider;
+
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'send_permitted',
+    );
+
+    const send = await readNextProviderSendEvidence(setup.pair);
+    expect(setup.pair.nextProviderSendRef.path).toBe(
+      `checkoutRequests/${setup.pair.commandKeyHash}`
+      + '/providerAttempts/0000000002/sendEvidence/first',
+    );
+    expect(setup.pair.nextProviderSendAuditRef.path).toBe(
+      `auditEvents/commerce_provider_send_${setup.pair.commandKeyHash}_0000000002`,
+    );
+    expect(send.evidence.exists).toBe(true);
+    expect(send.audit.exists).toBe(true);
+    expect(send.evidence.createTime).toBe(send.evidence.updateTime);
+    expect(send.audit.createTime).toBe(send.audit.updateTime);
+    expect(Object.keys(send.evidence.data).sort()).toEqual([
+      'automaticRetryDeadlineAt',
+      'commandIdentityVersion',
+      'commandKeyHash',
+      'prePostFenceEpoch',
+      'prePostRecordedAt',
+      'provider',
+      'providerAttempt',
+      'providerAttemptAuthorizationCommitment',
+      'providerAttemptAuthorizationSchemaVersion',
+      'providerPlanCommitment',
+      'providerPlanCommitmentSchemaVersion',
+      'providerPlanSchemaVersion',
+      'providerSendEvidenceSchemaVersion',
+    ].sort());
+    expect(send.evidence.data).toMatchObject({
+      providerSendEvidenceSchemaVersion: 2,
+      providerPlanSchemaVersion: 1,
+      providerPlanCommitmentSchemaVersion: 2,
+      providerAttemptAuthorizationSchemaVersion: 1,
+      commandIdentityVersion: 1,
+      commandKeyHash: setup.pair.commandKeyHash,
+      providerAttempt: 2,
+      provider: 'stripe',
+      providerPlanCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      providerAttemptAuthorizationCommitment: (
+        nextProvider.plan.data.providerAttemptAuthorizationCommitment
+      ),
+      prePostFenceEpoch: 2,
+    });
+    expect(send.evidence.data.prePostRecordedAt.toMillis())
+      .toBe(nextProvider.plan.data.boundAt.toMillis());
+    expect(send.evidence.data.automaticRetryDeadlineAt.toMillis()
+      - send.evidence.data.prePostRecordedAt.toMillis())
+      .toBe(PROVIDER_SEND_RETRY_WINDOW_MILLIS);
+    expect(send.evidence.data.automaticRetryDeadlineAt.toMillis())
+      .toBeGreaterThan(setup.automaticRetryDeadlineAt.toMillis());
+    expect(Object.keys(send.audit.data).sort()).toEqual([
+      'aggregateType',
+      'automaticRetryDeadlineAt',
+      'commandKeyHash',
+      'environment',
+      'eventType',
+      'occurredAt',
+      'prePostFenceEpoch',
+      'provider',
+      'providerAttempt',
+      'providerAttemptAuthorizationCommitment',
+      'providerAttemptAuthorizationSchemaVersion',
+      'providerOperation',
+      'providerPlanCommitment',
+      'providerPlanCommitmentSchemaVersion',
+      'providerPlanSchemaVersion',
+      'providerSendAuditSchemaVersion',
+      'providerSendEvidenceSchemaVersion',
+      'stripeMode',
+    ].sort());
+    expect(send.audit.data).toMatchObject({
+      providerSendAuditSchemaVersion: 2,
+      providerSendEvidenceSchemaVersion: 2,
+      providerPlanSchemaVersion: 1,
+      providerPlanCommitmentSchemaVersion: 2,
+      providerAttemptAuthorizationSchemaVersion: 1,
+      aggregateType: 'commerce_provider_send',
+      commandKeyHash: setup.pair.commandKeyHash,
+      providerAttempt: 2,
+      eventType: 'provider_pre_send_recorded',
+      provider: 'stripe',
+      environment: 'test',
+      stripeMode: 'test',
+      providerOperation: STRIPE_OPERATION,
+      providerPlanCommitment: send.evidence.data.providerPlanCommitment,
+      providerAttemptAuthorizationCommitment: (
+        send.evidence.data.providerAttemptAuthorizationCommitment
+      ),
+      prePostFenceEpoch: 2,
+    });
+    expect(send.audit.data.occurredAt.toMillis())
+      .toBe(send.evidence.data.prePostRecordedAt.toMillis());
+    expect(send.audit.data.automaticRetryDeadlineAt.toMillis())
+      .toBe(send.evidence.data.automaticRetryDeadlineAt.toMillis());
+    expect(foundationBefore.authorization.authorization.data.transitionKind)
+      .toBe(expectedTransitionKind);
+    expect(await readAuthorizedProviderPlanFoundationEvidence(setup.pair))
+      .toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(9);
+
+    const rendered = JSON.stringify({ send });
+    expect(rendered).not.toContain(STRIPE_ACCOUNT_ID);
+    expect(rendered).not.toContain(reference);
+    expect(rendered).not.toContain(setup.freshLeaseId);
+    expect(rendered).not.toContain(TRANSITION_RECORD_COMMITMENT);
+  });
+
+  test('24 identical attempt-2 pre-send calls create one immutable pair', async () => {
+    const setup = await setupBoundAuthorizedProviderPlan(
+      COMMAND_IDS.providerNextSendConcurrent,
+      'provider-next-send-concurrent',
+      384,
+      dispatchNeverBeganCandidate(),
+    );
+    const foundationBefore = await readAuthorizedProviderPlanFoundationEvidence(
+      setup.pair,
+    );
+
+    const results = await Promise.all(Array.from(
+      { length: CONCURRENT_CALLS },
+      () => retryWholeOperationAfterUnavailable(
+        () => recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+        retryEvidence,
+      ),
+    ));
+    for (const result of results) {
+      expectAuthorizedProviderSendResult(result, 'send_permitted');
+    }
+
+    const send = await readNextProviderSendEvidence(setup.pair);
+    expect(send.evidence.exists).toBe(true);
+    expect(send.audit.exists).toBe(true);
+    expect(send.evidence.createTime).toBe(send.evidence.updateTime);
+    expect(send.audit.createTime).toBe(send.audit.updateTime);
+    expect(await readAuthorizedProviderPlanFoundationEvidence(setup.pair))
+      .toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(9);
+  });
+
+  test('12 exact and 12 conflicting calls preserve the established C4A winner', async () => {
+    const evidence = expiredAttemptCandidate();
+    const setup = await setupPersistedProviderCandidate(
+      COMMAND_IDS.providerNextSendConflict,
+      'provider-next-send-conflict',
+      386,
+      evidence,
+    );
+    const winningArgs = setup.authorizationArgs;
+    const losingArgs = providerAuthorizationArgs(
+      setup.args,
+      setup.freshLeaseId,
+      2,
+      evidence,
+      'replace_expired_unpaid',
+      OTHER_TRANSITION_RECORD_COMMITMENT,
+    );
+    expectProviderAuthorizationResult(
+      await authorizeNextStripeProviderAttempt(winningArgs),
+    );
+    expectAuthorizedProviderPlanResult(
+      await bindAuthorizedStripeProviderPlan(winningArgs),
+      'provider_plan_bound',
+    );
+    const foundationBefore = await readAuthorizedProviderPlanFoundationEvidence(
+      setup.pair,
+    );
+
+    const settled = await Promise.allSettled([
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => recordAuthorizedStripeSendEvidence(winningArgs),
+        retryEvidence,
+      )),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => recordAuthorizedStripeSendEvidence(losingArgs),
+        retryEvidence,
+      )),
+    ]);
+    const fulfilled = settled.filter(({ status }) => status === 'fulfilled');
+    const rejected = settled.filter(({ status }) => status === 'rejected');
+    expect(fulfilled).toHaveLength(12);
+    for (const result of fulfilled) {
+      expectAuthorizedProviderSendResult(result.value, 'send_permitted');
+    }
+    expect(rejected).toHaveLength(12);
+    for (const result of rejected) expectJournalError(result.reason, 'command_conflict');
+
+    const sendBeforeProbes = await readNextProviderSendEvidence(setup.pair);
+    expect(sendBeforeProbes.evidence.exists).toBe(true);
+    expect(sendBeforeProbes.audit.exists).toBe(true);
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(winningArgs),
+      'send_permitted',
+    );
+    await expect(recordAuthorizedStripeSendEvidence(losingArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'command_conflict',
+    });
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(sendBeforeProbes);
+    expect(await readAuthorizedProviderPlanFoundationEvidence(setup.pair))
+      .toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(9);
+  });
+
+  test('lost-response retries and a later valid lease reuse the original window', async () => {
+    const evidence = dispatchNeverBeganCandidate();
+    const setup = await setupBoundAuthorizedProviderPlan(
+      COMMAND_IDS.providerNextSendLostResponse,
+      'provider-next-send-lost-response',
+      388,
+      evidence,
+    );
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'send_permitted',
+    );
+    const sendBefore = await readNextProviderSendEvidence(setup.pair);
+
+    const retries = await Promise.all(Array.from(
+      { length: 8 },
+      () => recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+    ));
+    for (const result of retries) {
+      expectAuthorizedProviderSendResult(result, 'send_permitted');
+    }
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+
+    const currentLifecycle = await setup.pair.lifecycleRef.get();
+    const laterLeaseId = deterministicLeaseId(390);
+    setTrustedNow(currentLifecycle.data().leaseExpiresAt.toMillis());
+    expectLeaseResult(await acquireCommerceCommandLease(acquireArgs(
+      db,
+      COMMAND_IDS.providerNextSendLostResponse,
+      setup.commandPayload,
+      laterLeaseId,
+    )), 3);
+    const laterArgs = providerAuthorizationArgs(
+      setup.args,
+      laterLeaseId,
+      3,
+      evidence,
+      setup.transitionKind,
+    );
+    const foundationBefore = {
+      ...(await readAuthorizedProviderPlanFoundationEvidence(setup.pair)),
+      laterLeaseAudit: snapshotEvidence(await readAudit(setup.pair, 4)),
+    };
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(laterArgs),
+      'send_permitted',
+    );
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+    expect({
+      ...(await readAuthorizedProviderPlanFoundationEvidence(setup.pair)),
+      laterLeaseAudit: snapshotEvidence(await readAudit(setup.pair, 4)),
+    }).toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(10);
+  });
+
+  test('attempt-2 deadline permits minus 1ns and reconciles at equality and later', async () => {
+    const evidence = dispatchNeverBeganCandidate();
+    const setup = await setupBoundAuthorizedProviderPlan(
+      COMMAND_IDS.providerNextSendBoundary,
+      'provider-next-send-boundary',
+      392,
+      evidence,
+    );
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'send_permitted',
+    );
+    const sendBefore = await readNextProviderSendEvidence(setup.pair);
+    const deadline = sendBefore.evidence.data.automaticRetryDeadlineAt;
+    const takeoverLeaseId = deterministicLeaseId(394);
+    setTrustedNow(deadline.toMillis() - 1000);
+    expectLeaseResult(await acquireCommerceCommandLease(acquireArgs(
+      db,
+      COMMAND_IDS.providerNextSendBoundary,
+      setup.commandPayload,
+      takeoverLeaseId,
+    )), 3);
+    const takeoverArgs = providerAuthorizationArgs(
+      setup.args,
+      takeoverLeaseId,
+      3,
+      evidence,
+      setup.transitionKind,
+    );
+
+    const immediatelyBeforeDeadline = new admin.firestore.Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds - 1,
+    );
+    timestampNow
+      .mockImplementationOnce(() => immediatelyBeforeDeadline)
+      .mockImplementationOnce(() => immediatelyBeforeDeadline);
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(takeoverArgs),
+      'send_permitted',
+    );
+    timestampNow.mockImplementationOnce(() => new admin.firestore.Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds,
+    ));
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(takeoverArgs),
+      'reconciliation_required',
+    );
+    timestampNow.mockImplementationOnce(() => new admin.firestore.Timestamp(
+      deadline._seconds,
+      deadline._nanoseconds + 1,
+    ));
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(takeoverArgs),
+      'reconciliation_required',
+    );
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(10);
+  });
+
+  test.each([
+    [
+      'lease-expiry equality',
+      COMMAND_IDS.providerNextSendPostLease,
+      'provider-next-send-post-lease',
+      396,
+      'lease_expiry',
+    ],
+    [
+      'trusted-clock rollback',
+      COMMAND_IDS.providerNextSendPostRollback,
+      'provider-next-send-post-rollback',
+      398,
+      'clock_rollback',
+    ],
+  ])('post-transaction %s commits evidence but returns reconciliation', async (
+    _label,
+    commandId,
+    reference,
+    leaseIndex,
+    boundary,
+  ) => {
+    const setup = await setupBoundAuthorizedProviderPlan(
+      commandId,
+      reference,
+      leaseIndex,
+      dispatchNeverBeganCandidate(),
+    );
+    const lifecycle = await setup.pair.lifecycleRef.get();
+    const plan = await setup.pair.nextProviderPlanRef.get();
+    const transactionTime = boundary === 'lease_expiry'
+      ? new admin.firestore.Timestamp(
+        lifecycle.data().leaseExpiresAt._seconds,
+        lifecycle.data().leaseExpiresAt._nanoseconds - 1,
+      )
+      : plan.data().boundAt;
+    const returnedTime = boundary === 'lease_expiry'
+      ? lifecycle.data().leaseExpiresAt
+      : new admin.firestore.Timestamp(
+        transactionTime._seconds,
+        transactionTime._nanoseconds - 1,
+      );
+    timestampNow
+      .mockImplementationOnce(() => transactionTime)
+      .mockImplementationOnce(() => returnedTime);
+
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'reconciliation_required',
+    );
+    const send = await readNextProviderSendEvidence(setup.pair);
+    expect(send.evidence.exists).toBe(true);
+    expect(send.audit.exists).toBe(true);
+    expect(send.evidence.data.prePostRecordedAt.toMillis())
+      .toBe(transactionTime.toMillis());
+    expect((await matchingAudits(setup.pair)).size).toBe(9);
+  });
+
+  test('v2 commitment rejects coherent plan replacement and detached provenance', async () => {
+    const setup = await setupBoundAuthorizedProviderPlan(
+      COMMAND_IDS.providerNextSendReplacement,
+      'provider-next-send-replacement',
+      400,
+      expiredAttemptCandidate(),
+    );
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'send_permitted',
+    );
+    const sendBefore = await readNextProviderSendEvidence(setup.pair);
+    const plan = await setup.pair.nextProviderPlanRef.get();
+    const planAudit = await setup.pair.nextProviderAuditRef.get();
+    const replacementTime = admin.firestore.Timestamp.fromMillis(
+      plan.data().boundAt.toMillis() + 1,
+    );
+    await Promise.all([
+      setup.pair.nextProviderPlanRef.delete(),
+      setup.pair.nextProviderAuditRef.delete(),
+    ]);
+    await Promise.all([
+      setup.pair.nextProviderPlanRef.create({
+        ...plan.data(),
+        boundAt: replacementTime,
+      }),
+      setup.pair.nextProviderAuditRef.create({
+        ...planAudit.data(),
+        occurredAt: replacementTime,
+      }),
+    ]);
+    setTrustedNow(replacementTime.toMillis() + 1);
+    await expect(recordAuthorizedStripeSendEvidence(setup.authorizationArgs))
+      .rejects.toMatchObject({
+        code: 'commerce_command_journal_error',
+        reason: 'journal_record_invalid',
+      });
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+
+    await Promise.all([
+      setup.pair.nextProviderPlanRef.delete(),
+      setup.pair.nextProviderAuditRef.delete(),
+    ]);
+    await Promise.all([
+      setup.pair.nextProviderPlanRef.create(plan.data()),
+      setup.pair.nextProviderAuditRef.create(planAudit.data()),
+    ]);
+    const validSendRecord = await setup.pair.nextProviderSendRef.get();
+    const validSendAudit = await setup.pair.nextProviderSendAuditRef.get();
+    await Promise.all([
+      setup.pair.nextProviderSendRef.set({
+        ...validSendRecord.data(),
+        providerAttemptAuthorizationCommitment: OTHER_TRANSITION_RECORD_COMMITMENT,
+      }),
+      setup.pair.nextProviderSendAuditRef.set({
+        ...validSendAudit.data(),
+        providerAttemptAuthorizationCommitment: OTHER_TRANSITION_RECORD_COMMITMENT,
+      }),
+    ]);
+    const detachedBefore = await readNextProviderSendEvidence(setup.pair);
+    await expect(recordAuthorizedStripeSendEvidence(setup.authorizationArgs))
+      .rejects.toMatchObject({
+        code: 'commerce_command_journal_error',
+        reason: 'journal_record_invalid',
+      });
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(detachedBefore);
+  });
+
+  test('an injected commit failure leaves neither attempt-2 send partner', async () => {
+    const setup = await setupBoundAuthorizedProviderPlan(
+      COMMAND_IDS.providerNextSendCommitFailure,
+      'provider-next-send-commit-failure',
+      402,
+      dispatchNeverBeganCandidate(),
+    );
+    const foundationBefore = await readAuthorizedProviderPlanFoundationEvidence(
+      setup.pair,
+    );
+    const sendBefore = await readNextProviderSendEvidence(setup.pair);
+    const auditsBefore = await matchingAudits(setup.pair);
+    const commitFailure = jest.spyOn(FirestoreTransaction.prototype, 'commit')
+      .mockRejectedValueOnce(new Error('synthetic attempt-2 send commit failure'));
+    let commitCalls = 0;
+
+    try {
+      const error = await recordAuthorizedStripeSendEvidence(
+        setup.authorizationArgs,
+      ).then(
+        () => null,
+        (reason) => reason,
+      );
+      expectJournalError(error, 'journal_unavailable');
+      commitCalls = commitFailure.mock.calls.length;
+    } finally {
+      commitFailure.mockRestore();
+    }
+    expect(commitCalls).toBe(1);
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(sendBefore);
+    expect(await readAuthorizedProviderPlanFoundationEvidence(setup.pair))
+      .toEqual(foundationBefore);
+    expect((await matchingAudits(setup.pair)).size).toBe(auditsBefore.size);
+    expect(sendBefore.evidence.exists).toBe(false);
+    expect(sendBefore.audit.exists).toBe(false);
+  });
+
+  test('attempt-2 send orphans fail closed and missing time reconciles', async () => {
+    const setup = await setupBoundAuthorizedProviderPlan(
+      COMMAND_IDS.providerNextSendOrphan,
+      'provider-next-send-orphan',
+      404,
+      expiredAttemptCandidate(),
+    );
+    await setup.pair.nextProviderSendAuditRef.create({
+      providerSendAuditSchemaVersion: 2,
+      syntheticOrphan: true,
+    });
+    const auditOrphanBefore = await readNextProviderSendEvidence(setup.pair);
+    await expect(recordAuthorizedStripeSendEvidence(setup.authorizationArgs))
+      .rejects.toMatchObject({
+        code: 'commerce_command_journal_error',
+        reason: 'journal_record_invalid',
+      });
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(auditOrphanBefore);
+
+    await setup.pair.nextProviderSendAuditRef.delete();
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'send_permitted',
+    );
+    const validEvidence = await setup.pair.nextProviderSendRef.get();
+    const validAudit = await setup.pair.nextProviderSendAuditRef.get();
+    await setup.pair.nextProviderSendAuditRef.delete();
+    const recordOrphanBefore = await readNextProviderSendEvidence(setup.pair);
+    await expect(recordAuthorizedStripeSendEvidence(setup.authorizationArgs))
+      .rejects.toMatchObject({
+        code: 'commerce_command_journal_error',
+        reason: 'journal_record_invalid',
+      });
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(recordOrphanBefore);
+
+    await setup.pair.nextProviderSendAuditRef.create(validAudit.data());
+    const evidenceWithoutTime = { ...validEvidence.data() };
+    const auditWithoutTime = { ...validAudit.data() };
+    delete evidenceWithoutTime.prePostRecordedAt;
+    delete auditWithoutTime.occurredAt;
+    await Promise.all([
+      setup.pair.nextProviderSendRef.set(evidenceWithoutTime),
+      setup.pair.nextProviderSendAuditRef.set(auditWithoutTime),
+    ]);
+    const unknownBefore = await readNextProviderSendEvidence(setup.pair);
+    expectAuthorizedProviderSendResult(
+      await recordAuthorizedStripeSendEvidence(setup.authorizationArgs),
+      'reconciliation_required',
+    );
+    expect(await readNextProviderSendEvidence(setup.pair)).toEqual(unknownBefore);
   });
 });

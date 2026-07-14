@@ -392,7 +392,7 @@ flowchart LR
     G -- "No" --> S["Stop; no write"]
     G -- "Yes" --> P["Write immutable attempt-2 plan + audit"]
     P --> R["Stop at requires_pre_send_evidence"]
-    R -. "No Stripe call" .-> C4B["Future C4B pre-send gate"]
+    R -. "No Stripe call" .-> C4B["C4B attempt-2 pre-send gate"]
 ```
 
 Text alternative: the exact C3C authorization and current active lease can create only an immutable attempt-2 Checkout Session plan; C4B must still record pre-send evidence before that Session request.
@@ -415,7 +415,52 @@ Expected proof: both allowed C3C transitions bind the same constrained attempt-2
 
 Stop if the emulator names a non-demo project, any provider credential is present, a network/provider call occurs, an attempt-2 send-evidence document appears, an earlier record changes, or any browser role can access the plan or audit.
 
-This is source and synthetic-test evidence only. It does not prove Firebase deployment, Stripe/provider configuration, production data, website publication, `runmprc.com`, or live behavior. Officer impact is none because no officer action or live surface changes. C4B pre-send controls and PAY-002C/D/PAY-003B runtime adoption remain open. Never test this boundary with a real registration, order, Stripe object, customer, or member.
+This is source and synthetic-test evidence only. It does not prove Firebase deployment, Stripe/provider configuration, production data, website publication, `runmprc.com`, or live behavior. Officer impact is none because no officer action or live surface changes. C4B source/tests are tracked in [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238); PAY-002C/D/PAY-003B runtime adoption remains open. Never test this boundary with a real registration, order, Stripe object, customer, or member.
+
+### Authorized Stripe attempt-2 pre-send evidence — SOURCE ONLY, UNUSED
+
+PAY-002B2C4B [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238) adds one server-only attempt-2 pre-send marker after the C4A plan. No endpoint or Functions index imports it. It cannot call Stripe, create attempt `3`, change a registration/order/hold, return a Checkout URL, or send a response to a member.
+
+```text
+checkoutRequests/{commandKeyHash}/providerAttempts/0000000002/sendEvidence/first
+auditEvents/commerce_provider_send_{commandKeyHash}_0000000002
+```
+
+```mermaid
+flowchart TD
+    P["Exact C4A attempt-2 plan + audit"] --> G{"Exact chain and active lease?"}
+    L["Current holder and fence"] --> G
+    G -- "No" --> S["Stop; no write"]
+    G -- "Yes" --> E["Create or read immutable pre-send pair"]
+    E --> T["Second trusted-time check"]
+    T -- "Before lease expiry and 23-hour deadline" --> Permit["send_permitted"]
+    T -- "Equality, later, or rollback" --> Reconcile["reconciliation_required"]
+    Permit -. "No Stripe call here" .-> Future["Future trusted runtime"]
+```
+
+Text alternative: the exact attempt-2 Checkout Session plan and current lease may create one immutable pre-send pair; permission is returned only after a second clock check stays before both limits, and this source never contacts Stripe.
+
+C4B leaves the existing version-1 plan-commitment bytes unchanged. It uses `providerPlanCommitmentSchemaVersion: 2` to cover every C4A plan field, its nanosecond binding time, and both authorization-provenance fields. The marker time is captured once before the transaction. Its deadline is exactly 23 hours later and cannot move on retry.
+
+The fixed permitted result contains only schema versions, `send_permitted`, and `pre_send_recorded`. The fixed ambiguous result contains only schema versions, `reconciliation_required`, and `provider_outcome_unknown`. Neither result proves caller authority, current business state, Stripe-account control, request execution, or a provider result. This boundary is only for `checkout_session_create` at `POST /v1/checkout/sessions`; Product/Price creation, Session expiry, refunds, and privileged provider actions need separate reviewed boundaries.
+
+Run only with Node 20, Java 17, repository lockfiles, and synthetic demo data:
+
+```bash
+npm --prefix functions run test:run -- --runInBand commerceCommandJournal.test.js
+REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR=1 \
+  npx --no-install firebase emulators:exec \
+  --project demo-pay002b2-test \
+  --only firestore \
+  "npm --prefix functions run test:run -- --runInBand commerceCommandJournal.emulator.test.js"
+npm run test:rules
+```
+
+Expected proof: both allowed C3C transitions reach the same C4A/C4B shape; the version-2 golden commitment covers the full authorized plan while version-1 bytes stay unchanged; exact concurrency creates one pair; a later valid lease observes the same deadline; and equality, expiry, rollback, changed provenance, malformed partners, commit failure, or browser access never permits a send. All earlier journal records must remain byte-identical.
+
+Stop if the emulator names a non-demo project, any provider credential is present, a network/provider call occurs, the deadline changes on retry, attempt `3` appears, a business record changes, version-1 commitment bytes change, an earlier record changes, or any browser role can access the marker or audit.
+
+This is source and synthetic-test evidence only. Record these states separately: source changed; tests passed; code merged; website published; `runmprc.com` verified; Firebase deployed; Stripe/provider configured; production data changed; production behavior verified. #238 does not itself prove any deployment, provider setting, live behavior, or officer action. PAY-002C/D/PAY-003B still need trusted business, result, reconciliation, and runtime work. Never test this boundary with a real registration, order, Stripe object, customer, or member.
 
 ### Target payment integration suite
 
