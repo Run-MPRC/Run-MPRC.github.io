@@ -129,8 +129,8 @@ function StravaSection({ uid }: { uid: string }) {
   const [loadingConn, setLoadingConn] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
-
   useEffect(() => {
     if (!services) return;
     getStravaConnection(services.firebaseResources.firestore, uid)
@@ -166,8 +166,8 @@ function StravaSection({ uid }: { uid: string }) {
       await stravaDisconnect(services.firebaseResources.app);
       setConn(null);
       setStats(null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to disconnect');
+    } catch {
+      setDisconnectError('We could not confirm the Strava disconnect. Please refresh this page before trying again.');
     } finally {
       setDisconnecting(false);
     }
@@ -183,7 +183,7 @@ function StravaSection({ uid }: { uid: string }) {
           conn={conn}
           stats={stats}
           loading={loadingStats}
-          error={error}
+          error={disconnectError || error}
           onDisconnect={handleDisconnect}
           disconnecting={disconnecting}
         />
