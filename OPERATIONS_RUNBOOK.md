@@ -330,6 +330,27 @@ The upgraded Rules helper fails before rule evaluation if Jest does not receive 
 
 This is source and synthetic test evidence only. It does not publish the website, deploy Firebase, change an outside provider, or prove production behavior. Use the protected release process and record each affected surface separately before making any live claim.
 
+### Race checkout request boundary — SOURCE ONLY, NOT LIVE
+
+PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) makes the race checkout Function reject malformed or unexpected signup data in two steps. First, it checks one exact, bounded request shape before opening Firestore. Second, after the read-only commerce admission returns the event snapshot, it checks every submitted answer against the event's bounded participant or volunteer field definitions. A denial uses one fixed message and must occur before a rate-limit write, role or capacity call, token creation, registration write, Stripe Product creation, or Stripe Checkout Session call.
+
+The website source sends only answers for the selected participant or volunteer fields. It omits `priceTier` entirely for volunteers. The server does not trust this cleanup; it repeats the full validation. Opaque event IDs stay byte-identical and are encoded before use in success or cancel URLs.
+
+Run the focused source proof with Node 20:
+
+```bash
+npm --prefix functions run test:run -- --runInBand \
+  raceCheckoutValidation.test.js \
+  checkoutPromotionPolicy.test.js
+
+CI=true npm test -- --watchAll=false --runInBand \
+  src/pages/events/raceCheckoutRequest.test.ts
+```
+
+Use only made-up event definitions and made-up runner data. The report must prove that missing required answers, unknown answers, wrong answer types, invalid choices, duplicate or malformed event field definitions, unknown request keys, and oversized input all fail without exposing the submitted value in the error. It must also preserve configured paid, configured free, and volunteer request paths.
+
+This command proves source and synthetic tests only. It does not prove that Firebase received the code or that any live event definition is compatible. PAY-001B2 must add immutable field, price, and waiver snapshots plus compatibility and protected staging proof before this boundary can be treated as live. Do not inspect or copy a real registration to obtain that proof.
+
 ### Target payment integration suite
 
 CI/staging must eventually include:

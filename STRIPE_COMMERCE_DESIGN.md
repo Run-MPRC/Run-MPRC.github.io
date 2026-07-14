@@ -116,6 +116,17 @@ The libraries contain no Firebase, Stripe, provider, logger, network, clock, or 
 
 These helpers are a source/test foundation only. No checkout, refund, admin, webhook, Firebase, or Stripe endpoint imports them in PAY-001A. Endpoint schemas, immutable business-price snapshots, deployment, and production behavior remain **NOT AVAILABLE YET** under PAY-001B/C/D and later payment issues.
 
+### Race and volunteer request boundary (PAY-001B1)
+
+PAY-001B1 is tracked in live issue [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219). It is the first bounded endpoint adoption of PAY-001A. The current compatible race callable uses two validation phases:
+
+1. Before Firestore is opened, accept only the exact current race/volunteer envelope and runner fields; normalize bounded names, contact fields, email, and optional date; require the exact participant/volunteer and price-tier combination; and require the literal waiver value `true`.
+2. After commerce admission returns the one server event snapshot, validate the selected participant or volunteer field definitions and match every submitted answer. Malformed definitions, duplicate keys/options, unknown or missing answers, wrong types, and invalid select choices stop before rate-limit writes, role/capacity work, token creation, registration writes, or Stripe access.
+
+The website source projects only answers for the currently selected participant or volunteer field set. It omits the `priceTier` key entirely for volunteers, so inactive form state and JavaScript `undefined` never enter the callable payload. This is compatibility hygiene, not authority; the server still rejects any mismatched request.
+
+Both phases return new immutable projections and one fixed non-identifying public failure. They do not log request data. This is a source boundary, not a launch claim. PAY-001B2 still must persist immutable event-field, price, and waiver snapshots and prove compatibility in protected staging. Request IDs, capacity holds, persistence-first records, idempotent Stripe attempts, removal of URL capabilities, deployment, and live behavior remain later work.
+
 ## 5. Catalog model
 
 ### Race pricing

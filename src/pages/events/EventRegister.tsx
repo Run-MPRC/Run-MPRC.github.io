@@ -11,6 +11,9 @@ import {
 import { Event, CustomField } from '../../types/events';
 import { useAuth } from '../../services/hooks/useAuth';
 import { track, events as analyticsEvents } from '../../services/analytics/analytics';
+import buildRaceCheckoutRequest, {
+  customValuesAfterSignupTypeChange,
+} from './raceCheckoutRequest';
 
 type PriceTier = 'member' | 'nonMember' | 'earlyBird';
 
@@ -180,7 +183,7 @@ function EventRegister() {
     try {
       const result = await createCheckoutSession(
         services!.firebaseResources.app,
-        {
+        buildRaceCheckoutRequest({
           eventId: event.id,
           runner: {
             firstName: runner.firstName,
@@ -192,11 +195,12 @@ function EventRegister() {
             emergencyContactName: runner.emergencyContactName,
             emergencyContactPhone: runner.emergencyContactPhone,
           },
-          customFields: customValues,
-          priceTier: signupType === 'volunteer' ? undefined : effectiveTier,
+          customValues,
+          eventCustomFields: event.customFields || [],
+          volunteerCustomFields: event.volunteerFields,
+          priceTier: effectiveTier,
           signupType,
-          acceptedWaiver: true,
-        },
+        }),
       );
 
       if (result.free) {
@@ -226,6 +230,15 @@ function EventRegister() {
     }
   }
 
+  function selectSignupType(nextType: 'participant' | 'volunteer') {
+    setCustomValues((currentValues) => customValuesAfterSignupTypeChange(
+      signupType,
+      nextType,
+      currentValues,
+    ));
+    setSignupType(nextType);
+  }
+
   return (
     <>
       <SEO title={`Register — ${event.title}`} noindex url={`https://runmprc.com/events/${event.slug}/register`} />
@@ -253,7 +266,7 @@ function EventRegister() {
                   name="signupType"
                   value="participant"
                   checked={signupType === 'participant'}
-                  onChange={() => setSignupType('participant')}
+                  onChange={() => selectSignupType('participant')}
                   className="mr-2"
                 />
                 Register as participant
@@ -264,7 +277,7 @@ function EventRegister() {
                   name="signupType"
                   value="volunteer"
                   checked={signupType === 'volunteer'}
-                  onChange={() => setSignupType('volunteer')}
+                  onChange={() => selectSignupType('volunteer')}
                   className="mr-2"
                 />
                 Volunteer for this event
