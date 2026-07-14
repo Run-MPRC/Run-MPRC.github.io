@@ -30,15 +30,15 @@ function ProductDetail() {
   const [color, setColor] = useState('');
 
   useEffect(() => {
-    if (!isReady || !services || !slug) return;
-    setLoading(true);
+    if (!isReady || !services || !slug) return () => undefined;
+    let active = true; setLoading(true); setProduct(null); setError(null);
     getProductBySlug(services.firebaseResources.firestore, slug)
       .then((p) => {
-        setProduct(p);
-        setLoading(false);
+        if (!active) return;
+        setProduct(p); setLoading(false);
         if (!p) setError('Product not found');
       })
-      .catch((err) => { setError(err.message); setLoading(false); });
+      .catch(() => { if (active) { setError('We could not load this product right now. Please try again later.'); setLoading(false); } }); return () => { active = false; };
   }, [services, isReady, slug]);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ function ProductDetail() {
   if (error || !product) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-red-500">{error || 'Product not found.'}</p>
+        <p role={!product && error ? 'alert' : undefined} aria-live={!product && error ? 'assertive' : undefined} aria-atomic={!product && error ? true : undefined} className="text-red-500">{error || 'Product not found.'}</p>
         <Link to="/shop" className="text-blue-600 hover:underline">← Back to shop</Link>
       </div>
     );
