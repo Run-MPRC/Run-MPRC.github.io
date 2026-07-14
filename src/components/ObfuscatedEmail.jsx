@@ -18,9 +18,7 @@ function ObfuscatedEmail({
   const [revealed, setRevealed] = useState(false);
 
   // Assemble email only on interaction
-  const getEmail = useCallback(() => {
-    return `${user}@${domain}.${tld}`;
-  }, [user, domain, tld]);
+  const getEmail = useCallback(() => `${user}@${domain}.${tld}`, [user, domain, tld]);
 
   const handleClick = (e) => {
     e.preventDefault();

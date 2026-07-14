@@ -17,11 +17,11 @@
     ".ts": 33,
     ".tsx": 26
   },
-  "errorCount": 125,
+  "errorCount": 124,
   "warningCount": 7,
   "errorsByExtension": {
     ".js": 2,
-    ".jsx": 27,
+    ".jsx": 26,
     ".ts": 2,
     ".tsx": 94
   },
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 7
   },
-  "fingerprint": "sha256:5cb325988e44a11061d4ba38ab81b4718ed17ef9b6273ea96490a1552661549f",
+  "fingerprint": "sha256:c451bc761b877b11e2d78c7d04e57460b5cda0cb697fd85b56b33e09dbe7ca47",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -141,19 +141,6 @@
     "src/types/shop.ts"
   ],
   "findings": [
-    {
-      "file": "src/components/ObfuscatedEmail.jsx",
-      "line": 21,
-      "column": 38,
-      "endLine": 23,
-      "endColumn": 4,
-      "severity": 2,
-      "ruleId": "arrow-body-style",
-      "message": "Unexpected block statement surrounding arrow body; move the returned value immediately after the `=>`.",
-      "messageId": "unexpectedSingleBlock",
-      "nodeType": "ArrowFunctionExpression",
-      "fatal": false
-    },
     {
       "file": "src/data.jsx",
       "line": 1,
