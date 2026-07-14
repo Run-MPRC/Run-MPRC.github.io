@@ -417,7 +417,7 @@ flowchart LR
     R -. "No send marker or Stripe call" .-> C4B["Future PAY-002B2C4B"]
 ```
 
-Text alternative: the exact saved C3C authorization and current active lease may bind one immutable attempt-2 plan; a separate C4B pre-send boundary is still required before any provider request.
+Text alternative: the exact saved C3C authorization and current active lease may bind one immutable attempt-2 Checkout Session plan; a separate C4B pre-send boundary is still required before that Session request.
 
 Version 1 is equality-only. The attempt-2 environment, Stripe mode, account commitment, API version, provider operation, HTTP `POST` endpoint, and canonical provider-parameter commitment must equal the validated attempt-1 plan. Attempt `2` is derived internally. Only the deterministic attempt-2 key commitment, current binding fence and trusted time, attempt number, and C3C authorization provenance may differ. A changed amount, currency, expiry, metadata, callback URL, line item, or other provider parameter is not authorized here.
 
@@ -425,14 +425,16 @@ The transaction revalidates B1 through C3C before reading both attempt-2 partner
 
 The fixed results are `provider_plan_bound` or `provider_plan_existing`, each with `requires_pre_send_evidence`. They expose no attempt, path, key, hash, commitment, fence, timestamp, evidence, account, parameter, or send/execute flag. The stored pair contains no raw account, parameters, key, identity, business/provider object ID, money, URL, response, secret, or personal data.
 
-#232 adds no attempt-2 send evidence, Stripe/network call, business write, response replay, endpoint/index import, provider configuration, migration, production-data action, deployment, website change, live behavior, or officer task. PAY-002B2C4B must separately record and freshness-check pre-send evidence before any attempt-2 provider request can be considered. PAY-002C/D and PAY-003B still own trusted business-state and runtime adoption.
+#232 adds no attempt-2 send evidence, Stripe/network call, business write, response replay, endpoint/index import, provider configuration, migration, production-data action, deployment, website change, live behavior, or officer task. PAY-002B2C4B must separately record and freshness-check pre-send evidence before any attempt-2 Checkout Session request can be considered. PAY-002C/D and PAY-003B still own trusted business-state and runtime adoption.
+
+This version-1 C4A boundary is specific to `checkout_session_create` at `/v1/checkout/sessions`. A future C4B can complete only that Checkout Session path. Stripe Product or Price creation, Session expiry, refunds, and other provider operations each need their own reviewed operation mapping, immutable plan, pre-send, result, and reconciliation boundaries; C3C or this C4A must not be reused as general provider-call permission.
 
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
 
 1. Validate the request and read server-controlled catalog/event state.
-2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, and C4A/C4B must separately bind and pre-send-gate any later provider generation.
+2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, and C4A/C4B must separately bind and pre-send-gate any later Checkout Session generation.
 3. In one Firestore transaction:
    - Reuse a matching prior request or reject a conflicting reuse.
    - Lock/read the event capacity counter or SKU variant.

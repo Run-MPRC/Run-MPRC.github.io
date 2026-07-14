@@ -97,6 +97,7 @@ const COMMAND_IDS = Object.freeze({
   providerNextPlanConcurrent: 'a3ace024-7913-4bdf-8ace-68ace0247913',
   providerNextPlanLostResponse: 'a4ace024-7913-4bdf-8ace-68ace0247913',
   providerNextPlanCommitFailure: 'a5ace024-7913-4bdf-8ace-68ace0247913',
+  providerNextPlanConflict: 'a6ace024-7913-4bdf-8ace-68ace0247913',
 });
 const BASE_NOW_MILLIS = 1800000000123;
 const LEASE_DURATION_MILLIS = 60000;
@@ -3425,6 +3426,114 @@ describeWithEmulator('commerce command journal Firestore transaction', () => {
     expect(nextProvider.audit.exists).toBe(true);
     expect(nextProvider.plan.createTime).toBe(nextProvider.plan.updateTime);
     expect(nextProvider.audit.createTime).toBe(nextProvider.audit.updateTime);
+    expect(await readAuthorizedProviderFoundationEvidence(setup.pair))
+      .toEqual(foundationBefore);
+    expect((await setup.pair.nextProviderSendRef.get()).exists).toBe(false);
+    expect((await matchingAudits(setup.pair)).size).toBe(8);
+  });
+
+  test('12-v-12 authorized-plan inputs preserve the C3C winner without overwrite', async () => {
+    const evidence = expiredAttemptCandidate();
+    const setup = await setupPersistedProviderCandidate(
+      COMMAND_IDS.providerNextPlanConflict,
+      'provider-next-plan-conflict',
+      365,
+      evidence,
+    );
+    const firstArgs = setup.authorizationArgs;
+    const secondArgs = providerAuthorizationArgs(
+      setup.args,
+      setup.freshLeaseId,
+      2,
+      evidence,
+      'replace_expired_unpaid',
+      OTHER_TRANSITION_RECORD_COMMITMENT,
+    );
+
+    const authorizationSettled = await Promise.allSettled([
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => authorizeNextStripeProviderAttempt(firstArgs),
+        retryEvidence,
+      )),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => authorizeNextStripeProviderAttempt(secondArgs),
+        retryEvidence,
+      )),
+    ]);
+    const authorizationFulfilled = authorizationSettled
+      .filter(({ status }) => status === 'fulfilled');
+    const authorizationRejected = authorizationSettled
+      .filter(({ status }) => status === 'rejected');
+    expect(authorizationFulfilled).toHaveLength(12);
+    for (const result of authorizationFulfilled) {
+      expectProviderAuthorizationResult(result.value);
+    }
+    expect(authorizationRejected).toHaveLength(12);
+    for (const result of authorizationRejected) {
+      expectJournalError(result.reason, 'command_conflict');
+    }
+    const firstAuthorizationWon = authorizationSettled.slice(0, 12)
+      .every(({ status }) => status === 'fulfilled');
+    const secondAuthorizationWon = authorizationSettled.slice(12)
+      .every(({ status }) => status === 'fulfilled');
+    expect(firstAuthorizationWon).not.toBe(secondAuthorizationWon);
+    const winningArgs = firstAuthorizationWon ? firstArgs : secondArgs;
+    const losingArgs = firstAuthorizationWon ? secondArgs : firstArgs;
+    const foundationBefore = await readAuthorizedProviderFoundationEvidence(setup.pair);
+
+    const planSettled = await Promise.allSettled([
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => bindAuthorizedStripeProviderPlan(firstArgs),
+        retryEvidence,
+      )),
+      ...Array.from({ length: 12 }, () => retryWholeOperationAfterUnavailable(
+        () => bindAuthorizedStripeProviderPlan(secondArgs),
+        retryEvidence,
+      )),
+    ]);
+    const fulfilled = planSettled.filter(({ status }) => status === 'fulfilled');
+    const rejected = planSettled.filter(({ status }) => status === 'rejected');
+    expect(fulfilled).toHaveLength(12);
+    expect(fulfilled.filter(({ value }) => value.outcome === 'provider_plan_bound'))
+      .toHaveLength(1);
+    expect(fulfilled.filter(({ value }) => value.outcome === 'provider_plan_existing'))
+      .toHaveLength(11);
+    for (const result of fulfilled) {
+      expectAuthorizedProviderPlanResult(result.value, result.value.outcome);
+    }
+    expect(rejected).toHaveLength(12);
+    for (const result of rejected) expectJournalError(result.reason, 'command_conflict');
+
+    const firstPlanWon = planSettled.slice(0, 12)
+      .every(({ status }) => status === 'fulfilled');
+    const secondPlanWon = planSettled.slice(12)
+      .every(({ status }) => status === 'fulfilled');
+    expect(firstPlanWon).not.toBe(secondPlanWon);
+    expect(firstPlanWon).toBe(firstAuthorizationWon);
+    const nextProviderBeforeProbes = await readNextProviderEvidence(setup.pair);
+    expect(nextProviderBeforeProbes.plan.exists).toBe(true);
+    expect(nextProviderBeforeProbes.audit.exists).toBe(true);
+    expect(nextProviderBeforeProbes.plan.createTime)
+      .toBe(nextProviderBeforeProbes.plan.updateTime);
+    expect(nextProviderBeforeProbes.audit.createTime)
+      .toBe(nextProviderBeforeProbes.audit.updateTime);
+    expect(nextProviderBeforeProbes.plan.data.providerAttemptAuthorizationCommitment)
+      .toBe(foundationBefore.authorization.audit.data
+        .providerAttemptAuthorizationCommitment);
+    expect(await readAuthorizedProviderFoundationEvidence(setup.pair))
+      .toEqual(foundationBefore);
+    expect((await setup.pair.nextProviderSendRef.get()).exists).toBe(false);
+    expect((await matchingAudits(setup.pair)).size).toBe(8);
+
+    expectAuthorizedProviderPlanResult(
+      await bindAuthorizedStripeProviderPlan(winningArgs),
+      'provider_plan_existing',
+    );
+    await expect(bindAuthorizedStripeProviderPlan(losingArgs)).rejects.toMatchObject({
+      code: 'commerce_command_journal_error',
+      reason: 'command_conflict',
+    });
+    expect(await readNextProviderEvidence(setup.pair)).toEqual(nextProviderBeforeProbes);
     expect(await readAuthorizedProviderFoundationEvidence(setup.pair))
       .toEqual(foundationBefore);
     expect((await setup.pair.nextProviderSendRef.get()).exists).toBe(false);

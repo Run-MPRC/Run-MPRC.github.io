@@ -377,7 +377,7 @@ REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR=1 \
 npm run test:rules
 ```
 
-Expected proof: both closed safe transitions create one paired record/audit only under the exact current later-fence lease; identical concurrency creates one pair; conflicting commitments produce one winner; unsafe/ambiguous evidence, stale leases, malformed/orphan records, and browser access fail closed. Stop if the emulator names a non-demo project, any provider credential is present, a network/provider call occurs, an attempt-2 plan/send document appears, an earlier record changes, or the Rules suite permits any browser role to access the pair.
+Expected proof: both closed safe transitions create one paired record/audit only under the exact current later-fence lease; identical concurrency creates one pair; conflicting commitments produce one winner; unsafe/ambiguous evidence, stale leases, malformed/orphan records, and browser access fail closed. Stop if the emulator names a non-demo project, any provider credential is present, a network/provider call occurs, a C3C-only authorization case creates an attempt-2 plan, any case creates attempt-2 send evidence, an earlier record changes, or the Rules suite permits any browser role to access the pair.
 
 This is source and synthetic-test evidence only. It does not prove Firebase deployment, Stripe configuration, a production business transition, production data, website publication, `runmprc.com`, or live behavior. No officer procedure changes because there is no officer action and no live surface. PAY-002C/D and PAY-003B must add reviewed business-state, plan, send, result, and reconciliation adoption before this can protect a real checkout. Do not test it with a real registration, order, Stripe object, customer, or member.
 
@@ -395,7 +395,7 @@ flowchart LR
     R -. "No Stripe call" .-> C4B["Future C4B pre-send gate"]
 ```
 
-Text alternative: the exact C3C authorization and current active lease can create only an immutable attempt-2 plan; C4B must still record pre-send evidence before any provider request.
+Text alternative: the exact C3C authorization and current active lease can create only an immutable attempt-2 Checkout Session plan; C4B must still record pre-send evidence before that Session request.
 
 Version 1 allows no provider-parameter change. Account, mode, API version, operation, endpoint, and canonical parameters must equal attempt 1. Only the internally derived attempt-2 key commitment, current fence/time, attempt number, and authorization provenance may differ.
 
