@@ -83,6 +83,24 @@ flowchart TD
 
 In words: people use their own accounts, at least two officers cover every service, and recovery information stays in the approved password manager rather than the repository or AI.
 
+## Role-based Firebase access — SOURCE ONLY, NOT LIVE
+
+```mermaid
+flowchart TD
+    SignIn["Person signs in"] --> Own{"Safe action on their own profile?"}
+    Own -- "Yes" --> Self["Use the existing own-account permission"]
+    Own -- "No; private role access" --> Verified{"Account email verified?"}
+    Verified -- "No" --> Deny["Deny private member/admin access"]
+    Verified -- "Yes" --> Role{"Allowed member/admin role?"}
+    Role -- "No" --> Deny
+    Role -- "Yes" --> Allow["Allow only that role's specific operation"]
+    Verified -. "does not grant" .-> Role
+```
+
+In words: safe self-service is limited to the person's own signed-in account, while every private member/admin operation requires both a verified account email and the already-approved role; verification does not grant the role.
+
+Issue [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) owns this Rules source/test boundary. It is **NOT LIVE** until the exact Rules revision is deployed and checked with made-up accounts. An officer must not edit a profile, toggle a role, or use a real account as a workaround or test.
+
 ## Member profile setup and recovery — NOT LIVE YET
 
 ```mermaid

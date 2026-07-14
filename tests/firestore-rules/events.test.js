@@ -167,19 +167,39 @@ describe('events collection', () => {
 
     test('member CAN read members_only event', async () => {
       await seed('events/e1', MEMBERS_ONLY);
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertSucceeds(member.doc('events/e1').get());
+    });
+
+    test.each([
+      ['a missing verification claim', {
+        uid: 'm-missing', role: 'member', omitEmailVerified: true,
+      }],
+      ['a false verification claim', {
+        uid: 'm-false', role: 'member', emailVerified: false,
+      }],
+      ['a string verification claim', {
+        uid: 'm-string', role: 'member', emailVerified: 'true',
+      }],
+      ['a numeric verification claim', {
+        uid: 'm-number', role: 'member', emailVerified: 1,
+      }],
+    ])('member with %s CANNOT read a members-only event', async (_label, auth) => {
+      await seed('events/e1', MEMBERS_ONLY);
+      const member = await db(auth);
+
+      await assertFails(member.doc('events/e1').get());
     });
 
     test('member CANNOT read a new-schema members_only draft', async () => {
       await seed('events/e1', MEMBERS_ONLY_DRAFT);
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(member.doc('events/e1').get());
     });
 
     test('member CANNOT read a legacy members-only draft', async () => {
       await seed('events/e1', LEGACY_MEMBERS_ONLY_DRAFT);
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(member.doc('events/e1').get());
     });
 
@@ -191,7 +211,7 @@ describe('events collection', () => {
         status: 'unexpected',
       });
       const anon = await db();
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
 
       await assertFails(anon.doc('events/public-unknown').get());
       await assertFails(member.doc('events/member-unknown').get());
@@ -201,8 +221,8 @@ describe('events collection', () => {
     test('visibility=draft remains admin-only even with an open status', async () => {
       await seed('events/e1', { ...PUBLIC_OPEN, visibility: 'draft' });
       const anon = await db();
-      const member = await db({ uid: 'u1', role: 'member' });
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
 
       await assertFails(anon.doc('events/e1').get());
       await assertFails(member.doc('events/e1').get());
@@ -211,8 +231,29 @@ describe('events collection', () => {
 
     test('admin CAN read draft event through the explicit events rule', async () => {
       await seed('events/e1', PUBLIC_DRAFT);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('events/e1').get());
+    });
+
+    test.each([
+      ['a missing verification claim', {
+        uid: 'a-missing', role: 'admin', omitEmailVerified: true,
+      }],
+      ['a false verification claim', {
+        uid: 'a-false', role: 'admin', emailVerified: false,
+      }],
+      ['a string verification claim', {
+        uid: 'a-string', role: 'admin', emailVerified: 'true',
+      }],
+      ['a numeric verification claim', {
+        uid: 'a-number', role: 'admin', emailVerified: 1,
+      }],
+    ])('admin with %s CANNOT read draft event data', async (_label, auth) => {
+      await seed('events/e1', PUBLIC_DRAFT);
+      const admin = await db(auth);
+
+      await assertFails(admin.doc('events/e1').get());
+      await assertFails(admin.collection('events').get());
     });
 
     test('anonymous CAN read legacy event (no visibility, member_only=false)', async () => {
@@ -235,13 +276,13 @@ describe('events collection', () => {
 
     test('admin CAN read a legacy draft event', async () => {
       await seed('events/e1', LEGACY_DRAFT);
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('events/e1').get());
     });
 
     test('member CAN read legacy member_only=true event', async () => {
       await seed('events/e1', LEGACY_MEMBERS_ONLY);
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertSucceeds(member.doc('events/e1').get());
     });
   });
@@ -273,14 +314,14 @@ describe('events collection', () => {
       // but is unreadable, so Firestore denies the whole list. This is why
       // listMemberEvents must instead run two visibility-scoped queries (the
       // two assertSucceeds cases here) and merge them client-side.
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(
         member.collection('events').where('status', 'in', ['open', 'closed']).get(),
       );
     });
 
     test('member CAN list members_only open/closed events with a visibility filter', async () => {
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertSucceeds(
         member.collection('events')
           .where('visibility', '==', 'members_only')
@@ -290,7 +331,7 @@ describe('events collection', () => {
     });
 
     test('admin CAN list all events for the current admin screen', async () => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.collection('events').get());
     });
   });
@@ -302,7 +343,7 @@ describe('events collection', () => {
     });
 
     test('member CANNOT create an event', async () => {
-      const member = await db({ uid: 'u1', role: 'member' });
+      const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
       await assertFails(member.doc('events/new').set(PUBLIC_OPEN));
     });
 
@@ -312,12 +353,12 @@ describe('events collection', () => {
     });
 
     test('admin CAN create an event', async () => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('events/new').set(adminEvent('new')));
     });
 
     test('admin CAN create the current client payload only as a hidden inert draft', async () => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('events/free').set(adminEvent('free', {
         capacity: null,
         pricing: { memberCents: 0, nonMemberCents: 0 },
@@ -325,13 +366,13 @@ describe('events collection', () => {
     });
 
     test.each(INVALID_SLUGS)('admin CANNOT create an event with invalid slug %s', async (slug) => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc(`events/${slug}`).set(adminEvent(slug)));
     });
 
     test('admin CAN update an event with the current editor payload', async () => {
       await seed('events/e1', adminEvent('e1'));
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('events/e1').update(editorUpdate()));
     });
 
@@ -359,7 +400,7 @@ describe('events collection', () => {
         registrationClosesAt,
       };
       await seed('events/e1', adminEvent('e1', operational));
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertSucceeds(admin.doc('events/e1').update(editorUpdate({
         ...operational,
       })));
@@ -367,14 +408,14 @@ describe('events collection', () => {
 
     test('admin CANNOT delete an event directly', async () => {
       await seed('events/e1', adminEvent('e1'));
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('events/e1').delete());
     });
 
     test.each([
       ['a user without a role claim', { uid: 'u1' }],
       ['an unverified user', { uid: 'u2', role: 'unverified' }],
-      ['a member', { uid: 'u3', role: 'member' }],
+      ['a member', { uid: 'u3', role: 'member', emailVerified: true }],
     ])('%s CANNOT update or delete an event', async (_label, auth) => {
       await seed('events/e1', adminEvent('e1'));
       const user = await db(auth);
@@ -430,7 +471,7 @@ describe('events collection', () => {
       })],
       ['a missing creation timestamp', (event) => withoutField(event, 'createdAt')],
     ])('admin CANNOT create an event with %s', async (_label, buildInvalid) => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       const event = buildInvalid(adminEvent('invalid'));
       await assertFails(admin.doc('events/invalid').set(event));
     });
@@ -453,7 +494,7 @@ describe('events collection', () => {
       ['an insecure hero-image URL', { heroImageUrl: 'http://example.com/hero.jpg' }],
     ])('admin CANNOT update an event with %s', async (_label, patch) => {
       await seed('events/e1', adminEvent('e1'));
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('events/e1').update(patch));
     });
 
@@ -490,14 +531,14 @@ describe('events collection', () => {
       ['inventory state', { inventory: { onHand: 10 } }],
       ['audit data', { auditLog: [{ action: 'created' }] }],
     ])('admin CANNOT create an event containing protected %s', async (_label, patch) => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(
         admin.doc('events/protected').set(adminEvent('protected', patch)),
       );
     });
 
     test('admin CANNOT inject Stripe fields into event pricing', async () => {
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('events/protected').set(adminEvent('protected', {
         pricing: {
           memberCents: 2500,
@@ -509,7 +550,7 @@ describe('events collection', () => {
 
     test('admin CANNOT inject Stripe fields while updating event pricing', async () => {
       await seed('events/e1', adminEvent('e1'));
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('events/e1').update({
         pricing: {
           memberCents: 2500,
@@ -552,7 +593,7 @@ describe('events collection', () => {
       ['audit data', { auditLog: [{ action: 'tampered' }] }],
     ])('admin CANNOT update protected event %s', async (_label, patch) => {
       await seed('events/e1', adminEvent('e1'));
-      const admin = await db({ uid: 'a1', role: 'admin' });
+      const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
       await assertFails(admin.doc('events/e1').update(patch));
     });
   });
@@ -575,7 +616,7 @@ describe('registrations subcollection', () => {
   });
 
   test('member CANNOT read a registration', async () => {
-    const member = await db({ uid: 'u1', role: 'member' });
+    const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(member.doc('events/e1/registrations/r1').get());
   });
 
@@ -585,8 +626,25 @@ describe('registrations subcollection', () => {
   });
 
   test('admin CAN read a registration through the explicit registrations rule', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.doc('events/e1/registrations/r1').get());
+  });
+
+  test.each([
+    ['a missing verification claim', {
+      uid: 'a-missing', role: 'admin', omitEmailVerified: true,
+    }],
+    ['a false verification claim', {
+      uid: 'a-false', role: 'admin', emailVerified: false,
+    }],
+    ['a malformed verification claim', {
+      uid: 'a-string', role: 'admin', emailVerified: 'true',
+    }],
+  ])('admin with %s CANNOT read or list registrations', async (_label, auth) => {
+    const admin = await db(auth);
+
+    await assertFails(admin.doc('events/e1/registrations/r1').get());
+    await assertFails(admin.collection('events/e1/registrations').get());
   });
 
   test('anonymous CANNOT write a registration', async () => {
@@ -597,21 +655,21 @@ describe('registrations subcollection', () => {
   });
 
   test('member CANNOT write a registration', async () => {
-    const member = await db({ uid: 'u1', role: 'member' });
+    const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(
       member.doc('events/e1/registrations/r2').set({ status: 'paid' }),
     );
   });
 
   test('admin CANNOT create a registration directly', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(
       admin.doc('events/e1/registrations/r2').set({ status: 'paid' }),
     );
   });
 
   test('admin CANNOT update registration financial state directly', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(
       admin.doc('events/e1/registrations/r1').update({
         status: 'refunded',
@@ -621,17 +679,17 @@ describe('registrations subcollection', () => {
   });
 
   test('admin CANNOT delete a registration directly', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.doc('events/e1/registrations/r1').delete());
   });
 
   test('admin CAN list registrations for a known event', async () => {
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertSucceeds(admin.collection('events/e1/registrations').get());
   });
 
   test('member CANNOT list registrations across events', async () => {
-    const member = await db({ uid: 'u1', role: 'member' });
+    const member = await db({ uid: 'u1', role: 'member', emailVerified: true });
     await assertFails(member.collectionGroup('registrations').get());
   });
 
@@ -641,7 +699,7 @@ describe('registrations subcollection', () => {
       status: 'paid',
       amountCents: 5000,
     });
-    const admin = await db({ uid: 'a1', role: 'admin' });
+    const admin = await db({ uid: 'a1', role: 'admin', emailVerified: true });
     await assertFails(admin.collectionGroup('registrations').get());
   });
 });
