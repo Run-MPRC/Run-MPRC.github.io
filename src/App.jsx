@@ -12,6 +12,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Activities from './pages/activities/Activities';
 import ServiceLocatorProvider from './services/ServiceLocatorProvider';
 import LoginForm from './pages/login/LoginForm';
+import VerifyEmailAction from './pages/login/VerifyEmailAction';
 import Events from './pages/events/Events';
 import EventDetail from './pages/events/EventDetail';
 import EventRegister from './pages/events/EventRegister';
@@ -86,6 +87,7 @@ function App() {
                 <Route path="joinus" element={<JoinUsConditionalRoute />} />
                 <Route path="committee" element={<Committee />} />
                 <Route path="login" element={<LoginForm />} />
+                <Route path="auth/action" element={<VerifyEmailAction />} />
                 <Route path="terms" element={<Terms />} />
                 <Route path="privacy" element={<Privacy />} />
                 <Route path="*" element={<NotFound />} />

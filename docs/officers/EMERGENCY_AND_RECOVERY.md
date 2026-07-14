@@ -29,6 +29,7 @@
 | Site unavailable or old after a merge | Ask the platform owner to check Netlify and GitHub Pages separately; do not change DNS. |
 | Login or member access is wrong | Stop role requests and contact the identity/platform owners. |
 | Account exists but a verification email request is unavailable | Ask the member to stop resending. Record only the time, route path `/login` or `/account`, and plain status. Omit all query/fragment text. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
+| Verification link is unusable or temporarily unavailable | Ask the member to stop after one deliberate check and one retry. Record only the time, clean route `/auth/action`, and plain result. Never copy anything after `?` or `#`, and never ask for the link, code, email address, or screenshot. |
 | Password reset does not lead to a private message | Ask the member to stop after one displayed wait and one retry. Record only the time, route path `/login`, and plain status. Do not ask which address they entered or whether an account exists. |
 | Profile Save says permission is missing | Ask the member to stop, sign out, and wait. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
 | Private member information is visible | Contact platform and privacy owners immediately; they choose containment through an approved service procedure. Do not change permissions yourself. |
@@ -113,6 +114,53 @@ After the exact #118 and #153 live proofs exist:
 **Undo:** ask for one reviewed frontend revert or safe roll-forward. Never undo this problem by deleting the login account.
 
 **Escalation:** membership lead plus identity/platform owner; communications owner for delivery or Spam.
+
+### Verification link page — SOURCE ONLY, NOT LIVE
+
+**Status:** [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) is a verification-only source change. It is not a live procedure until the exact website revision is published, `runmprc.com` is verified, and [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119) proves a safe Firebase handler choice. Firebase uses one handler for verification, password reset, and email recovery. The partial route must not be enabled globally.
+
+**Purpose:** let a member check one private verification link without exposing its code or letting an automated mail scanner change the account.
+
+**Approver:** identity/platform owner plus membership lead. The communications owner and a second Firebase owner approve the provider/template decision.
+
+**Prerequisites:** exact #194 merge and website proof; protected release proof; private #119 proof that reset and recovery links still work; an isolated Firebase project; a made-up account and safe email sink. A source test, preview, or real member link is not enough.
+
+```mermaid
+flowchart LR
+    Open["Member opens private link"] --> Clean["Page removes code from the address"]
+    Clean --> Choose["Member chooses Verify email once"]
+    Scanner["Mail scanner only opens page"] --> NoChange["No account change"]
+    Choose --> Result{"Plain result"}
+    Result -- "Verified or already complete" --> Account["Continue to My Account"]
+    Result -- "Different account" --> SignOut["Sign out; reopen original link"]
+    Result -- "Cannot be used" --> New["Request one new email"]
+    Result -- "Temporary" --> Retry["Check connection; retry once"]
+```
+
+In words: opening the page removes the private code but changes nothing; the member chooses one button, then follows one plain result without sharing the link or account details.
+
+Officer steps after every prerequisite has proof:
+
+1. Ask the member to open the private message on their own device.
+2. Do not ask them to forward, copy, or show the link.
+3. Ask them to confirm the address ends with `/auth/action` and contains no `?` or `#` before choosing anything.
+4. Ask them to choose **Verify email** once.
+5. If the page says verified or already complete, ask them to continue to My Account.
+6. If it says a different account is signed in, ask them to open My Account, sign out, and reopen the original message.
+7. If the link cannot be used, ask them to request one new verification email from My Account.
+8. If verification is temporarily unavailable, ask them to check the connection and use the one retry.
+9. If the second attempt is not clear, stop and open a redacted incident.
+10. Record only the time, clean route `/auth/action`, and exact plain result.
+
+**Expected result:** page load makes no action-code check and changes no account; the private query and fragment disappear; one deliberate action gives a fixed result; no address, code, provider error, role, membership, payment, or profile value appears or changes.
+
+**Stop conditions:** the address still contains `?` or `#`; anyone asks for a link/code/address/screenshot; the page changes an account before the button; a non-verification action opens here; more than one retry; a real-member/provider test; or missing provider/live proof.
+
+**Success proof:** exact #194 pull request and merge; green synthetic no-network tests; dated keyboard and screen-reader check; exact website publication and `runmprc.com` revision; private #119 staging proof for verification, reset, recovery, reuse, expiration, and rollback. Keep each proof separate.
+
+**Undo:** publish one reviewed frontend revert or safe roll-forward. The Firebase owners separately restore the previously proven default/multi-mode handler. Never delete an account or edit verification state by hand.
+
+**Escalation:** identity/platform owner plus membership lead; add communications for sender/delivery, security for an exposed code or wrong mutation, and the provider owner for handler/template failure.
 
 ### Password reset request — NOT AVAILABLE YET
 

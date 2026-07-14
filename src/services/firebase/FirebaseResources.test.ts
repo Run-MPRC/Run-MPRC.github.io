@@ -293,6 +293,9 @@ describe('FirebaseResources environment isolation', () => {
     '/register/success#example-capability',
     '/REGISTER/SUCCESS?registration=r1&token=example-capability',
     '/shop/purchase/success/?order=o1&token=example-capability',
+    '/auth/action?mode=verifyEmail&oobCode=example-action-code',
+    '/AUTH/ACTION/?mode=verifyEmail&oobCode=example-action-code',
+    '/%61uth/action#example-action-code',
     '/register/%73uccess?registration=r1&token=example-capability',
     '/%72egister/success#example-capability',
     '/register/%ZZsuccess?token=example-capability',
@@ -304,6 +307,42 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockInitializeAppCheck).not.toHaveBeenCalled();
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
     expect(mockGetAnalytics).not.toHaveBeenCalled();
+  });
+
+  test('remembers the initial Auth capability after the visible URL is scrubbed', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+    const originalLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    setNodeEnv('production');
+    process.env.REACT_APP_RECAPTCHA_SITE_KEY = 'configured-public-site-key';
+    window.history.replaceState(
+      null,
+      '',
+      '/auth/action?mode=verifyEmail&oobCode=example-action-code#private',
+    );
+
+    try {
+      jest.isolateModules(() => {
+        // eslint-disable-next-line global-require
+        const FirebaseResources = require('./FirebaseResources').default;
+        window.history.replaceState(null, '', '/auth/action');
+        FirebaseResources.getInstance();
+      });
+
+      expect(mockReCaptchaEnterpriseProvider).not.toHaveBeenCalled();
+      expect(mockReCaptchaV3Provider).not.toHaveBeenCalled();
+      expect(mockInitializeAppCheck).not.toHaveBeenCalled();
+      expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
+      expect(mockGetAnalytics).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, '', originalLocation);
+      setNodeEnv(originalNodeEnv);
+      if (originalSiteKey === undefined) {
+        delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+      } else {
+        process.env.REACT_APP_RECAPTCHA_SITE_KEY = originalSiteKey;
+      }
+    }
   });
 
   test('ordinary production query pages keep Analytics disabled', async () => {
