@@ -9,7 +9,7 @@
  * remaining stream, encoding, channel, blob, and performance primitives.
  *
  * `setupFiles` executes before the test framework and before any test module
- * is required, so these assignments land before `firebase`/`undici` load.
+ * is required, so these assignments land before Firebase loads.
  */
 const { TextEncoder, TextDecoder } = require('util');
 const { ReadableStream, WritableStream, TransformStream } = require('stream/web');
