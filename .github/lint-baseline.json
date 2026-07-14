@@ -17,13 +17,13 @@
     ".ts": 33,
     ".tsx": 26
   },
-  "errorCount": 124,
+  "errorCount": 123,
   "warningCount": 7,
   "errorsByExtension": {
     ".js": 2,
     ".jsx": 26,
     ".ts": 2,
-    ".tsx": 94
+    ".tsx": 93
   },
   "warningsByExtension": {
     ".js": 0,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 7
   },
-  "fingerprint": "sha256:c451bc761b877b11e2d78c7d04e57460b5cda0cb697fd85b56b33e09dbe7ca47",
+  "fingerprint": "sha256:199771a215cc460da8b2d37433a69027d0d459658b07869ed61dbff0bc44525d",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -750,19 +750,6 @@
       "message": "A form label must be associated with a control.",
       "messageId": null,
       "nodeType": "JSXOpeningElement",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/admin/members/AdminMembers.tsx",
-      "line": 60,
-      "column": 3,
-      "endLine": 60,
-      "endColumn": 58,
-      "severity": 2,
-      "ruleId": "react-hooks/exhaustive-deps",
-      "message": "Definition for rule 'react-hooks/exhaustive-deps' was not found.",
-      "messageId": null,
-      "nodeType": null,
       "fatal": false
     },
     {
