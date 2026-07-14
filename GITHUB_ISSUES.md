@@ -323,7 +323,7 @@ Implement only the live CONFIG child claimed in `GITHUB_ISSUE_SLICES.md`. Never 
 ## AUTH-001 — Require verified email for member and privileged claims
 
 **Labels:** `priority:P0`, `type:security`, `area:auth`, `area:firebase`, `size:M`
-**Status:** Partial. AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) merged through [PR #107](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/107) as `ce22c110f2132b157bd8a0d43b065585e0b43cb5`; its Firebase deployment skipped. AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) merged as `a8801770e97cf21d81f3307f5893734115140d8f` and owns the role-based Firestore Rules source/test slice. AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) tracks the matching current Functions role-guard slice. None is proven live. Remaining mirror/revocation, authoritative-membership, capability/recent-auth, roster-export, and legacy-sync work is open, so the parent is not complete.
+**Status:** Partial. AUTH-001A [#98](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/98) merged through [PR #107](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/107) as `ce22c110f2132b157bd8a0d43b065585e0b43cb5`; its Firebase deployment skipped. AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) merged as `a8801770e97cf21d81f3307f5893734115140d8f` and owns the role-based Firestore Rules source/test slice. AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) merged through [PR #211](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/211) as `85751dac1b27b9dbb0beb70ff3c432c8da4e609d` and owns the matching current Functions role guards. AUTH-001D1 [#213](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/213) tracks the browser role-projection match. None is proven live. Remaining mirror/revocation, authoritative-membership, capability/recent-auth, roster-export, and legacy-sync work is open, so the parent is not complete.
 **Depends on:** SEC-001 recommended
 
 ### Problem
@@ -336,12 +336,15 @@ AUTH-001B [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) is t
 
 AUTH-001C [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) is the distinct current Functions outcome. One decoded-token policy is used by the shared admin guard, checkout's member-only/member-price role lookup, and registration CSV export. It requires exact boolean `email_verified === true` plus exact `member` or `admin`; request/profile substitutes and malformed, inherited, accessor-backed, or proxied claims deny. Admin and CSV denial precedes their Firestore work. Checkout keeps its existing configuration/event/rate-limit order, but an unverified role cannot permit member-only access, member pricing, a registration write, or a Stripe call. It preserves generic caller-facing failures and does not claim CSV minimization, recent-auth, scoped capabilities, deployment, or live behavior.
 
+AUTH-001D1 [#213](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/213) is the separate browser consistency outcome. The identity service projects `member` or `admin` into UI state only from one refreshed ID-token result with exact own data `email_verified === true` and the exact role. Missing, false, malformed, inherited, accessor-backed, proxied, unknown, or case-changed values project no privileged browser role. Exact `unverified` may remain only as a non-authoritative display state. This prevents a browser from presenting protected controls that #196/#209 must reject; it adds no server authority, grant, profile write, revocation, deployment, or live proof.
+
 Adjacent account-email recovery is represented by canonical live parent [#120](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/120), not by a new AUTH-001 role-grant child. AUTH-MAIL-002A [#145](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/145) merged the account-creation/request split as `46557c7` but is not published. AUTH-MAIL-002B [#153](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/153) merged the truthful My Account resend result and browser cooldown as `23bca8c8`, but protected release run `29252492614` stopped before build and published nothing. AUTH-MAIL-002C1 [#155](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/155) tracks one neutral password-reset request result and repeat-safe browser cooldown. AUTH-MAIL-002C2 is represented by live child [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194): a verification-only `/auth/action` source route that scrubs capability state, requires an explicit click and provider `VERIFY_EMAIL`, and exposes only fixed non-identifying results. It must not be configured as Firebase's project-wide custom handler while reset-password and recover-email modes remain unsupported. None grants membership, proves provider delivery, reconciles the Firestore verification mirror, or proves Firebase API enumeration protection.
 
 ### Scope
 
 - Reject member/admin/capability grants when the target Firebase user's email is unverified.
 - Require verified email at sensitive member/admin server guards and Firestore rule helpers.
+- Make browser member/admin role projection mirror that exact token check without treating UI state as authority.
 - Define behavior for non-email providers and accounts with no email.
 - Reconcile/update the member profile's email-verification mirror after verification or token refresh.
 - Revoke refresh tokens/force claim refresh on demotion and security-sensitive role changes.
@@ -353,12 +356,14 @@ Adjacent account-email recovery is represented by canonical live parent [#120](h
 - [ ] A forged request field cannot override Firebase's verified token/user-record value.
 - [ ] Verified user can be granted an allowed role by an authorized actor.
 - [ ] Sensitive rule/function access requires both capability and verified email where policy says so.
+- [ ] Browser member/admin controls require the same exact token facts and cannot substitute profile/request data.
 - [ ] Demotion has documented token revocation/propagation behavior.
 - [ ] Existing tests with privileged contexts explicitly set verification state.
 
 ### Tests/evidence
 
 - Attack-path unit and Rules emulator tests for unverified member/admin.
+- Browser projection tests for malformed claims plus a captured Auth callback that emits no privileged role.
 - Verified promotion/demotion and self-demotion protection tests.
 - Emulator flow showing verification mirror/claim refresh.
 

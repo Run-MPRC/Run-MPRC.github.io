@@ -38,6 +38,59 @@ const UNUSABLE_ACTION_CODE_ERRORS = new Set([
   'auth/user-not-found',
 ]);
 
+function ownDataValue(record: object, key: PropertyKey): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+    return undefined;
+  }
+  return descriptor.value;
+}
+
+function hasOnlyPlainData(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object') return true;
+  if (seen.has(value)) return false;
+
+  const prototype = Object.getPrototypeOf(value);
+  if (
+    prototype !== Object.prototype
+    && prototype !== Array.prototype
+    && prototype !== null
+  ) {
+    return false;
+  }
+
+  seen.add(value);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  return Reflect.ownKeys(descriptors).every((key) => {
+    if (typeof key === 'symbol') return false;
+    const descriptor = descriptors[key as keyof typeof descriptors];
+    return Object.prototype.hasOwnProperty.call(descriptor, 'value')
+      && hasOnlyPlainData(descriptor.value, seen);
+  });
+}
+
+export function projectUserRoleFromTokenClaims(claims: unknown): UserRole {
+  if (claims === null || typeof claims !== 'object') return null;
+
+  try {
+    const prototype = Object.getPrototypeOf(claims);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    if (!hasOnlyPlainData(claims)) return null;
+    if (typeof globalThis.structuredClone !== 'function') return null;
+
+    // Structured clone rejects Proxy objects. Browser role state is guidance,
+    // not authority, but it should mirror the server's fail-closed projection.
+    globalThis.structuredClone(claims);
+
+    const role = ownDataValue(claims, 'role');
+    if (role === 'unverified') return 'unverified';
+    if (ownDataValue(claims, 'email_verified') !== true) return null;
+    return role === 'member' || role === 'admin' ? role : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isValidEmailActionCode(value: unknown): value is string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
     return false;
@@ -90,6 +143,12 @@ class IdentityService {
 
   private currentUserRole: UserRole = null;
 
+  private currentUserRoleUid: string | null = null;
+
+  private roleRequestVersion = 0;
+
+  private signedOutStatePublished = false;
+
   private authStateListeners: Set<AuthStateCallback> = new Set();
 
   constructor(firebase: FirebaseResources) {
@@ -99,20 +158,58 @@ class IdentityService {
 
   private initAuthStateListener(): void {
     onAuthStateChanged(this.auth, async (user) => {
-      if (user) {
-        this.currentUserRole = await this.fetchUserRole(user);
-      } else {
-        this.currentUserRole = null;
+      if (!user) {
+        // Ignore an older sign-out callback after another account is current.
+        if (this.auth.currentUser !== null) return;
+
+        this.roleRequestVersion += 1;
+        this.clearUserRole();
+        if (!this.signedOutStatePublished) this.notifyListeners(null);
+        return;
       }
-      this.notifyListeners(user);
+
+      await this.refreshUserRole(user);
     });
+  }
+
+  private clearUserRole(): void {
+    this.currentUserRole = null;
+    this.currentUserRoleUid = null;
+  }
+
+  private roleForUser(user: User): UserRole {
+    return this.currentUserRoleUid === user.uid ? this.currentUserRole : null;
+  }
+
+  private async refreshUserRole(user: User): Promise<UserRole> {
+    // Firebase Auth callbacks can finish out of order. Never let an older
+    // account clear or populate the role projection for the current account.
+    if (this.auth.currentUser?.uid !== user.uid) return null;
+
+    const requestVersion = this.roleRequestVersion + 1;
+    this.roleRequestVersion = requestVersion;
+    this.clearUserRole();
+    this.notifyListeners(user);
+
+    const role = await this.fetchUserRole(user);
+    if (
+      requestVersion !== this.roleRequestVersion
+      || this.auth.currentUser?.uid !== user.uid
+    ) {
+      return null;
+    }
+
+    this.currentUserRole = role;
+    this.currentUserRoleUid = user.uid;
+    this.notifyListeners(user);
+    return role;
   }
 
   // eslint-disable-next-line class-methods-use-this
   private async fetchUserRole(user: User): Promise<UserRole> {
     try {
       const idTokenResult: IdTokenResult = await user.getIdTokenResult(true);
-      return (idTokenResult.claims.role as UserRole) || null;
+      return projectUserRoleFromTokenClaims(idTokenResult.claims);
     } catch {
       return null;
     }
@@ -120,14 +217,21 @@ class IdentityService {
 
   private notifyListeners(user: User | null): void {
     const authUser = user ? this.mapToAuthUser(user) : null;
-    this.authStateListeners.forEach((callback) => callback(authUser));
+    this.signedOutStatePublished = user === null;
+    this.authStateListeners.forEach((callback) => {
+      try {
+        callback(authUser);
+      } catch {
+        // A UI subscriber must not change the truthful provider outcome.
+      }
+    });
   }
 
   private mapToAuthUser(user: User): AuthUser {
     return {
       uid: user.uid,
       email: user.email,
-      role: this.currentUserRole,
+      role: this.roleForUser(user),
     };
   }
 
@@ -148,11 +252,10 @@ class IdentityService {
       return false;
     }
 
-    if (this.currentUserRole === null) {
-      this.currentUserRole = await this.fetchUserRole(currentUser);
-    }
+    let role = this.roleForUser(currentUser);
+    if (role === null) role = await this.refreshUserRole(currentUser);
 
-    return this.currentUserRole === 'member' || this.currentUserRole === 'admin';
+    return role === 'member' || role === 'admin';
   }
 
   async checkAdmin(): Promise<boolean> {
@@ -163,11 +266,10 @@ class IdentityService {
       return false;
     }
 
-    if (this.currentUserRole === null) {
-      this.currentUserRole = await this.fetchUserRole(currentUser);
-    }
+    let role = this.roleForUser(currentUser);
+    if (role === null) role = await this.refreshUserRole(currentUser);
 
-    return this.currentUserRole === 'admin';
+    return role === 'admin';
   }
 
   onAuthStateChanged(callback: AuthStateCallback): Unsubscribe {
@@ -175,7 +277,12 @@ class IdentityService {
 
     // Call immediately with current state if user is already authenticated
     if (this.auth.currentUser) {
-      callback(this.mapToAuthUser(this.auth.currentUser));
+      this.signedOutStatePublished = false;
+      try {
+        callback(this.mapToAuthUser(this.auth.currentUser));
+      } catch {
+        // Keep one faulty subscriber isolated from the Auth service.
+      }
     }
 
     return () => {
@@ -185,13 +292,18 @@ class IdentityService {
 
   async signIn(email: string, password: string): Promise<UserCredential> {
     const credential = await signInWithEmailAndPassword(this.auth, email, password);
-    this.currentUserRole = await this.fetchUserRole(credential.user);
+    await this.refreshUserRole(credential.user);
     return credential;
   }
 
   async register(email: string, password: string): Promise<RegistrationResult> {
     const credential = await createUserWithEmailAndPassword(this.auth, email, password);
-    this.currentUserRole = 'unverified';
+    if (this.auth.currentUser?.uid === credential.user.uid) {
+      this.roleRequestVersion += 1;
+      this.currentUserRole = 'unverified';
+      this.currentUserRoleUid = credential.user.uid;
+      this.notifyListeners(credential.user);
+    }
     try {
       await sendEmailVerification(credential.user);
       return {
@@ -211,7 +323,11 @@ class IdentityService {
 
   async signOut(): Promise<void> {
     await firebaseSignOut(this.auth);
-    this.currentUserRole = null;
+    if (this.auth.currentUser === null) {
+      this.roleRequestVersion += 1;
+      this.clearUserRole();
+      if (!this.signedOutStatePublished) this.notifyListeners(null);
+    }
   }
 
   async sendPasswordReset(email: string): Promise<void> {

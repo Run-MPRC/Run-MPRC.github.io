@@ -93,15 +93,16 @@ flowchart TD
     Verified -- "No" --> Deny["Deny private member/admin access"]
     Verified -- "Yes" --> Role{"Allowed member/admin role?"}
     Role -- "No" --> Deny
-    Role -- "Yes" --> Surface{"Database read or server Function?"}
+    Role -- "Yes" --> Surface{"Website display, database read, or server Function?"}
+    Surface --> Website["Show matching website controls\nnot permission by itself"]
     Surface --> Rules["Apply the specific database permission"]
     Surface --> Function["Apply the specific Function guard"]
     Verified -. "does not grant" .-> Role
 ```
 
-In words: safe self-service is limited to the person's own signed-in account, while every private database or server-Function use of a member/admin role requires both a verified account email and the already-approved role; verification does not grant the role.
+In words: safe self-service is limited to the person's own signed-in account; the website shows member/admin controls only when the refreshed account token contains both verified-email proof and the already-approved role, while the database and server check those facts again because a visible control is never permission.
 
-Issue [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) owns the database Rules source/test boundary. Issue [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) owns the matching current server-Function boundary for admin actions, member checkout treatment, and registration export. Both are **NOT LIVE** until the exact Rules and Functions revisions are deployed backend-first and checked with made-up accounts. An officer must not edit a profile, toggle a role, open real member data, or use a real account as a workaround or test. Registration export still needs separate purpose, minimum-column, recent-auth, audit, and limit work under [#116](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/116).
+Issue [#196](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/196) owns the database Rules source/test boundary. Issue [#209](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/209) owns the matching current server-Function boundary for admin actions, member checkout treatment, and registration export. Issue [#213](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/213) owns the website display match. All are **NOT LIVE** until the exact Rules and Functions revisions are deployed backend-first, the exact website is published to protected staging second, and the complete made-up-account matrix passes. An officer must not edit a profile, toggle a role, open real member data, or use a real account as a workaround or test. Registration export still needs separate purpose, minimum-column, recent-auth, audit, and limit work under [#116](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/116).
 
 ## Member profile setup and recovery — NOT LIVE YET
 
