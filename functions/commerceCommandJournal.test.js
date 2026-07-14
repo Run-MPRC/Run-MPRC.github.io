@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { inspect } = require('node:util');
 const { Timestamp } = require('firebase-admin/firestore');
 
@@ -12,12 +13,14 @@ const {
 const {
   journalSchemaVersion,
   lifecycleSchemaVersion,
+  providerReconciliationEvidenceSchemaVersion,
   providerSendEvidenceSchemaVersion,
   CommerceCommandJournalError,
   acquireCommerceCommandLease,
   bindInitialStripeProviderPlan,
   completeCommerceCommand,
   failCommerceCommand,
+  recordInitialStripeReconciliationEvidence,
   recordInitialStripeSendEvidence,
   registerCommerceCommand,
 } = require('./commerceCommandJournal');
@@ -27,6 +30,7 @@ const OTHER_COMMAND_ID = '123e4567-e89b-42d3-a456-426614174000';
 const LEASE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OTHER_LEASE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const THIRD_LEASE_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const FOURTH_LEASE_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const TERMINAL_REFERENCE_FINGERPRINT = 'd'.repeat(64);
 const OTHER_TERMINAL_REFERENCE_FINGERPRINT = 'e'.repeat(64);
 const STRIPE_ACCOUNT_ID = 'acct_1SyntheticTest000000000001';
@@ -43,6 +47,64 @@ const RAW_CALLER = 'private-runner@example.test';
 const HOSTILE_CANARY = 'private-runner@example.test/token?secret=do-not-copy';
 const NOW_MILLIS = 1800000000123;
 const PROVIDER_SEND_RETRY_WINDOW_MILLIS = 23 * 60 * 60 * 1000;
+const HASH_MAGIC = 'mprc-commerce-command-journal-sha256';
+
+function updateTestDigest(hash, value) {
+  const bytes = Buffer.from(value, 'utf8');
+  const length = Buffer.allocUnsafe(4);
+  length.writeUInt32BE(bytes.length, 0);
+  hash.update(length);
+  hash.update(bytes);
+}
+
+function testDigest(domain, fields) {
+  const hash = createHash('sha256');
+  updateTestDigest(hash, HASH_MAGIC);
+  updateTestDigest(hash, domain);
+  for (const [name, value] of fields) {
+    updateTestDigest(hash, name);
+    updateTestDigest(hash, value);
+  }
+  return hash.digest('hex');
+}
+
+function reconciliationEvidenceCommitment(record) {
+  return testDigest('mprc.command-provider-reconciliation-evidence-complete.v1', [
+    ['version', '1'],
+    [
+      'providerReconciliationEvidenceSchemaVersion',
+      String(record.providerReconciliationEvidenceSchemaVersion),
+    ],
+    ['reconciliationPolicySchemaVersion', String(record.reconciliationPolicySchemaVersion)],
+    ['providerPlanSchemaVersion', String(record.providerPlanSchemaVersion)],
+    ['providerSendEvidenceSchemaVersion', String(record.providerSendEvidenceSchemaVersion)],
+    ['commandIdentityVersion', String(record.commandIdentityVersion)],
+    ['commandKeyHash', record.commandKeyHash],
+    ['providerAttempt', String(record.providerAttempt)],
+    ['provider', record.provider],
+    ['evidenceRevision', String(record.evidenceRevision)],
+    ['providerPlanCommitment', record.providerPlanCommitment],
+    ['providerSendEvidenceCommitment', record.providerSendEvidenceCommitment],
+    ['classification', record.classification],
+    ['state', record.state],
+    ['planBinding', record.planBinding],
+    ['evidenceSource', record.evidenceSource],
+    ['evidenceCompleteness', record.evidenceCompleteness],
+    ['dispatchEvidence', record.dispatchEvidence],
+    ['responseEvidence', record.responseEvidence],
+    ['idempotencyEvidence', record.idempotencyEvidence],
+    ['providerObjectEvidence', record.providerObjectEvidence],
+    ['paymentEvidence', record.paymentEvidence],
+    ['eventEvidence', record.eventEvidence],
+    ['searchEvidence', record.searchEvidence],
+    ['businessTransitionEvidence', record.businessTransitionEvidence],
+    ['observedFenceEpoch', String(record.observedFenceEpoch)],
+    ['observedLeaseExpiresAtSeconds', String(record.observedLeaseExpiresAt.seconds)],
+    ['observedLeaseExpiresAtNanoseconds', String(record.observedLeaseExpiresAt.nanoseconds)],
+    ['recordedAtSeconds', String(record.recordedAt.seconds)],
+    ['recordedAtNanoseconds', String(record.recordedAt.nanoseconds)],
+  ]);
+}
 
 function frozenRecord(entries = []) {
   const value = Object.create(null);
@@ -102,9 +164,10 @@ function cloneStore(store) {
 }
 
 function createMockDb(seed = [], options = {}) {
-  const store = new Map(seed);
+  const store = options.sharedStore || new Map(seed);
   const callbackRuns = [];
   const collectionCalls = [];
+  let rejectAfterCommit = options.rejectAfterCommit;
   const db = {
     collection: jest.fn((collectionName) => {
       collectionCalls.push(collectionName);
@@ -119,6 +182,7 @@ function createMockDb(seed = [], options = {}) {
       let finalWrites = [];
 
       for (let index = 0; index < numberOfRuns; index += 1) {
+        if (options.beforeCallbackRun) await options.beforeCallbackRun(index);
         const readView = cloneStore(store);
         const writes = [];
         const transaction = Object.freeze({
@@ -142,6 +206,11 @@ function createMockDb(seed = [], options = {}) {
         }
       }
       for (const write of finalWrites) store.set(write.ref.path, write.value);
+      if (rejectAfterCommit) {
+        const error = rejectAfterCommit;
+        rejectAfterCommit = null;
+        throw error;
+      }
       if (Object.prototype.hasOwnProperty.call(options, 'returnedValue')) {
         return options.returnedValue;
       }
@@ -256,6 +325,40 @@ function providerPlanInput(db, overrides = {}) {
   };
 }
 
+function candidateReconciliationEvidence(overrides = {}) {
+  return {
+    reconciliationPolicySchemaVersion: 1,
+    provider: 'stripe',
+    providerAttempt: 1,
+    planBinding: 'exact',
+    evidenceSource: 'trusted_dispatch_history',
+    evidenceCompleteness: 'complete',
+    dispatchEvidence: 'execution_never_began',
+    responseEvidence: 'none',
+    idempotencyEvidence: 'not_relied_upon',
+    providerObjectEvidence: 'none',
+    paymentEvidence: 'none',
+    eventEvidence: 'none',
+    searchEvidence: 'none',
+    businessTransitionEvidence: 'same_operation_eligible',
+    ...overrides,
+  };
+}
+
+function providerReconciliationInput(db, overrides = {}) {
+  return {
+    ...validInput(db),
+    stripeAccountId: STRIPE_ACCOUNT_ID,
+    stripeMode: 'test',
+    stripeApiVersion: STRIPE_API_VERSION,
+    endpointPath: STRIPE_ENDPOINT_PATH,
+    providerOperation: PROVIDER_OPERATION,
+    providerParameters: validProviderParameters(),
+    reconciliationEvidence: candidateReconciliationEvidence(),
+    ...overrides,
+  };
+}
+
 function lifecyclePaths(input, revision = 2) {
   const identity = expectedIdentity(input);
   return Object.freeze({
@@ -288,6 +391,20 @@ function providerSendPaths(input) {
     providerSendAuditPath: documentPath(
       'auditEvents',
       `commerce_provider_send_${paths.commandKeyHash}_0000000001`,
+    ),
+  });
+}
+
+function providerReconciliationPaths(input) {
+  const paths = providerSendPaths(input);
+  return Object.freeze({
+    ...paths,
+    providerReconciliationPath: (
+      `${paths.providerPlanPath}/reconciliationEvidence/0000000001`
+    ),
+    providerReconciliationAuditPath: documentPath(
+      'auditEvents',
+      `commerce_provider_reconciliation_${paths.commandKeyHash}_0000000001_0000000001`,
     ),
   });
 }
@@ -2799,6 +2916,819 @@ describe('pre-POST Stripe send evidence and retry cutoff', () => {
   });
 });
 
+describe('immutable initial Stripe reconciliation evidence', () => {
+  let nowMillis;
+
+  beforeEach(() => {
+    nowMillis = NOW_MILLIS;
+    jest.spyOn(Timestamp, 'now')
+      .mockImplementation(() => Timestamp.fromMillis(nowMillis));
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  async function createSendFoundation(mock) {
+    await registerCommerceCommand(validInput(mock.db));
+    nowMillis += 1000;
+    await acquireCommerceCommandLease(leaseInput(mock.db));
+    nowMillis += 1000;
+    await bindInitialStripeProviderPlan(providerPlanInput(mock.db));
+    nowMillis += 1000;
+    await recordInitialStripeSendEvidence(providerPlanInput(mock.db));
+  }
+
+  function moveToSendCutoff(mock, input = providerReconciliationInput(mock.db)) {
+    const paths = providerReconciliationPaths(input);
+    nowMillis = mock.store.get(paths.providerSendPath).automaticRetryDeadlineAt.toMillis();
+    return paths;
+  }
+
+  test('creates one candidate pair at the C2 cutoff with no active lease and preserves prior bytes', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = providerReconciliationPaths(input);
+    const before = cloneStore(mock.store);
+    nowMillis = mock.store.get(paths.providerSendPath).automaticRetryDeadlineAt.toMillis();
+
+    const result = await recordInitialStripeReconciliationEvidence(input);
+
+    expect(providerReconciliationEvidenceSchemaVersion).toBe(1);
+    expect(result).toEqual({
+      journalSchemaVersion: 1,
+      providerReconciliationEvidenceSchemaVersion: 1,
+      reconciliationPolicySchemaVersion: 1,
+      outcome: 'reconciliation_candidate_persisted',
+      state: 'requires_separate_authorization',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    const transactionRun = mock.callbackRuns.at(-1);
+    expect(transactionRun.transaction.get).toHaveBeenCalledTimes(10);
+    expect(transactionRun.transaction.create).toHaveBeenCalledTimes(2);
+    expect(Math.max(...transactionRun.transaction.get.mock.invocationCallOrder))
+      .toBeLessThan(Math.min(...transactionRun.transaction.create.mock.invocationCallOrder));
+    expect(transactionRun.writes.map((write) => write.ref.path)).toEqual([
+      paths.providerReconciliationPath,
+      paths.providerReconciliationAuditPath,
+    ]);
+
+    const record = mock.store.get(paths.providerReconciliationPath);
+    const audit = mock.store.get(paths.providerReconciliationAuditPath);
+    expect(record).toEqual({
+      providerReconciliationEvidenceSchemaVersion: 1,
+      reconciliationPolicySchemaVersion: 1,
+      providerPlanSchemaVersion: 1,
+      providerSendEvidenceSchemaVersion: 1,
+      commandIdentityVersion: 1,
+      commandKeyHash: paths.commandKeyHash,
+      providerAttempt: 1,
+      provider: 'stripe',
+      evidenceRevision: 1,
+      providerPlanCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      providerSendEvidenceCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+      planBinding: 'exact',
+      evidenceSource: 'trusted_dispatch_history',
+      evidenceCompleteness: 'complete',
+      dispatchEvidence: 'execution_never_began',
+      responseEvidence: 'none',
+      idempotencyEvidence: 'not_relied_upon',
+      providerObjectEvidence: 'none',
+      paymentEvidence: 'none',
+      eventEvidence: 'none',
+      searchEvidence: 'none',
+      businessTransitionEvidence: 'same_operation_eligible',
+      observedFenceEpoch: 1,
+      observedLeaseExpiresAt: expect.any(Timestamp),
+      recordedAt: expect.any(Timestamp),
+    });
+    expect(audit).toEqual({
+      providerReconciliationAuditSchemaVersion: 1,
+      providerReconciliationEvidenceSchemaVersion: 1,
+      aggregateType: 'commerce_provider_reconciliation',
+      commandKeyHash: paths.commandKeyHash,
+      providerAttempt: 1,
+      evidenceRevision: 1,
+      eventType: 'provider_reconciliation_candidate_recorded',
+      provider: 'stripe',
+      environment: 'test',
+      stripeMode: 'test',
+      providerOperation: PROVIDER_OPERATION,
+      providerPlanCommitment: record.providerPlanCommitment,
+      providerSendEvidenceCommitment: record.providerSendEvidenceCommitment,
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      observedFenceEpoch: 1,
+      observedLeaseExpiresAt: record.observedLeaseExpiresAt,
+      reconciliationEvidenceCommitment: expect.stringMatching(/^[0-9a-f]{64}$/),
+      occurredAt: expect.any(Timestamp),
+    });
+    expect(record.recordedAt).toBe(audit.occurredAt);
+    expect(record.observedLeaseExpiresAt).toBe(audit.observedLeaseExpiresAt);
+    expect(record.recordedAt.toMillis()).toBe(
+      before.get(paths.providerSendPath).automaticRetryDeadlineAt.toMillis(),
+    );
+    expect(Object.isFrozen(record)).toBe(true);
+    expect(Object.isFrozen(audit)).toBe(true);
+    for (const [path_, value] of before) expect(mock.store.get(path_)).toBe(value);
+  });
+
+  test('transaction retries snapshot evidence once and create the same pair after every read', async () => {
+    const foundation = createMockDb();
+    await createSendFoundation(foundation);
+    moveToSendCutoff(foundation);
+    const evidence = candidateReconciliationEvidence();
+    const mock = createMockDb([...foundation.store], {
+      callbackRuns: 4,
+      beforeCallbackRun: async (index) => {
+        if (index === 1) evidence.dispatchEvidence = 'timeout';
+      },
+    });
+    const input = providerReconciliationInput(mock.db, {
+      reconciliationEvidence: evidence,
+    });
+    Timestamp.now.mockClear();
+
+    const result = await recordInitialStripeReconciliationEvidence(input);
+
+    expect(result.outcome).toBe('reconciliation_candidate_persisted');
+    expect(Timestamp.now).toHaveBeenCalledTimes(2);
+    expect(mock.callbackRuns).toHaveLength(4);
+    for (const { transaction, writes } of mock.callbackRuns) {
+      expect(transaction.get).toHaveBeenCalledTimes(10);
+      expect(transaction.create).toHaveBeenCalledTimes(2);
+      expect(writes).toHaveLength(2);
+      expect(writes[0].value.dispatchEvidence).toBe('execution_never_began');
+    }
+    const recordWrites = mock.callbackRuns.map(({ writes }) => writes[0].value);
+    const auditWrites = mock.callbackRuns.map(({ writes }) => writes[1].value);
+    expect(recordWrites.every((value) => JSON.stringify(value) === JSON.stringify(recordWrites[0])))
+      .toBe(true);
+    expect(auditWrites.every((value) => JSON.stringify(value) === JSON.stringify(auditWrites[0])))
+      .toBe(true);
+  });
+
+  test('an earlier-started call accepts the exact pair committed by a later-started call', async () => {
+    const foundation = createMockDb();
+    await createSendFoundation(foundation);
+    const paths = moveToSendCutoff(foundation);
+    const cutoff = foundation.store.get(
+      paths.providerSendPath,
+    ).automaticRetryDeadlineAt.toMillis();
+    let releaseEarlier;
+    let markEarlierStarted;
+    const earlierBlocked = new Promise((resolve) => { releaseEarlier = resolve; });
+    const earlierStarted = new Promise((resolve) => { markEarlierStarted = resolve; });
+    const earlier = createMockDb([], {
+      sharedStore: foundation.store,
+      beforeCallbackRun: async () => {
+        markEarlierStarted();
+        await earlierBlocked;
+      },
+    });
+    const later = createMockDb([], { sharedStore: foundation.store });
+    for (const offset of [0, 1, 2, 3]) {
+      Timestamp.now.mockImplementationOnce(() => Timestamp.fromMillis(cutoff + offset));
+    }
+    Timestamp.now.mockClear();
+
+    const earlierPromise = recordInitialStripeReconciliationEvidence(
+      providerReconciliationInput(earlier.db),
+    );
+    await earlierStarted;
+    let laterResult;
+    try {
+      laterResult = await recordInitialStripeReconciliationEvidence(
+        providerReconciliationInput(later.db),
+      );
+    } finally {
+      releaseEarlier();
+    }
+    const earlierResult = await earlierPromise;
+
+    expect(laterResult).toMatchObject({ outcome: 'reconciliation_candidate_persisted' });
+    expect(earlierResult).toEqual(laterResult);
+    expect(Timestamp.now).toHaveBeenCalledTimes(4);
+    expect(later.callbackRuns[0].writes).toHaveLength(2);
+    expect(earlier.callbackRuns[0].writes).toEqual([]);
+    expect(foundation.store.get(paths.providerReconciliationPath).recordedAt.toMillis())
+      .toBe(cutoff + 1);
+  });
+
+  test('waits for both the C2 cutoff and current lease expiry without persisting', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = providerReconciliationPaths(input);
+    const cutoff = mock.store.get(paths.providerSendPath).automaticRetryDeadlineAt.toMillis();
+
+    nowMillis += 1;
+    await expect(recordInitialStripeReconciliationEvidence(input)).resolves.toEqual({
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+    });
+    expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+
+    nowMillis = cutoff - 30000;
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    nowMillis = cutoff;
+    const activeResult = await recordInitialStripeReconciliationEvidence(input);
+    expect(activeResult.classification).toBe('new_attempt_candidate');
+    expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+    expect(mock.store.get(paths.lifecyclePath).fenceEpoch).toBe(2);
+
+    nowMillis = cutoff + 30000;
+    const persisted = await recordInitialStripeReconciliationEvidence(input);
+    expect(persisted.outcome).toBe('reconciliation_candidate_persisted');
+    expect(mock.store.get(paths.providerReconciliationPath)).toMatchObject({
+      observedFenceEpoch: 2,
+      observedLeaseExpiresAt: Timestamp.fromMillis(cutoff + 30000),
+    });
+  });
+
+  test('uses nanosecond precision at the C2 deadline and lease-expiry boundaries', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = providerReconciliationPaths(input);
+    const deadline = mock.store.get(paths.providerSendPath).automaticRetryDeadlineAt;
+    const oneNanosecondBefore = deadline.nanoseconds === 0
+      ? new Timestamp(deadline.seconds - 1, 999999999)
+      : new Timestamp(deadline.seconds, deadline.nanoseconds - 1);
+    Timestamp.now.mockImplementationOnce(() => oneNanosecondBefore);
+
+    expect(await recordInitialStripeReconciliationEvidence(input)).toEqual({
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+    });
+    expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+
+    Timestamp.now.mockImplementationOnce(() => new Timestamp(
+      deadline.seconds,
+      deadline.nanoseconds,
+    ));
+    Timestamp.now.mockImplementationOnce(() => new Timestamp(
+      deadline.seconds,
+      deadline.nanoseconds,
+    ));
+    expect(await recordInitialStripeReconciliationEvidence(input)).toMatchObject({
+      outcome: 'reconciliation_candidate_persisted',
+    });
+    expect(mock.store.get(paths.providerReconciliationPath).recordedAt).toEqual(deadline);
+
+    nowMillis = NOW_MILLIS;
+    const leaseMock = createMockDb();
+    await createSendFoundation(leaseMock);
+    const leaseReconciliationInput = providerReconciliationInput(leaseMock.db);
+    const leasePaths = providerReconciliationPaths(leaseReconciliationInput);
+    const leaseDeadline = leaseMock.store.get(
+      leasePaths.providerSendPath,
+    ).automaticRetryDeadlineAt;
+    nowMillis = leaseDeadline.toMillis();
+    await acquireCommerceCommandLease(leaseInput(leaseMock.db, {
+      leaseId: OTHER_LEASE_ID,
+    }));
+    const leaseExpiry = leaseMock.store.get(leasePaths.lifecyclePath).leaseExpiresAt;
+    const oneNanosecondBeforeExpiry = leaseExpiry.nanoseconds === 0
+      ? new Timestamp(leaseExpiry.seconds - 1, 999999999)
+      : new Timestamp(leaseExpiry.seconds, leaseExpiry.nanoseconds - 1);
+    Timestamp.now.mockImplementationOnce(() => oneNanosecondBeforeExpiry);
+    expect(await recordInitialStripeReconciliationEvidence(
+      leaseReconciliationInput,
+    )).toEqual({
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+    });
+    expect(leaseMock.store.has(leasePaths.providerReconciliationPath)).toBe(false);
+
+    Timestamp.now.mockImplementationOnce(() => new Timestamp(
+      leaseExpiry.seconds,
+      leaseExpiry.nanoseconds,
+    ));
+    Timestamp.now.mockImplementationOnce(() => new Timestamp(
+      leaseExpiry.seconds,
+      leaseExpiry.nanoseconds,
+    ));
+    expect(await recordInitialStripeReconciliationEvidence(
+      leaseReconciliationInput,
+    )).toMatchObject({
+      outcome: 'reconciliation_candidate_persisted',
+    });
+    expect(leaseMock.store.get(leasePaths.providerReconciliationPath)).toMatchObject({
+      observedFenceEpoch: 2,
+      observedLeaseExpiresAt: leaseExpiry,
+    });
+  });
+
+  test('terminal lifecycle without a C3B pair returns the unchanged candidate and writes nothing', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = providerReconciliationPaths(input);
+    nowMillis += 1;
+    await completeCommerceCommand(completionInput(mock.db));
+    moveToSendCutoff(mock, input);
+    const runsBefore = mock.callbackRuns.length;
+
+    const result = await recordInitialStripeReconciliationEvidence(input);
+
+    expect(result).toEqual({
+      reconciliationPolicySchemaVersion: 1,
+      classification: 'new_attempt_candidate',
+      state: 'requires_persistence_and_authorization',
+    });
+    expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+    expect(mock.store.has(paths.providerReconciliationAuditPath)).toBe(false);
+    expect(mock.callbackRuns.slice(runsBefore).at(-1).writes).toEqual([]);
+  });
+
+  test('an exact C3B pair remains read-only after a takeover reaches terminal state', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = moveToSendCutoff(mock, input);
+    await recordInitialStripeReconciliationEvidence(input);
+    const recordBefore = mock.store.get(paths.providerReconciliationPath);
+    const auditBefore = mock.store.get(paths.providerReconciliationAuditPath);
+
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    nowMillis += 1;
+    await completeCommerceCommand(completionInput(mock.db, {
+      leaseId: OTHER_LEASE_ID,
+      expectedFenceEpoch: 2,
+    }));
+    nowMillis += 1;
+
+    expect(await recordInitialStripeReconciliationEvidence(input)).toMatchObject({
+      outcome: 'reconciliation_candidate_persisted',
+      state: 'requires_separate_authorization',
+    });
+    expect(mock.callbackRuns.at(-1).writes).toEqual([]);
+    expect(mock.store.get(paths.providerReconciliationPath)).toBe(recordBefore);
+    expect(mock.store.get(paths.providerReconciliationAuditPath)).toBe(auditBefore);
+
+    const terminalLeaseAuditPath = lifecyclePaths(input, 3).lifecycleAuditPath;
+    const terminalLeaseAudit = mock.store.get(terminalLeaseAuditPath);
+    mock.store.set(terminalLeaseAuditPath, {
+      ...terminalLeaseAudit,
+      occurredAt: Timestamp.fromMillis(terminalLeaseAudit.occurredAt.toMillis() + 1),
+      leaseExpiresAt: Timestamp.fromMillis(terminalLeaseAudit.leaseExpiresAt.toMillis() + 1),
+    });
+    const beforeMalformedRetry = cloneStore(mock.store);
+    nowMillis += 1;
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(input),
+      'journal_record_invalid',
+    );
+    expect(mock.store).toEqual(beforeMalformedRetry);
+  });
+
+  test.each([
+    [
+      'existing attempt',
+      candidateReconciliationEvidence({
+        evidenceSource: 'verified_provider_object',
+        dispatchEvidence: 'execution_started',
+        responseEvidence: 'accepted',
+        providerObjectEvidence: 'exact_open',
+        paymentEvidence: 'unpaid',
+        searchEvidence: 'exact_lookup_complete',
+        businessTransitionEvidence: 'ineligible',
+      }),
+      'existing_attempt_found',
+      'do_not_advance',
+    ],
+    [
+      'unsafe evidence',
+      candidateReconciliationEvidence({ dispatchEvidence: 'timeout' }),
+      'reconciliation_required',
+      'requires_reconciliation',
+    ],
+  ])('returns unchanged C3A %s classification and writes nothing', async (
+    _label,
+    reconciliationEvidence,
+    classification,
+    state,
+  ) => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const paths = moveToSendCutoff(mock);
+    const runsBefore = mock.callbackRuns.length;
+
+    const result = await recordInitialStripeReconciliationEvidence(
+      providerReconciliationInput(mock.db, { reconciliationEvidence }),
+    );
+
+    expect(result).toEqual({
+      reconciliationPolicySchemaVersion: 1,
+      classification,
+      state,
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+    const [{ transaction, writes }] = mock.callbackRuns.slice(runsBefore);
+    expect(transaction.create).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  test('exact and canonical retries are read-only while any valid change conflicts', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = moveToSendCutoff(mock, input);
+    await recordInitialStripeReconciliationEvidence(input);
+    const recordBefore = mock.store.get(paths.providerReconciliationPath);
+    const auditBefore = mock.store.get(paths.providerReconciliationAuditPath);
+    const storeSize = mock.store.size;
+
+    nowMillis += 1;
+    const exact = await recordInitialStripeReconciliationEvidence(input);
+    const canonical = await recordInitialStripeReconciliationEvidence(
+      providerReconciliationInput(mock.db, {
+        providerParameters: validProviderParameters([
+          ['synthetic_reference', HOSTILE_CANARY],
+          ['currency', 'usd'],
+          ['amount_total', 2500],
+        ]),
+      }),
+    );
+    expect(exact).toBe(canonical);
+    expect(exact.outcome).toBe('reconciliation_candidate_persisted');
+    for (const { transaction, writes } of mock.callbackRuns.slice(-2)) {
+      expect(transaction.create).not.toHaveBeenCalled();
+      expect(writes).toEqual([]);
+    }
+
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(providerReconciliationInput(mock.db, {
+        reconciliationEvidence: candidateReconciliationEvidence({
+          dispatchEvidence: 'timeout',
+        }),
+      })),
+      'command_conflict',
+    );
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(providerReconciliationInput(mock.db, {
+        providerParameters: validProviderParameters([
+          ['amount_total', 2600],
+          ['currency', 'usd'],
+          ['synthetic_reference', HOSTILE_CANARY],
+        ]),
+      })),
+      'command_conflict',
+    );
+    expect(mock.store.size).toBe(storeSize);
+    expect(mock.store.get(paths.providerReconciliationPath)).toBe(recordBefore);
+    expect(mock.store.get(paths.providerReconciliationAuditPath)).toBe(auditBefore);
+  });
+
+  test('rejects C2 and C3B orphans or malformed partners without repair', async () => {
+    const foundation = createMockDb();
+    await createSendFoundation(foundation);
+    const baseInput = providerReconciliationInput(foundation.db);
+    const paths = moveToSendCutoff(foundation, baseInput);
+    const foundationSeed = [...foundation.store];
+
+    const missingSendAudit = new Map(foundationSeed);
+    missingSendAudit.delete(paths.providerSendAuditPath);
+    const unreadableSendTime = new Map(foundationSeed);
+    unreadableSendTime.set(paths.providerSendPath, {
+      ...unreadableSendTime.get(paths.providerSendPath),
+      automaticRetryDeadlineAt: null,
+    });
+    for (const seed of [missingSendAudit, unreadableSendTime]) {
+      const mock = createMockDb([...seed]);
+      await expectSafeError(
+        () => recordInitialStripeReconciliationEvidence(providerReconciliationInput(mock.db)),
+        'journal_record_invalid',
+      );
+      expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+      expect(mock.store.has(paths.providerReconciliationAuditPath)).toBe(false);
+    }
+
+    await recordInitialStripeReconciliationEvidence(baseInput);
+    const complete = cloneStore(foundation.store);
+    const record = complete.get(paths.providerReconciliationPath);
+    const audit = complete.get(paths.providerReconciliationAuditPath);
+    const variants = [];
+    const missingAudit = cloneStore(complete);
+    missingAudit.delete(paths.providerReconciliationAuditPath);
+    variants.push(missingAudit);
+    const missingRecord = cloneStore(complete);
+    missingRecord.delete(paths.providerReconciliationPath);
+    variants.push(missingRecord);
+    const extraRecord = cloneStore(complete);
+    extraRecord.set(paths.providerReconciliationPath, { ...record, extra: HOSTILE_CANARY });
+    variants.push(extraRecord);
+    const badAudit = cloneStore(complete);
+    badAudit.set(paths.providerReconciliationAuditPath, {
+      ...audit,
+      reconciliationEvidenceCommitment: 'a'.repeat(64),
+    });
+    variants.push(badAudit);
+    const futureRecord = cloneStore(complete);
+    futureRecord.set(paths.providerReconciliationPath, {
+      ...record,
+      providerReconciliationEvidenceSchemaVersion: 2,
+    });
+    variants.push(futureRecord);
+    const futureAudit = cloneStore(complete);
+    futureAudit.set(paths.providerReconciliationAuditPath, {
+      ...audit,
+      providerReconciliationAuditSchemaVersion: 2,
+    });
+    variants.push(futureAudit);
+
+    for (const seed of variants) {
+      const mock = createMockDb([...seed]);
+      const before = cloneStore(mock.store);
+      await expectSafeError(
+        () => recordInitialStripeReconciliationEvidence(providerReconciliationInput(mock.db)),
+        'journal_record_invalid',
+      );
+      expect(mock.store).toEqual(before);
+    }
+  });
+
+  test('rejects a recommitted C3B pair whose observed fence predates C2', async () => {
+    const mock = createMockDb();
+    await registerCommerceCommand(validInput(mock.db));
+    nowMillis += 1000;
+    await acquireCommerceCommandLease(leaseInput(mock.db));
+    nowMillis = NOW_MILLIS + 61000;
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    nowMillis += 1000;
+    const secondFencePlan = providerPlanInput(mock.db, {
+      leaseId: OTHER_LEASE_ID,
+      expectedFenceEpoch: 2,
+    });
+    await bindInitialStripeProviderPlan(secondFencePlan);
+    nowMillis += 1000;
+    await recordInitialStripeSendEvidence(secondFencePlan);
+    const input = providerReconciliationInput(mock.db);
+    const paths = moveToSendCutoff(mock, input);
+    await recordInitialStripeReconciliationEvidence(input);
+
+    const firstLeaseAudit = mock.store.get(lifecyclePaths(input, 2).lifecycleAuditPath);
+    const originalRecord = mock.store.get(paths.providerReconciliationPath);
+    const originalAudit = mock.store.get(paths.providerReconciliationAuditPath);
+    expect(mock.store.get(paths.providerSendPath).prePostFenceEpoch).toBe(2);
+    expect(originalRecord.observedFenceEpoch).toBe(2);
+    const forgedRecord = {
+      ...originalRecord,
+      observedFenceEpoch: 1,
+      observedLeaseExpiresAt: firstLeaseAudit.leaseExpiresAt,
+    };
+    const forgedAudit = {
+      ...originalAudit,
+      observedFenceEpoch: 1,
+      observedLeaseExpiresAt: firstLeaseAudit.leaseExpiresAt,
+      reconciliationEvidenceCommitment: reconciliationEvidenceCommitment(forgedRecord),
+    };
+    mock.store.set(paths.providerReconciliationPath, forgedRecord);
+    mock.store.set(paths.providerReconciliationAuditPath, forgedAudit);
+    nowMillis += 1;
+    const before = cloneStore(mock.store);
+
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(input),
+      'journal_record_invalid',
+    );
+    expect(mock.store).toEqual(before);
+  });
+
+  test('rejects historical C2 lease evidence that overlaps a newer current fence', async () => {
+    const mock = createMockDb();
+    await registerCommerceCommand(validInput(mock.db));
+    nowMillis += 1000;
+    await acquireCommerceCommandLease(leaseInput(mock.db));
+    nowMillis += 1000;
+    await bindInitialStripeProviderPlan(providerPlanInput(mock.db));
+    const input = providerReconciliationInput(mock.db);
+    const paths = providerReconciliationPaths(input);
+
+    nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    nowMillis += 1000;
+    await recordInitialStripeSendEvidence(providerPlanInput(mock.db, {
+      leaseId: OTHER_LEASE_ID,
+      expectedFenceEpoch: 2,
+    }));
+    nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: THIRD_LEASE_ID }));
+    nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: FOURTH_LEASE_ID }));
+    const currentLeaseAcquiredAt = mock.store.get(paths.lifecyclePath).leaseAcquiredAt;
+    const impossibleFenceTwoAcquiredAt = Timestamp.fromMillis(
+      currentLeaseAcquiredAt.toMillis() + 1000,
+    );
+    const impossibleFenceTwoExpiresAt = Timestamp.fromMillis(
+      impossibleFenceTwoAcquiredAt.toMillis() + 60000,
+    );
+    const impossibleSendAt = Timestamp.fromMillis(
+      impossibleFenceTwoAcquiredAt.toMillis() + 1,
+    );
+    const impossibleDeadline = Timestamp.fromMillis(
+      impossibleSendAt.toMillis() + PROVIDER_SEND_RETRY_WINDOW_MILLIS,
+    );
+    const fenceTwoAuditPath = lifecyclePaths(input, 3).lifecycleAuditPath;
+    mock.store.set(fenceTwoAuditPath, {
+      ...mock.store.get(fenceTwoAuditPath),
+      leaseExpiresAt: impossibleFenceTwoExpiresAt,
+      occurredAt: impossibleFenceTwoAcquiredAt,
+    });
+    mock.store.set(paths.providerSendPath, {
+      ...mock.store.get(paths.providerSendPath),
+      prePostRecordedAt: impossibleSendAt,
+      automaticRetryDeadlineAt: impossibleDeadline,
+    });
+    mock.store.set(paths.providerSendAuditPath, {
+      ...mock.store.get(paths.providerSendAuditPath),
+      automaticRetryDeadlineAt: impossibleDeadline,
+      occurredAt: impossibleSendAt,
+    });
+    nowMillis = impossibleDeadline.toMillis();
+    const before = cloneStore(mock.store);
+
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(input),
+      'journal_record_invalid',
+    );
+    expect(mock.store).toEqual(before);
+    expect(mock.store.has(paths.providerReconciliationPath)).toBe(false);
+  });
+
+  test('rejects historical C3B lease evidence that overlaps a newer current fence', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = moveToSendCutoff(mock, input);
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: OTHER_LEASE_ID }));
+    nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+    await recordInitialStripeReconciliationEvidence(input);
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: THIRD_LEASE_ID }));
+    nowMillis = mock.store.get(paths.lifecyclePath).leaseExpiresAt.toMillis();
+    await acquireCommerceCommandLease(leaseInput(mock.db, { leaseId: FOURTH_LEASE_ID }));
+    const currentLeaseAcquiredAt = mock.store.get(paths.lifecyclePath).leaseAcquiredAt;
+    const impossibleFenceTwoAcquiredAt = Timestamp.fromMillis(
+      currentLeaseAcquiredAt.toMillis() + 1000,
+    );
+    const impossibleFenceTwoExpiresAt = Timestamp.fromMillis(
+      impossibleFenceTwoAcquiredAt.toMillis() + 60000,
+    );
+    const impossibleRecordedAt = Timestamp.fromMillis(
+      impossibleFenceTwoExpiresAt.toMillis() + 1,
+    );
+    const fenceTwoAuditPath = lifecyclePaths(input, 3).lifecycleAuditPath;
+    mock.store.set(fenceTwoAuditPath, {
+      ...mock.store.get(fenceTwoAuditPath),
+      leaseExpiresAt: impossibleFenceTwoExpiresAt,
+      occurredAt: impossibleFenceTwoAcquiredAt,
+    });
+    const forgedRecord = {
+      ...mock.store.get(paths.providerReconciliationPath),
+      observedLeaseExpiresAt: impossibleFenceTwoExpiresAt,
+      recordedAt: impossibleRecordedAt,
+    };
+    const forgedAudit = {
+      ...mock.store.get(paths.providerReconciliationAuditPath),
+      observedLeaseExpiresAt: impossibleFenceTwoExpiresAt,
+      occurredAt: impossibleRecordedAt,
+      reconciliationEvidenceCommitment: reconciliationEvidenceCommitment(forgedRecord),
+    };
+    mock.store.set(paths.providerReconciliationPath, forgedRecord);
+    mock.store.set(paths.providerReconciliationAuditPath, forgedAudit);
+    nowMillis = impossibleRecordedAt.toMillis();
+    const before = cloneStore(mock.store);
+
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(input),
+      'journal_record_invalid',
+    );
+    expect(mock.store).toEqual(before);
+  });
+
+  test('rejects hostile roots and evidence descriptors before Firestore', async () => {
+    const mock = createMockDb();
+    const getter = jest.fn(() => HOSTILE_CANARY);
+    const accessorEvidence = candidateReconciliationEvidence();
+    Object.defineProperty(accessorEvidence, 'dispatchEvidence', {
+      enumerable: true,
+      get: getter,
+    });
+    const callsBefore = mock.db.runTransaction.mock.calls.length;
+    const badInputs = [
+      { ...providerReconciliationInput(mock.db), providerAttempt: 2 },
+      { ...providerReconciliationInput(mock.db), shouldAdvance: true },
+      providerReconciliationInput(mock.db, { reconciliationEvidence: accessorEvidence }),
+      providerReconciliationInput(mock.db, {
+        reconciliationEvidence: new Proxy(candidateReconciliationEvidence(), {}),
+      }),
+      providerReconciliationInput(mock.db, {
+        reconciliationEvidence: candidateReconciliationEvidence({ providerAttempt: 2 }),
+      }),
+    ];
+    for (const badInput of badInputs) {
+      await expectSafeError(
+        () => recordInitialStripeReconciliationEvidence(badInput),
+        'invalid_command_input',
+      );
+    }
+    expect(getter).not.toHaveBeenCalled();
+    expect(mock.db.runTransaction).toHaveBeenCalledTimes(callsBefore);
+    expect(mock.store.size).toBe(0);
+  });
+
+  test('pre-commit failure is atomic and lost acknowledgement recovers read-only', async () => {
+    const foundation = createMockDb();
+    await createSendFoundation(foundation);
+    const paths = moveToSendCutoff(foundation);
+    const commitFailure = createMockDb([...foundation.store], {
+      rejectCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+    });
+    const before = cloneStore(commitFailure.store);
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(
+        providerReconciliationInput(commitFailure.db),
+      ),
+      'journal_unavailable',
+      [STRIPE_ACCOUNT_ID],
+    );
+    expect(commitFailure.store).toEqual(before);
+
+    const lostAcknowledgement = createMockDb([...foundation.store], {
+      rejectAfterCommit: new Error(`${HOSTILE_CANARY}/${STRIPE_ACCOUNT_ID}`),
+    });
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(
+        providerReconciliationInput(lostAcknowledgement.db),
+      ),
+      'journal_unavailable',
+      [STRIPE_ACCOUNT_ID],
+    );
+    expect(lostAcknowledgement.store.has(paths.providerReconciliationPath)).toBe(true);
+    expect(lostAcknowledgement.store.has(paths.providerReconciliationAuditPath)).toBe(true);
+    nowMillis += 1;
+    await expect(recordInitialStripeReconciliationEvidence(
+      providerReconciliationInput(lostAcknowledgement.db),
+    )).resolves.toMatchObject({ outcome: 'reconciliation_candidate_persisted' });
+    expect(lostAcknowledgement.callbackRuns.at(-1).writes).toEqual([]);
+  });
+
+  test('future persisted evidence and forged transaction output fail closed', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = moveToSendCutoff(mock, input);
+    await recordInitialStripeReconciliationEvidence(input);
+    const recordedAt = mock.store.get(paths.providerReconciliationPath).recordedAt.toMillis();
+    nowMillis = recordedAt - 1;
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(input),
+      'journal_record_invalid',
+    );
+
+    nowMillis = recordedAt + 1;
+    const forged = createMockDb([...mock.store], {
+      returnedValue: Object.freeze({ value: HOSTILE_CANARY }),
+    });
+    await expectSafeError(
+      () => recordInitialStripeReconciliationEvidence(
+        providerReconciliationInput(forged.db),
+      ),
+      'journal_unavailable',
+    );
+  });
+
+  test('stores and returns no raw identifiers, parameters, keys, or attempt-2 control', async () => {
+    const mock = createMockDb();
+    await createSendFoundation(mock);
+    const input = providerReconciliationInput(mock.db);
+    const paths = moveToSendCutoff(mock, input);
+
+    const result = await recordInitialStripeReconciliationEvidence(input);
+    const rendered = JSON.stringify({
+      result,
+      record: mock.store.get(paths.providerReconciliationPath),
+      audit: mock.store.get(paths.providerReconciliationAuditPath),
+    });
+
+    for (const forbidden of [
+      HOSTILE_CANARY,
+      RAW_CALLER,
+      COMMAND_ID,
+      STRIPE_ACCOUNT_ID,
+      '0000000002',
+      'shouldAdvance',
+      'shouldExecute',
+    ]) expect(rendered).not.toContain(forbidden);
+  });
+});
+
 describe('exact existing identity and partner validation', () => {
   beforeEach(() => {
     jest.spyOn(Timestamp, 'now').mockImplementation(() => Timestamp.fromMillis(NOW_MILLIS + 5000));
@@ -3050,7 +3980,7 @@ describe('fixed input and infrastructure failure boundary', () => {
 });
 
 describe('closed source and export boundary', () => {
-  test('exports only the unused journal APIs and the narrow pre-send evidence gate', () => {
+  test('exports only the unused journal APIs and narrow evidence gates', () => {
     const api = require('./commerceCommandJournal');
     expect(journalSchemaVersion).toBe(1);
     expect(lifecycleSchemaVersion).toBe(1);
@@ -3063,7 +3993,9 @@ describe('closed source and export boundary', () => {
       'failCommerceCommand',
       'journalSchemaVersion',
       'lifecycleSchemaVersion',
+      'providerReconciliationEvidenceSchemaVersion',
       'providerSendEvidenceSchemaVersion',
+      'recordInitialStripeReconciliationEvidence',
       'recordInitialStripeSendEvidence',
       'registerCommerceCommand',
     ]);
@@ -3071,7 +4003,7 @@ describe('closed source and export boundary', () => {
     expect(Object.isFrozen(CommerceCommandJournalError)).toBe(true);
     expect(Object.isFrozen(CommerceCommandJournalError.prototype)).toBe(true);
     expect(Object.keys(api).join(' ')).not.toMatch(
-      /execute|renew|release|reconcile|replay|advance|result|outcome/i,
+      /execute|renew|release|replay|advance|result|outcome/i,
     );
   });
 
@@ -3083,6 +4015,7 @@ describe('closed source and export boundary', () => {
     const imports = importMatches.map((match) => match[2]);
     expect(imports.sort()).toEqual([
       './commerceCommandIdentity',
+      './commerceProviderReconciliation',
       'firebase-admin/firestore',
       'node:crypto',
       'node:util',
@@ -3106,6 +4039,13 @@ describe('closed source and export boundary', () => {
     expect(source).not.toMatch(
       /Math\.random|randomBytes|randomFill|randomInt|randomUUID|getRandomValues|process\.env|node:fs|node:http|node:https|child_process/,
     );
+    for (const forbidden of [
+      'providerAttempts/0000000002',
+      'providerAttempt: 2',
+      'providerAttempt = 2',
+      'shouldAdvance',
+      'shouldExecute',
+    ]) expect(source).not.toContain(forbidden);
     expect(source).toContain('maxAttempts: 10');
     expect((source.match(/Timestamp\.now\(\)/g) || [])).toHaveLength(1);
     expect(source.indexOf('Timestamp.now()')).toBeLessThan(source.indexOf('.runTransaction('));

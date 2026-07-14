@@ -471,6 +471,69 @@ describe('server-only operational collections', () => {
   });
 
   describe.each([
+    ['anonymous', undefined],
+    ['member', { uid: 'member-1', role: 'member', emailVerified: true }],
+    ['browser admin', { uid: 'admin-1', role: 'admin', emailVerified: true }],
+  ])('checkoutRequests provider reconciliation evidence — %s', (_label, auth) => {
+    const existingHash = 'a'.repeat(64);
+    const newHash = 'b'.repeat(64);
+    const existingPath = `checkoutRequests/${existingHash}/providerAttempts/0000000001/`
+      + 'reconciliationEvidence/0000000001';
+    const newPath = `checkoutRequests/${newHash}/providerAttempts/0000000001/`
+      + 'reconciliationEvidence/0000000001';
+    const collectionPath = `checkoutRequests/${existingHash}/providerAttempts/0000000001/`
+      + 'reconciliationEvidence';
+    const existingAuditPath = 'auditEvents/'
+      + `commerce_provider_reconciliation_${existingHash}_0000000001_0000000001`;
+    const newAuditPath = 'auditEvents/'
+      + `commerce_provider_reconciliation_${newHash}_0000000001_0000000001`;
+    const evidence = {
+      providerReconciliationEvidenceSchemaVersion: 1,
+      providerAttempt: 1,
+      provider: 'stripe',
+      evidenceRevision: 1,
+      classification: 'reconciliation_candidate',
+    };
+    const audit = {
+      providerReconciliationAuditSchemaVersion: 1,
+      commandKeyHash: existingHash,
+      providerAttempt: 1,
+      evidenceRevision: 1,
+      eventType: 'provider_reconciliation_candidate_recorded',
+    };
+
+    test('CANNOT read, create, update, or delete reconciliation evidence', async () => {
+      await seed(existingPath, evidence);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingPath).get());
+      await assertFails(client.doc(newPath).set(evidence));
+      await assertFails(client.doc(existingPath).update({ evidenceRevision: 2 }));
+      await assertFails(client.doc(existingPath).delete());
+    });
+
+    test('CANNOT list reconciliation evidence by collection or collection group', async () => {
+      await seed(existingPath, evidence);
+      const client = await db(auth);
+
+      await assertFails(client.collection(collectionPath).get());
+      await assertFails(client.collectionGroup('reconciliationEvidence').get());
+    });
+
+    test('CANNOT read or write the matching reconciliation audit event', async () => {
+      await seed(existingAuditPath, audit);
+      const client = await db(auth);
+
+      await assertFails(client.doc(existingAuditPath).get());
+      await assertFails(client.doc(newAuditPath).set({ ...audit, commandKeyHash: newHash }));
+      await assertFails(client.doc(existingAuditPath).update({ evidenceRevision: 2 }));
+      await assertFails(client.doc(existingAuditPath).delete());
+      await assertFails(client.collection('auditEvents').get());
+      await assertFails(client.collectionGroup('auditEvents').get());
+    });
+  });
+
+  describe.each([
     ['promoCodes/PROMO1', 'promoCodes/PROMO2', { discountPercent: 10 }],
     ['ratelimits/checkout_ip__1.2.3.4', 'ratelimits/checkout_ip__5.6.7.8', { count: 5 }],
     ['mail/message1', 'mail/message2', { to: ['runner@example.com'] }],
