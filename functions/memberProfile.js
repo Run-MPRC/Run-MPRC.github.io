@@ -3,7 +3,6 @@ const { Timestamp } = require('firebase-admin/firestore');
 
 const DEFAULT_ROLE = 'unverified';
 const FULL_NAME_MAX_CHARACTERS = 200;
-const PHONE_NUMBER_MAX_CHARACTERS = 40;
 
 function boundedIdentityString(value, maxCharacters, fallback) {
   if (typeof value !== 'string') return fallback;
@@ -22,11 +21,9 @@ function buildPendingMemberProfile(user, now = Timestamp.now()) {
     email: typeof user.email === 'string' ? user.email.trim().toLowerCase() : '',
     createdAt: now,
     lastLogin: now,
-    phoneNumber: boundedIdentityString(
-      user.phoneNumber,
-      PHONE_NUMBER_MAX_CHARACTERS,
-      '',
-    ),
+    // Keep the existing schema shape without copying optional phone data from
+    // Firebase Auth while profile phone collection is paused under #197.
+    phoneNumber: '',
     role: DEFAULT_ROLE,
     emailVerified: user.emailVerified === true,
     provider: user.providerData?.[0]?.providerId || 'unknown',
@@ -66,7 +63,6 @@ async function ensureMemberProfileDocument(user) {
 module.exports = {
   DEFAULT_ROLE,
   FULL_NAME_MAX_CHARACTERS,
-  PHONE_NUMBER_MAX_CHARACTERS,
   buildPendingMemberProfile,
   memberProfileExists,
   ensureMemberProfileDocument,
