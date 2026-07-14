@@ -423,6 +423,40 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Strava activity failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give a signed-in member one plain next step when My Account cannot load Strava activity, without showing a provider or technical error.
+
+**Approver:** membership lead plus platform/security owner.
+
+**Prerequisites:** issue [#250](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/250) must be merged for source review. Calling the sentence live also requires a protected website publication and an exact revision check on `runmprc.com`. This source change does not deploy Firebase, contact Strava, change provider settings, use production data, or prove live behavior.
+
+Officer review steps after the source merge:
+
+1. Keep the activity-failure sentence marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #250 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up connection, made-up activity, and mocked service results.
+4. Confirm a made-up stats rejection shows `We could not load your Strava activity right now. Please try again later.`
+5. Confirm the connected athlete remains visible and the loading sentence stops.
+6. Confirm no made-up provider detail appears on the page or in browser console output.
+7. Confirm a hostile rejected value is not inspected.
+8. Confirm a successful made-up result still shows the existing activity and totals.
+9. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** the reviewed source uses one fixed retry-later sentence for a stats-load rejection. It does not inspect, display, or log the rejected value. Existing connection display and successful activity projection stay in place. Disconnect failures are separate work and are not made safe by this source slice.
+
+**Stop conditions:** any real member or Strava account; a request for a token, provider error, private account detail, or screenshot containing private values; a real provider call; a production Firebase or Strava change; a raw detail on the page or in the console; or a claim that source, tests, merge, or a green workflow proves the sentence is live.
+
+**Success proof:** for source completion, record the exact #250 issue, reviewed pull request, merged commit, intended old-source failure, green synthetic tests, relevant full checks, and independent privacy review. For live availability, separately record the approved website publication, published revision, and a dated `runmprc.com` check using no real account. Record Firebase deployment, Strava/provider configuration, and production-data actions as **not performed** for this frontend-only change.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com`. Do not undo by changing a member account, Firebase record, or Strava setting.
+
+**Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if any provider or technical detail appeared. Do not copy the detail into an issue, message, screenshot, or AI tool.
+
+No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.

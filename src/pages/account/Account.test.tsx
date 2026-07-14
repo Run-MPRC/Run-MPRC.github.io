@@ -18,7 +18,9 @@ import {
   updateMyProfile,
 } from '../../services/account/accountService';
 import {
+  getStravaConnection,
   stravaExchangeCode,
+  stravaFetchStats,
   verifyStravaState,
 } from '../../services/strava/stravaService';
 import { AccountContent } from './Account';
@@ -32,10 +34,16 @@ jest.mock('../../services/hooks/useAuth', () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock('../../services/strava/stravaService', () => ({
-  stravaExchangeCode: jest.fn(),
-  verifyStravaState: jest.fn(),
-}));
+jest.mock('../../services/strava/stravaService', () => {
+  const actual = jest.requireActual('../../services/strava/stravaService');
+  return {
+    ...actual,
+    getStravaConnection: jest.fn(),
+    stravaExchangeCode: jest.fn(),
+    stravaFetchStats: jest.fn(),
+    verifyStravaState: jest.fn(),
+  };
+});
 
 jest.mock('../../services/account/accountService', () => {
   const actual = jest.requireActual('../../services/account/accountService');
@@ -55,6 +63,8 @@ jest.mock('../../components/SEO', () => function SEO() {
 jest.mock('./StravaSection', () => function StravaSection() {
   return <div data-testid="strava-section" />;
 });
+
+const ActualStravaSection = jest.requireActual('./StravaSection').default;
 
 const USER = {
   uid: 'synthetic-user',
@@ -78,6 +88,46 @@ const app = { name: 'synthetic-app' };
 const firestore = { name: 'synthetic-firestore' };
 const signOut = jest.fn();
 const resendVerificationEmail = jest.fn();
+
+const STRAVA_CONNECTION = {
+  provider: 'strava' as const,
+  athleteId: 123456,
+  firstName: 'Synthetic',
+  lastName: 'Athlete',
+  username: 'synthetic-athlete',
+  profileUrl: null,
+  connectedAt: null,
+  updatedAt: null,
+};
+
+const STRAVA_STATS = {
+  connected: true as const,
+  athlete: {
+    id: 123456,
+    firstName: 'Synthetic',
+    lastName: 'Athlete',
+    username: 'synthetic-athlete',
+    profileUrl: null,
+  },
+  recentActivities: [{
+    id: 987654,
+    name: 'Synthetic Morning Run',
+    type: 'Run',
+    distanceMeters: 8046.72,
+    movingTimeSeconds: 2700,
+    startDate: '2026-07-13T14:00:00Z',
+  }],
+  yearToDate: {
+    runMeters: 16093.44,
+    runCount: 2,
+    rideMeters: 0,
+    rideCount: 0,
+  },
+  allTime: {
+    runMeters: 32186.88,
+    runCount: 4,
+  },
+};
 
 function accountView(user = USER) {
   return (
@@ -477,6 +527,106 @@ describe('Account profile recovery', () => {
     const css = readFileSync(join(__dirname, 'Account.css'), 'utf8');
     expect(css).toMatch(/\.verification-resend__button\s*\{[\s\S]*min-height:\s*3rem;/);
     expect(css).toMatch(/\.verification-resend__button:focus-visible\s*\{[\s\S]*outline:/);
+  });
+});
+
+const STRAVA_ACTIVITY_FAILURE = 'We could not load your Strava activity right now. Please try again later.';
+
+function renderActualStravaSection() {
+  return render(<ActualStravaSection uid={USER.uid} />);
+}
+
+describe('Strava activity browser failure boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useServiceLocator as jest.Mock).mockReturnValue({
+      services: { firebaseResources: { app, firestore } },
+      isReady: true,
+    });
+    (getStravaConnection as jest.Mock).mockResolvedValue(STRAVA_CONNECTION);
+    (stravaFetchStats as jest.Mock).mockResolvedValue(STRAVA_STATS);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('waits for the connection before requesting stats once', async () => {
+    let resolveConnection: ((connection: typeof STRAVA_CONNECTION) => void) | undefined;
+    (getStravaConnection as jest.Mock).mockReturnValueOnce(
+      new Promise<typeof STRAVA_CONNECTION>((resolve) => {
+        resolveConnection = resolve;
+      }),
+    );
+
+    renderActualStravaSection();
+
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledWith(firestore, USER.uid));
+    expect(stravaFetchStats).not.toHaveBeenCalled();
+
+    await act(async () => resolveConnection?.(STRAVA_CONNECTION));
+
+    await waitFor(() => expect(stravaFetchStats).toHaveBeenCalledWith(app));
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+
+  test('replaces rejected stats details with one fixed actionable alert', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+    (stravaFetchStats as jest.Mock).mockRejectedValueOnce(Object.assign(
+      new Error('provider-private-canary member@example.test'),
+      {
+        code: 'functions/provider-private-canary',
+        endpoint: 'https://provider.example.test/?token=secret-canary',
+      },
+    ));
+
+    renderActualStravaSection();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(STRAVA_ACTIVITY_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).toHaveTextContent('Synthetic Athlete');
+    expect(document.body).not.toHaveTextContent(
+      /provider-private-canary|member@example\.test|provider\.example|secret-canary/i,
+    );
+    expect(screen.queryByText('Loading recent activity...')).not.toBeInTheDocument();
+    expect(getStravaConnection).toHaveBeenCalledWith(firestore, USER.uid);
+    expect(stravaFetchStats).toHaveBeenCalledWith(app);
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves the successful activity projection', async () => {
+    renderActualStravaSection();
+
+    expect(await screen.findByText('Synthetic Morning Run')).toBeInTheDocument();
+    expect(screen.getByText('Runs this year')).toBeInTheDocument();
+    expect(screen.getByText('All-time runs')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(stravaFetchStats).toHaveBeenCalledWith(app);
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not inspect a hostile stats rejection', async () => {
+    const messageGetter = jest.fn(() => {
+      throw new Error('message-getter-canary');
+    });
+    (stravaFetchStats as jest.Mock).mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderActualStravaSection();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_ACTIVITY_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('message-getter-canary');
+    expect(screen.queryByText('Loading recent activity...')).not.toBeInTheDocument();
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
   });
 });
 
