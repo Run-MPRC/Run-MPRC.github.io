@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const React = require('react');
 const ts = require('typescript');
-const { render, screen } = require('@testing-library/react');
+const { fireEvent, render, screen } = require('@testing-library/react');
 
 const mockCaptureException = jest.fn();
 const mockCreateUserWithEmailAndPassword = jest.fn();
@@ -46,6 +46,14 @@ const SAFE_CONSOLE_OWNER = path.join(
   'services',
   'monitoring',
   'clientDiagnostics.ts',
+);
+const ERROR_BOUNDARY_SOURCE = path.join(
+  'src',
+  'components',
+  'ErrorBoundary.tsx',
+);
+const RENDER_FAILURE_MESSAGE = (
+  'Try again, and contact an MPRC officer if this keeps happening.'
 );
 
 function runtimeFiles(directory: string, includeHtml = false): string[] {
@@ -228,6 +236,133 @@ describe('client diagnostic privacy', () => {
     expect(serializedConsole).not.toContain(emailCanary);
     expect(serializedConsole).not.toContain(tokenCanary);
     expect(serializedConsole).not.toContain('private component stack');
+  });
+
+  test('keeps only the closed render-failed state, not the thrown value', () => {
+    const getTrap = jest.fn(() => { throw new Error('private-get-canary'); });
+    const ownKeysTrap = jest.fn(() => { throw new Error('private-keys-canary'); });
+    const descriptorTrap = jest.fn(() => { throw new Error('private-descriptor-canary'); });
+    const hostileFailure = new Proxy(Object.create(null), {
+      get: getTrap,
+      ownKeys: ownKeysTrap,
+      getOwnPropertyDescriptor: descriptorTrap,
+    });
+
+    [null, undefined, false, '', hostileFailure].forEach((failure) => {
+      const state = ErrorBoundary.getDerivedStateFromError(failure);
+      const hasErrorDescriptor = Object.getOwnPropertyDescriptor(state, 'hasError');
+
+      expect(Reflect.ownKeys(state)).toEqual(['hasError']);
+      expect(hasErrorDescriptor).toBeDefined();
+      expect(hasErrorDescriptor?.value).toBe(true);
+    });
+    expect(getTrap).not.toHaveBeenCalled();
+    expect(ownKeysTrap).not.toHaveBeenCalled();
+    expect(descriptorTrap).not.toHaveBeenCalled();
+  });
+
+  test('renders one fixed accessible fallback without environment-specific detail', () => {
+    const error = new Error('private-message-canary');
+    error.stack = 'private-stack-canary';
+    const previousEnvironment = process.env.NODE_ENV;
+    const fallbackMarkup: Record<string, string> = {};
+
+    try {
+      ['test', 'development'].forEach((environment) => {
+        process.env.NODE_ENV = environment;
+        const boundary = new ErrorBoundary({ children: null });
+        (boundary as any).state = ErrorBoundary.getDerivedStateFromError(error);
+        const view = render(boundary.render());
+        fallbackMarkup[environment] = view.container.innerHTML;
+        view.unmount();
+      });
+    } finally {
+      process.env.NODE_ENV = previousEnvironment;
+    }
+
+    expect(fallbackMarkup.development).not.toContain('private-message-canary');
+    expect(fallbackMarkup.development).not.toContain('private-stack-canary');
+    expect(fallbackMarkup.development).toBe(fallbackMarkup.test);
+
+    const boundary = new ErrorBoundary({ children: null });
+    (boundary as any).state = ErrorBoundary.getDerivedStateFromError(error);
+    const view = render(boundary.render());
+    const alerts = screen.getAllByRole('alert');
+
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveAttribute('aria-live', 'assertive');
+    expect(alerts[0]).toHaveAttribute('aria-atomic', 'true');
+    expect(alerts[0].textContent).toBe(RENDER_FAILURE_MESSAGE);
+    expect(view.container).not.toHaveTextContent('private-message-canary');
+    expect(view.container).not.toHaveTextContent('private-stack-canary');
+    expect(view.container).not.toHaveTextContent('team has been notified');
+  });
+
+  test('has no raw-error or environment-specific fallback branch in source', () => {
+    const projectRoot = path.resolve(__dirname, '../../..');
+    const source = fs.readFileSync(path.join(projectRoot, ERROR_BOUNDARY_SOURCE), 'utf8');
+
+    expect(source).not.toMatch(/\berror\.(?:message|stack)\b/);
+    expect(source).not.toContain('process.env.NODE_ENV');
+    expect(source).not.toContain('The team has been notified');
+  });
+
+  test('passes the original failure only to captureException and emits fixed diagnostics', () => {
+    const hostileFailure = {};
+    const messageGetter = jest.fn(() => { throw new Error('private-message-canary'); });
+    const stackGetter = jest.fn(() => { throw new Error('private-stack-canary'); });
+    const toString = jest.fn(() => { throw new Error('private-string-canary'); });
+    Object.defineProperties(hostileFailure, {
+      message: { get: messageGetter },
+      stack: { get: stackGetter },
+      toString: { value: toString },
+    });
+    const boundary = new ErrorBoundary({ children: null });
+
+    expect(() => boundary.componentDidCatch(hostileFailure)).not.toThrow();
+    expect(mockCaptureException).toHaveBeenCalledTimes(1);
+    expect(mockCaptureException.mock.calls[0][0]).toBe(hostileFailure);
+    expect(consoleError.mock.calls).toEqual([['[MPRC client] render_failed']]);
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(stackGetter).not.toHaveBeenCalled();
+    expect(toString).not.toHaveBeenCalled();
+  });
+
+  test('keeps fixed recovery diagnostics when the monitoring adapter fails', () => {
+    const adapterFailureCanary = 'private-monitoring-adapter-canary';
+    mockCaptureException.mockImplementationOnce(() => {
+      throw new Error(adapterFailureCanary);
+    });
+    const boundary = new ErrorBoundary({ children: null });
+
+    expect(() => boundary.componentDidCatch(new Error('synthetic render failure'))).not.toThrow();
+    expect(consoleError.mock.calls).toEqual([['[MPRC client] render_failed']]);
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(adapterFailureCanary);
+  });
+
+  test('keeps recovery and home actions after a render failure', () => {
+    let shouldThrow = true;
+    function RecoverableChild() {
+      if (shouldThrow) throw new Error('synthetic render failure');
+      return React.createElement('p', null, 'Recovered child');
+    }
+
+    render(React.createElement(
+      ErrorBoundary,
+      null,
+      React.createElement(RecoverableChild),
+    ));
+
+    expect(screen.getByRole('alert').textContent).toBe(RENDER_FAILURE_MESSAGE);
+    expect(screen.getByRole('link', { name: 'Go home' })).toHaveAttribute('href', '/');
+
+    shouldThrow = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(screen.getByText('Recovered child')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('verification-email failure returns unavailable without logging provider data', async () => {

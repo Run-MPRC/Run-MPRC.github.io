@@ -38,6 +38,55 @@
 
 Live commerce is not approved as of 2026-07-12. If the public site appears to accept a real payment, do not test it with a real card.
 
+### Unexpected “Something went wrong” page — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** leave a failed page safely, contact the right owner, and avoid copying private or technical error details.
+
+**Approver:** platform owner plus one backup. Add the privacy owner if private information may be involved. Add the treasurer if the failure followed a signup, checkout, order, payment, or refund action.
+
+**Prerequisites:** issue [#293](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/293) must be merged for source review. Calling the safer page live also requires a protected website publication and an exact revision check on `runmprc.com`. Source tests use only made-up failures. Do not force a production failure.
+
+**Seeing this page does not prove the club, a person, or an outside monitoring service was notified.** The source change does not configure monitoring, alert routing, provider delivery, or human response.
+
+```mermaid
+flowchart LR
+    Page["Something went wrong page"] --> Stop["Stop repeated actions"]
+    Stop --> Record["Record time and clean route"]
+    Record --> Contact["Contact the platform owner directly"]
+    Page -. "does not prove" .-> Notice["Monitoring or human notification"]
+```
+
+In words: stop repeated actions, record only safe public facts, and contact the platform owner directly. Never treat the page itself as proof that an alert reached anyone.
+
+Until the exact website proof exists, follow **First five minutes** above, but record only the clean route and omit everything after `?` or `#`. Contact the platform owner directly.
+
+Officer steps after the exact website proof exists:
+
+1. Stop using the affected page.
+2. Record the time.
+3. Record only the clean public route. Omit everything after `?` or `#`.
+4. Do not retry if the page followed a signup, checkout, order, payment, refund, Admin save, or any action that might have changed data.
+5. Otherwise, choose **Try again** once.
+6. If the page returns, choose **Go home**.
+7. Contact the platform owner directly.
+8. Add the privacy owner if private information appeared.
+9. Add the treasurer if money, an order, or a signup may be involved.
+10. Record who acknowledged the incident.
+11. Do not open developer tools or copy an error, stack, token, account detail, or private screenshot.
+12. Do not say anyone was notified until that person confirms receipt.
+
+**Expected result:** the page shows one fixed accessible recovery message, no thrown error detail, and the existing **Try again** and **Go home** choices. One safe retry can reset the page. The officer contacts the correct owner directly. The page does not prove that monitoring ran, a provider delivered an alert, or a person saw it.
+
+**Stop conditions:** any private detail, email, URL query, fragment, token-shaped value, provider detail, or technical error appears; the page followed a money, signup, order, or Admin action; one retry fails; anyone asks you to force a production error, inspect a real browser console, change monitoring settings, or copy the thrown value; the exact website revision is unverified; or anyone treats the page or a green workflow as notification proof.
+
+**Success proof:** record the exact #293 issue, reviewed pull request, merged commit, intended old-source exposure, green made-up privacy and recovery tests, relevant full checks, and accessibility review. Record website publication and the dated `runmprc.com` revision separately. A mocked reporting call proves only that source reached the existing reporting boundary. Monitoring configuration, provider delivery, alert routing, and human acknowledgement each require separate private evidence. Do not force a live failure to obtain proof.
+
+**Undo:** use one reviewed frontend revert or safe roll-forward through the protected website release. Verify the replacement revision on `runmprc.com`. Do not undo by disabling monitoring, changing a provider, editing production data, or repeatedly forcing the failure.
+
+**Escalation:** platform owner plus backup. Add the privacy owner for exposed information, the treasurer for money or signup uncertainty, and the security owner for a token, secret, account detail, or unauthorized action. Use the private incident path. Do not copy sensitive details into an issue, message, screenshot, email, or AI tool.
+
 ### Pause new commerce — NOT AVAILABLE YET
 
 **Status:** [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source checks only. There is no approved officer button or procedure for changing the server control. Do not edit Firebase, Stripe, or release settings yourself.
