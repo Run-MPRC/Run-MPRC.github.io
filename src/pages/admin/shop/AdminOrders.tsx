@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect, useMemo, useRef, useState,
+} from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
 import AdminGuard from '../AdminGuard';
@@ -10,6 +12,14 @@ import {
   formatPrice,
   listAllOrders,
 } from '../../../services/shop/shopService';
+
+interface OrdersLoadOutcome {
+  firestore: unknown;
+  status: 'loading' | 'resolved' | 'unavailable';
+  orders: Order[];
+}
+
+const LOAD_FAILURE = 'We could not load orders right now. Stop and contact the treasurer and platform owner before taking any order action.';
 
 function StatusPill({ status }: { status: string }) {
   const m: Record<string, string> = {
@@ -30,31 +40,50 @@ function fmtDate(ts: any) {
 
 function Inner() {
   const { services, isReady } = useServiceLocator();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
+  const currentFirestoreRef = useRef(firestore);
+  currentFirestoreRef.current = firestore;
+  const requestSequence = useRef(0);
+  const [loadOutcome, setLoadOutcome] = useState<OrdersLoadOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  const currentOutcome = loadOutcome?.firestore === firestore ? loadOutcome : null;
+  const currentStatus = currentOutcome?.status ?? 'loading';
+  const orders = currentOutcome?.status === 'resolved' ? currentOutcome.orders : [];
+
   async function reload() {
-    if (!services) return;
-    setLoading(true);
+    if (!firestore || currentFirestoreRef.current !== firestore) return;
+    requestSequence.current += 1;
+    const requestId = requestSequence.current;
+    const outcomeKey = { firestore };
+    setLoadOutcome({ ...outcomeKey, status: 'loading', orders: [] });
+    setError(null);
     try {
-      const all = await listAllOrders(services.firebaseResources.firestore);
-      setOrders(all);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      const all = await listAllOrders(firestore);
+      if (requestId !== requestSequence.current
+        || currentFirestoreRef.current !== firestore) return;
+      setLoadOutcome({ ...outcomeKey, status: 'resolved', orders: all });
+    } catch {
+      if (requestId !== requestSequence.current
+        || currentFirestoreRef.current !== firestore) return;
+      setLoadOutcome({ ...outcomeKey, status: 'unavailable', orders: [] });
     }
   }
 
   useEffect(() => {
-    if (!isReady || !services) return;
+    if (!firestore) {
+      requestSequence.current += 1;
+      return () => undefined;
+    }
     reload();
+    return () => { requestSequence.current += 1; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [services, isReady]);
+  }, [firestore]);
 
   async function run(orderId: string, action: AdminOrderAction, payload?: Record<string, unknown>) {
     if (!services) return;
@@ -125,43 +154,59 @@ function Inner() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 my-3">
-          <div className="border rounded p-3 bg-green-50">
-            <div className="text-xs text-gray-600">Paid</div>
-            <div className="text-xl font-bold">{totals.paid}</div>
-          </div>
-          <div className="border rounded p-3 bg-blue-50">
-            <div className="text-xs text-gray-600">Gross revenue</div>
-            <div className="text-xl font-bold">{formatPrice(totals.grossCents)}</div>
-          </div>
-        </div>
+        {currentStatus === 'resolved' && (
+          <>
+            <div className="grid grid-cols-2 gap-3 my-3">
+              <div className="border rounded p-3 bg-green-50">
+                <div className="text-xs text-gray-600">Paid</div>
+                <div className="text-xl font-bold">{totals.paid}</div>
+              </div>
+              <div className="border rounded p-3 bg-blue-50">
+                <div className="text-xs text-gray-600">Gross revenue</div>
+                <div className="text-xl font-bold">{formatPrice(totals.grossCents)}</div>
+              </div>
+            </div>
 
-        <div className="flex gap-2 flex-wrap items-center my-3">
-          <input
-            className="border rounded px-3 py-2 flex-1 min-w-[200px]"
-            placeholder="Search by buyer or product..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            className="border rounded px-3 py-2"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            <div className="flex gap-2 flex-wrap items-center my-3">
+              <input
+                className="border rounded px-3 py-2 flex-1 min-w-[200px]"
+                placeholder="Search by buyer or product..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+              <select
+                className="border rounded px-3 py-2"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="paid">Paid</option>
+                <option value="fulfilled">Fulfilled</option>
+                <option value="pending">Pending</option>
+                <option value="refunded">Refunded</option>
+                <option value="partially_refunded">Partial refund</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {currentStatus === 'loading' && <p>Loading...</p>}
+        {currentStatus === 'unavailable' && (
+          <p
+            className="text-red-500 text-sm"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
           >
-            <option value="all">All statuses</option>
-            <option value="paid">Paid</option>
-            <option value="fulfilled">Fulfilled</option>
-            <option value="pending">Pending</option>
-            <option value="refunded">Refunded</option>
-            <option value="partially_refunded">Partial refund</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
+            {LOAD_FAILURE}
+          </p>
+        )}
+        {currentStatus === 'resolved' && error && (
+          <p className="text-red-500 text-sm">{error}</p>
+        )}
 
-        {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-
-        {!loading && (
+        {currentStatus === 'resolved' && (
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
