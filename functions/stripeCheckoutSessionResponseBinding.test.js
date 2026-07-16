@@ -295,11 +295,17 @@ describe('Stripe Checkout Session response transport binding', () => {
   test('accepts the actual #280 projection for platform and Connect consistency', () => {
     const platformFirst = expectCandidate(capsuleWith());
     const platformSecond = expectCandidate(capsuleWith());
+    const minimumAccount = `acct_${'A'.repeat(16)}`;
+    const minimumConnect = expectCandidate(capsuleWith({
+      observedResponseStripeAccount: minimumAccount,
+      expectedResponseStripeAccount: minimumAccount,
+    }));
     const connect = expectCandidate(capsuleWith({
       observedResponseStripeAccount: STRIPE_ACCOUNT,
       expectedResponseStripeAccount: STRIPE_ACCOUNT,
     }));
     expect(platformFirst).not.toBe(platformSecond);
+    expect(plainResult(minimumConnect)).toEqual(plainResult(platformFirst));
     expect(plainResult(connect)).toEqual(plainResult(platformFirst));
   });
 
@@ -397,22 +403,50 @@ describe('Stripe Checkout Session response transport binding', () => {
     expectReconciliation(capsuleWith({ checkoutSessionProjection: projection }));
   });
 
-  test('valid #280 business and environment values remain transport-neutral', () => {
-    const cases = [
-      { mode: 'payment', status: 'open', payment_status: 'unpaid' },
-      { mode: 'setup', status: 'complete', payment_status: 'no_payment_required' },
-      { mode: 'subscription', status: 'expired', payment_status: 'paid' },
-      { status: null, amount_total: null, currency: null },
-      {
-        id: 'cs_live_syntheticbinding0001',
-        livemode: true,
-        amount_total: Number.MAX_SAFE_INTEGER,
-      },
-    ];
-    cases.forEach((values) => {
-      const projection = baseProjection({ values });
-      expectCandidate(capsuleWith({ checkoutSessionProjection: projection }));
+  test('a present raw account contradicts a projected missing account', () => {
+    const projection = projectionWith({
+      responseStripeAccountObservation: 'missing',
     });
+    expectReconciliation(capsuleWith({
+      checkoutSessionProjection: projection,
+      observedResponseStripeAccount: STRIPE_ACCOUNT,
+      expectedResponseStripeAccount: STRIPE_ACCOUNT,
+    }));
+  });
+
+  test('valid #280 business and environment values remain transport-neutral', () => {
+    for (const livemode of [false, true]) {
+      for (const mode of ['payment', 'setup', 'subscription']) {
+        for (const status of ['open', 'complete', 'expired', null]) {
+          for (const paymentStatus of [
+            'paid',
+            'unpaid',
+            'no_payment_required',
+          ]) {
+            const projection = baseProjection({
+              values: {
+                id: livemode
+                  ? 'cs_live_syntheticbinding0001'
+                  : SESSION_ID,
+                livemode,
+                mode,
+                status,
+                payment_status: paymentStatus,
+              },
+            });
+            expectCandidate(capsuleWith({ checkoutSessionProjection: projection }));
+          }
+        }
+      }
+    }
+    for (const values of [
+      { status: null, amount_total: null, currency: null },
+      { amount_total: Number.MAX_SAFE_INTEGER },
+    ]) {
+      expectCandidate(capsuleWith({
+        checkoutSessionProjection: baseProjection({ values }),
+      }));
+    }
   });
 
   test.each([
@@ -574,6 +608,9 @@ describe('Stripe Checkout Session response transport binding', () => {
     ['empty key', { observedResponseIdempotencyKey: '' }],
     ['space key', { observedResponseIdempotencyKey: 'key with space' }],
     ['oversized key', { observedResponseIdempotencyKey: 'K'.repeat(256) }],
+    ['invalid expected API', { expectedResponseApiVersion: null }],
+    ['invalid expected key', { expectedResponseIdempotencyKey: 'key with space' }],
+    ['invalid expected account', { expectedResponseStripeAccount: 'acct_short' }],
     ['bad account prefix', { observedResponseStripeAccount: 'user_1234567890123456' }],
     ['short account', { observedResponseStripeAccount: 'acct_123456789012345' }],
     ['long account', { observedResponseStripeAccount: `acct_${'A'.repeat(65)}` }],
@@ -713,6 +750,31 @@ describe('Stripe Checkout Session response transport binding', () => {
       URL_CANARY,
     ]);
     expect(Object.isFrozen(error)).toBe(true);
+  });
+
+  test('candidate, reconciliation, and failure paths produce no console output', () => {
+    const methods = ['debug', 'error', 'info', 'log', 'warn'];
+    const descriptors = new Map(methods.map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(console, key),
+    ]));
+    let calls = 0;
+    try {
+      for (const [key, descriptor] of descriptors) {
+        Object.defineProperty(console, key, {
+          ...descriptor,
+          value: () => { calls += 1; },
+        });
+      }
+      expectCandidate();
+      expectReconciliation(capsuleWith({ expectedResponseApiVersion: undefined }));
+      expectFixedFailure(() => classifyStripeCheckoutSessionResponseBinding(null));
+    } finally {
+      for (const [key, descriptor] of descriptors) {
+        Object.defineProperty(console, key, descriptor);
+      }
+    }
+    expect(calls).toBe(0);
   });
 
   test('never maps a transport candidate to C4C1 or permission vocabulary', () => {
