@@ -222,6 +222,23 @@ function snapshotAuthorizationExchangeResponse(response) {
   });
 }
 
+function snapshotRefreshTokenResponse(response) {
+  if (!isPlainJsonRecord(response)) return null;
+
+  const accessToken = selectedOwnDataValue(response, 'access_token', true);
+  const refreshToken = selectedOwnDataValue(response, 'refresh_token', true);
+  const expiresAt = selectedOwnDataValue(response, 'expires_at', true);
+  if (
+    !isBoundedVisibleAscii(accessToken, STRAVA_TOKEN_MAX_LENGTH)
+    || !isBoundedVisibleAscii(refreshToken, STRAVA_TOKEN_MAX_LENGTH)
+    || !isPositiveSafeInteger(expiresAt)
+  ) {
+    return null;
+  }
+
+  return objectFreeze({ accessToken, refreshToken, expiresAt });
+}
+
 function getStravaCreds() {
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
@@ -299,11 +316,17 @@ async function refreshToken(refresh) {
   if (!resp || resp.ok !== true) {
     throw stravaRefreshError('failed-precondition');
   }
+  let response;
   try {
-    return await resp.json();
+    response = await resp.json();
   } catch (_error) {
     throw stravaRefreshError('unavailable');
   }
+  const refreshed = snapshotRefreshTokenResponse(response);
+  if (!refreshed) {
+    throw stravaRefreshError('internal');
+  }
+  return refreshed;
 }
 
 async function getFreshAccessToken(uid) {
@@ -320,12 +343,12 @@ async function getFreshAccessToken(uid) {
   const refreshed = await refreshToken(tokens.refresh_token);
   await secretDocRef(uid).set({
     ...tokens,
-    access_token: refreshed.access_token,
-    refresh_token: refreshed.refresh_token,
-    expires_at: refreshed.expires_at,
+    access_token: refreshed.accessToken,
+    refresh_token: refreshed.refreshToken,
+    expires_at: refreshed.expiresAt,
     updatedAt: Timestamp.now(),
   }, { merge: true });
-  return refreshed.access_token;
+  return refreshed.accessToken;
 }
 
 exports.stravaExchangeCode = functions
