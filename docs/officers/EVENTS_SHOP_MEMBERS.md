@@ -816,6 +816,51 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Public event-registration submission failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give a public event-registration visitor one plain instruction when the website cannot confirm a submission, without adding any failure-supplied runner, contact, Firebase, Stripe, provider, endpoint, token-shaped, or technical detail to the page or analytics.
+
+**Approver:** events lead plus platform/security owner. Add the treasurer before any live paid-registration review.
+
+**Prerequisites:** issue [#274](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/274) must be merged for source review. Use only a made-up event, made-up runner and contact values, a made-up waiver, and a mocked rejected submission. Calling the sentence live also requires a protected website publication and an exact revision check on the affected `runmprc.com/events/.../register` page without entering data, accepting a waiver, submitting, or starting checkout. This source change does not prove whether a rejected request reached Firebase or Stripe, make a repeat safe, contact a provider, deploy Firebase, use production data, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Made-up registration form"] --> B["Mocked submission request"]
+    B -- "Rejected" --> C["Fixed inline alert; event and form remain"]
+    B -- "Resolved" --> D["Existing free or paid success path"]
+```
+
+In words: a mocked rejection keeps the made-up event, form, answers, and waiver selection on the page and shows one fixed inline alert; the existing successful free-registration and paid-checkout paths are unchanged.
+
+Officer review steps after the source merge:
+
+1. Keep the submission-failure sentence marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #274 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up public event, made-up runner and emergency-contact fields, a made-up waiver, and a mocked checkout Function rejection.
+4. Confirm the rejection shows exactly `We could not confirm your registration. Please wait before trying again.`
+5. Confirm the complete sentence is announced as one urgent screen-reader alert.
+6. Confirm the made-up event, route, form values, and waiver selection remain visible, no navigation or redirect occurs, and the existing busy state ends.
+7. Confirm no contact value supplied only by the rejection, Firebase, Stripe, provider, endpoint, token-shaped, or technical detail appears on the page, in five browser console methods, or in analytics. The made-up runner and contact values remain only in their existing form inputs and mocked request.
+8. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
+9. Confirm the mocked request still receives the same Firebase app and made-up event, runner, custom-field, signup-type, waiver, and price-tier projection exactly once.
+10. Confirm the existing submit-attempt analytics marker remains and the registration-error marker contains only the made-up public event slug, with no rejected value or property.
+11. Record source change, tests, merge, preview, website publication, the exact `runmprc.com` registration page, Firebase, Stripe/provider, registration/checkout, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** the reviewed source discards the complete rejected value and uses one fixed inline instruction that does not claim registration definitely failed. The event and entered values remain visible, the existing busy state ends, and successful free-registration navigation and paid-checkout redirect stay unchanged. The button becomes available again as it did before, but this source slice does not prove a repeat is safe; follow the displayed wait instruction until PAY-002/PAY-003 provide durable idempotency, result persistence, and reconciliation.
+
+**Stop conditions:** any real member, runner, registration, private event record, name, email, phone, birth date, emergency contact, waiver, payment, Session, or provider data used to exercise the synthetic failure review; entry or submission of a real form; acceptance of a real waiver; a real registration or checkout attempt; a request for a raw error, private endpoint, token, provider ID, or screenshot containing private values; an attempt to force a production failure; a Firebase, Stripe, provider, event-record, or analytics change; an unapproved retry; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live or a repeat is safe. A later approved revision check may open the already-public event page read-only but must not enter data, accept a waiver, submit, start checkout, or force a failure.
+
+**Success proof:** for source completion, record the exact #274 issue, reviewed pull request, merged commit, eight preserved old-source tests plus two intended old-source failures, ten green synthetic registration route tests, relevant full checks, and independent privacy/accessibility review. For live availability, separately record the approved website publication, published revision, and a dated read-only `runmprc.com` registration-page revision check without entering data, accepting a waiver, submitting, or forcing an error. Record Firebase deployment, Stripe/provider configuration or calls, event-record and production-data actions, registrations, payments, and checkout attempts as **not performed** for this frontend-only change. The failure path remains synthetic-test evidence unless an approved isolated staging plan later proves it with test-mode providers and reconciliation.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on the affected `runmprc.com` registration page. Do not undo by changing an event, registration, member account, database record, payment, waiver, permission, Firebase setting, analytics setting, or Stripe/provider setting.
+
+**Escalation:** events lead plus platform/security owner. Add the treasurer and use the private incident path if a live request may have reached registration or checkout. Add the privacy owner if any failure-supplied runner/contact value or any Firebase, Stripe, provider, endpoint, token-shaped, or technical detail appeared outside the retained made-up form inputs and mocked request. Do not copy the detail into an issue, message, screenshot, email, or AI tool.
+
+No system-topology diagram changes for this source slice; the state-flow diagram above records the page's failure-display change, while data movement, permissions, account ownership, and deployment topology remain unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
