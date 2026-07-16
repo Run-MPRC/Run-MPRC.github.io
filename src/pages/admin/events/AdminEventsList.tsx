@@ -7,6 +7,8 @@ import { Event } from '../../../types/events';
 import { listAllEvents } from '../../../services/events/adminService';
 import { formatEventDate, formatPrice } from '../../../services/events/eventsService';
 
+const LOAD_FAILURE = 'We could not load events right now. Please try again later.';
+
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     draft: 'bg-gray-200 text-gray-700',
@@ -28,10 +30,23 @@ function Inner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isReady || !services) return;
+    if (!isReady || !services) return undefined;
+    let active = true;
+    setLoading(true);
+    setError(null);
     listAllEvents(services.firebaseResources.firestore)
-      .then((evs) => { setEvents(evs); setLoading(false); })
-      .catch((err) => { setError(err.message); setLoading(false); });
+      .then((evs) => {
+        if (!active) return;
+        setEvents(evs);
+        setError(null);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setError(LOAD_FAILURE);
+        setLoading(false);
+      });
+    return () => { active = false; };
   }, [services, isReady]);
 
   return (
@@ -48,7 +63,11 @@ function Inner() {
           </Link>
         </div>
         {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {error && (
+          <p className="text-red-500" role="alert" aria-live="assertive" aria-atomic="true">
+            {error}
+          </p>
+        )}
         {!loading && !error && events.length === 0 && (
           <p className="text-gray-600">
             No events yet.
@@ -59,7 +78,7 @@ function Inner() {
             .
           </p>
         )}
-        {!loading && events.length > 0 && (
+        {!error && !loading && events.length > 0 && (
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b bg-gray-50">

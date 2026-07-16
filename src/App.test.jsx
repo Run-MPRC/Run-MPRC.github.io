@@ -15,6 +15,7 @@ import {
   listMemberEvents,
   listPublicEvents,
 } from './services/events/eventsService';
+import { listAllEvents } from './services/events/adminService';
 import { events as analyticsEvents, track } from './services/analytics/analytics';
 import { useAuth } from './services/hooks/useAuth';
 import {
@@ -57,6 +58,14 @@ jest.mock('./services/events/eventsService', () => {
   };
 });
 
+jest.mock('./services/events/adminService', () => {
+  const actual = jest.requireActual('./services/events/adminService');
+  return {
+    ...actual,
+    listAllEvents: jest.fn(),
+  };
+});
+
 jest.mock('./services/analytics/analytics', () => {
   const actual = jest.requireActual('./services/analytics/analytics');
   return { ...actual, track: jest.fn() };
@@ -86,6 +95,7 @@ beforeEach(() => {
   getEventBySlug.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
+  listAllEvents.mockReset();
   track.mockReset();
   useAuth.mockReset();
   useAuth.mockReturnValue({
@@ -191,6 +201,7 @@ const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Pleas
 const EVENT_REGISTER_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
 const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Please try again later.';
+const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
@@ -226,6 +237,11 @@ function renderPublicEventRegister() {
 
 function renderAdminProducts() {
   window.history.pushState({}, '', '/admin/products');
+  return render(<App />);
+}
+
+function renderAdminEvents() {
+  window.history.pushState({}, '', '/admin/events');
   return render(<App />);
 }
 
@@ -1656,5 +1672,264 @@ describe('Admin Products list-load failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(listAllProducts).toHaveBeenCalledWith(firestore);
     expect(listAllProducts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Admin Events list-load failure boundary', () => {
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listAllEvents.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected list details with one fixed accessible unknown outcome', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listAllEvents.mockRejectedValueOnce(Object.assign(
+      new Error('admin-events-private-canary officer@example.test'),
+      {
+        code: 'firestore/admin-events-private-canary',
+        endpoint: 'https://provider.example.test/?token=admin-events-secret-canary',
+      },
+    ));
+
+    renderAdminEvents();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_EVENTS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /admin-events-private-canary|officer@example\.test|provider\.example|admin-events-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-events-private-canary|officer@example\.test|provider\.example|admin-events-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Create the first one' }))
+      .not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('No events yet.');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Events' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '+ New event' }))
+      .toHaveAttribute('href', '/admin/events/new');
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/admin/events');
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile list rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-events-message-getter-canary');
+    });
+    listAllEvents.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderAdminEvents();
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_EVENTS_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('admin-events-message-getter-canary');
+    expect(JSON.stringify(track.mock.calls)).not.toContain('admin-events-message-getter-canary');
+    expect(screen.queryByRole('link', { name: 'Create the first one' }))
+      .not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('No events yet.');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Events' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '+ New event' }))
+      .toHaveAttribute('href', '/admin/events/new');
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/admin/events');
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves the existing successful empty-events result', async () => {
+    renderAdminEvents();
+
+    const emptyStateLink = await screen.findByRole('link', {
+      name: 'Create the first one',
+    });
+    expect(emptyStateLink).toHaveAttribute('href', '/admin/events/new');
+    expect(emptyStateLink.parentElement).toHaveTextContent(
+      'No events yet. Create the first one.',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the existing successful event projection', async () => {
+    listAllEvents.mockResolvedValueOnce([{
+      id: 'synthetic-event',
+      slug: 'synthetic-club-run',
+      title: 'Synthetic Club Run',
+      startAt: { toDate: () => new Date(2030, 0, 12, 12, 0) },
+      capacity: 20,
+      registeredCount: 7,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 1000, nonMemberCents: 1500 },
+    }]);
+
+    renderAdminEvents();
+
+    expect(await screen.findByRole('link', { name: 'Synthetic Club Run' }))
+      .toHaveAttribute('href', '/admin/events/synthetic-club-run/edit');
+    expect(screen.getByText(/Jan 12, 2030/)).toBeInTheDocument();
+    expect(screen.getByText('$10.00 / $15.00')).toBeInTheDocument();
+    expect(screen.getByText('7 / 20')).toBeInTheDocument();
+    expect(screen.getByText('open')).toBeInTheDocument();
+    expect(screen.getByText('public')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Signups' }))
+      .toHaveAttribute('href', '/admin/events/synthetic-club-run/registrations');
+    expect(screen.getByRole('link', { name: 'Edit' }))
+      .toHaveAttribute('href', '/admin/events/synthetic-club-run/edit');
+    expect(screen.queryByRole('link', { name: 'Create the first one' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+  });
+
+  test('hides a previously loaded table when a later lookup fails', async () => {
+    listAllEvents.mockResolvedValueOnce([{
+      id: 'synthetic-event',
+      slug: 'synthetic-club-run',
+      title: 'Synthetic Club Run',
+      startAt: { toDate: () => new Date(2030, 0, 12, 12, 0) },
+      capacity: 20,
+      registeredCount: 7,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 1000, nonMemberCents: 1500 },
+    }]);
+    const view = renderAdminEvents();
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+
+    const retryFirestore = { name: 'synthetic-firestore-retry' };
+    listAllEvents.mockRejectedValueOnce(
+      new Error('admin-events-stale-private-canary'),
+    );
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: retryFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_EVENTS_LOAD_FAILURE);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Create the first one' }))
+      .not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('No events yet.');
+    expect(document.body).not.toHaveTextContent('admin-events-stale-private-canary');
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, retryFirestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(2);
+  });
+
+  test('shows a later successful empty result after an earlier failure', async () => {
+    listAllEvents.mockRejectedValueOnce(new Error('admin-events-first-failure-canary'));
+    const view = renderAdminEvents();
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_EVENTS_LOAD_FAILURE);
+
+    const retryFirestore = { name: 'synthetic-firestore-success-retry' };
+    listAllEvents.mockResolvedValueOnce([]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: retryFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    const emptyStateLink = await screen.findByRole('link', {
+      name: 'Create the first one',
+    });
+    expect(emptyStateLink.parentElement).toHaveTextContent(
+      'No events yet. Create the first one.',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('admin-events-first-failure-canary');
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, retryFirestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(2);
+  });
+
+  test('ignores an older hostile rejection after a newer successful lookup', async () => {
+    let rejectOlderLookup;
+    listAllEvents.mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectOlderLookup = reject;
+    }));
+    const view = renderAdminEvents();
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+
+    const currentFirestore = { name: 'synthetic-firestore-current' };
+    listAllEvents.mockResolvedValueOnce([{
+      id: 'synthetic-current-event',
+      slug: 'synthetic-current-run',
+      title: 'Synthetic Current Run',
+      startAt: { toDate: () => new Date(2030, 0, 12, 12, 0) },
+      capacity: null,
+      registeredCount: 2,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 0, nonMemberCents: 0 },
+    }]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByRole('link', { name: 'Synthetic Current Run' }))
+      .toHaveAttribute('href', '/admin/events/synthetic-current-run/edit');
+
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-events-older-message-getter-canary');
+    });
+    await act(async () => {
+      rejectOlderLookup(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Synthetic Current Run' }))
+      .toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      'admin-events-older-message-getter-canary',
+    );
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(2);
   });
 });

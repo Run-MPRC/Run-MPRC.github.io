@@ -1005,6 +1005,53 @@ Officer review steps after the source merge:
 
 No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected failure display.
 
+### Admin event-list load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one plain instruction when the Admin Events list cannot load, without showing a Firebase, database, provider, account, endpoint, token-shaped, or technical detail and without falsely saying that the event list is empty.
+
+**Approver:** events lead plus platform/security and privacy owners. Add the treasurer before any future live commerce-admin review.
+
+**Prerequisites:** issue [#290](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/290) must be merged for source review. Use only a mocked admin identity, mocked database reference, made-up event, and mocked rejected list lookup. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply: this slice does not approve the screen, role, permissions, backup, preview, rollback, event editing, publication, registration, payment, or production use. It does not choose the event source reserved to #121, deploy Firebase, change Rules, permissions, or event records, contact Stripe or another provider, use production data, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Made-up Admin Events route"] --> B["Mocked event-list lookup"]
+    B -- "Fulfilled empty" --> C["Existing No events yet state"]
+    B -- "Fulfilled with events" --> D["Existing events table"]
+    B -- "Rejected" --> E["Fixed alert; no empty state or table"]
+```
+
+In words: only a successful mocked lookup may show the existing empty event list or events table. A mocked rejection shows one fixed alert while keeping the Events heading and New event navigation; it does not turn an unknown result into an empty or current event list.
+
+Officer review steps after the source merge:
+
+1. Keep this failure sentence and the complete Admin Events screen marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #290 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database reference, made-up event, and mocked lookup.
+4. Confirm a mocked rejection shows exactly `We could not load events right now. Please try again later.`
+5. Confirm assistive technology receives the complete sentence immediately as one alert.
+6. Confirm no rejection-only database, Firebase, provider, account, endpoint, token-shaped, or technical detail appears on the page, in analytics, or in the browser console.
+7. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
+8. Confirm the rejected lookup ends loading and shows neither **No events yet.** nor an events table.
+9. Confirm the **Events** heading and **+ New event** link remain without following the link.
+10. Confirm the mocked lookup receives the same mocked database reference exactly once.
+11. Confirm a successful mocked empty list still shows **No events yet.**, and a successful made-up event keeps its existing table display.
+12. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider, event-record, production-data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** the reviewed source discards the complete rejected value without binding or inspecting it and shows one fixed accessible retry-later sentence. A failure is not treated as an empty or populated event list. The Events heading and New event navigation remain, while genuine successful empty and populated results keep their existing displays. This does not authorize an officer to open or use the Admin Events screen live.
+
+**Stop conditions:** any real officer, member, event, registration, location, discount, waiver, price, capacity, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; the false empty state or an events table after rejection; an attempted event/admin write; a Firebase, Rules, provider, permission, or event-source change; an attempt to decide #121 work; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or Admin screen is live.
+
+**Success proof:** for source completion, record the exact #290 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic actual-route tests, relevant full checks, and independent privacy, accessibility, and officer-continuity reviews. The safe review path stops at source and synthetic tests because the Admin screen is not approved for officer use. Live availability requires a later separately approved Admin-screen release and dated exact-revision verification after every prerequisite above is complete. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, event-record changes, production-data actions, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After any later approved publication, use the same protected website release path and verify the replacement revision. Do not undo by changing or deleting an event, registration, payment, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** events lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, Firebase, provider, account, event, registration, endpoint, token-shaped, or technical detail appeared. Add the treasurer if commerce or payment state might be involved. Do not copy private details into an issue, message, screenshot, email, or AI tool.
+
+No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected failure display.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.
