@@ -148,6 +148,7 @@ test('renders the Auth action route and removes its query and fragment before us
 const SHOP_LOAD_FAILURE = 'We could not load the shop right now. Please try again later.';
 const PRODUCT_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please try again later.';
+const EVENTS_CALENDAR_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const firestore = { name: 'synthetic-firestore' };
 
 function renderPublicShop() {
@@ -162,6 +163,11 @@ function renderPublicProduct() {
 
 function renderPublicEvents() {
   window.history.pushState({}, '', '/events');
+  return render(<App />);
+}
+
+function renderPublicEventCalendar() {
+  window.history.pushState({}, '', '/events/calendar');
   return render(<App />);
 }
 
@@ -284,6 +290,140 @@ describe('public Events-list failure boundary', () => {
       .toHaveAttribute('href', '/events/synthetic-club-run');
     expect(screen.getByText('Made-up Park', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Free')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listPublicEvents).toHaveBeenCalledTimes(1);
+    expect(listMemberEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe('public Events-calendar failure boundary', () => {
+  let unsubscribe;
+
+  beforeEach(() => {
+    unsubscribe = jest.fn();
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listPublicEvents.mockImplementation((_db, onChange) => {
+      onChange([]);
+      return unsubscribe;
+    });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected calendar details with one fixed accessible result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listPublicEvents.mockImplementationOnce((_db, _onChange, onError) => {
+      onError(Object.assign(
+        new Error('calendar-provider-private-canary member@example.test'),
+        {
+          code: 'firestore/calendar-provider-private-canary',
+          endpoint: 'https://provider.example.test/?token=calendar-secret-canary',
+        },
+      ));
+      return unsubscribe;
+    });
+
+    renderPublicEventCalendar();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(EVENTS_CALENDAR_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /calendar-provider-private-canary|member@example\.test|provider\.example|calendar-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sun')).not.toBeInTheDocument();
+    expect(listPublicEvents).toHaveBeenCalledWith(
+      firestore,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(listPublicEvents).toHaveBeenCalledTimes(1);
+    expect(listMemberEvents).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile calendar rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('calendar-message-getter-canary');
+    });
+    listPublicEvents.mockImplementationOnce((_db, _onChange, onError) => {
+      onError(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      return unsubscribe;
+    });
+
+    renderPublicEventCalendar();
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(EVENTS_CALENDAR_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('calendar-message-getter-canary');
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves the empty calendar, public lister, and unsubscribe', async () => {
+    const { unmount } = renderPublicEventCalendar();
+
+    expect(await screen.findByText('Sun')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous month' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next month' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listPublicEvents).toHaveBeenCalledWith(
+      firestore,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(listPublicEvents).toHaveBeenCalledTimes(1);
+    expect(listMemberEvents).not.toHaveBeenCalled();
+
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves a successful public event in the current calendar month', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2030, 0, 15, 12));
+    const currentMonth = new Date();
+    listPublicEvents.mockImplementationOnce((_db, onChange) => {
+      onChange([{
+        id: 'synthetic-calendar-event',
+        slug: 'synthetic-calendar-run',
+        title: 'Synthetic Calendar Run',
+        startAt: {
+          toDate: () => new Date(
+            currentMonth.getFullYear(),
+            currentMonth.getMonth(),
+            12,
+            8,
+          ),
+        },
+        capacity: null,
+        registeredCount: 0,
+        status: 'open',
+        visibility: 'public',
+        pricing: { memberCents: 0, nonMemberCents: 0 },
+      }]);
+      return unsubscribe;
+    });
+
+    renderPublicEventCalendar();
+
+    expect(await screen.findByRole('link', { name: 'Synthetic Calendar Run' }))
+      .toHaveAttribute('href', '/events/synthetic-calendar-run');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(listPublicEvents).toHaveBeenCalledTimes(1);
     expect(listMemberEvents).not.toHaveBeenCalled();
