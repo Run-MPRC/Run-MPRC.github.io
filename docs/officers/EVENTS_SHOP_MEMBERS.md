@@ -1264,6 +1264,66 @@ The existing role-change request, raw action-error text, authorization, audit, r
 
 No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the website-account list display and the boundary separating website roles from the future authoritative membership roster.
 
+### Admin Event editor load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one plain result when the Admin Event editor cannot safely identify the event being edited. An unknown event must not show a database or provider detail, an earlier event, a blank edit form, or a **Save changes** action.
+
+**Approver:** event lead plus platform/security and privacy owners. Add the treasurer before any future live review of prices, capacity, registration, payment, or refund settings.
+
+**Prerequisites:** issue [#311](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/311) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up events, and mocked lookup results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. Issue [#121](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/121) still owns the approved event source. This slice does not approve the editor, save an event, choose a source, deploy Firebase, change Rules or permissions, use production data, or prove live behavior.
+
+Before #311, a rejected lookup could show technical provider text and leave a blank editable event form. A missing event could also leave that form available. A merged source fix and green tests do not publish the website or make the editor safe to use.
+
+```mermaid
+flowchart LR
+    A["Made-up Admin Event edit route and service readiness"] --> B["Fresh editor boundary for each edit route or edit-route readiness change"]
+    B --> I["Latest mocked lookup for current route and database"]
+    I -- "Pending" --> C["Loading; no event form or Save action"]
+    I -- "Rejected" --> D["Fixed alert; no event form or Save action"]
+    I -- "Resolved missing" --> E["Event not found; no event form or Save action"]
+    I -- "Resolved event" --> F["Existing populated edit form"]
+    B -- "New event route" --> J["Blank create draft"]
+    G["Older or unmounted result"] -. "Ignored" .-> H["No display change"]
+```
+
+Text alternative: each edit route or edit-route service-readiness change starts a fresh editor boundary. Only the latest current mocked lookup may settle an edit route. Pending, rejected, and missing results show no edit form or save action. A current event keeps the existing populated form. A new-event route starts a blank draft and keeps it across service-readiness changes. An older or unmounted result changes nothing.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Event editor marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #311 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, made-up events, and mocked lookups.
+4. Confirm no test clicks **Create event** or **Save changes** and no event write is attempted.
+5. Confirm a pending edit lookup shows **Loading...** and no event form or **Save changes** action.
+6. Confirm a mocked rejection shows exactly `We could not load this event right now. Please try again later.`
+7. Confirm assistive technology receives the whole rejection sentence immediately as one alert.
+8. Confirm the rejected value is not inspected, logged, measured, stored, sent to analytics, or displayed.
+9. Confirm a missing made-up event shows **Event not found** and no event form or **Save changes** action.
+10. Confirm a current made-up event keeps the existing populated form and disabled URL path. Do not change a field.
+11. Confirm a fresh **New event** route keeps its existing blank create form without starting an edit lookup. Do not submit it.
+12. Confirm an earlier event disappears while a new route or database lookup is pending.
+13. Confirm a loaded edit form stays hidden when services become unavailable and then become ready again, until the new current lookup resolves.
+14. Confirm moving from a loaded edit route to **New event** starts a blank draft.
+15. Confirm the synthetic test shows that service-readiness changes and an internal page update with the same database connection preserve a current new-event draft and do not start an edit lookup.
+16. Confirm an older or unmounted result cannot replace the current route.
+17. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Rules or permissions, provider configuration, event records, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** pending, rejected, and missing edit lookups show no editable event form. A rejection uses one fixed accessible sentence and no rejected detail. A missing event stays separate from a provider failure. Only the terminal result of the latest lookup attempt for the current mocked route and database may settle the page, and only a fulfilled current event may populate the form. Older and unmounted results are inert. A changed edit route or edit-route service-readiness state starts a clean editor boundary before any new lookup. A later current lookup can recover without briefly restoring an earlier form. Moving from edit to new starts a blank draft. Service-readiness changes and an internal page update with the same database connection do not start an edit lookup or erase that new-event draft. Existing successful edit projection remains unchanged.
+
+The existing form validation, create/update requests, save rejection text, save retry behavior, event-source choice, pricing, capacity, registration, waiver, payment, and refund behavior are separate unfinished work. This slice does not make the Admin Event editor safe for officer use.
+
+**Stop conditions:** any real officer, member, event, route, price, capacity, registration, waiver, payment, Firebase, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a blank, old, or editable event form after an unknown lookup; an attempted create or save; a Firebase, Rules, provider, permission, source, or event-record change; or a claim that source, tests, merge, preview, or a green workflow proves the result or editor is live.
+
+**Success proof:** for source completion, record the exact #311 issue, reviewed pull request, merged commit, recorded old-source failures, reviewer-driven route and readiness regressions, green synthetic actual-route tests, relevant full checks, and independent privacy, lifecycle, accessibility, and officer-continuity reviews. The safe review stops at source and mocked tests because the Admin screen is not approved for officer use. Live availability requires a later separately approved release and dated exact-revision verification after authorization, source, save safety, audit, backup, rollback, and Firebase evidence are complete. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, event changes, production-data actions, saves, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by creating, changing, or deleting an event, registration, payment, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** event lead plus platform/security owner. Add the privacy owner if any private or technical detail appeared. Add the treasurer if price, capacity, registration, payment, or refund state might be affected. Use the private incident path if an event write might have occurred without a current readback. Do not copy private details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the editor's current-lookup display behavior.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.
