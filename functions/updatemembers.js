@@ -129,8 +129,8 @@ exports.updateMemberRole = functions.https.onRequest(
         failed,
         role,
       });
-    } catch (error) {
-      console.error('Error updating members:', error);
+    } catch {
+      console.error('member_role_update_failed');
       response.status(500).json({ error: 'Internal server error' });
     }
   },
