@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
 import AdminGuard from '../AdminGuard';
@@ -11,6 +13,14 @@ import {
 } from '../../../services/account/adminMembersService';
 
 const ROLES: MemberRole[] = ['unverified', 'member', 'admin'];
+
+interface MembersLoadOutcome {
+  firestore: unknown;
+  status: 'loading' | 'resolved' | 'unavailable';
+  members: Member[];
+}
+
+const LOAD_FAILURE = 'We could not load website accounts right now. Stop and contact the membership lead and platform owner before changing website access.';
 
 function RolePill({ role }: { role: string }) {
   const style: Record<string, string> = {
@@ -34,30 +44,48 @@ function fmtDate(ts: any) {
 function Inner() {
   const { services, isReady } = useServiceLocator();
   const { user } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
+  const currentFirestoreRef = useRef(firestore);
+  currentFirestoreRef.current = firestore;
+  const requestSequence = useRef(0);
+  const [loadOutcome, setLoadOutcome] = useState<MembersLoadOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | MemberRole>('all');
 
-  async function reload() {
-    if (!services) return;
-    setLoading(true);
+  const currentOutcome = loadOutcome?.firestore === firestore ? loadOutcome : null;
+  const currentStatus = currentOutcome?.status ?? 'loading';
+  const members = currentOutcome?.status === 'resolved' ? currentOutcome.members : [];
+
+  const reload = useCallback(async () => {
+    if (!firestore || currentFirestoreRef.current !== firestore) return;
+    requestSequence.current += 1;
+    const requestId = requestSequence.current;
+    const outcomeKey = { firestore };
+    setLoadOutcome({ ...outcomeKey, status: 'loading', members: [] });
     try {
-      const all = await listAllMembers(services.firebaseResources.firestore);
-      setMembers(all);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      const all = await listAllMembers(firestore);
+      if (requestId !== requestSequence.current
+        || currentFirestoreRef.current !== firestore) return;
+      setLoadOutcome({ ...outcomeKey, status: 'resolved', members: all });
+    } catch {
+      if (requestId !== requestSequence.current
+        || currentFirestoreRef.current !== firestore) return;
+      setLoadOutcome({ ...outcomeKey, status: 'unavailable', members: [] });
     }
-  }
+  }, [firestore]);
 
   useEffect(() => {
-    if (!isReady || !services) return;
+    if (!firestore) {
+      requestSequence.current += 1;
+      return () => undefined;
+    }
     reload();
-  }, [services, isReady]);
+    return () => { requestSequence.current += 1; };
+  }, [firestore, reload]);
 
   async function changeRole(email: string, role: MemberRole) {
     if (!services) return;
@@ -92,71 +120,87 @@ function Inner() {
 
   return (
     <>
-      <SEO title="Admin — Members" noindex />
+      <SEO title="Admin — Website accounts" noindex />
       <div className="container mx-auto p-4 max-w-5xl">
         <Link to="/admin" className="text-sm text-blue-600 hover:underline">
           ← Admin home
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Members</h1>
+        <h1 className="text-2xl font-bold mt-2">Website accounts</h1>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
-          <div className="border rounded p-3 bg-purple-50">
-            <div className="text-xs text-gray-600">Admins</div>
-            <div className="text-xl font-bold">{counts.admin}</div>
-          </div>
-          <div className="border rounded p-3 bg-green-50">
-            <div className="text-xs text-gray-600">Members</div>
-            <div className="text-xl font-bold">{counts.member}</div>
-          </div>
-          <div className="border rounded p-3 bg-gray-50">
-            <div className="text-xs text-gray-600">Pending verification</div>
-            <div className="text-xl font-bold">{counts.unverified}</div>
-          </div>
-          <div className="border rounded p-3 bg-blue-50">
-            <div className="text-xs text-gray-600">Total</div>
-            <div className="text-xl font-bold">{counts.total}</div>
-          </div>
-        </div>
+        {currentStatus === 'resolved' && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+              <div className="border rounded p-3 bg-purple-50">
+                <div className="text-xs text-gray-600">Admin website access</div>
+                <div className="text-xl font-bold">{counts.admin}</div>
+              </div>
+              <div className="border rounded p-3 bg-green-50">
+                <div className="text-xs text-gray-600">Member website access</div>
+                <div className="text-xl font-bold">{counts.member}</div>
+              </div>
+              <div className="border rounded p-3 bg-gray-50">
+                <div className="text-xs text-gray-600">Pending website verification</div>
+                <div className="text-xl font-bold">{counts.unverified}</div>
+              </div>
+              <div className="border rounded p-3 bg-blue-50">
+                <div className="text-xs text-gray-600">Total website accounts</div>
+                <div className="text-xl font-bold">{counts.total}</div>
+              </div>
+            </div>
 
-        <div className="flex gap-2 flex-wrap items-center my-3">
-          <input
-            className="border rounded px-3 py-2 flex-1 min-w-[200px]"
-            placeholder="Search by name or email..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            className="border rounded px-3 py-2"
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as any)}
+            <div className="flex gap-2 flex-wrap items-center my-3">
+              <input
+                className="border rounded px-3 py-2 flex-1 min-w-[200px]"
+                placeholder="Search by name or email..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+              <select
+                className="border rounded px-3 py-2"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value as any)}
+              >
+                <option value="all">All website roles</option>
+                <option value="unverified">Unverified</option>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {currentStatus === 'loading' && <p>Loading...</p>}
+        {currentStatus === 'unavailable' && (
+          <p
+            className="text-red-500 text-sm"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
           >
-            <option value="all">All roles</option>
-            <option value="unverified">Unverified</option>
-            <option value="member">Member</option>
-            <option value="admin">Admin</option>
-          </select>
-        </div>
+            {LOAD_FAILURE}
+          </p>
+        )}
+        {currentStatus === 'resolved' && error && (
+          <p className="text-red-500 text-sm">{error}</p>
+        )}
 
-        {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-
-        {!loading && (
+        {currentStatus === 'resolved' && (
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
                 <th className="text-left p-2">Name</th>
                 <th className="text-left p-2">Email</th>
-                <th className="text-left p-2">Role</th>
-                <th className="text-left p-2">Joined</th>
+                <th className="text-left p-2">Website role</th>
+                <th className="text-left p-2">Account created</th>
                 <th className="text-left p-2">Email verified</th>
-                <th className="text-right p-2">Change role to...</th>
+                <th className="text-right p-2">Change website role to...</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="p-4 text-center text-gray-500">
-                    No members matched
+                    No website accounts matched
                   </td>
                 </tr>
               )}
