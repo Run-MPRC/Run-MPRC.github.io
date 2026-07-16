@@ -292,4 +292,75 @@ describe('role grant verification policy', () => {
     expect(admin.__mocks.getUserByEmail).not.toHaveBeenCalled();
     expect(admin.__mocks.setCustomUserClaims).not.toHaveBeenCalled();
   });
+
+  test('bulk sync redacts an unexpected outer failure', async () => {
+    admin.__setUsers([{
+      email: 'synthetic@example.com',
+      uid: 'synthetic-uid',
+      emailVerified: true,
+    }]);
+    const messageGetter = jest.fn(() => {
+      throw new Error('membership-sync-message-getter-canary');
+    });
+    const privateFailure = Object.defineProperty({
+      detail: 'membership-sync-private-canary',
+    }, 'message', {
+      configurable: true,
+      get: messageGetter,
+    });
+    const allSettled = jest.spyOn(Promise, 'allSettled').mockImplementationOnce(
+      async (values) => {
+        await Promise.all(values);
+        throw privateFailure;
+      },
+    );
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const response = mockResponse();
+
+    try {
+      await updateMemberRole(bulkRequest({
+        emails: ['synthetic@example.com'],
+        role: 'member',
+      }), response);
+
+      expect(response.status).toHaveBeenCalledWith(500);
+      expect(response.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+      expect(consoleError.mock.calls).toHaveLength(1);
+      expect(consoleError.mock.calls[0]?.[0]).toBe('member_role_update_failed');
+      expect(consoleError.mock.calls[0]).toHaveLength(1);
+      expect(consoleError.mock.calls[0]).not.toContain(privateFailure);
+      expect(messageGetter).not.toHaveBeenCalled();
+      expect(allSettled).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleError.mockRestore();
+      allSettled.mockRestore();
+    }
+  });
+
+  test('bulk sync success does not emit the outer-failure marker', async () => {
+    admin.__setUsers([{
+      email: 'synthetic@example.com',
+      uid: 'synthetic-uid',
+      emailVerified: true,
+    }]);
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const response = mockResponse();
+
+    try {
+      await updateMemberRole(bulkRequest({
+        emails: ['synthetic@example.com'],
+        role: 'member',
+      }), response);
+
+      expect(response.status).toHaveBeenCalledWith(200);
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        succeeded: ['synthetic@example.com'],
+        failed: [],
+        role: 'member',
+      }));
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
