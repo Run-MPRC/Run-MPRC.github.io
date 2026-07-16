@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import { resolvePath } from 'react-router-dom';
 import { useServiceLocator } from './services/ServiceLocatorContext';
+import { listMemberEvents, listPublicEvents } from './services/events/eventsService';
 import { getProductBySlug, listActiveProducts } from './services/shop/shopService';
 import App from './App';
 
@@ -31,6 +32,15 @@ jest.mock('./services/shop/shopService', () => {
   };
 });
 
+jest.mock('./services/events/eventsService', () => {
+  const actual = jest.requireActual('./services/events/eventsService');
+  return {
+    ...actual,
+    listMemberEvents: jest.fn(),
+    listPublicEvents: jest.fn(),
+  };
+});
+
 jest.mock('./services/hooks/useAuth', () => ({
   useAuth: () => ({
     user: null,
@@ -49,6 +59,8 @@ beforeEach(() => {
   useServiceLocator.mockReturnValue({ services: null, isReady: false });
   getProductBySlug.mockReset();
   listActiveProducts.mockReset();
+  listMemberEvents.mockReset();
+  listPublicEvents.mockReset();
 });
 
 afterEach(() => {
@@ -135,6 +147,7 @@ test('renders the Auth action route and removes its query and fragment before us
 
 const SHOP_LOAD_FAILURE = 'We could not load the shop right now. Please try again later.';
 const PRODUCT_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
+const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please try again later.';
 const firestore = { name: 'synthetic-firestore' };
 
 function renderPublicShop() {
@@ -146,6 +159,136 @@ function renderPublicProduct() {
   window.history.pushState({}, '', '/shop/synthetic-product');
   return render(<App />);
 }
+
+function renderPublicEvents() {
+  window.history.pushState({}, '', '/events');
+  return render(<App />);
+}
+
+describe('public Events-list failure boundary', () => {
+  let unsubscribe;
+
+  beforeEach(() => {
+    unsubscribe = jest.fn();
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listPublicEvents.mockImplementation((_db, onChange) => {
+      onChange([]);
+      return unsubscribe;
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected event details with one fixed result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listPublicEvents.mockImplementationOnce((_db, _onChange, onError) => {
+      onError(Object.assign(
+        new Error('events-provider-private-canary member@example.test'),
+        {
+          code: 'firestore/events-provider-private-canary',
+          endpoint: 'https://provider.example.test/?token=events-secret-canary',
+        },
+      ));
+      return unsubscribe;
+    });
+
+    renderPublicEvents();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(EVENTS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /events-provider-private-canary|member@example\.test|provider\.example|events-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading events...')).not.toBeInTheDocument();
+    expect(screen.queryByText('No events scheduled at this time.')).not.toBeInTheDocument();
+    expect(listPublicEvents).toHaveBeenCalledWith(
+      firestore,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(listPublicEvents).toHaveBeenCalledTimes(1);
+    expect(listMemberEvents).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile event rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('events-message-getter-canary');
+    });
+    listPublicEvents.mockImplementationOnce((_db, _onChange, onError) => {
+      onError(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      return unsubscribe;
+    });
+
+    renderPublicEvents();
+
+    expect((await screen.findByRole('alert')).textContent).toBe(EVENTS_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('events-message-getter-canary');
+    expect(screen.queryByText('Loading events...')).not.toBeInTheDocument();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves the empty result, public lister, and unsubscribe', async () => {
+    const { unmount } = renderPublicEvents();
+
+    expect(await screen.findByText('No events scheduled at this time.'))
+      .toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listPublicEvents).toHaveBeenCalledWith(
+      firestore,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(listPublicEvents).toHaveBeenCalledTimes(1);
+    expect(listMemberEvents).not.toHaveBeenCalled();
+
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the successful public event projection', async () => {
+    listPublicEvents.mockImplementationOnce((_db, onChange) => {
+      onChange([{
+        id: 'synthetic-event',
+        slug: 'synthetic-club-run',
+        title: 'Synthetic Club Run',
+        startAt: { toDate: () => new Date('2030-01-12T16:00:00Z') },
+        location: 'Made-up Park',
+        capacity: null,
+        registeredCount: 0,
+        status: 'open',
+        visibility: 'public',
+        pricing: { memberCents: 0, nonMemberCents: 0 },
+        resultsUrl: null,
+      }]);
+      return unsubscribe;
+    });
+
+    renderPublicEvents();
+
+    expect(await screen.findByRole('link', { name: /Synthetic Club Run/ }))
+      .toHaveAttribute('href', '/events/synthetic-club-run');
+    expect(screen.getByText('Made-up Park', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Free')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listPublicEvents).toHaveBeenCalledTimes(1);
+    expect(listMemberEvents).not.toHaveBeenCalled();
+  });
+});
 
 describe('public Shop catalog failure boundary', () => {
   beforeEach(() => {
