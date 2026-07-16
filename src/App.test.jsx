@@ -15,7 +15,11 @@ import {
   listPublicEvents,
 } from './services/events/eventsService';
 import { track } from './services/analytics/analytics';
-import { getProductBySlug, listActiveProducts } from './services/shop/shopService';
+import {
+  createMerchCheckout,
+  getProductBySlug,
+  listActiveProducts,
+} from './services/shop/shopService';
 import App from './App';
 
 jest.mock('./services/ServiceLocatorProvider', () => function TestServiceLocatorProvider({
@@ -32,6 +36,7 @@ jest.mock('./services/shop/shopService', () => {
   const actual = jest.requireActual('./services/shop/shopService');
   return {
     ...actual,
+    createMerchCheckout: jest.fn(),
     getProductBySlug: jest.fn(),
     listActiveProducts: jest.fn(),
   };
@@ -68,6 +73,7 @@ jest.mock('./services/hooks/useAuth', () => ({
 beforeEach(() => {
   useServiceLocator.mockReset();
   useServiceLocator.mockReturnValue({ services: null, isReady: false });
+  createMerchCheckout.mockReset();
   getProductBySlug.mockReset();
   listActiveProducts.mockReset();
   getEventBySlug.mockReset();
@@ -160,10 +166,12 @@ test('renders the Auth action route and removes its query and fragment before us
 
 const SHOP_LOAD_FAILURE = 'We could not load the shop right now. Please try again later.';
 const PRODUCT_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
+const SHOP_CHECKOUT_FAILURE = 'We could not confirm checkout. Please wait before trying again.';
 const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please try again later.';
 const EVENTS_CALENDAR_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
+const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
 function renderPublicShop() {
@@ -1041,7 +1049,7 @@ describe('public Shop catalog failure boundary', () => {
 describe('public Shop product-load failure boundary', () => {
   beforeEach(() => {
     useServiceLocator.mockReturnValue({
-      services: { firebaseResources: { firestore } },
+      services: { firebaseResources: { app: firebaseApp, firestore } },
       isReady: true,
     });
     getProductBySlug.mockResolvedValue(null);
@@ -1209,5 +1217,122 @@ describe('public Shop product-load failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(getProductBySlug).toHaveBeenCalledWith(firestore, 'synthetic-product');
     expect(getProductBySlug).toHaveBeenCalledTimes(1);
+  });
+
+  test('replaces rejected checkout details with one fixed accessible result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    getProductBySlug.mockResolvedValueOnce({
+      id: 'synthetic-product',
+      slug: 'synthetic-product',
+      title: 'Synthetic Product',
+      description: 'A made-up product used only for this test.',
+      imageUrl: '',
+      priceCents: 3000,
+      status: 'active',
+      sizes: [],
+      colors: [],
+    });
+    createMerchCheckout.mockRejectedValueOnce(Object.assign(
+      new Error('checkout-provider-private-canary private-leak@example.test'),
+      {
+        code: 'functions/checkout-provider-private-canary',
+        endpoint: 'https://provider.example.test/?token=checkout-secret-canary',
+      },
+    ));
+
+    renderPublicProduct();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Synthetic Product' }))
+      .toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Buyer' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'buyer@example.test' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Phone (optional)'), {
+      target: { value: '+1 555 010 2720' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Buy — $30.00' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(SHOP_CHECKOUT_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /checkout-provider-private-canary|private-leak@example\.test|provider\.example|checkout-secret-canary/i,
+    );
+    expect(createMerchCheckout).toHaveBeenCalledWith(firebaseApp, {
+      productSlug: 'synthetic-product',
+      buyer: {
+        firstName: 'Synthetic',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+        phone: '+1 555 010 2720',
+      },
+      size: undefined,
+      color: undefined,
+    });
+    expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+    expect(screen.getByPlaceholderText('First name')).toHaveValue('Synthetic');
+    expect(screen.getByPlaceholderText('Last name')).toHaveValue('Buyer');
+    expect(screen.getByPlaceholderText('Email')).toHaveValue('buyer@example.test');
+    expect(screen.getByPlaceholderText('Phone (optional)')).toHaveValue('+1 555 010 2720');
+    expect(screen.getByRole('button', { name: 'Buy — $30.00' })).toBeEnabled();
+    expect(window.location.pathname).toBe('/shop/synthetic-product');
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile checkout rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('checkout-message-getter-canary');
+    });
+    getProductBySlug.mockResolvedValueOnce({
+      id: 'synthetic-product',
+      slug: 'synthetic-product',
+      title: 'Synthetic Product',
+      description: 'A made-up product used only for this test.',
+      imageUrl: '',
+      priceCents: 3000,
+      status: 'active',
+      sizes: [],
+      colors: [],
+    });
+    createMerchCheckout.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderPublicProduct();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Synthetic Product' }))
+      .toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Buyer' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'buyer@example.test' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Buy — $30.00' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(SHOP_CHECKOUT_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('checkout-message-getter-canary');
+    expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Synthetic Product' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy — $30.00' })).toBeEnabled();
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
