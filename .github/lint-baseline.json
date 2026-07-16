@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 7
   },
-  "fingerprint": "sha256:0c34434815d7a5fb07cf657b7b0ca38d6b21a060cf6bb3facc0f5dbd6f6b3a8b",
+  "fingerprint": "sha256:3164e36fd09ee5a7b57a31403c4dbb6cab134f10db35bcd86fd099305e7b5d3b",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -234,9 +234,9 @@
     },
     {
       "file": "src/pages/admin/AdminHome.tsx",
-      "line": 148,
+      "line": 196,
       "column": 1,
-      "endLine": 148,
+      "endLine": 196,
       "endColumn": 114,
       "severity": 2,
       "ruleId": "max-len",

@@ -6,12 +6,15 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from '@testing-library/react';
 import { resolvePath } from 'react-router-dom';
 import { useServiceLocator } from './services/ServiceLocatorContext';
 import {
   createCheckoutSession,
+  formatEventDate,
   getEventBySlug,
+  listEventRegistrations,
   listMemberEvents,
   listPublicEvents,
 } from './services/events/eventsService';
@@ -53,6 +56,7 @@ jest.mock('./services/events/eventsService', () => {
     ...actual,
     createCheckoutSession: jest.fn(),
     getEventBySlug: jest.fn(),
+    listEventRegistrations: jest.fn(),
     listMemberEvents: jest.fn(),
     listPublicEvents: jest.fn(),
   };
@@ -93,6 +97,7 @@ beforeEach(() => {
   listAllProducts.mockReset();
   createCheckoutSession.mockReset();
   getEventBySlug.mockReset();
+  listEventRegistrations.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
   listAllEvents.mockReset();
@@ -203,6 +208,7 @@ const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. P
 const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Please try again later.';
 const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
+const ADMIN_DASHBOARD_LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
@@ -248,6 +254,11 @@ function renderAdminProductEditor() {
 
 function renderAdminEvents() {
   window.history.pushState({}, '', '/admin/events');
+  return render(<App />);
+}
+
+function renderAdminDashboard() {
+  window.history.pushState({}, '', '/admin');
   return render(<App />);
 }
 
@@ -2049,6 +2060,467 @@ describe('Admin Product editor load-failure boundary', () => {
     expect(getProductBySlug).toHaveBeenCalledWith(firestore, 'synthetic-product');
     expect(getProductBySlug).toHaveBeenCalledTimes(1);
     expect(window.location.pathname).toBe('/admin/products/synthetic-product/edit');
+  });
+});
+
+describe('Admin dashboard summary load-failure boundary', () => {
+  function timestamp(value) {
+    const date = new Date(value);
+    return {
+      toDate: () => date,
+      toMillis: () => date.getTime(),
+    };
+  }
+
+  function adminEvent({
+    id,
+    slug,
+    title,
+    startsAt,
+    status = 'open',
+    location = 'Synthetic Park',
+    capacity = null,
+  }) {
+    return {
+      id,
+      slug,
+      title,
+      startAt: timestamp(startsAt),
+      status,
+      location,
+      capacity,
+    };
+  }
+
+  function expectSummaryToBeHidden() {
+    expect(screen.queryByText('Next event')).not.toBeInTheDocument();
+    expect(screen.queryByText('Overall')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total events')).not.toBeInTheDocument();
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument();
+    expect(screen.queryByText('Drafts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Paid')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pending')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunded')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gross')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Capacity:/)).not.toBeInTheDocument();
+  }
+
+  function expectManagementNavigation() {
+    expect(document.querySelector('a[href="/admin/events"]')).not.toBeNull();
+    expect(document.querySelector('a[href="/admin/events/new"]')).not.toBeNull();
+    expect(document.querySelector('a[href="/admin/members"]')).not.toBeNull();
+    expect(document.querySelector('a[href="/admin/products"]')).not.toBeNull();
+    expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listAllEvents.mockResolvedValue([]);
+    listEventRegistrations.mockResolvedValue([]);
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-01-01T00:00:00Z').getTime());
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('hides every summary while the current event lookup is pending', async () => {
+    listAllEvents.mockReturnValueOnce(new Promise(() => {}));
+
+    const view = renderAdminDashboard();
+
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+    expectSummaryToBeHidden();
+    expect(screen.getByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
+    expect(screen.getByText('Manage')).toBeInTheDocument();
+    expectManagementNavigation();
+    expect(listEventRegistrations).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  test('replaces event-list rejection details with one accessible fixed result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listAllEvents.mockRejectedValueOnce(Object.assign(
+      new Error('admin-summary-private-canary officer@example.test'),
+      {
+        code: 'firestore/admin-summary-private-canary',
+        endpoint: 'https://provider.example.test/?token=admin-summary-secret-canary',
+      },
+    ));
+
+    renderAdminDashboard();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_DASHBOARD_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /admin-summary-private-canary|officer@example\.test|provider\.example|admin-summary-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-summary-private-canary|officer@example\.test|provider\.example|admin-summary-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expectSummaryToBeHidden();
+    expect(screen.getByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
+    expect(screen.getByText('Manage')).toBeInTheDocument();
+    expectManagementNavigation();
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+    expect(listEventRegistrations).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile event-list rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-summary-message-getter-canary');
+    });
+    listAllEvents.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderAdminDashboard();
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(ADMIN_DASHBOARD_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('admin-summary-message-getter-canary');
+    expectSummaryToBeHidden();
+    expect(listEventRegistrations).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('hides partial event totals when the registration lookup rejects', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listAllEvents.mockResolvedValueOnce([adminEvent({
+      id: 'synthetic-next-event',
+      slug: 'synthetic-next-run',
+      title: 'Synthetic Next Run',
+      startsAt: '2030-01-12T20:00:00Z',
+      capacity: 8,
+    })]);
+    listEventRegistrations.mockRejectedValueOnce(Object.assign(
+      new Error('admin-summary-registration-private-canary officer@example.test'),
+      {
+        endpoint: 'https://provider.example.test/?token=registration-secret-canary',
+      },
+    ));
+
+    renderAdminDashboard();
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(ADMIN_DASHBOARD_LOAD_FAILURE);
+    expect(document.body).not.toHaveTextContent(
+      /admin-summary-registration-private-canary|officer@example\.test|provider\.example|registration-secret-canary/i,
+    );
+    expectSummaryToBeHidden();
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listEventRegistrations).toHaveBeenCalledWith(
+      firestore,
+      'synthetic-next-event',
+    );
+    expect(listEventRegistrations).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves a complete successful empty summary', async () => {
+    renderAdminDashboard();
+
+    const overall = (await screen.findByText('Overall')).parentElement;
+    expect(overall).toHaveTextContent(/Total events\s*0/);
+    expect(overall).toHaveTextContent(/Upcoming\s*0/);
+    expect(overall).toHaveTextContent(/Drafts\s*0/);
+    expect(screen.queryByText('Next event')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listEventRegistrations).not.toHaveBeenCalled();
+  });
+
+  test('preserves complete event, registration, money, and capacity summaries', async () => {
+    const selectedEvent = adminEvent({
+      id: 'synthetic-next-event',
+      slug: 'synthetic-next-run',
+      title: 'Synthetic Next Run',
+      startsAt: '2030-01-12T20:00:00Z',
+      capacity: 8,
+    });
+    listAllEvents.mockResolvedValueOnce([
+      adminEvent({
+        id: 'synthetic-later-event',
+        slug: 'synthetic-later-run',
+        title: 'Synthetic Later Run',
+        startsAt: '2031-02-12T20:00:00Z',
+        status: 'closed',
+      }),
+      selectedEvent,
+      adminEvent({
+        id: 'synthetic-draft-event',
+        slug: 'synthetic-draft-run',
+        title: 'Synthetic Draft Run',
+        startsAt: '2029-01-12T20:00:00Z',
+        status: 'draft',
+      }),
+      adminEvent({
+        id: 'synthetic-past-event',
+        slug: 'synthetic-past-run',
+        title: 'Synthetic Past Run',
+        startsAt: '2020-01-12T20:00:00Z',
+      }),
+    ]);
+    listEventRegistrations.mockResolvedValueOnce([
+      { status: 'paid', amountCents: 1500 },
+      { status: 'paid', amountCents: 2000 },
+      { status: 'pending', amountCents: 3500 },
+      { status: 'refunded', amountCents: 3500 },
+      { status: 'partially_refunded', amountCents: 500 },
+    ]);
+
+    renderAdminDashboard();
+
+    const eventLink = await screen.findByRole('link', { name: 'Synthetic Next Run' });
+    expect(eventLink).toHaveAttribute(
+      'href',
+      '/admin/events/synthetic-next-run/registrations',
+    );
+    expect(screen.getByRole('link', { name: /View signups/ })).toHaveAttribute(
+      'href',
+      '/admin/events/synthetic-next-run/registrations',
+    );
+    const nextEventSection = screen.getByText('Next event').parentElement;
+    expect(nextEventSection).toHaveTextContent(
+      `${formatEventDate(selectedEvent.startAt)} · Synthetic Park`,
+    );
+    expect(nextEventSection).toHaveTextContent(/Paid\s*2/);
+    expect(nextEventSection).toHaveTextContent(/Pending\s*1/);
+    expect(nextEventSection).toHaveTextContent(/Refunded\s*2/);
+    expect(nextEventSection).toHaveTextContent(/Gross\s*\$35\.00/);
+    expect(nextEventSection).toHaveTextContent(/Capacity:\s*3 \/ 8\s*\(38%\)/);
+    const overall = screen.getByText('Overall').parentElement;
+    expect(overall).toHaveTextContent(/Total events\s*4/);
+    expect(overall).toHaveTextContent(/Upcoming\s*3/);
+    expect(overall).toHaveTextContent(/Drafts\s*1/);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listEventRegistrations).toHaveBeenCalledWith(
+      firestore,
+      'synthetic-next-event',
+    );
+    expect(listEventRegistrations).toHaveBeenCalledTimes(1);
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+  });
+
+  test('clears a previous summary while a changed database lookup is pending', async () => {
+    listAllEvents.mockResolvedValueOnce([adminEvent({
+      id: 'synthetic-previous-event',
+      slug: 'synthetic-previous-run',
+      title: 'Synthetic Previous Run',
+      startsAt: '2030-01-12T20:00:00Z',
+    })]);
+    const view = renderAdminDashboard();
+    expect(await screen.findByRole('link', { name: 'Synthetic Previous Run' }))
+      .toBeInTheDocument();
+
+    let resolveCurrentLookup;
+    listAllEvents.mockReturnValueOnce(new Promise((resolve) => {
+      resolveCurrentLookup = resolve;
+    }));
+    const currentFirestore = { name: 'synthetic-firestore-current-dashboard' };
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+    expectSummaryToBeHidden();
+    expect(document.body).not.toHaveTextContent('Synthetic Previous Run');
+
+    await act(async () => {
+      resolveCurrentLookup([]);
+      await Promise.resolve();
+    });
+
+    const overall = await screen.findByText('Overall');
+    expect(overall.parentElement).toHaveTextContent(/Total events\s*0/);
+    expect(screen.queryByText('Next event')).not.toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('ignores an older event-list success after a newer empty result', async () => {
+    let resolveOlderLookup;
+    const olderLookup = new Promise((resolve) => {
+      resolveOlderLookup = resolve;
+    });
+    listAllEvents.mockReturnValueOnce(olderLookup);
+    const view = renderAdminDashboard();
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+
+    const currentFirestore = { name: 'synthetic-firestore-newer-dashboard' };
+    listAllEvents.mockResolvedValueOnce([]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect((await screen.findByText('Overall')).parentElement)
+      .toHaveTextContent(/Total events\s*0/);
+
+    await act(async () => {
+      resolveOlderLookup([adminEvent({
+        id: 'synthetic-older-event',
+        slug: 'synthetic-older-run',
+        title: 'Synthetic Older Run',
+        startsAt: '2030-01-12T20:00:00Z',
+      })]);
+      await olderLookup;
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Overall').parentElement)
+      .toHaveTextContent(/Total events\s*0/);
+    expect(document.body).not.toHaveTextContent('Synthetic Older Run');
+    expect(listEventRegistrations).not.toHaveBeenCalled();
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('ignores an older registration success after a newer empty result', async () => {
+    let resolveOlderRegistrations;
+    const olderRegistrations = new Promise((resolve) => {
+      resolveOlderRegistrations = resolve;
+    });
+    listAllEvents.mockResolvedValueOnce([adminEvent({
+      id: 'synthetic-older-event',
+      slug: 'synthetic-older-run',
+      title: 'Synthetic Older Run',
+      startsAt: '2030-01-12T20:00:00Z',
+      capacity: 4,
+    })]);
+    listEventRegistrations.mockReturnValueOnce(olderRegistrations);
+    const view = renderAdminDashboard();
+    await waitFor(() => expect(listEventRegistrations).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+    expectSummaryToBeHidden();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    const currentFirestore = { name: 'synthetic-firestore-newest-dashboard' };
+    listAllEvents.mockResolvedValueOnce([]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect((await screen.findByText('Overall')).parentElement)
+      .toHaveTextContent(/Total events\s*0/);
+
+    await act(async () => {
+      resolveOlderRegistrations([{ status: 'paid', amountCents: 4800 }]);
+      await olderRegistrations;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('Next event')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Overall').parentElement)
+      .toHaveTextContent(/Total events\s*0/);
+    expect(document.body).not.toHaveTextContent('Synthetic Older Run');
+    expect(document.body).not.toHaveTextContent('$48.00');
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('ignores an older hostile registration rejection after a newer success', async () => {
+    let rejectOlderRegistrations;
+    listAllEvents.mockResolvedValueOnce([adminEvent({
+      id: 'synthetic-older-event',
+      slug: 'synthetic-older-run',
+      title: 'Synthetic Older Run',
+      startsAt: '2030-01-12T20:00:00Z',
+    })]);
+    listEventRegistrations.mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectOlderRegistrations = reject;
+    }));
+    const view = renderAdminDashboard();
+    await waitFor(() => expect(listEventRegistrations).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-firestore-latest-dashboard' };
+    listAllEvents.mockResolvedValueOnce([]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect((await screen.findByText('Overall')).parentElement)
+      .toHaveTextContent(/Total events\s*0/);
+
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-summary-older-message-getter-canary');
+    });
+    await act(async () => {
+      rejectOlderRegistrations(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Overall').parentElement)
+      .toHaveTextContent(/Total events\s*0/);
+    expect(document.body).not.toHaveTextContent(
+      'admin-summary-older-message-getter-canary',
+    );
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('does not start a registration lookup after the dashboard unmounts', async () => {
+    let resolveLookup;
+    const pendingLookup = new Promise((resolve) => {
+      resolveLookup = resolve;
+    });
+    listAllEvents.mockReturnValueOnce(pendingLookup);
+    const view = renderAdminDashboard();
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+    view.unmount();
+
+    await act(async () => {
+      resolveLookup([adminEvent({
+        id: 'synthetic-unmounted-event',
+        slug: 'synthetic-unmounted-run',
+        title: 'Synthetic Unmounted Run',
+        startsAt: '2030-01-12T20:00:00Z',
+      })]);
+      await pendingLookup;
+      await Promise.resolve();
+    });
+
+    expect(listEventRegistrations).not.toHaveBeenCalled();
   });
 });
 

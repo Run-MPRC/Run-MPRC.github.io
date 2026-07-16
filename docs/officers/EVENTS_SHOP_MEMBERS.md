@@ -1101,6 +1101,57 @@ Officer review steps after the source merge:
 
 No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected failure display.
 
+### Admin dashboard summary load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one plain result when the Admin dashboard cannot load a complete summary. The page must not show a private technical detail, a false zero, a partial money total, or figures from an older request.
+
+**Approver:** events lead plus platform/security and privacy owners. The treasurer must also approve any future live review of registration or gross-payment figures.
+
+**Prerequisites:** issue [#297](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/297) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up events and registrations, and mocked lookup results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. This slice does not approve the dashboard, role, permissions, backup, preview, rollback, event source, publication, registration, payment, or production use. It does not deploy Firebase, change Rules or records, contact Stripe or another provider, use production data, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Made-up Admin dashboard"] --> B["Mocked event-list lookup"]
+    B -- "Rejected" --> F["Fixed alert; no summary"]
+    B -- "Fulfilled; no next event" --> C["Complete overall totals"]
+    B -- "Fulfilled; next event" --> D["Mocked registration lookup"]
+    D -- "Rejected" --> F
+    D -- "Fulfilled" --> E["Complete overall and next-event summary"]
+    G["Obsolete result"] -. "Ignored" .-> H["No display change"]
+```
+
+Text alternative: only the active event lookup and, when needed, its registration lookup may show complete figures. Either rejection shows the same fixed alert with no summary. An obsolete result changes nothing.
+
+Officer review steps after the source merge:
+
+1. Keep this failure sentence and the complete Admin dashboard marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #297 issue, reviewed pull request, merge commit, and synthetic test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, made-up events and registrations, and mocked results.
+4. Confirm a mocked event-list or registration rejection shows exactly `We could not load the admin summary right now. Please try again later.`
+5. Confirm assistive technology receives the whole sentence immediately as one alert.
+6. Confirm the complete rejected value is not inspected, logged, measured, stored, sent to analytics, or displayed.
+7. Confirm loading and failure show no **Next event**, **Overall**, **Total events**, **Upcoming**, **Drafts**, registration counts, gross amount, or capacity figure.
+8. Confirm an older event or registration result cannot replace the current dashboard after its database reference changes or the page closes.
+9. Confirm a successful empty event list shows the existing complete zero totals and starts no registration lookup.
+10. Confirm a complete made-up success keeps the earliest eligible event, existing counts, gross amount, capacity calculation, date, location, and signup links.
+11. Confirm the **Admin** heading and **Manage** navigation remain during loading and failure. Do not follow the links.
+12. Confirm the mocked lookups receive only the active mocked database reference and selected made-up event ID.
+13. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider, event or registration records, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** the reviewed source commits a summary only after every lookup needed for that summary succeeds. Loading and either lookup failure show no summary figures. A failure uses one fixed accessible sentence and no rejected detail. Older results are inert. Successful empty and complete made-up results keep the existing selection, counts, gross amount, capacity, date, location, and navigation. These mocked figures prove only the display calculation; they do not prove a registration, payment, refund, provider record, or live total. This does not authorize an officer to open or use the Admin dashboard live.
+
+**Stop conditions:** any real officer, member, event, registration, runner, contact detail, waiver, price, gross amount, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a zero, partial, or stale summary during loading or failure; an attempted Admin action; a Firebase, Rules, provider, permission, source, or record change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or dashboard is live.
+
+**Success proof:** for source completion, record the exact #297 issue, reviewed pull request, merged commit, eight intended old-source failures, eleven green synthetic dashboard tests, relevant full checks, and independent privacy, accessibility, lifecycle, money-display, and officer-continuity reviews. The safe review stops at source and mocked tests because the Admin dashboard is not approved for officer use. Live availability requires a later separately approved Admin-screen release and dated exact-revision verification after every prerequisite above is complete. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, event or registration changes, production-data actions, payments, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After any later approved publication, use the same protected website release path and verify the replacement revision. Do not undo by changing or deleting an event, registration, payment, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** events lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, Firebase, provider, account, event, registration, runner, endpoint, token-shaped, or technical detail appeared. Add the treasurer if a count, gross amount, refund, registration, or payment state might be wrong. Do not copy private details into an issue, message, screenshot, email, or AI tool.
+
+No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only complete-summary display and current-request behavior.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.
