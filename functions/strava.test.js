@@ -37,9 +37,10 @@ jest.mock('firebase-admin', () => {
       },
       get: async () => {
         reads.push(path);
+        const exists = documents.has(path);
         const data = documents.get(path);
         return {
-          exists: data !== undefined,
+          exists,
           data: () => data,
         };
       },
@@ -909,6 +910,9 @@ describe('Strava authorization exchange failure boundary', () => {
 describe('Strava token refresh failure boundary', () => {
   let fetchMock;
   let consoleSpies;
+  let dateNowSpy;
+
+  const NOW_SECONDS = 1_800_000_000;
 
   const CONNECTION = Object.freeze({
     provider: 'strava',
@@ -934,6 +938,7 @@ describe('Strava token refresh failure boundary', () => {
     admin.__clearWrites();
     Timestamp.now.mockClear();
     requireAppCheck.mockReset();
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(NOW_SECONDS * 1000);
     fetchMock = jest.fn();
     global.fetch = fetchMock;
     consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
@@ -942,6 +947,7 @@ describe('Strava token refresh failure boundary', () => {
 
   afterEach(() => {
     global.fetch = GUARDED_FETCH;
+    dateNowSpy.mockRestore();
     consoleSpies.forEach((spy) => spy.mockRestore());
     delete process.env.STRAVA_CLIENT_ID;
     delete process.env.STRAVA_CLIENT_SECRET;
@@ -950,6 +956,20 @@ describe('Strava token refresh failure boundary', () => {
   function seedExpiredConnection() {
     admin.__setDocument(CONNECTION_PATH, CONNECTION);
     admin.__setDocument(SECRET_PATH, EXPIRED_SECRET);
+  }
+
+  function validStoredSecret() {
+    return {
+      access_token: 'stored_access_token_test',
+      refresh_token: 'stored_refresh_token_test',
+      expires_at: NOW_SECONDS + 61,
+      scope: 'read',
+    };
+  }
+
+  function seedStoredSecret(secret) {
+    admin.__setDocument(CONNECTION_PATH, CONNECTION);
+    admin.__setDocument(SECRET_PATH, secret);
   }
 
   function expectNoWritesOrLogs() {
@@ -993,6 +1013,22 @@ describe('Strava token refresh failure boundary', () => {
     return refreshJson;
   }
 
+  function mockValidStatsFlow() {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue([]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          ytd_run_totals: { distance: 0, count: 0 },
+          ytd_ride_totals: { distance: 0, count: 0 },
+          all_run_totals: { distance: 0, count: 0 },
+        }),
+      });
+  }
+
   async function expectInvalidSuccessfulRefresh(response) {
     seedExpiredConnection();
     const json = mockRefreshResponse(response);
@@ -1021,6 +1057,26 @@ describe('Strava token refresh failure boundary', () => {
     );
     expect(json).toHaveBeenCalledTimes(1);
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
+  }
+
+  async function expectInvalidStoredSecret(secret) {
+    seedStoredSecret(secret);
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/stored-secret-canary|provider-secret-canary/i);
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expect(dateNowSpy).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
     expectNoWritesOrLogs();
   }
 
@@ -1148,6 +1204,434 @@ describe('Strava token refresh failure boundary', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
+  });
+
+  describe('stored token validation before refresh or bearer use', () => {
+    class StoredSecretClass {
+      constructor() {
+        Object.assign(this, validStoredSecret());
+      }
+    }
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a boolean', true],
+      ['a number', 1],
+      ['a string', 'stored-secret-canary'],
+      ['a bigint', 1n],
+      ['a symbol', Symbol('stored-secret-canary')],
+      ['a function', () => validStoredSecret()],
+      ['an array', []],
+      ['a null-prototype record', Object.create(null)],
+      ['a custom-prototype record', Object.create({ inherited: true })],
+      ['a Date', new Date(0)],
+      ['a class instance', new StoredSecretClass()],
+    ])('rejects %s root before clock or provider access', async (_case, secret) => {
+      await expectInvalidStoredSecret(secret);
+    });
+
+    test('rejects a transparent root Proxy without invoking any trap', async () => {
+      const traps = {
+        get: jest.fn(() => {
+          throw new Error('stored-secret-canary root get trap');
+        }),
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('stored-secret-canary root descriptor trap');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('stored-secret-canary root prototype trap');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('stored-secret-canary root ownKeys trap');
+        }),
+      };
+      const secret = new Proxy(validStoredSecret(), traps);
+
+      await expectInvalidStoredSecret(secret);
+
+      Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('rejects a revoked root Proxy without reflection', async () => {
+      const { proxy, revoke } = Proxy.revocable(validStoredSecret(), {});
+      revoke();
+
+      await expectInvalidStoredSecret(proxy);
+    });
+
+    const invalidStoredTokenValues = [
+      ['missing', undefined, true],
+      ['own undefined', undefined, false],
+      ['null', null, false],
+      ['empty', '', false],
+      ['literal space', 'token canary', false],
+      ['control', 'token\ncanary', false],
+      ['non-ASCII', 'tökén', false],
+      ['oversized', 'x'.repeat(MAX_TOKEN_LENGTH + 1), false],
+      ['boxed', Object('boxed-token'), false],
+      ['structured', { token: 'structured' }, false],
+    ];
+
+    test.each(
+      ['access_token', 'refresh_token'].flatMap((field) => (
+        invalidStoredTokenValues.map(([kind, value, remove]) => [
+          field,
+          kind,
+          value,
+          remove,
+        ])
+      )),
+    )('rejects stored %s that is %s even on the branch that does not use it', async (
+      field,
+      _kind,
+      value,
+      remove,
+    ) => {
+      const secret = validStoredSecret();
+      secret.expires_at = field === 'access_token' ? 1 : NOW_SECONDS + 61;
+      if (remove) delete secret[field];
+      else secret[field] = value;
+
+      await expectInvalidStoredSecret(secret);
+    });
+
+    test.each([
+      ['access_token', NOW_SECONDS + 61],
+      ['refresh_token', 1],
+    ])('rejects malformed stored %s on its directly used branch', async (
+      field,
+      expiresAt,
+    ) => {
+      const secret = validStoredSecret();
+      secret[field] = { token: 'stored-secret-canary' };
+      secret.expires_at = expiresAt;
+
+      await expectInvalidStoredSecret(secret);
+    });
+
+    test.each([
+      ['missing', undefined, true],
+      ['own undefined', undefined, false],
+      ['null', null, false],
+      ['a string', String(NOW_SECONDS + 61), false],
+      ['zero', 0, false],
+      ['a negative integer', -1, false],
+      ['a fraction', 1.5, false],
+      ['positive infinity', Number.POSITIVE_INFINITY, false],
+      ['not-a-number', Number.NaN, false],
+      ['an unsafe integer', Number.MAX_SAFE_INTEGER + 1, false],
+      ['a bigint', BigInt(NOW_SECONDS + 61), false],
+      ['a symbol', Symbol('stored-secret-canary'), false],
+      ['a boxed number', Object(NOW_SECONDS + 61), false],
+    ])('rejects stored expires_at that is %s without coercion', async (
+      _case,
+      value,
+      remove,
+    ) => {
+      const secret = validStoredSecret();
+      if (remove) delete secret.expires_at;
+      else secret.expires_at = value;
+
+      await expectInvalidStoredSecret(secret);
+    });
+
+    test.each([
+      ['access_token', 1],
+      ['refresh_token', NOW_SECONDS + 61],
+      ['expires_at', NOW_SECONDS + 61],
+    ])('does not invoke a selected stored %s accessor', async (field, expiresAt) => {
+      const secret = validStoredSecret();
+      secret.expires_at = expiresAt;
+      const selectedValue = secret[field];
+      const getter = jest.fn(() => selectedValue);
+      Object.defineProperty(secret, field, {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectInvalidStoredSecret(secret);
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['access_token', 'stored_access_token_test', 1],
+      ['refresh_token', 'stored_refresh_token_test', NOW_SECONDS + 61],
+      ['expires_at', NOW_SECONDS + 61, NOW_SECONDS + 61],
+    ])('does not consult an inherited stored %s value', async (
+      field,
+      inheritedValue,
+      expiresAt,
+    ) => {
+      const secret = validStoredSecret();
+      secret.expires_at = expiresAt;
+      delete secret[field];
+      const inheritedGetter = jest.fn(() => inheritedValue);
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectInvalidStoredSecret(secret);
+      } finally {
+        delete Object.prototype[field];
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['access_token', 1],
+      ['refresh_token', NOW_SECONDS + 61],
+      ['expires_at', NOW_SECONDS + 61],
+    ])('does not invoke stored %s coercion or JSON hooks', async (field, expiresAt) => {
+      const hooks = {
+        toJSON: jest.fn(() => 'stored-secret-canary'),
+        toString: jest.fn(() => 'stored-secret-canary'),
+        valueOf: jest.fn(() => NOW_SECONDS + 61),
+        [Symbol.toPrimitive]: jest.fn(() => NOW_SECONDS + 61),
+      };
+      const secret = validStoredSecret();
+      secret[field] = hooks;
+      secret.expires_at = field === 'expires_at' ? hooks : expiresAt;
+
+      await expectInvalidStoredSecret(secret);
+
+      expect(hooks.toJSON).not.toHaveBeenCalled();
+      expect(hooks.toString).not.toHaveBeenCalled();
+      expect(hooks.valueOf).not.toHaveBeenCalled();
+      expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test('ignores unknown stored getters and writes only refreshed credentials', async () => {
+      const secret = validStoredSecret();
+      secret.expires_at = 1;
+      const unknownGetters = [
+        ['scope', 'read'],
+        ['updatedAt', { _seconds: 1 }],
+        ['then', undefined],
+        ['toJSON', () => ({ access_token: 'stored-secret-canary' })],
+        ['provider_debug', 'stored-secret-canary'],
+      ].map(([field, value]) => {
+        const getter = jest.fn(() => value);
+        Object.defineProperty(secret, field, {
+          configurable: true,
+          enumerable: true,
+          get: getter,
+        });
+        return getter;
+      });
+      const symbolGetter = jest.fn(() => 'stored-secret-canary');
+      Object.defineProperty(secret, Symbol('unknown'), {
+        configurable: true,
+        enumerable: true,
+        get: symbolGetter,
+      });
+      seedStoredSecret(secret);
+      mockValidRefreshFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      unknownGetters.forEach((getter) => expect(getter).not.toHaveBeenCalled());
+      expect(symbolGetter).not.toHaveBeenCalled();
+      expect(admin.__getWrites()).toEqual([{
+        path: SECRET_PATH,
+        data: {
+          access_token: 'refreshed_access_token_test',
+          refresh_token: 'refreshed_refresh_token_test',
+          expires_at: 1_900_000_000,
+          updatedAt: expect.any(Object),
+        },
+        options: { merge: true },
+      }]);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('refreshes at exactly 60 seconds using only the validated refresh token', async () => {
+      const secret = validStoredSecret();
+      secret.expires_at = NOW_SECONDS + 60;
+      seedStoredSecret(secret);
+      mockValidRefreshFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://www.strava.com/api/v3/oauth/token',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: 'strava_client_test',
+            client_secret: 'strava_secret_test',
+            refresh_token: 'stored_refresh_token_test',
+            grant_type: 'refresh_token',
+          }),
+        },
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+    });
+
+    test('uses the exact validated access token with 61 seconds remaining', async () => {
+      const secret = validStoredSecret();
+      seedStoredSecret(secret);
+      mockValidStatsFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      const headers = { Authorization: 'Bearer stored_access_token_test' };
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+        { headers },
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        'https://www.strava.com/api/v3/athletes/123456/stats',
+        { headers },
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('uses the fresh projection after the raw record mutates during clock access', async () => {
+      const secret = validStoredSecret();
+      seedStoredSecret(secret);
+      dateNowSpy.mockImplementationOnce(() => {
+        secret.access_token = 'mutated_access_token_test';
+        secret.refresh_token = 'mutated_refresh_token_test';
+        secret.expires_at = 1;
+        return NOW_SECONDS * 1000;
+      });
+      mockValidStatsFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      const headers = { Authorization: 'Bearer stored_access_token_test' };
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+        { headers },
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        'https://www.strava.com/api/v3/athletes/123456/stats',
+        { headers },
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('uses the refresh projection after the raw record mutates during clock access', async () => {
+      const secret = validStoredSecret();
+      secret.expires_at = NOW_SECONDS + 60;
+      seedStoredSecret(secret);
+      dateNowSpy.mockImplementationOnce(() => {
+        secret.access_token = 'mutated_access_token_test';
+        secret.refresh_token = 'mutated_refresh_token_test';
+        secret.expires_at = Number.MAX_SAFE_INTEGER;
+        return NOW_SECONDS * 1000;
+      });
+      mockValidRefreshFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://www.strava.com/api/v3/oauth/token',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: 'strava_client_test',
+            client_secret: 'strava_secret_test',
+            refresh_token: 'stored_refresh_token_test',
+            grant_type: 'refresh_token',
+          }),
+        },
+      );
+      expect(admin.__getWrites()).toEqual([{
+        path: SECRET_PATH,
+        data: {
+          access_token: 'refreshed_access_token_test',
+          refresh_token: 'refreshed_refresh_token_test',
+          expires_at: 1_900_000_000,
+          updatedAt: expect.any(Object),
+        },
+        options: { merge: true },
+      }]);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test.each([
+      ['minimum', 'a', 'b'],
+      ['maximum', 'a'.repeat(MAX_TOKEN_LENGTH), 'b'.repeat(MAX_TOKEN_LENGTH)],
+    ])('accepts exact stored %s token bounds byte-for-byte', async (
+      _case,
+      accessToken,
+      refreshToken,
+    ) => {
+      const secret = validStoredSecret();
+      secret.access_token = accessToken;
+      secret.refresh_token = refreshToken;
+      secret.expires_at = Number.MAX_SAFE_INTEGER;
+      seedStoredSecret(secret);
+      mockValidStatsFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(admin.__getWrites()).toEqual([]);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('accepts frozen and non-enumerable selected stored data descriptors', async () => {
+      const secret = validStoredSecret();
+      ['access_token', 'refresh_token', 'expires_at'].forEach((field) => {
+        Object.defineProperty(secret, field, {
+          configurable: false,
+          enumerable: false,
+          value: secret[field],
+          writable: false,
+        });
+      });
+      Object.freeze(secret);
+      seedStoredSecret(secret);
+      mockValidStatsFlow();
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+        { headers: { Authorization: 'Bearer stored_access_token_test' } },
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(admin.__getWrites()).toEqual([]);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
   });
 
   describe('successful refresh response validation', () => {
@@ -1458,8 +1942,8 @@ describe('Strava token refresh failure boundary', () => {
         access_token: 'refreshed_access_token_test',
         refresh_token: 'synthetic_refresh_token_test',
         expires_at: 1_900_000_000,
-        scope: 'read',
       });
+      expect(admin.__getWrites()[0].data).not.toHaveProperty('scope');
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(Timestamp.now).toHaveBeenCalledTimes(1);
       consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
@@ -1560,7 +2044,6 @@ describe('Strava token refresh failure boundary', () => {
         access_token: 'refreshed_access_token_test',
         refresh_token: 'refreshed_refresh_token_test',
         expires_at: 1_900_000_000,
-        scope: 'read',
         updatedAt: expect.any(Object),
       },
       options: { merge: true },
