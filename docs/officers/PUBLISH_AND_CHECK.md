@@ -159,6 +159,34 @@ Do not use this section until #133 records that both GitHub environments are pro
 9. Use made-up data only. Do not inspect or change a real member record.
 10. Complete the delivery record.
 
+### Check keyboard focus after an approved website publication — NOT AVAILABLE YET
+
+**Purpose:** prove that a person using a keyboard can see which public link, button, or navigation control is active.
+
+**Approver:** the named release observer, with the platform owner or accessibility reviewer available if the check fails.
+
+**Prerequisites:** protected website publication must be available; the exact approved commit must be live and identified by the host; the public site must be safe to open without signing in; and the observer must use a normal computer with a keyboard. Publication is still **NOT AVAILABLE YET** under #133/#136, so do not record live proof from this procedure until those prerequisites are met.
+
+1. Open the public website in a private browser window.
+2. Confirm the host identifies the exact approved commit.
+3. Stay signed out. Do not submit a form or enter member, payment, or private data.
+4. Press `Tab` once. Confirm the skip link appears with a visible yellow-and-dark focus ring.
+5. Continue pressing `Tab` through the public navigation and one public page action.
+6. Open the public Events page and repeat the keyboard check without registering.
+7. Open the public Shop page and repeat the keyboard check without starting checkout.
+8. Press `Shift` and `Tab` together to confirm the focus ring remains visible when moving backward.
+9. Record the exact commit, public pages, browser, date, time, and one redacted public screenshot.
+
+**Expected result:** every focused public link, button, and navigation control has a clearly visible yellow-and-dark ring; the ring is not clipped; focus moves in a sensible order; and keyboard movement does not open, submit, or change anything by itself. A mouse-only click does not need to show the same ring.
+
+**Stop conditions:** stop if the exact live commit is unknown, the ring is missing or hard to distinguish, the ring is clipped, focus moves to an invisible control, focus becomes trapped, the page changes without activation, or the check asks for sign-in or real data.
+
+**Success proof:** keep the exact commit and host readback, the named public pages, browser, check time, and one redacted screenshot that contains no member or payment data.
+
+**Undo:** do not edit live CSS or provider files by hand. Open a small tracked issue and reviewed pull request to revert or safely correct the focus rule, then use the same protected publication path. Record the exact undo commit.
+
+**Escalation:** platform owner first, then the accessibility reviewer or backup release officer. Treat an unexpected live publication as a hosting incident.
+
 ## Expected result
 
 Merge, release approval, Firebase deployment, backend verification, Pages publication, Netlify publication, `runmprc.com`, and provider verification are recorded as separate states. A backend failure or missing authority leaves the website unpublished.
