@@ -9,7 +9,11 @@ import {
 } from '@testing-library/react';
 import { resolvePath } from 'react-router-dom';
 import { useServiceLocator } from './services/ServiceLocatorContext';
-import { listMemberEvents, listPublicEvents } from './services/events/eventsService';
+import {
+  getEventBySlug,
+  listMemberEvents,
+  listPublicEvents,
+} from './services/events/eventsService';
 import { getProductBySlug, listActiveProducts } from './services/shop/shopService';
 import App from './App';
 
@@ -36,6 +40,7 @@ jest.mock('./services/events/eventsService', () => {
   const actual = jest.requireActual('./services/events/eventsService');
   return {
     ...actual,
+    getEventBySlug: jest.fn(),
     listMemberEvents: jest.fn(),
     listPublicEvents: jest.fn(),
   };
@@ -59,6 +64,7 @@ beforeEach(() => {
   useServiceLocator.mockReturnValue({ services: null, isReady: false });
   getProductBySlug.mockReset();
   listActiveProducts.mockReset();
+  getEventBySlug.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
 });
@@ -149,6 +155,7 @@ const SHOP_LOAD_FAILURE = 'We could not load the shop right now. Please try agai
 const PRODUCT_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please try again later.';
 const EVENTS_CALENDAR_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
+const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const firestore = { name: 'synthetic-firestore' };
 
 function renderPublicShop() {
@@ -168,6 +175,11 @@ function renderPublicEvents() {
 
 function renderPublicEventCalendar() {
   window.history.pushState({}, '', '/events/calendar');
+  return render(<App />);
+}
+
+function renderPublicEventDetail() {
+  window.history.pushState({}, '', '/events/synthetic-event');
   return render(<App />);
 }
 
@@ -427,6 +439,110 @@ describe('public Events-calendar failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(listPublicEvents).toHaveBeenCalledTimes(1);
     expect(listMemberEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe('public Event-detail load failure boundary', () => {
+  beforeEach(() => {
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected event details with one fixed accessible result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    getEventBySlug.mockRejectedValueOnce(Object.assign(
+      new Error('event-detail-provider-private-canary member@example.test'),
+      {
+        code: 'firestore/event-detail-provider-private-canary',
+        endpoint: 'https://provider.example.test/?token=event-detail-secret-canary',
+      },
+    ));
+
+    renderPublicEventDetail();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(EVENT_DETAIL_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /event-detail-provider-private-canary|member@example\.test|provider\.example|event-detail-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Event not found')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to events/ })).toHaveAttribute('href', '/events');
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile event-detail rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('event-detail-message-getter-canary');
+    });
+    getEventBySlug.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderPublicEventDetail();
+
+    expect((await screen.findByRole('alert')).textContent).toBe(EVENT_DETAIL_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('event-detail-message-getter-canary');
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves the existing missing-event result', async () => {
+    renderPublicEventDetail();
+
+    expect(await screen.findByText('Event not found')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to events/ })).toHaveAttribute('href', '/events');
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the existing successful event projection and registration link', async () => {
+    getEventBySlug.mockResolvedValueOnce({
+      id: 'synthetic-event',
+      slug: 'synthetic-event',
+      title: 'Synthetic Club Event',
+      description: 'A made-up event used only for this test.',
+      startAt: { toDate: () => new Date('2030-01-12T16:00:00Z') },
+      location: 'Made-up Park',
+      capacity: null,
+      registeredCount: 0,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 1000, nonMemberCents: 1500 },
+      resultsUrl: null,
+    });
+
+    renderPublicEventDetail();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Synthetic Club Event' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Made-up Park', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('$10.00')).toBeInTheDocument();
+    expect(screen.getByText('$15.00')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' }))
+      .toHaveAttribute('href', '/events/synthetic-event/register');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
   });
 });
 

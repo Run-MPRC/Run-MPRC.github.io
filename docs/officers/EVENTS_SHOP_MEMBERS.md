@@ -634,6 +634,41 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Public event-detail load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give a visitor to one public event page a plain next step when that event cannot load, without showing a database, provider, account, endpoint, or technical error.
+
+**Approver:** events lead plus platform/security owner.
+
+**Prerequisites:** issue [#262](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/262) must be merged for source review. Calling the sentence live also requires a protected website publication and an exact revision check on the affected `runmprc.com/events/...` page. This source change does not choose the canonical event source, schema, importer, or publication workflow reserved to #121; repair the separate stale or out-of-order event lookup lifecycle; deploy Firebase; change database permissions; contact an outside provider; change event records; use production data; or prove live behavior. It also leaves the separate commerce-result work in #249 unchanged.
+
+Officer review steps after the source merge:
+
+1. Keep the public event-detail failure sentence marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #262 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up event, mocked event lookup, and mocked database reference.
+4. Confirm a made-up lookup rejection shows exactly `We could not load this event right now. Please try again later.` in one alert that assistive technology reads immediately as a complete sentence.
+5. Confirm the loading sentence stops and the **Back to events** link remains available.
+6. Confirm no made-up database, provider, account, endpoint, or technical detail appears on the page or in browser console output.
+7. Confirm a hostile rejected value is not inspected.
+8. Confirm a genuinely missing made-up event still shows the existing not-found result.
+9. Confirm a successful made-up event still shows its existing public details and registration link.
+10. Record website publication, the exact `runmprc.com` event page, Firebase, provider, event-record, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** the reviewed source uses one fixed retry-later sentence for a rejected event lookup. It announces the complete sentence immediately as one alert and does not inspect, display, or log the rejected value. Loading ends and the Back to events link remains, while missing and successful event results keep their existing displays. This source slice does not approve an event source, schema, importer, or publication workflow; those owner decisions remain under #121. It does not repair stale or out-of-order lookups or change the separate #249 commerce-result work.
+
+**Stop conditions:** any real member, registration, event record, private location, discount, payment, waiver, or contact data; a request for a database or provider error, account detail, private endpoint, or screenshot containing private values; a production Firebase or provider change; a raw detail on the page or in the console; an attempt to force a production failure; an attempt to decide #121 work, repair the separate lookup-lifecycle defect, or edit #249 work in this slice; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live.
+
+**Success proof:** for source completion, record the exact #262 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic tests, relevant full checks, and independent privacy review. For live availability, separately record the approved website publication, published revision, and a dated check of the affected `runmprc.com` event page without forcing an error, starting registration, or opening private event data. Record Firebase deployment, database-permission changes, provider configuration, event-record changes, and production-data actions as **not performed** for this frontend-only change. The failure path remains synthetic-test evidence unless an approved isolated staging check proves it.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on the affected `runmprc.com` event page. Do not undo by changing an event, member account, registration, database record, permission, source document, or provider setting.
+
+**Escalation:** events lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, provider, account, endpoint, or technical detail appeared. Do not copy the detail into an issue, message, screenshot, email, or AI tool. A specialist still owns any stale or out-of-order lookup repair.
+
+No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.

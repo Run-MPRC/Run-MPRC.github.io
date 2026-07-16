@@ -41,14 +41,14 @@ function EventDetail() {
         if (!e) setError('Event not found');
         else track(analyticsEvents.eventView, { slug: e.slug, title: e.title });
       })
-      .catch((err) => { setError(err.message); setLoading(false); });
+      .catch(() => { setError('We could not load this event right now. Please try again later.'); setLoading(false); });
   }, [services, isReady, slug]);
 
   if (loading) return <div className="container mx-auto p-6">Loading...</div>;
   if (error || !event) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-red-500">{error || 'Event not found.'}</p>
+        <p role="alert" aria-live="assertive" aria-atomic="true" className="text-red-500">{error || 'Event not found.'}</p>
         <Link to="/events" className="text-blue-600 hover:underline">
           ← Back to events
         </Link>
