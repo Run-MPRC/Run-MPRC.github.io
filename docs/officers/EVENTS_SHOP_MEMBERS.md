@@ -1324,6 +1324,63 @@ The existing form validation, create/update requests, save rejection text, save 
 
 No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the editor's current-lookup display behavior.
 
+### Admin Event registrations load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one clear stop instruction when the Admin Event registrations page cannot load one complete, current result. Loading, missing, failed, older, or closed-page requests must show no runner details, money totals, filters, table, export button, registration-action button, or open action window.
+
+**Approver:** event lead, treasurer, and platform/security and privacy owners.
+
+**Prerequisites:** issue [#315](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/315) must be merged for source review. Use only a made-up admin identity, mocked database references, a made-up event, made-up registrations, and mocked lookup results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. Issue [#121](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/121) still owns the approved event source. Issue [#116](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/116) still owns the future approved roster/export purpose and fields. This slice does not approve the screen, export, late add, comp, refund, substitute, cancel, note, role, permission, event source, backup, rollback, production data, or live use.
+
+```mermaid
+flowchart LR
+    A["Current made-up route, database, and ready state"] --> B["Mocked current event lookup"]
+    B -- "Pending" --> C["Loading; no registration result or action"]
+    B -- "Missing" --> D["Event not found; no registration lookup"]
+    B -- "Rejected" --> E["Fixed stop alert; no registration result or action"]
+    B -- "Resolved event" --> F["Mocked current registrations lookup"]
+    F -- "Pending" --> C
+    F -- "Rejected" --> E
+    F -- "Resolved empty or populated" --> G["Existing complete result and controls"]
+    H["Older or closed-page result"] -. "Ignored" .-> I["No display change"]
+```
+
+Text alternative: the current made-up event must resolve before the registration lookup starts. Only a complete current registration result may show the existing page. Pending work shows loading, a missing event shows **Event not found**, either rejection shows one fixed stop alert, and an older or closed-page result changes nothing.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Event registrations page marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #315 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, a made-up event, and made-up registrations.
+4. Confirm no test clicks **Export CSV** or submits a registration action.
+5. Confirm an event lookup starts first and a registration lookup starts only after that current event is found.
+6. Confirm loading shows no event detail, runner detail, money total, filter, table, export button, registration-action button, or action window.
+7. Confirm either mocked lookup rejection shows exactly `We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.`
+8. Confirm assistive technology receives the whole sentence immediately as one alert.
+9. Confirm the complete rejected value is not inspected, logged, measured, stored, sent to analytics, or displayed.
+10. Confirm a missing made-up event shows **Event not found**, starts no registration lookup, and shows no orphaned registration.
+11. Confirm a changed route, database connection, or ready state immediately removes the earlier runner details, filters, table, controls, and open action window.
+12. Confirm an older success or rejection and a result received after the page closes are ignored without inspecting their event, runner, or error fields.
+13. Confirm a later complete made-up result recovers with blank filters and only its own event and registration rows.
+14. Confirm a successful empty result keeps **No registrations** and exact zero totals, while a successful populated result keeps the existing totals, filtering, rows, and action entry points. Do not use those action entry points.
+15. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Rules or permission changes, provider configuration, event or registration records, export or action activity, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** only the fully resolved current mocked event-and-registration result can show event or runner details, money totals, filters, the table, export, registration actions, or action windows. Loading and either rejection show no old or partial result. A missing event stays separate and starts no registration lookup. The fixed rejection sentence contains no private or technical detail. Older and closed-page values are inert. Successful empty and populated made-up results keep their existing display behavior.
+
+The existing CSV request and file contents, late-add, comp, refund, substitute, cancel, note, prompts, action responses, raw action-error text, authorization, idempotency, reconciliation, and audit behavior are separate unfinished work. This slice does not make the Admin Event registrations page, export, or actions safe for officer use.
+
+**Stop conditions:** any real officer, runner, name, email address, phone, emergency contact, event, registration, waiver, price, gross amount, payment, refund, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a stale, partial, orphaned, or false-empty result; a visible export or action control during loading or failure; an export or registration action; a Firebase, Rules, permission, provider, source, event, or registration-record change; or a claim that source, tests, merge, preview, or a green workflow proves the page is live.
+
+**Success proof:** for source completion, record the exact #315 issue, reviewed pull request, merged commit, intended old-source failures, 23 green synthetic boundary tests, relevant full checks, and independent privacy, accessibility, lifecycle, and officer-continuity reviews. The safe review stops at source and mocked tests because the Admin screen is not approved for officer use. Live availability requires a separate approved release and dated exact-revision verification after authorization, export and action safety, idempotency, audit, backup, rollback, Firebase, and provider evidence are complete. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, event or registration changes, production-data actions, exports, payments, refunds, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by exporting, repeating an action, or changing or deleting an event, registration, payment, refund, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** event lead, treasurer, and platform/security owner. Add the privacy owner and use the private incident path if any runner, payment, provider, endpoint, token-shaped, or technical detail appeared, or if an export or registration action might have completed without a current readback. Do not copy private details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the current two-stage load result and display boundary.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.
