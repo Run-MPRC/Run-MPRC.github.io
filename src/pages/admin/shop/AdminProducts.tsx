@@ -6,6 +6,8 @@ import { useServiceLocator } from '../../../services/ServiceLocatorContext';
 import { Product } from '../../../types/shop';
 import { listAllProducts, formatPrice } from '../../../services/shop/shopService';
 
+const LOAD_FAILURE = 'We could not load products right now. Please try again later.';
+
 function StatusPill({ status }: { status: string }) {
   const m: Record<string, string> = {
     draft: 'bg-gray-200 text-gray-700',
@@ -26,7 +28,7 @@ function Inner() {
     if (!isReady || !services) return;
     listAllProducts(services.firebaseResources.firestore)
       .then((ps) => { setProducts(ps); setLoading(false); })
-      .catch((err) => { setError(err.message); setLoading(false); });
+      .catch(() => { setError(LOAD_FAILURE); setLoading(false); });
   }, [services, isReady]);
 
   return (
@@ -49,9 +51,13 @@ function Inner() {
         </div>
 
         {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {error && (
+          <p className="text-red-500" role="alert" aria-live="assertive" aria-atomic="true">
+            {error}
+          </p>
+        )}
 
-        {!loading && products.length === 0 && (
+        {!error && !loading && products.length === 0 && (
           <p className="text-gray-600">
             No products yet.
             {' '}
@@ -59,7 +65,7 @@ function Inner() {
             .
           </p>
         )}
-        {!loading && products.length > 0 && (
+        {!error && !loading && products.length > 0 && (
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b bg-gray-50">

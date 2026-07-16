@@ -16,10 +16,12 @@ import {
   listPublicEvents,
 } from './services/events/eventsService';
 import { events as analyticsEvents, track } from './services/analytics/analytics';
+import { useAuth } from './services/hooks/useAuth';
 import {
   createMerchCheckout,
   getProductBySlug,
   listActiveProducts,
+  listAllProducts,
 } from './services/shop/shopService';
 import App from './App';
 
@@ -40,6 +42,7 @@ jest.mock('./services/shop/shopService', () => {
     createMerchCheckout: jest.fn(),
     getProductBySlug: jest.fn(),
     listActiveProducts: jest.fn(),
+    listAllProducts: jest.fn(),
   };
 });
 
@@ -60,7 +63,7 @@ jest.mock('./services/analytics/analytics', () => {
 });
 
 jest.mock('./services/hooks/useAuth', () => ({
-  useAuth: () => ({
+  useAuth: jest.fn(() => ({
     user: null,
     isLoading: false,
     isAuthenticated: false,
@@ -69,7 +72,7 @@ jest.mock('./services/hooks/useAuth', () => ({
     signIn: jest.fn(),
     signOut: jest.fn(),
     register: jest.fn(),
-  }),
+  })),
 }));
 
 beforeEach(() => {
@@ -78,11 +81,23 @@ beforeEach(() => {
   createMerchCheckout.mockReset();
   getProductBySlug.mockReset();
   listActiveProducts.mockReset();
+  listAllProducts.mockReset();
   createCheckoutSession.mockReset();
   getEventBySlug.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
   track.mockReset();
+  useAuth.mockReset();
+  useAuth.mockReturnValue({
+    user: null,
+    isLoading: false,
+    isAuthenticated: false,
+    isMember: false,
+    isAdmin: false,
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+    register: jest.fn(),
+  });
 });
 
 afterEach(() => {
@@ -175,6 +190,7 @@ const EVENTS_CALENDAR_LOAD_FAILURE = 'We could not load events right now. Please
 const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
+const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Please try again later.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
@@ -205,6 +221,11 @@ function renderPublicEventDetail() {
 
 function renderPublicEventRegister() {
   window.history.pushState({}, '', '/events/synthetic-event/register');
+  return render(<App />);
+}
+
+function renderAdminProducts() {
+  window.history.pushState({}, '', '/admin/products');
   return render(<App />);
 }
 
@@ -1505,5 +1526,135 @@ describe('public Shop product-load failure boundary', () => {
     expect(screen.getByRole('button', { name: 'Buy — $30.00' })).toBeEnabled();
     expect(track).not.toHaveBeenCalled();
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});
+
+describe('Admin Products list-load failure boundary', () => {
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listAllProducts.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected list details with one fixed accessible unknown outcome', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listAllProducts.mockRejectedValueOnce(Object.assign(
+      new Error('admin-products-private-canary officer@example.test'),
+      {
+        code: 'firestore/admin-products-private-canary',
+        endpoint: 'https://provider.example.test/?token=admin-products-secret-canary',
+      },
+    ));
+
+    renderAdminProducts();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_PRODUCTS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /admin-products-private-canary|officer@example\.test|provider\.example|admin-products-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-products-private-canary|officer@example\.test|provider\.example|admin-products-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Create one' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Products' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute('href', '/admin/orders');
+    expect(screen.getByRole('link', { name: '+ New product' }))
+      .toHaveAttribute('href', '/admin/products/new');
+    expect(listAllProducts).toHaveBeenCalledWith(firestore);
+    expect(listAllProducts).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/admin/products');
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile list rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-products-message-getter-canary');
+    });
+    listAllProducts.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderAdminProducts();
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_PRODUCTS_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('admin-products-message-getter-canary');
+    expect(JSON.stringify(track.mock.calls)).not.toContain('admin-products-message-getter-canary');
+    expect(screen.queryByRole('link', { name: 'Create one' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Products' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute('href', '/admin/orders');
+    expect(screen.getByRole('link', { name: '+ New product' }))
+      .toHaveAttribute('href', '/admin/products/new');
+    expect(listAllProducts).toHaveBeenCalledWith(firestore);
+    expect(listAllProducts).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/admin/products');
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('preserves the existing successful empty-catalog result', async () => {
+    renderAdminProducts();
+
+    const emptyStateLink = await screen.findByRole('link', { name: 'Create one' });
+    expect(emptyStateLink).toHaveAttribute('href', '/admin/products/new');
+    expect(emptyStateLink.parentElement).toHaveTextContent('No products yet. Create one.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllProducts).toHaveBeenCalledWith(firestore);
+    expect(listAllProducts).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the existing successful product projection', async () => {
+    listAllProducts.mockResolvedValueOnce([{
+      id: 'synthetic-product',
+      slug: 'synthetic-club-shirt',
+      title: 'Synthetic Club Shirt',
+      description: 'A made-up product used only for this test.',
+      imageUrl: '',
+      priceCents: 2500,
+      status: 'active',
+      sizes: [],
+      colors: [],
+    }]);
+
+    renderAdminProducts();
+
+    expect(await screen.findByRole('link', { name: 'Synthetic Club Shirt' }))
+      .toHaveAttribute('href', '/admin/products/synthetic-club-shirt/edit');
+    expect(screen.getByText('$25.00')).toBeInTheDocument();
+    expect(screen.getByText('active')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Edit' }))
+      .toHaveAttribute('href', '/admin/products/synthetic-club-shirt/edit');
+    expect(screen.queryByRole('link', { name: 'Create one' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllProducts).toHaveBeenCalledWith(firestore);
+    expect(listAllProducts).toHaveBeenCalledTimes(1);
   });
 });
