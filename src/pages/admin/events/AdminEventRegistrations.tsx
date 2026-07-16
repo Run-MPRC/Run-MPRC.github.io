@@ -1,7 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect, useMemo, useRef, useState,
+} from 'react';
 import { Link, useParams } from 'react-router-dom';
 import SEO from '../../../components/SEO';
-import { useServiceLocator } from '../../../services/ServiceLocatorContext';
+import {
+  ServiceLocatorContextValue,
+  useServiceLocator,
+} from '../../../services/ServiceLocatorContext';
 import AdminGuard from '../AdminGuard';
 import { Event, Registration } from '../../../types/events';
 import { getEventBySlug, formatPrice, formatEventDate } from '../../../services/events/eventsService';
@@ -133,12 +138,30 @@ type ModalKind =
   | { kind: 'mark_comp' }
   | { kind: 'late_add' };
 
-function Inner() {
-  const { slug } = useParams<{ slug: string }>();
-  const { services, isReady } = useServiceLocator();
-  const [event, setEvent] = useState<Event | null>(null);
-  const [regs, setRegs] = useState<Registration[]>([]);
-  const [loading, setLoading] = useState(true);
+interface RegistrationsLoadOutcome {
+  firestore: unknown;
+  slug: string;
+  status: 'loading' | 'resolved' | 'missing' | 'unavailable';
+  event: Event | null;
+  registrations: Registration[];
+}
+
+const LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
+
+function Inner({
+  routeSlug,
+  services,
+  isReady,
+}: {
+  routeSlug?: string;
+  services: ServiceLocatorContextValue['services'];
+  isReady: boolean;
+}) {
+  const slug = routeSlug;
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
+  const [loadOutcome, setLoadOutcome] = useState<RegistrationsLoadOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -157,30 +180,104 @@ function Inner() {
     priceTier: 'nonMember' as 'member' | 'nonMember' | 'earlyBird',
     amountDollars: '',
   });
+  const requestSequence = useRef(0);
+  const mounted = useRef(true);
+  const currentFirestore = useRef(firestore);
+  const currentSlug = useRef(slug);
+  currentFirestore.current = firestore;
+  currentSlug.current = slug;
 
-  async function reload() {
-    if (!services || !slug) return;
-    const db = services.firebaseResources.firestore;
-    setLoading(true);
+  const currentOutcome = loadOutcome?.firestore === firestore
+    && loadOutcome.slug === slug
+    ? loadOutcome
+    : null;
+  const currentLoadStatus = currentOutcome?.status || 'loading';
+  const event = currentLoadStatus === 'resolved' ? currentOutcome?.event || null : null;
+  const regs = currentLoadStatus === 'resolved'
+    ? currentOutcome?.registrations || []
+    : [];
+
+  function isCurrentRequest(requestId: number, db: unknown, eventSlug: string) {
+    return mounted.current
+      && requestSequence.current === requestId
+      && currentFirestore.current === db
+      && currentSlug.current === eventSlug;
+  }
+
+  async function reload(resetContext = false) {
+    const db = firestore;
+    if (!db || !slug) return;
+    if (!mounted.current || currentFirestore.current !== db || currentSlug.current !== slug) {
+      return;
+    }
+
+    const requestId = requestSequence.current + 1;
+    requestSequence.current = requestId;
+    const outcomeKey = { firestore: db, slug };
+    setLoadOutcome({
+      ...outcomeKey,
+      status: 'loading',
+      event: null,
+      registrations: [],
+    });
+    setError(null);
+    if (resetContext) {
+      setModal(null);
+      setFilter('');
+      setStatusFilter('all');
+      setTypeFilter('all');
+      setRefundAmount('');
+      setNoteText('');
+      setRunnerDraft({ firstName: '', lastName: '', email: '' });
+      setPriceDraft({ priceTier: 'nonMember', amountDollars: '' });
+    }
+
     try {
-      const [ev, rs] = await Promise.all([
-        getEventBySlug(db, slug),
-        listRegistrationsForEvent(db, slug),
-      ]);
-      setEvent(ev);
-      setRegs(rs);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      const nextEvent = await getEventBySlug(db, slug);
+      if (!isCurrentRequest(requestId, db, slug)) return;
+      if (!nextEvent) {
+        setLoadOutcome({
+          ...outcomeKey,
+          status: 'missing',
+          event: null,
+          registrations: [],
+        });
+        return;
+      }
+
+      const nextRegistrations = await listRegistrationsForEvent(db, slug);
+      if (!isCurrentRequest(requestId, db, slug)) return;
+      setLoadOutcome({
+        ...outcomeKey,
+        status: 'resolved',
+        event: nextEvent,
+        registrations: nextRegistrations,
+      });
+    } catch {
+      if (!isCurrentRequest(requestId, db, slug)) return;
+      setLoadOutcome({
+        ...outcomeKey,
+        status: 'unavailable',
+        event: null,
+        registrations: [],
+      });
     }
   }
 
   useEffect(() => {
-    if (!isReady || !services || !slug) return;
-    reload();
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestSequence.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!firestore || !slug) return () => undefined;
+    reload(true);
+    return () => { requestSequence.current += 1; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [services, isReady, slug]);
+  }, [firestore, slug]);
 
   async function downloadCsv() {
     if (!services || !slug) return;
@@ -285,82 +382,99 @@ function Inner() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
-          <div className="border rounded p-3 bg-green-50">
-            <div className="text-xs text-gray-600">Paid registrations</div>
-            <div className="text-xl font-bold">{totals.paid}</div>
-          </div>
-          <div className="border rounded p-3 bg-gray-50">
-            <div className="text-xs text-gray-600">Refunds</div>
-            <div className="text-xl font-bold">{totals.refunded}</div>
-          </div>
-          <div className="border rounded p-3 bg-blue-50">
-            <div className="text-xs text-gray-600">Gross revenue</div>
-            <div className="text-xl font-bold">{formatPrice(totals.grossCents)}</div>
-          </div>
-          <div className="border rounded p-3 bg-amber-50">
-            <div className="text-xs text-gray-600">Refunded amount</div>
-            <div className="text-xl font-bold">{formatPrice(totals.refundedCents)}</div>
-          </div>
-        </div>
+        {currentLoadStatus === 'resolved' && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+              <div className="border rounded p-3 bg-green-50">
+                <div className="text-xs text-gray-600">Paid registrations</div>
+                <div className="text-xl font-bold">{totals.paid}</div>
+              </div>
+              <div className="border rounded p-3 bg-gray-50">
+                <div className="text-xs text-gray-600">Refunds</div>
+                <div className="text-xl font-bold">{totals.refunded}</div>
+              </div>
+              <div className="border rounded p-3 bg-blue-50">
+                <div className="text-xs text-gray-600">Gross revenue</div>
+                <div className="text-xl font-bold">{formatPrice(totals.grossCents)}</div>
+              </div>
+              <div className="border rounded p-3 bg-amber-50">
+                <div className="text-xs text-gray-600">Refunded amount</div>
+                <div className="text-xl font-bold">{formatPrice(totals.refundedCents)}</div>
+              </div>
+            </div>
 
-        <div className="flex gap-2 flex-wrap items-center my-3">
-          <input
-            className="border rounded px-3 py-2 flex-1 min-w-[200px]"
-            placeholder="Search by name or email..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            className="border rounded px-3 py-2"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All statuses</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="refunded">Refunded</option>
-            <option value="partially_refunded">Partial refund</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="comp">Comp</option>
-          </select>
-          <select
-            className="border rounded px-3 py-2"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-          >
-            <option value="all">Everyone</option>
-            <option value="participant">Participants</option>
-            <option value="volunteer">Volunteers</option>
-          </select>
-          <button
-            type="button"
-            onClick={() => openModal({ kind: 'late_add' })}
-            className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
-          >
-            + Late add
-          </button>
-          <button
-            type="button"
-            onClick={() => openModal({ kind: 'mark_comp' })}
-            className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-sm"
-          >
-            + Comp registration
-          </button>
-          <button
-            type="button"
-            onClick={downloadCsv}
-            disabled={exporting}
-            className="border px-3 py-2 rounded hover:bg-gray-50 disabled:opacity-50 text-sm"
-          >
-            {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
-        </div>
+            <div className="flex gap-2 flex-wrap items-center my-3">
+              <input
+                className="border rounded px-3 py-2 flex-1 min-w-[200px]"
+                placeholder="Search by name or email..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+              <select
+                className="border rounded px-3 py-2"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="refunded">Refunded</option>
+                <option value="partially_refunded">Partial refund</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="comp">Comp</option>
+              </select>
+              <select
+                className="border rounded px-3 py-2"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+              >
+                <option value="all">Everyone</option>
+                <option value="participant">Participants</option>
+                <option value="volunteer">Volunteers</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => openModal({ kind: 'late_add' })}
+                className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
+              >
+                + Late add
+              </button>
+              <button
+                type="button"
+                onClick={() => openModal({ kind: 'mark_comp' })}
+                className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-sm"
+              >
+                + Comp registration
+              </button>
+              <button
+                type="button"
+                onClick={downloadCsv}
+                disabled={exporting}
+                className="border px-3 py-2 rounded hover:bg-gray-50 disabled:opacity-50 text-sm"
+              >
+                {exporting ? 'Exporting...' : 'Export CSV'}
+              </button>
+            </div>
+          </>
+        )}
 
-        {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {currentLoadStatus === 'loading' && <p>Loading...</p>}
+        {currentLoadStatus === 'unavailable' && (
+          <p
+            className="text-red-500 text-sm"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {LOAD_FAILURE}
+          </p>
+        )}
+        {currentLoadStatus === 'missing' && <p>Event not found</p>}
+        {currentLoadStatus === 'resolved' && error && (
+          <p className="text-red-500 text-sm">{error}</p>
+        )}
 
-        {!loading && (
+        {currentLoadStatus === 'resolved' && (
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
@@ -449,7 +563,7 @@ function Inner() {
         )}
       </div>
 
-      {modal?.kind === 'refund_full' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'refund_full' && (
         <ActionModal
           title={`Refund full — ${modal.reg.runner?.email}`}
           submitLabel="Issue full refund"
@@ -467,7 +581,7 @@ function Inner() {
         </ActionModal>
       )}
 
-      {modal?.kind === 'refund_partial' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'refund_partial' && (
         <ActionModal
           title={`Partial refund — ${modal.reg.runner?.email}`}
           submitLabel="Issue partial refund"
@@ -502,7 +616,7 @@ function Inner() {
         </ActionModal>
       )}
 
-      {modal?.kind === 'cancel' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'cancel' && (
         <ActionModal
           title={`Cancel — ${modal.reg.runner?.email}`}
           submitLabel="Cancel registration"
@@ -524,7 +638,7 @@ function Inner() {
         </ActionModal>
       )}
 
-      {modal?.kind === 'substitute' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'substitute' && (
         <ActionModal
           title={`Substitute runner — was ${modal.reg.runner?.email}`}
           submitLabel="Substitute"
@@ -536,7 +650,7 @@ function Inner() {
         </ActionModal>
       )}
 
-      {modal?.kind === 'add_note' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'add_note' && (
         <ActionModal
           title="Add note"
           submitLabel="Add note"
@@ -553,7 +667,7 @@ function Inner() {
         </ActionModal>
       )}
 
-      {modal?.kind === 'mark_comp' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'mark_comp' && (
         <ActionModal
           title="Comp registration"
           submitLabel="Create comp"
@@ -568,7 +682,7 @@ function Inner() {
         </ActionModal>
       )}
 
-      {modal?.kind === 'late_add' && (
+      {currentLoadStatus === 'resolved' && modal?.kind === 'late_add' && (
         <ActionModal
           title="Late add (with Stripe Payment Link)"
           submitLabel="Create late registration"
@@ -624,10 +738,25 @@ function Inner() {
   );
 }
 
+function RegistrationsRoute() {
+  const { slug: routeSlug } = useParams<{ slug: string }>();
+  const locator = useServiceLocator();
+  const readinessKey = locator.isReady && locator.services ? 'ready' : 'not-ready';
+
+  return (
+    <Inner
+      key={`${routeSlug || 'missing'}:${readinessKey}`}
+      routeSlug={routeSlug}
+      services={locator.services}
+      isReady={locator.isReady}
+    />
+  );
+}
+
 function AdminEventRegistrations() {
   return (
     <AdminGuard>
-      <Inner />
+      <RegistrationsRoute />
     </AdminGuard>
   );
 }
