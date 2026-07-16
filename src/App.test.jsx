@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { resolvePath } from 'react-router-dom';
 import { useServiceLocator } from './services/ServiceLocatorContext';
@@ -19,6 +20,10 @@ import {
   listPublicEvents,
 } from './services/events/eventsService';
 import { listAllEvents } from './services/events/adminService';
+import {
+  listAllMembers,
+  setMemberRole,
+} from './services/account/adminMembersService';
 import { events as analyticsEvents, track } from './services/analytics/analytics';
 import { useAuth } from './services/hooks/useAuth';
 import {
@@ -74,6 +79,15 @@ jest.mock('./services/events/adminService', () => {
   };
 });
 
+jest.mock('./services/account/adminMembersService', () => {
+  const actual = jest.requireActual('./services/account/adminMembersService');
+  return {
+    ...actual,
+    listAllMembers: jest.fn(),
+    setMemberRole: jest.fn(),
+  };
+});
+
 jest.mock('./services/analytics/analytics', () => {
   const actual = jest.requireActual('./services/analytics/analytics');
   return { ...actual, track: jest.fn() };
@@ -107,6 +121,8 @@ beforeEach(() => {
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
   listAllEvents.mockReset();
+  listAllMembers.mockReset();
+  setMemberRole.mockReset();
   track.mockReset();
   useAuth.mockReset();
   useAuth.mockReturnValue({
@@ -216,6 +232,7 @@ const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right 
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const ADMIN_DASHBOARD_LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
 const ADMIN_ORDERS_LOAD_FAILURE = 'We could not load orders right now. Stop and contact the treasurer and platform owner before taking any order action.';
+const ADMIN_MEMBERS_LOAD_FAILURE = 'We could not load website accounts right now. Stop and contact the membership lead and platform owner before changing website access.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
@@ -271,6 +288,11 @@ function renderAdminDashboard() {
 
 function renderAdminOrders() {
   window.history.pushState({}, '', '/admin/orders');
+  return render(<App />);
+}
+
+function renderAdminMembers() {
+  window.history.pushState({}, '', '/admin/members');
   return render(<App />);
 }
 
@@ -3169,5 +3191,490 @@ describe('Admin Orders list-load failure boundary', () => {
     expect(messageGetter).not.toHaveBeenCalled();
     expect(track).not.toHaveBeenCalled();
     expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('Admin website-account role-list load failure boundary', () => {
+  function syntheticTimestamp(value) {
+    const date = new Date(value);
+    return { toDate: () => date };
+  }
+
+  function syntheticWebsiteAccount({
+    uid = 'synthetic-account',
+    email = `${uid}@example.test`,
+    fullName = 'Synthetic Website Account',
+    role = 'member',
+    emailVerified = true,
+    createdAt = '2030-01-12T20:00:00Z',
+  } = {}) {
+    return {
+      uid,
+      email,
+      fullName,
+      role,
+      emailVerified,
+      createdAt: syntheticTimestamp(createdAt),
+    };
+  }
+
+  function expectGenericAdminMembersShell() {
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Admin home/ }))
+      .toHaveAttribute('href', '/admin');
+    expect(window.location.pathname).toBe('/admin/members');
+  }
+
+  function expectWebsiteAccountResultsToBeHidden() {
+    [
+      'Admins',
+      'Members',
+      'Pending verification',
+      'Total',
+      'Admin website access',
+      'Member website access',
+      'Pending website verification',
+      'Total website accounts',
+    ].forEach((label) => {
+      const summaryLabels = screen.queryAllByText(label)
+        .filter((element) => element.tagName === 'DIV');
+      expect(summaryLabels).toHaveLength(0);
+    });
+    expect(screen.queryByPlaceholderText('Search by name or email...'))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('No members matched')).not.toBeInTheDocument();
+    expect(screen.queryByText('No website accounts matched')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', {
+      name: /^(admin|member|unverified)$/i,
+    })).toHaveLength(0);
+  }
+
+  function getWebsiteAccountSummaryTile(label) {
+    return screen.getByText(label).parentElement;
+  }
+
+  function spyOnBrowserConsole() {
+    return ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-current-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    listAllMembers.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    expect(setMemberRole).not.toHaveBeenCalled();
+    jest.restoreAllMocks();
+  });
+
+  test('hides every account-derived result and role control while the current read is pending', async () => {
+    listAllMembers.mockReturnValueOnce(new Promise(() => {}));
+
+    const view = renderAdminMembers();
+
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+    expectGenericAdminMembersShell();
+    expectWebsiteAccountResultsToBeHidden();
+    expect(listAllMembers).toHaveBeenCalledWith(firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  test('replaces an ordinary rejection with one fixed accessible stop result', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    listAllMembers.mockRejectedValueOnce(Object.assign(
+      new Error('admin-members-private-canary officer-private@example.test'),
+      {
+        code: 'firestore/admin-members-private-canary',
+        endpoint: 'https://provider.example.test/?token=admin-members-secret-canary',
+      },
+    ));
+
+    renderAdminMembers();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_MEMBERS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expectWebsiteAccountResultsToBeHidden();
+    expectGenericAdminMembersShell();
+    expect(document.body).not.toHaveTextContent(
+      /admin-members-private-canary|officer-private@example\.test|provider\.example|admin-members-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-members-private-canary|officer-private@example\.test|provider\.example|admin-members-secret-canary/i,
+    );
+    expect(track).not.toHaveBeenCalled();
+    expect(listAllMembers).toHaveBeenCalledWith(firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect, log, measure, or render a hostile rejected value', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const messageGetter = jest.fn(() => 'admin-members-message-getter-canary');
+    listAllMembers.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderAdminMembers();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_MEMBERS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('admin-members-message-getter-canary');
+    expect(JSON.stringify(track.mock.calls))
+      .not.toContain('admin-members-message-getter-canary');
+    expectWebsiteAccountResultsToBeHidden();
+    expectGenericAdminMembersShell();
+    expect(track).not.toHaveBeenCalled();
+    expect(listAllMembers).toHaveBeenCalledWith(firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('shows a genuine successful empty result with website-account labels', async () => {
+    renderAdminMembers();
+
+    expect(await screen.findByText('No website accounts matched')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Website accounts' }))
+      .toBeInTheDocument();
+    expect(getWebsiteAccountSummaryTile('Admin website access'))
+      .toHaveTextContent(/Admin website access\s*0/);
+    expect(getWebsiteAccountSummaryTile('Member website access'))
+      .toHaveTextContent(/Member website access\s*0/);
+    expect(getWebsiteAccountSummaryTile('Pending website verification'))
+      .toHaveTextContent(/Pending website verification\s*0/);
+    expect(getWebsiteAccountSummaryTile('Total website accounts'))
+      .toHaveTextContent(/Total website accounts\s*0/);
+    expect(screen.getByPlaceholderText('Search by name or email...')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveValue('all');
+    expect(screen.getByRole('option', { name: 'All website roles' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Website role' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Account created' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Change website role to...' }))
+      .toBeInTheDocument();
+    expect(screen.queryByText('Members')).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Role' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Joined' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      /paid annual membership|dues paid|member pricing|discount access/i,
+    );
+    expect(listAllMembers).toHaveBeenCalledWith(firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves populated projection, filtering, dates, and the self-demotion guard under truthful labels', async () => {
+    const currentAdmin = syntheticWebsiteAccount({
+      uid: 'synthetic-current-admin',
+      fullName: 'Synthetic Current Admin',
+      role: 'admin',
+      createdAt: '2030-01-12T20:00:00Z',
+    });
+    const otherAdmin = syntheticWebsiteAccount({
+      uid: 'synthetic-other-admin',
+      fullName: 'Synthetic Other Admin',
+      role: 'admin',
+      createdAt: '2030-02-13T20:00:00Z',
+    });
+    const memberAccount = syntheticWebsiteAccount({
+      uid: 'synthetic-member-account',
+      fullName: 'Synthetic Member Account',
+      role: 'member',
+      createdAt: '2030-03-14T20:00:00Z',
+    });
+    const unverifiedAccount = syntheticWebsiteAccount({
+      uid: 'synthetic-unverified-account',
+      fullName: 'Synthetic Unverified Account',
+      role: 'unverified',
+      emailVerified: false,
+      createdAt: '2030-04-15T20:00:00Z',
+    });
+    listAllMembers.mockResolvedValueOnce([
+      currentAdmin,
+      otherAdmin,
+      memberAccount,
+      unverifiedAccount,
+    ]);
+
+    renderAdminMembers();
+
+    expect(await screen.findByText('Synthetic Current Admin')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Website accounts' }))
+      .toBeInTheDocument();
+    expect(getWebsiteAccountSummaryTile('Admin website access'))
+      .toHaveTextContent(/Admin website access\s*2/);
+    expect(getWebsiteAccountSummaryTile('Member website access'))
+      .toHaveTextContent(/Member website access\s*1/);
+    expect(getWebsiteAccountSummaryTile('Pending website verification'))
+      .toHaveTextContent(/Pending website verification\s*1/);
+    expect(getWebsiteAccountSummaryTile('Total website accounts'))
+      .toHaveTextContent(/Total website accounts\s*4/);
+    expect(screen.getByRole('columnheader', { name: 'Website role' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Account created' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Change website role to...' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('synthetic-member-account@example.test')).toBeInTheDocument();
+    expect(screen.getByText(
+      memberAccount.createdAt.toDate().toLocaleDateString('en-US', {
+        year: 'numeric', month: 'short', day: 'numeric',
+      }),
+    )).toBeInTheDocument();
+    expect(screen.getAllByText('yes').length).toBeGreaterThan(0);
+    expect(screen.getByText('no')).toBeInTheDocument();
+
+    const selfRow = screen.getByText('synthetic-current-admin@example.test').closest('tr');
+    expect(selfRow).not.toBeNull();
+    expect(within(selfRow).getByRole('button', { name: 'member' })).toBeDisabled();
+    expect(within(selfRow).getByRole('button', { name: 'unverified' })).toBeDisabled();
+
+    const search = screen.getByPlaceholderText('Search by name or email...');
+    fireEvent.change(search, { target: { value: 'member account' } });
+    expect(screen.getByText('Synthetic Member Account')).toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Current Admin')).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: '' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'unverified' } });
+    expect(screen.getByText('Synthetic Unverified Account')).toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Member Account')).not.toBeInTheDocument();
+    expect(screen.queryByText('Members')).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Role' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Joined' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      /paid annual membership|dues paid|member pricing|discount access/i,
+    );
+    expect(listAllMembers).toHaveBeenCalledWith(firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not reload when only the services wrapper changes around the same Firestore object', async () => {
+    listAllMembers.mockResolvedValueOnce([syntheticWebsiteAccount()]);
+    const view = renderAdminMembers();
+    expect(await screen.findByText('Synthetic Website Account')).toBeInTheDocument();
+
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('Synthetic Website Account')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores an older success after a newer read for the same Firestore object', async () => {
+    let resolveOlderLookup;
+    listAllMembers.mockReturnValueOnce(new Promise((resolve) => {
+      resolveOlderLookup = resolve;
+    }));
+    const view = renderAdminMembers();
+    await waitFor(() => expect(listAllMembers).toHaveBeenCalledTimes(1));
+
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: false,
+    });
+    view.rerender(<App />);
+
+    listAllMembers.mockResolvedValueOnce([
+      syntheticWebsiteAccount({ fullName: 'Current Same-Database Account' }),
+    ]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    expect(await screen.findByText('Current Same-Database Account')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveOlderLookup([
+        syntheticWebsiteAccount({ fullName: 'Obsolete Same-Database Account' }),
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Current Same-Database Account')).toBeInTheDocument();
+    expect(screen.queryByText('Obsolete Same-Database Account')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllMembers).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllMembers).toHaveBeenNthCalledWith(2, firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(2);
+  });
+
+  test('hides earlier account truth during a current Firestore read, then shows current empty truth', async () => {
+    listAllMembers.mockResolvedValueOnce([syntheticWebsiteAccount()]);
+    const view = renderAdminMembers();
+    expect(await screen.findByText('Synthetic Website Account')).toBeInTheDocument();
+
+    let resolveCurrentLookup;
+    listAllMembers.mockReturnValueOnce(new Promise((resolve) => {
+      resolveCurrentLookup = resolve;
+    }));
+    const currentFirestore = { name: 'synthetic-members-firestore-current' };
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    await waitFor(() => expect(listAllMembers).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectWebsiteAccountResultsToBeHidden();
+    expect(screen.queryByText('Synthetic Website Account')).not.toBeInTheDocument();
+
+    await act(async () => { resolveCurrentLookup([]); });
+    expect(await screen.findByText('No website accounts matched')).toBeInTheDocument();
+    expect(getWebsiteAccountSummaryTile('Total website accounts'))
+      .toHaveTextContent(/Total website accounts\s*0/);
+    expect(listAllMembers).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllMembers).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('hides earlier account truth when the current Firestore read rejects', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    listAllMembers.mockResolvedValueOnce([syntheticWebsiteAccount()]);
+    const view = renderAdminMembers();
+    expect(await screen.findByText('Synthetic Website Account')).toBeInTheDocument();
+
+    const currentFirestore = { name: 'synthetic-members-firestore-failure' };
+    listAllMembers.mockRejectedValueOnce(
+      new Error('admin-members-transition-private-canary'),
+    );
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_MEMBERS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expectWebsiteAccountResultsToBeHidden();
+    expect(screen.queryByText('Synthetic Website Account')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('admin-members-transition-private-canary');
+    expect(track).not.toHaveBeenCalled();
+    expect(listAllMembers).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllMembers).toHaveBeenNthCalledWith(2, currentFirestore);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores an older success after a newer Firestore read resolves empty', async () => {
+    let resolveOlderLookup;
+    listAllMembers.mockReturnValueOnce(new Promise((resolve) => {
+      resolveOlderLookup = resolve;
+    }));
+    const view = renderAdminMembers();
+    await waitFor(() => expect(listAllMembers).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-members-firestore-newer-empty' };
+    listAllMembers.mockResolvedValueOnce([]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByText('No website accounts matched')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveOlderLookup([syntheticWebsiteAccount({ fullName: 'Obsolete Website Account' })]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('No website accounts matched')).toBeInTheDocument();
+    expect(screen.queryByText('Obsolete Website Account')).not.toBeInTheDocument();
+    expect(getWebsiteAccountSummaryTile('Total website accounts'))
+      .toHaveTextContent(/Total website accounts\s*0/);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllMembers).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllMembers).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('ignores an older hostile rejection after a newer Firestore read succeeds', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    let rejectOlderLookup;
+    listAllMembers.mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectOlderLookup = reject;
+    }));
+    const view = renderAdminMembers();
+    await waitFor(() => expect(listAllMembers).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-members-firestore-newer-success' };
+    listAllMembers.mockResolvedValueOnce([
+      syntheticWebsiteAccount({ fullName: 'Current Website Account' }),
+    ]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByText('Current Website Account')).toBeInTheDocument();
+
+    const messageGetter = jest.fn(() => 'obsolete-admin-members-private-canary');
+    await act(async () => {
+      rejectOlderLookup(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Current Website Account')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-admin-members-private-canary');
+    expect(track).not.toHaveBeenCalled();
+    expect(listAllMembers).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllMembers).toHaveBeenNthCalledWith(2, currentFirestore);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores a hostile rejection after the Admin website-account page unmounts', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    let rejectLookup;
+    listAllMembers.mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectLookup = reject;
+    }));
+    const view = renderAdminMembers();
+    await waitFor(() => expect(listAllMembers).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const messageGetter = jest.fn(() => 'unmounted-admin-members-private-canary');
+    await act(async () => {
+      rejectLookup(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });

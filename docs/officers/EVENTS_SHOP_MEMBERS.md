@@ -1206,6 +1206,64 @@ The existing Fulfill, Refund, and Cancel requests, prompts, action responses, ra
 
 No system-topology diagram changes for this source slice because page hierarchy, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected list-result display and current-request behavior.
 
+### Admin website-account role-list load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep an unknown website-account role list private and fail closed. The page must not show a raw technical detail, false zero role counts, old names or email addresses, or role-change controls from an earlier request. A website role is not proof of annual paid membership.
+
+**Approver:** membership lead plus identity/platform security and privacy owners. Add the treasurer before any future work that displays annual membership, dues, pricing, or discount eligibility.
+
+**Prerequisites:** issue [#307](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/307) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up website accounts, and mocked list results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. Issue [#116](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/116) remains the separate future owner of the authoritative current-membership roster and CSV export. This slice does not approve the screen or role changes, implement a roster or export, deploy Firebase, change an account or membership, use production data, or prove live behavior.
+
+Before #307, the source could show raw load errors, false zero counts, old account details, and broad labels that could be mistaken for membership. A merged source fix and green tests do not publish the website. A website publication does not prove Firebase, permissions, account records, annual membership, dues, pricing, discounts, or role-action safety.
+
+```mermaid
+flowchart LR
+    A["Made-up Admin website-account route"] --> B["Current mocked account-role lookup"]
+    B -- "Pending" --> C["Loading; no role counts, account details, or role buttons"]
+    B -- "Rejected" --> D["Fixed stop alert; no role counts, account details, or role buttons"]
+    B -- "Fulfilled empty" --> E["Zero website-account role counts"]
+    B -- "Fulfilled with accounts" --> F["Website-account roles and access controls"]
+    F -. "Not membership proof" .-> G["Annual paid-membership roster — #116 NOT AVAILABLE YET"]
+    H["Obsolete result"] -. "Ignored" .-> I["No display change"]
+```
+
+Text alternative: only the current successful mocked lookup may show website-account roles. Loading, rejection, and obsolete results show no account-derived content. Website roles, account dates, and email verification never prove annual paid membership; the future #116 roster is separate.
+
+Officer review steps after the source merge:
+
+1. Keep the Admin website-account screen and the #116 membership roster marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #307 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, and made-up website accounts.
+4. Confirm no test clicks a role-change button or calls the role-change service.
+5. Confirm loading and failure show no role counts, filters, names, email addresses, dates, verification state, rows, or role buttons.
+6. Confirm a mocked rejection shows exactly `We could not load website accounts right now. Stop and contact the membership lead and platform owner before changing website access.`
+7. Confirm assistive technology receives the whole sentence immediately as one alert.
+8. Confirm the rejected value is not inspected, logged, measured, stored, sent to analytics, or displayed.
+9. Confirm an older success or failure cannot replace the current result after the database reference changes or the page closes.
+10. Confirm a successful mocked empty list shows only zero website-account role counts and no matching website accounts.
+11. Confirm a successful made-up list uses `Website accounts`, `Website role`, and `Account created` labels while preserving the existing account-access display.
+12. Confirm the `member` website role is never described as current, paid, or annual club membership.
+13. Confirm account creation and email verification are never described as membership or dues evidence.
+14. Confirm the #116 roster view and CSV export remain unavailable and no roster file is created.
+15. Confirm the page heading and **Admin home** link remain during loading and failure. Do not follow the link.
+16. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, permissions, account records, membership records, provider configuration, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** only a current successful mocked lookup shows website-account roles. Loading and rejection show one private fail-closed state with no false zero, stale account information, or role button. Successful results describe website access and account creation only. They do not display or infer annual membership, dues, eligibility, member pricing, discounts, or roster status. This does not authorize an officer to open the screen or change a role live.
+
+The existing role-change request, raw action-error text, authorization, audit, replay protection, and account-recovery behavior remain separate unfinished work. This slice does not make the Admin website-account screen or its role actions safe. Issue #116 remains responsible for the future server-authoritative membership roster and export.
+
+**Stop conditions:** any real account, member, name, email address, payment, dues record, membership record, provider record, credential, or production data; an attempted role change; a request to infer membership from a role, account date, or email verification; a Firebase, permission, provider, account, or membership-record change; or a claim that source, tests, merge, preview, or a green workflow proves the screen or roster is live.
+
+**Success proof:** for source completion, record the exact #307 issue, reviewed pull request, merged commit, recorded old-source failures, green synthetic tests, relevant full checks, and independent privacy, identity, membership-truth, lifecycle, and officer-continuity reviews. The safe review stops at source and mocked tests because the Admin screen is not approved for officer use. Live availability requires a separate approved release and exact-revision verification after authorization, role-action safety, audit, backup, rollback, and Firebase evidence are complete. The #116 roster additionally requires its own policy, server authority, scoped capability, field approval, deployment, audit, export, and backup-officer proof. Record website publication, `runmprc.com`, Firebase deployment, permission changes, provider configuration, account or membership changes, roster/export activity, production-data actions, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by changing a website role, membership, dues record, account, permission, database record, or provider setting.
+
+**Escalation:** membership lead plus identity/platform security owner. Add the privacy owner if account details appeared. Add the treasurer if anyone inferred paid membership, dues, pricing, or discount eligibility. Use the private incident path if an access change might have completed without a current readback. Do not copy personal details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the website-account list display and the boundary separating website roles from the future authoritative membership roster.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.
