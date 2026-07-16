@@ -522,12 +522,37 @@ C4C2B2 remains the runtime-adjacent boundary. It must control the SDK promise, c
 
 This is source and synthetic-test evidence only. Record source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, production data changed, and production behavior verified as separate states. #280 changes no officer task and proves none of the external or live states.
 
+### Checkout Session transport-binding classifier (PAY-002B2C4C2B2A — SOURCE ONLY, UNUSED)
+
+PAY-002B2C4C2B2A source/tests are tracked in live [#285](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/285). The pure synchronous `classifyStripeCheckoutSessionResponseBinding` policy accepts one exact schema-1 capsule that a future controller must create in a single call stack. The capsule is frozen, null-prototype, non-Proxy, and exact-keyed. It contains the already-created #280 projection plus separately captured observed and expected API-version, idempotency-key, and optional Stripe-account primitives. #285 does not call #280, read or re-read a Session or `lastResponse`, cross an `await`, retain an input reference, or call Stripe.
+
+```mermaid
+flowchart LR
+    Projection["Exact frozen #280 projection"] --> Compare{"Closed transport comparison"}
+    Observed["Observed memory-only primitives"] --> Compare
+    Expected["Expected memory-only primitives"] --> Compare
+    Compare -- "Mismatch or insufficient" --> Reconcile["reconciliation_required"]
+    Compare -- "Exact technical consistency" --> Candidate["untrusted_transport_binding_candidate"]
+    Candidate --> Stop["Stop before provenance, URL, business, time, and persistence binding"]
+    Reconcile --> Stop
+```
+
+Text alternative: a future controller gives the pure classifier one existing #280 projection plus observed and expected memory-only transport primitives; exact technical consistency yields only an untrusted candidate, while every mismatch stops for reconciliation.
+
+Both the projection and capsule shape are revalidated without coercion. API-version and idempotency-key values are visible ASCII primitives of at most 255 characters; optional account values use the bounded Stripe account-ID shape. `undefined` is the only absence. The installed compatibility ceiling remains API version `2023-10-16`: an exact match to another bounded version still reconciles until the SDK/configuration contract is reviewed. Exact status `200`, a bounded request-ID category, and a bounded HTTPS-capability category are also required for a candidate. Business status, payment state, amount, currency, mode, live mode, and time are structurally validated but deliberately not approved here.
+
+Every well-formed mismatch, missing mandatory fact, one-sided account, unsafe response category, or contradiction returns a fresh frozen `reconciliation_required`. Both account inputs may be absent for an ordinary platform-account response, but that proves only equality of missing observations. It never proves which Stripe account handled a request. Malformed, hostile, accessor, inherited, Proxy, reordered, unfrozen, or out-of-bounds input throws one fixed redacted error. The classifier reads raw primitives only into synchronous local variables for direct comparison. It does not copy them into an aggregate, result, log, record, artifact, or retained reference.
+
+The sole matching classification is `untrusted_transport_binding_candidate` with `requires_runtime_origin_account_dispatch_business_time_url_and_persistence_binding`. Neither fixed output contains a Session ID, URL, request ID, raw API version, idempotency key, Stripe account, source object, personal data, or secret. The word `expected` does not mean trusted. This child proves no provider origin, account control, same-SDK-promise provenance, C4A/C4B/configuration binding, dispatch/delivery, idempotent request use, approved URL origin/callback, current time, business state, retention approval, persistence, replay safety, C4C1 result binding, or runtime adoption.
+
+The remaining C4C2B2 runtime boundary must capture the projection and raw facts from one controlled SDK promise, derive expected values from the exact active plan and protected configuration, validate the memory-only URL, attach current business/time evidence, persist only approved server evidence, and return a current URL without logging or storing it. Source change, tests, merge, website publication, `runmprc.com` verification, Firebase deployment, Stripe configuration, production data, and live behavior remain separate states. #285 changes no officer task and proves none of the external or live states.
+
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
 
 1. Validate the request and read server-controlled catalog/event state.
-2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, C4A/C4B must separately bind and pre-send-gate any later Checkout Session generation, C4C1 may classify only an unbound reported result shape, C4C2A supplies test observations, and C4C2B1 supplies only an unused untrusted allowlist projection.
+2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, C4A/C4B must separately bind and pre-send-gate any later Checkout Session generation, C4C1 may classify only an unbound reported result shape, C4C2A supplies test observations, C4C2B1 supplies only an unused untrusted allowlist projection, and C4C2B2A/#285 classifies only untrusted transport consistency.
 3. In one Firestore transaction:
    - Reuse a matching prior request or reject a conflicting reuse.
    - Lock/read the event capacity counter or SKU variant.
@@ -540,7 +565,7 @@ External Stripe calls cannot be part of a Firestore transaction. Use this sequen
 6. Persist the server-only Session ID, expiry, minimal allowlisted evidence, and attempt state. Do not persist the Checkout URL.
 7. Return an approved, freshly validated URL only after the Session is attached to the business transaction. For replay, retrieve the Session server-side by the stored ID and revalidate its account, mode, business reference, state, expiry, and approved Checkout URL origin before returning the current URL.
 8. If Stripe definitively rejects creation, run a compensating transaction that marks the attempt failed and releases the hold once.
-9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and C4B/#238 must separately record fresh pre-send evidence. C4C1/#246 can classify a reported result shape only, C4C2A/#275 observes only forgeable SDK behavior, and C4C2B1/#280 produces only an unused server-only projection with redacted response categories. Step 6 still requires C4C2B2 trusted call/URL binding, result persistence, and business validation.
+9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and C4B/#238 must separately record fresh pre-send evidence. C4C1/#246 can classify a reported result shape only, C4C2A/#275 observes only forgeable SDK behavior, C4C2B1/#280 produces only an unused server-only projection with redacted response categories, and C4C2B2A/#285 classifies only untrusted transport consistency. Step 6 still requires the remaining C4C2B2 trusted call/URL binding, result persistence, and business validation.
 
 Create the local business record before calling Stripe. That lets a very fast webhook resolve metadata directly and eliminates the current record-not-found race.
 

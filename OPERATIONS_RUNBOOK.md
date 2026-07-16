@@ -560,6 +560,42 @@ C4C2B2 remains required to control the SDK promise, compare raw memory-only resp
 
 Record these states separately: source changed; tests passed; code merged; website published; `runmprc.com` verified; Firebase deployed; Stripe/provider configured; production data changed; production behavior verified. #280 creates no officer action and proves none of the external or live states.
 
+### Checkout Session transport-binding classifier — SOURCE ONLY, UNUSED
+
+PAY-002B2C4C2B2A [#285](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/285) adds one pure synchronous comparison policy. No endpoint or Functions index imports it. It makes no Stripe SDK, Firebase, Firestore, journal, configuration, environment, clock, logger, network, filesystem, provider, or persistence call.
+
+```mermaid
+flowchart LR
+    P["Exact existing #280 projection"] --> C{"Compare exact bounded facts"}
+    O["Observed memory-only API/key/account"] --> C
+    E["Expected memory-only API/key/account"] --> C
+    C -- "Exact technical consistency" --> U["Untrusted candidate"]
+    C -- "Mismatch or insufficient fact" --> R["Reconciliation required"]
+    U --> S["Stop: runtime provenance, URL, business, time, and persistence still missing"]
+    R --> S
+```
+
+Text alternative: the unused classifier compares one existing #280 projection with separately supplied observed and expected memory-only facts; it returns only an untrusted candidate or a reconciliation stop.
+
+The future caller must prepare one schema-1 capsule in one synchronous call stack. The capsule and #280 projection must be frozen, null-prototype, exact-keyed, non-Proxy, and own-data-only. The classifier does not call #280 or inspect a raw Session. It reads bounded raw primitives only into local variables for direct equality checks. It never copies them into output, a log, a record, an artifact, or a retained reference.
+
+Run only with Node 20 and repository lockfiles. Use synthetic values and no provider credential:
+
+```bash
+npm --prefix functions run test:run -- --runInBand stripeCheckoutSessionResponseBinding.test.js
+npm --prefix functions run lint
+npm --prefix functions run test:run -- --runInBand
+node --test tests/test-artifact-safety.test.js
+```
+
+Expected result: exact API version `2023-10-16`, exact non-missing idempotency-key equality, matching optional account observations, expected-200, bounded request-ID, and bounded HTTPS-capability categories return the same fresh `untrusted_transport_binding_candidate` category for platform-account and Connect-shaped inputs. Matching missing account values mean only “both observations are missing”; they do not prove account identity or control. Any well-formed mismatch, missing mandatory fact, one-sided account, other API ceiling, non-200, missing request ID, absent URL, or contradictory projection category returns `reconciliation_required`. Malformed, hostile, Proxy, accessor, inherited, reordered, unfrozen, or out-of-bounds input throws one fixed redacted error.
+
+No result, error, `String`/JSON/inspection rendering, stack, console call, or test artifact may contain the supplied Session ID, capability URL, request ID, raw API version, idempotency key, Stripe account, source object, personal data, or secret. The fixed output must never be described as provider-origin, account-control, same-promise, dispatch, delivery, C4A/C4B/configuration, idempotent-request, approved-URL, business/time, retention, persistence, replay, C4C1, or authorization evidence.
+
+Stop if a test needs a real Stripe/Firebase credential, object, project, provider response, customer/member/business record, network call, production service, runtime import, or raw provider value in an issue, matcher, snapshot, log, screenshot, or artifact. Stop if the code reads a Session, calls #280, crosses an asynchronous boundary, obtains “expected” values from an unreviewed source, validates a URL, writes data, or enters a checkout creator. Those are separate remaining C4C2B2 controller responsibilities.
+
+Record these states separately: source changed; tests passed; code merged; website published; `runmprc.com` verified; Firebase deployed; Stripe/provider configured; production data changed; production behavior verified. #285 creates no officer action and proves none of the external or live states.
+
 ### Target payment integration suite
 
 CI/staging must eventually include:
