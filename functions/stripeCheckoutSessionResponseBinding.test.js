@@ -343,6 +343,69 @@ describe('Stripe Checkout Session response transport binding', () => {
     }
   });
 
+  test('returns fresh immutable redacted reconciliation results for independently missing transport bindings', () => {
+    const apiMissingProjection = baseProjection({
+      account: STRIPE_ACCOUNT,
+      responseValues: { apiVersion: undefined },
+    });
+    const apiMissingCapsule = capsuleWith({
+      checkoutSessionProjection: apiMissingProjection,
+      observedResponseApiVersion: undefined,
+      expectedResponseApiVersion: undefined,
+      observedResponseStripeAccount: STRIPE_ACCOUNT,
+      expectedResponseStripeAccount: STRIPE_ACCOUNT,
+    });
+    const keyMissingProjection = baseProjection({
+      account: STRIPE_ACCOUNT,
+      responseValues: { idempotencyKey: undefined },
+    });
+    const keyMissingCapsule = capsuleWith({
+      checkoutSessionProjection: keyMissingProjection,
+      observedResponseIdempotencyKey: undefined,
+      expectedResponseIdempotencyKey: undefined,
+      observedResponseStripeAccount: STRIPE_ACCOUNT,
+      expectedResponseStripeAccount: STRIPE_ACCOUNT,
+    });
+    const apiCapsuleSnapshot = snapshotRecord(apiMissingCapsule);
+    const apiProjectionSnapshot = snapshotRecord(apiMissingProjection);
+    const keyCapsuleSnapshot = snapshotRecord(keyMissingCapsule);
+    const keyProjectionSnapshot = snapshotRecord(keyMissingProjection);
+
+    const apiResult = expectReconciliation(apiMissingCapsule);
+    const keyResult = expectReconciliation(keyMissingCapsule);
+
+    expect(apiResult).not.toBe(keyResult);
+    for (const result of [apiResult, keyResult]) {
+      expect(Reflect.ownKeys(result)).toEqual(RESULT_KEYS);
+      expect(Object.getPrototypeOf(result)).toBe(null);
+      expect(Object.isFrozen(result)).toBe(true);
+      for (const key of RESULT_KEYS) {
+        expect(Object.getOwnPropertyDescriptor(result, key)).toEqual({
+          value: RECONCILIATION[key],
+          enumerable: true,
+          writable: false,
+          configurable: false,
+        });
+      }
+      const rendered = [JSON.stringify(result), inspect(result)].join('\n');
+      for (const rawValue of [
+        SESSION_ID,
+        CHECKOUT_URL,
+        REQUEST_ID,
+        API_VERSION,
+        IDEMPOTENCY_KEY,
+        STRIPE_ACCOUNT,
+      ]) {
+        expect(rendered.includes(rawValue)).toBe(false);
+      }
+    }
+
+    expectSnapshotUnchanged(apiMissingCapsule, apiCapsuleSnapshot);
+    expectSnapshotUnchanged(apiMissingProjection, apiProjectionSnapshot);
+    expectSnapshotUnchanged(keyMissingCapsule, keyCapsuleSnapshot);
+    expectSnapshotUnchanged(keyMissingProjection, keyProjectionSnapshot);
+  });
+
   test.each([
     ['observed API missing', { observedResponseApiVersion: undefined }],
     ['expected API missing', { expectedResponseApiVersion: undefined }],
