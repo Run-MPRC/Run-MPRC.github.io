@@ -18,6 +18,15 @@ interface EventSummary {
   grossCents: number;
 }
 
+interface DashboardLoadOutcome {
+  firestore: unknown;
+  status: 'loading' | 'resolved' | 'unavailable';
+  allEvents: Event[];
+  nextEvent: EventSummary | null;
+}
+
+const LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
+
 function Tile({
   label, value, subtitle,
 }: {
@@ -42,18 +51,32 @@ function isUpcoming(e: Event): boolean {
 
 function Inner() {
   const { services, isReady } = useServiceLocator();
-  const [nextEvent, setNextEvent] = useState<EventSummary | null>(null);
-  const [allEvents, setAllEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
+  const [loadOutcome, setLoadOutcome] = useState<DashboardLoadOutcome | null>(null);
+
+  const currentOutcome = loadOutcome?.firestore === firestore ? loadOutcome : null;
+  const currentStatus = currentOutcome?.status ?? 'loading';
+  const allEvents = currentOutcome?.status === 'resolved' ? currentOutcome.allEvents : [];
+  const nextEvent = currentOutcome?.status === 'resolved' ? currentOutcome.nextEvent : null;
 
   useEffect(() => {
-    if (!isReady || !services) return;
-    const db = services.firebaseResources.firestore;
+    if (!firestore) return () => undefined;
+    let active = true;
+    const outcomeKey = { firestore };
+
+    setLoadOutcome({
+      ...outcomeKey,
+      status: 'loading',
+      allEvents: [],
+      nextEvent: null,
+    });
+
     (async () => {
       try {
-        const all = await listAllEvents(db);
-        setAllEvents(all);
+        const all = await listAllEvents(firestore);
+        if (!active) return;
 
         const upcoming = all
           .filter((e) => isUpcoming(e) && (e.status === 'open' || e.status === 'closed'))
@@ -63,28 +86,44 @@ function Inner() {
             return ams - bms;
           });
         const next = upcoming[0];
+        let nextSummary: EventSummary | null = null;
         if (next) {
-          const regs = await listEventRegistrations(db, next.id);
+          const regs = await listEventRegistrations(firestore, next.id);
+          if (!active) return;
           const paid = regs.filter((r) => r.status === 'paid');
           const pending = regs.filter((r) => r.status === 'pending');
           const refunded = regs.filter(
             (r) => r.status === 'refunded' || r.status === 'partially_refunded',
           );
-          setNextEvent({
+          nextSummary = {
             event: next,
             paidCount: paid.length,
             pendingCount: pending.length,
             refundedCount: refunded.length,
             grossCents: paid.reduce((s, r) => s + (r.amountCents || 0), 0),
-          });
+          };
         }
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+
+        if (!active) return;
+        setLoadOutcome({
+          ...outcomeKey,
+          status: 'resolved',
+          allEvents: all,
+          nextEvent: nextSummary,
+        });
+      } catch {
+        if (!active) return;
+        setLoadOutcome({
+          ...outcomeKey,
+          status: 'unavailable',
+          allEvents: [],
+          nextEvent: null,
+        });
       }
     })();
-  }, [services, isReady]);
+
+    return () => { active = false; };
+  }, [firestore]);
 
   const totalEvents = allEvents.length;
   const upcomingCount = allEvents.filter(isUpcoming).length;
@@ -96,10 +135,19 @@ function Inner() {
       <div className="container mx-auto p-4 max-w-5xl">
         <h1 className="text-2xl font-bold mb-4">Admin</h1>
 
-        {loading && <p>Loading...</p>}
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {currentStatus === 'loading' && <p>Loading...</p>}
+        {currentStatus === 'unavailable' && (
+          <p
+            className="text-red-500 text-sm"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {LOAD_FAILURE}
+          </p>
+        )}
 
-        {!loading && nextEvent && (
+        {currentStatus === 'resolved' && nextEvent && (
           <section className="mb-6">
             <div className="text-xs uppercase tracking-wide text-gray-600 mb-2">
               Next event
@@ -153,16 +201,18 @@ function Inner() {
           </section>
         )}
 
-        <section className="mb-6">
-          <div className="text-xs uppercase tracking-wide text-gray-600 mb-2">
-            Overall
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <Tile label="Total events" value={totalEvents} />
-            <Tile label="Upcoming" value={upcomingCount} />
-            <Tile label="Drafts" value={draftCount} />
-          </div>
-        </section>
+        {currentStatus === 'resolved' && (
+          <section className="mb-6">
+            <div className="text-xs uppercase tracking-wide text-gray-600 mb-2">
+              Overall
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <Tile label="Total events" value={totalEvents} />
+              <Tile label="Upcoming" value={upcomingCount} />
+              <Tile label="Drafts" value={draftCount} />
+            </div>
+          </section>
+        )}
 
         <section>
           <div className="text-xs uppercase tracking-wide text-gray-600 mb-2">
