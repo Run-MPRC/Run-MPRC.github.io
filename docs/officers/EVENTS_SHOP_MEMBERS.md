@@ -1152,6 +1152,60 @@ Officer review steps after the source merge:
 
 No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only complete-summary display and current-request behavior.
 
+### Admin order-list load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one safe instruction when the Admin Orders list is unknown. The page must not show a private technical detail, false zero totals, old buyer or shipping details, or order actions from an earlier request.
+
+**Approver:** treasurer plus shop lead, platform/security owner, and privacy owner. All four roles must approve any future live review because this screen can display personal details and start money or fulfillment actions.
+
+**Prerequisites:** issue [#303](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/303) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up orders, and mocked list results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. This slice does not approve the screen, permissions, backup, rollback, refund, cancellation, fulfillment, shipping, reconciliation, or production use. It does not deploy Firebase, contact Stripe, change an order, use production data, or prove live behavior.
+
+Before #303, the source could show raw load errors, false zero totals, or old order details after an unknown read. A merged source fix and green tests do not publish the website. A website publication does not prove Firebase, Stripe, permissions, order records, or action safety.
+
+```mermaid
+flowchart LR
+    A["Made-up Admin Orders route"] --> B["Current mocked order-list lookup"]
+    B -- "Pending" --> C["Loading; no order details, totals, or actions"]
+    B -- "Rejected" --> D["Fixed stop alert; no order details, totals, or actions"]
+    B -- "Fulfilled empty" --> E["Existing zero totals and No orders"]
+    B -- "Fulfilled with orders" --> F["Existing totals, filters, table, and actions"]
+    G["Obsolete result"] -. "Ignored" .-> H["No display change"]
+```
+
+Text alternative: only the current successful mocked order lookup may show totals, order details, or action buttons. Loading and rejection show no order-derived content. An obsolete result changes nothing.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Orders screen marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #303 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, and made-up orders.
+4. Confirm no test clicks **Fulfill**, **Refund**, or **Cancel**.
+5. Confirm a pending lookup shows **Loading...** and no totals, filters, table, buyer details, or action buttons.
+6. Confirm a mocked rejection shows exactly `We could not load orders right now. Stop and contact the treasurer and platform owner before taking any order action.`
+7. Confirm assistive technology receives the whole sentence immediately as one alert.
+8. Confirm the rejected value is not inspected, logged, measured, stored, sent to analytics, or displayed.
+9. Confirm an older success or failure cannot replace the current result after the database reference changes or the page closes.
+10. Confirm a successful mocked empty list keeps the existing empty-result display: **Paid 0**, **Gross revenue $0.00**, and **No orders**.
+11. Confirm a successful made-up list keeps the existing totals, filters, date and money formatting, table, and action buttons without using those buttons.
+12. Confirm the **Orders** heading and **Products** link remain during loading and failure. Do not follow the link.
+13. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Stripe, permissions, order records, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** the reviewed source shows order-derived content only after the current mocked list read succeeds. Loading shows no order-derived content. A rejection shows one fixed accessible stop sentence and no rejected detail, false zero, old row, or action button. Older results are inert. Successful empty and made-up populated results keep their existing displays. The fixed sentence tells the officer to stop because a failed refresh can follow an action that may already have completed.
+
+The existing Fulfill, Refund, and Cancel requests, prompts, action responses, raw action-error text, idempotency, reconciliation, and audit behavior are separate unfinished work. This slice does not make Admin Orders or its actions safe.
+
+**Stop conditions:** any real officer, buyer, address, phone, email, order, tracking number, product, payment, refund, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a zero, stale row, buyer detail, or action button during loading or failure; an attempted order action; a Firebase, Rules, provider, permission, or record change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or screen is live.
+
+**Success proof:** for source completion, record the exact #303 issue, reviewed pull request, merged commit, ten intended old-source failures, eleven green synthetic tests, relevant full checks, and independent privacy, lifecycle, and officer-continuity reviews. The safe review stops at source and mocked tests because Admin Orders is not approved for officer use. Live availability requires a later separately approved release and dated exact-revision verification after authorization, action safety, idempotency, audit, backup, rollback, and provider evidence are complete. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, Stripe configuration, order changes, production-data actions, refunds, cancellations, fulfillment, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Do not undo by repeating an order action or changing or deleting an order, payment, refund, shipment, officer account, permission, database record, or provider setting.
+
+**Escalation:** treasurer plus platform/security owner. Add the shop lead and privacy owner. Use the private incident path if any personal, order, payment, provider, endpoint, token-shaped, or technical detail appeared, or if an action might have completed without a current readback. Do not copy private details into an issue, message, screenshot, email, or AI tool.
+
+No system-topology diagram changes for this source slice because page hierarchy, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected list-result display and current-request behavior.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.

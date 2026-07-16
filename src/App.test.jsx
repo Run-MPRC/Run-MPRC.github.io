@@ -22,9 +22,11 @@ import { listAllEvents } from './services/events/adminService';
 import { events as analyticsEvents, track } from './services/analytics/analytics';
 import { useAuth } from './services/hooks/useAuth';
 import {
+  adminOrderAction,
   createMerchCheckout,
   getProductBySlug,
   listActiveProducts,
+  listAllOrders,
   listAllProducts,
 } from './services/shop/shopService';
 import App from './App';
@@ -43,9 +45,11 @@ jest.mock('./services/shop/shopService', () => {
   const actual = jest.requireActual('./services/shop/shopService');
   return {
     ...actual,
+    adminOrderAction: jest.fn(),
     createMerchCheckout: jest.fn(),
     getProductBySlug: jest.fn(),
     listActiveProducts: jest.fn(),
+    listAllOrders: jest.fn(),
     listAllProducts: jest.fn(),
   };
 });
@@ -91,9 +95,11 @@ jest.mock('./services/hooks/useAuth', () => ({
 beforeEach(() => {
   useServiceLocator.mockReset();
   useServiceLocator.mockReturnValue({ services: null, isReady: false });
+  adminOrderAction.mockReset();
   createMerchCheckout.mockReset();
   getProductBySlug.mockReset();
   listActiveProducts.mockReset();
+  listAllOrders.mockReset();
   listAllProducts.mockReset();
   createCheckoutSession.mockReset();
   getEventBySlug.mockReset();
@@ -209,6 +215,7 @@ const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Pleas
 const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const ADMIN_DASHBOARD_LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
+const ADMIN_ORDERS_LOAD_FAILURE = 'We could not load orders right now. Stop and contact the treasurer and platform owner before taking any order action.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
@@ -259,6 +266,11 @@ function renderAdminEvents() {
 
 function renderAdminDashboard() {
   window.history.pushState({}, '', '/admin');
+  return render(<App />);
+}
+
+function renderAdminOrders() {
+  window.history.pushState({}, '', '/admin/orders');
   return render(<App />);
 }
 
@@ -2780,5 +2792,382 @@ describe('Admin Events list-load failure boundary', () => {
     expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
     expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
     expect(listAllEvents).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Admin Orders list-load failure boundary', () => {
+  function syntheticTimestamp(value) {
+    const date = new Date(value);
+    return { toDate: () => date };
+  }
+
+  function syntheticOrder({
+    id = 'synthetic-order',
+    title = 'Synthetic Club Shirt',
+    status = 'paid',
+    amountCents = 1500,
+    createdAt = '2030-01-12T20:00:00Z',
+  } = {}) {
+    return {
+      id,
+      productTitle: title,
+      buyer: {
+        firstName: 'Synthetic',
+        lastName: id,
+        email: `${id}@example.test`,
+      },
+      shipping: null,
+      size: null,
+      color: null,
+      amountCents,
+      currency: 'usd',
+      status,
+      trackingNumber: null,
+      createdAt: syntheticTimestamp(createdAt),
+    };
+  }
+
+  function expectOrderResultsToBeHidden() {
+    expect(screen.queryAllByText('Paid')).toHaveLength(0);
+    expect(screen.queryByText('Gross revenue')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search by buyer or product...'))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('No orders')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Fulfill|Refund|Cancel)$/ }))
+      .not.toBeInTheDocument();
+  }
+
+  function getSummaryTile(label) {
+    return screen.getAllByText(label)
+      .find((element) => element.tagName === 'DIV')
+      ?.parentElement;
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    listAllOrders.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('hides order-derived content while the current lookup is pending', async () => {
+    listAllOrders.mockReturnValueOnce(new Promise(() => {}));
+
+    const view = renderAdminOrders();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Orders' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectOrderResultsToBeHidden();
+    expect(screen.getByRole('link', { name: /^Products/ }))
+      .toHaveAttribute('href', '/admin/products');
+    expect(listAllOrders).toHaveBeenCalledWith(firestore);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  test('replaces a rejected lookup with one fixed accessible stop result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listAllOrders.mockRejectedValueOnce(Object.assign(
+      new Error('admin-orders-private-canary buyer-private@example.test'),
+      {
+        code: 'firestore/admin-orders-private-canary',
+        endpoint: 'https://provider.example.test/?token=admin-orders-secret-canary',
+      },
+    ));
+
+    renderAdminOrders();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_ORDERS_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expectOrderResultsToBeHidden();
+    expect(screen.getByRole('heading', { level: 1, name: 'Orders' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Products/ }))
+      .toHaveAttribute('href', '/admin/products');
+    expect(document.body).not.toHaveTextContent(
+      /admin-orders-private-canary|buyer-private@example\.test|provider\.example|admin-orders-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-orders-private-canary|buyer-private@example\.test|provider\.example|admin-orders-secret-canary/i,
+    );
+    expect(listAllOrders).toHaveBeenCalledWith(firestore);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect a hostile rejected message property', async () => {
+    const messageGetter = jest.fn(() => 'admin-orders-message-getter-canary');
+    listAllOrders.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderAdminOrders();
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_ORDERS_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('admin-orders-message-getter-canary');
+    expectOrderResultsToBeHidden();
+    expect(track).not.toHaveBeenCalled();
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('preserves a genuine successful empty-order result', async () => {
+    renderAdminOrders();
+
+    expect(await screen.findByText('No orders')).toBeInTheDocument();
+    expect(getSummaryTile('Paid')).toHaveTextContent(/Paid\s*0/);
+    expect(getSummaryTile('Gross revenue'))
+      .toHaveTextContent(/Gross revenue\s*\$0\.00/);
+    expect(screen.getByPlaceholderText('Search by buyer or product...')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveValue('all');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllOrders).toHaveBeenCalledWith(firestore);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('preserves populated totals, formatting, filtering, and row projection', async () => {
+    const paidOrder = syntheticOrder({
+      id: 'synthetic-paid-order',
+      title: 'Synthetic Paid Shirt',
+      amountCents: 1500,
+    });
+    const fulfilledOrder = syntheticOrder({
+      id: 'synthetic-fulfilled-order',
+      title: 'Synthetic Fulfilled Hat',
+      status: 'fulfilled',
+      amountCents: 2500,
+      createdAt: '2030-02-13T20:00:00Z',
+    });
+    const pendingOrder = syntheticOrder({
+      id: 'synthetic-pending-order',
+      title: 'Synthetic Pending Socks',
+      status: 'pending',
+      amountCents: 9900,
+    });
+    const refundedOrder = syntheticOrder({
+      id: 'synthetic-refunded-order',
+      title: 'Synthetic Refunded Bottle',
+      status: 'refunded',
+      amountCents: 7500,
+    });
+    listAllOrders.mockResolvedValueOnce([
+      paidOrder,
+      fulfilledOrder,
+      pendingOrder,
+      refundedOrder,
+    ]);
+
+    renderAdminOrders();
+
+    expect(await screen.findByText('Synthetic Paid Shirt')).toBeInTheDocument();
+    expect(getSummaryTile('Paid')).toHaveTextContent(/Paid\s*2/);
+    expect(getSummaryTile('Gross revenue'))
+      .toHaveTextContent(/Gross revenue\s*\$40\.00/);
+    expect(screen.getByText('synthetic-paid-order@example.test')).toBeInTheDocument();
+    expect(screen.getAllByText(
+      paidOrder.createdAt.toDate().toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      }),
+    ).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Refund' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Fulfill' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Search by buyer or product...'), {
+      target: { value: 'fulfilled hat' },
+    });
+    expect(screen.getByText('Synthetic Fulfilled Hat')).toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Paid Shirt')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Search by buyer or product...'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'refunded' } });
+    expect(screen.getByText('Synthetic Refunded Bottle')).toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Fulfilled Hat')).not.toBeInTheDocument();
+    expect(listAllOrders).toHaveBeenCalledWith(firestore);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('does not reload when only the services wrapper changes', async () => {
+    listAllOrders.mockResolvedValueOnce([syntheticOrder()]);
+    const view = renderAdminOrders();
+    expect(await screen.findByText('Synthetic Club Shirt')).toBeInTheDocument();
+
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('Synthetic Club Shirt')).toBeInTheDocument();
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('hides earlier results while a new Firestore lookup is pending, then shows current empty truth', async () => {
+    listAllOrders.mockResolvedValueOnce([syntheticOrder()]);
+    const view = renderAdminOrders();
+    expect(await screen.findByText('Synthetic Club Shirt')).toBeInTheDocument();
+
+    let resolveCurrentLookup;
+    listAllOrders.mockReturnValueOnce(new Promise((resolve) => {
+      resolveCurrentLookup = resolve;
+    }));
+    const currentFirestore = { name: 'synthetic-firestore-current' };
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    await waitFor(() => expect(listAllOrders).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectOrderResultsToBeHidden();
+
+    await act(async () => { resolveCurrentLookup([]); });
+    expect(await screen.findByText('No orders')).toBeInTheDocument();
+    expect(getSummaryTile('Paid')).toHaveTextContent(/Paid\s*0/);
+    expect(getSummaryTile('Gross revenue'))
+      .toHaveTextContent(/Gross revenue\s*\$0\.00/);
+    expect(listAllOrders).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllOrders).toHaveBeenNthCalledWith(2, currentFirestore);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('hides earlier results when the current Firestore lookup fails', async () => {
+    listAllOrders.mockResolvedValueOnce([syntheticOrder()]);
+    const view = renderAdminOrders();
+    expect(await screen.findByText('Synthetic Club Shirt')).toBeInTheDocument();
+
+    const currentFirestore = { name: 'synthetic-firestore-failure' };
+    listAllOrders.mockRejectedValueOnce(new Error('admin-orders-transition-private-canary'));
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_ORDERS_LOAD_FAILURE);
+    expectOrderResultsToBeHidden();
+    expect(document.body).not.toHaveTextContent('admin-orders-transition-private-canary');
+    expect(listAllOrders).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllOrders).toHaveBeenNthCalledWith(2, currentFirestore);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('ignores an older success after a newer Firestore lookup resolves empty', async () => {
+    let resolveOlderLookup;
+    listAllOrders.mockReturnValueOnce(new Promise((resolve) => {
+      resolveOlderLookup = resolve;
+    }));
+    const view = renderAdminOrders();
+    await waitFor(() => expect(listAllOrders).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-firestore-newer-empty' };
+    listAllOrders.mockResolvedValueOnce([]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByText('No orders')).toBeInTheDocument();
+
+    await act(async () => { resolveOlderLookup([syntheticOrder({ title: 'Obsolete Order' })]); });
+
+    expect(screen.getByText('No orders')).toBeInTheDocument();
+    expect(screen.queryByText('Obsolete Order')).not.toBeInTheDocument();
+    expect(getSummaryTile('Paid')).toHaveTextContent(/Paid\s*0/);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(listAllOrders).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllOrders).toHaveBeenNthCalledWith(2, currentFirestore);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('ignores an older hostile rejection after a newer Firestore lookup succeeds', async () => {
+    let rejectOlderLookup;
+    listAllOrders.mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectOlderLookup = reject;
+    }));
+    const view = renderAdminOrders();
+    await waitFor(() => expect(listAllOrders).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-firestore-newer-success' };
+    listAllOrders.mockResolvedValueOnce([syntheticOrder({ title: 'Current Order' })]);
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByText('Current Order')).toBeInTheDocument();
+
+    const messageGetter = jest.fn(() => 'obsolete-order-private-canary');
+    await act(async () => {
+      rejectOlderLookup(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Current Order')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-order-private-canary');
+    expect(listAllOrders).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllOrders).toHaveBeenNthCalledWith(2, currentFirestore);
+    expect(adminOrderAction).not.toHaveBeenCalled();
+  });
+
+  test('ignores a hostile rejection after the Admin Orders page unmounts', async () => {
+    let rejectLookup;
+    listAllOrders.mockReturnValueOnce(new Promise((_resolve, reject) => {
+      rejectLookup = reject;
+    }));
+    const view = renderAdminOrders();
+    await waitFor(() => expect(listAllOrders).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const messageGetter = jest.fn(() => 'unmounted-order-private-canary');
+    await act(async () => {
+      rejectLookup(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+    expect(adminOrderAction).not.toHaveBeenCalled();
   });
 });
