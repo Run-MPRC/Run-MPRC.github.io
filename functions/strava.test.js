@@ -2057,6 +2057,7 @@ describe('Strava token refresh failure boundary', () => {
 describe('Strava activity data failure boundary', () => {
   let fetchMock;
   let consoleSpies;
+  let dateNowSpy;
 
   const CONNECTION = Object.freeze({
     provider: 'strava',
@@ -2076,10 +2077,13 @@ describe('Strava activity data failure boundary', () => {
   beforeEach(() => {
     process.env.STRAVA_CLIENT_ID = 'strava_client_test';
     process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
+    admin.__clearDeletes();
     admin.__clearDocuments();
     admin.__clearReads();
     admin.__clearWrites();
+    Timestamp.now.mockClear();
     requireAppCheck.mockReset();
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     fetchMock = jest.fn();
     global.fetch = fetchMock;
     consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
@@ -2088,6 +2092,7 @@ describe('Strava activity data failure boundary', () => {
 
   afterEach(() => {
     global.fetch = GUARDED_FETCH;
+    dateNowSpy.mockRestore();
     consoleSpies.forEach((spy) => spy.mockRestore());
     delete process.env.STRAVA_CLIENT_ID;
     delete process.env.STRAVA_CLIENT_SECRET;
@@ -2098,7 +2103,32 @@ describe('Strava activity data failure boundary', () => {
     admin.__setDocument(SECRET_PATH, FRESH_SECRET);
   }
 
-  function expectTwoFreshBearerReads() {
+  function validStoredConnection(overrides = {}) {
+    return { ...CONNECTION, ...overrides };
+  }
+
+  function seedStoredConnection(connection) {
+    admin.__setDocument(CONNECTION_PATH, connection);
+    admin.__setDocument(SECRET_PATH, FRESH_SECRET);
+  }
+
+  function mockSuccessfulActivityData(onActivitiesRequest) {
+    const activitiesJson = jest.fn().mockResolvedValue([]);
+    const statsJson = jest.fn().mockResolvedValue({
+      ytd_run_totals: { distance: 0, count: 0 },
+      ytd_ride_totals: { distance: 0, count: 0 },
+      all_run_totals: { distance: 0, count: 0 },
+    });
+    fetchMock
+      .mockImplementationOnce(async () => {
+        if (onActivitiesRequest) onActivitiesRequest();
+        return { ok: true, json: activitiesJson };
+      })
+      .mockResolvedValueOnce({ ok: true, json: statsJson });
+    return { activitiesJson, statsJson };
+  }
+
+  function expectTwoFreshBearerReads(athleteId = 123456) {
     const headers = { Authorization: 'Bearer fresh_access_token_test' };
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -2107,7 +2137,7 @@ describe('Strava activity data failure boundary', () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      'https://www.strava.com/api/v3/athletes/123456/stats',
+      `https://www.strava.com/api/v3/athletes/${athleteId}/stats`,
       { headers },
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -2117,6 +2147,417 @@ describe('Strava activity data failure boundary', () => {
     expect(admin.__getWrites()).toEqual([]);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
+
+  async function expectRejectedStoredConnection(connection) {
+    seedStoredConnection(connection);
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(dateNowSpy).not.toHaveBeenCalled();
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  describe('stored connection validation before secret or provider use', () => {
+    class StoredConnection {
+      constructor() {
+        Object.assign(this, CONNECTION);
+      }
+    }
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a boolean', true],
+      ['a number', 1],
+      ['a string', 'strava'],
+      ['a function', () => CONNECTION],
+      ['an array', [CONNECTION]],
+      ['a null-prototype record', Object.assign(Object.create(null), CONNECTION)],
+      ['a custom-prototype record', Object.assign(Object.create({ inherited: true }), CONNECTION)],
+      ['a Date', new Date(0)],
+      ['a class instance', new StoredConnection()],
+    ])('rejects %s root before the secret read', async (_case, connection) => {
+      await expectRejectedStoredConnection(connection);
+    });
+
+    test('rejects a transparent root Proxy without invoking any trap', async () => {
+      const traps = {
+        get: jest.fn(() => {
+          throw new Error('stored-connection-canary root get trap');
+        }),
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('stored-connection-canary root descriptor trap');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('stored-connection-canary root prototype trap');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('stored-connection-canary root ownKeys trap');
+        }),
+      };
+      const connection = new Proxy(validStoredConnection(), traps);
+
+      await expectRejectedStoredConnection(connection);
+
+      Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('rejects a revoked root Proxy without reflection', async () => {
+      const { proxy, revoke } = Proxy.revocable(validStoredConnection(), {});
+      revoke();
+
+      await expectRejectedStoredConnection(proxy);
+    });
+
+    test.each([
+      ['missing', undefined, true],
+      ['undefined', undefined, false],
+      ['null', null, false],
+      ['empty', '', false],
+      ['whitespace', ' strava ', false],
+      ['wrong case', 'STRAVA', false],
+      ['a boolean', true, false],
+      ['a number', 1, false],
+      ['boxed', Object('strava'), false],
+      ['structured', { value: 'strava' }, false],
+    ])('rejects provider that is %s before the secret read', async (_case, value, remove) => {
+      const connection = validStoredConnection({ provider: value });
+      if (remove) delete connection.provider;
+
+      await expectRejectedStoredConnection(connection);
+    });
+
+    test.each([
+      ['missing', undefined, true],
+      ['undefined', undefined, false],
+      ['null', null, false],
+      ['zero', 0, false],
+      ['negative', -1, false],
+      ['fractional', 1.5, false],
+      ['NaN', Number.NaN, false],
+      ['positive infinity', Number.POSITIVE_INFINITY, false],
+      ['unsafe', Number.MAX_SAFE_INTEGER + 1, false],
+      ['a string', '123456', false],
+      ['a boolean', true, false],
+      ['a bigint', 123456n, false],
+      ['a symbol', Symbol('stored-connection-canary'), false],
+      ['boxed', Object(123456), false],
+      ['structured', { id: 123456 }, false],
+    ])('rejects athleteId that is %s before the secret read', async (
+      _case,
+      value,
+      remove,
+    ) => {
+      const connection = validStoredConnection({ athleteId: value });
+      if (remove) delete connection.athleteId;
+
+      await expectRejectedStoredConnection(connection);
+    });
+
+    test.each([
+      ['firstName', undefined],
+      ['firstName', 1],
+      ['firstName', 'line\nbreak'],
+      ['lastName', undefined],
+      ['lastName', '\ud800'],
+      ['username', undefined],
+      ['username', 'x'.repeat(MAX_PROFILE_TEXT_LENGTH + 1)],
+      ['username', Object('boxed-username')],
+      ['username', { value: 'structured-username' }],
+    ])('rejects invalid optional %s without coercion', async (field, value) => {
+      await expectRejectedStoredConnection(validStoredConnection({ [field]: value }));
+    });
+
+    test.each([
+      ['a relative path', '/profile.png'],
+      ['plain HTTP', 'http://images.example.test/profile.png'],
+      ['credentials', 'https://user:pass@images.example.test/profile.png'],
+      ['raw whitespace', 'https://images.example.test/profile image.png'],
+      ['a backslash', 'https://images.example.test/profile\\image.png'],
+      ['a malformed URL', 'https://'],
+      ['an oversized URL', `https://images.example.test/${'x'.repeat(MAX_PROFILE_URL_LENGTH)}`],
+      ['undefined', undefined],
+      ['a number', 1],
+      ['boxed text', Object('https://images.example.test/profile.png')],
+    ])('rejects profileUrl with %s before the secret read', async (_case, profileUrl) => {
+      await expectRejectedStoredConnection(validStoredConnection({ profileUrl }));
+    });
+
+    test.each([
+      ['provider', 'strava'],
+      ['athleteId', 123456],
+      ['firstName', 'Synthetic'],
+      ['lastName', 'Athlete'],
+      ['username', 'synthetic-athlete'],
+      ['profileUrl', 'https://images.example.test/synthetic-athlete.png'],
+    ])('does not invoke a selected %s accessor', async (field, value) => {
+      const getter = jest.fn(() => value);
+      const connection = validStoredConnection();
+      Object.defineProperty(connection, field, {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectRejectedStoredConnection(connection);
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['provider', 'strava'],
+      ['athleteId', 123456],
+    ])('does not consult an inherited %s getter', async (field, value) => {
+      const inheritedGetter = jest.fn(() => value);
+      const connection = validStoredConnection();
+      delete connection[field];
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectRejectedStoredConnection(connection);
+      } finally {
+        delete Object.prototype[field];
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test('ignores inherited optional getters instead of exposing their values', async () => {
+      const fields = ['firstName', 'lastName', 'username', 'profileUrl'];
+      const inheritedGetters = fields.map((field) => ({
+        field,
+        getter: jest.fn(() => `stored-connection-canary inherited ${field}`),
+      }));
+      const connection = validStoredConnection();
+      fields.forEach((field) => delete connection[field]);
+      inheritedGetters.forEach(({ field, getter }) => {
+        Object.defineProperty(Object.prototype, field, {
+          configurable: true,
+          get: getter,
+        });
+      });
+
+      try {
+        seedStoredConnection(connection);
+        mockSuccessfulActivityData();
+
+        const result = await stravaFetchStats({}, CONTEXT);
+
+        expect(result.athlete).toEqual({
+          id: 123456,
+          firstName: null,
+          lastName: null,
+          username: null,
+          profileUrl: null,
+        });
+      } finally {
+        fields.forEach((field) => delete Object.prototype[field]);
+      }
+
+      inheritedGetters.forEach(({ getter }) => expect(getter).not.toHaveBeenCalled());
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+
+    test.each([
+      ['provider', 'strava'],
+      ['athleteId', 123456],
+      ['firstName', 'Synthetic'],
+      ['profileUrl', 'https://images.example.test/synthetic-athlete.png'],
+    ])('does not invoke %s coercion or JSON hooks', async (field, admittedValue) => {
+      const hooks = {
+        toJSON: jest.fn(() => admittedValue),
+        toString: jest.fn(() => String(admittedValue)),
+        valueOf: jest.fn(() => admittedValue),
+        [Symbol.toPrimitive]: jest.fn(() => admittedValue),
+      };
+
+      await expectRejectedStoredConnection(validStoredConnection({ [field]: hooks }));
+
+      expect(hooks.toJSON).not.toHaveBeenCalled();
+      expect(hooks.toString).not.toHaveBeenCalled();
+      expect(hooks.valueOf).not.toHaveBeenCalled();
+      expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['firstName', 'firstName', 'missing', undefined, true],
+      ['firstName', 'firstName', 'null', null, false],
+      ['firstName', 'firstName', 'empty', '', false],
+      ['lastName', 'lastName', 'missing', undefined, true],
+      ['lastName', 'lastName', 'null', null, false],
+      ['lastName', 'lastName', 'empty', '', false],
+      ['username', 'username', 'missing', undefined, true],
+      ['username', 'username', 'null', null, false],
+      ['username', 'username', 'empty', '', false],
+      ['profileUrl', 'profileUrl', 'missing', undefined, true],
+      ['profileUrl', 'profileUrl', 'null', null, false],
+      ['profileUrl', 'profileUrl', 'empty', '', false],
+    ])('projects optional %s to %s as null when %s', async (
+      storedField,
+      resultField,
+      _case,
+      value,
+      remove,
+    ) => {
+      const connection = validStoredConnection({ [storedField]: value });
+      if (remove) delete connection[storedField];
+      seedStoredConnection(connection);
+      mockSuccessfulActivityData();
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.athlete[resultField]).toBeNull();
+      expectTwoFreshBearerReads(connection.athleteId);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expectNoWritesOrLogs();
+    });
+
+    test('ignores unknown hostile fields without enumeration or access', async () => {
+      const unknownGetters = ['connectedAt', 'updatedAt', 'debug', 'toJSON']
+        .map((field) => ({
+          field,
+          getter: jest.fn(() => {
+            throw new Error(`stored-connection-canary unknown ${field}`);
+          }),
+        }));
+      const symbolGetter = jest.fn(() => {
+        throw new Error('stored-connection-canary unknown symbol');
+      });
+      const connection = validStoredConnection();
+      unknownGetters.forEach(({ field, getter }) => {
+        Object.defineProperty(connection, field, {
+          configurable: true,
+          enumerable: true,
+          get: getter,
+        });
+      });
+      Object.defineProperty(connection, Symbol('unknown'), {
+        configurable: true,
+        enumerable: true,
+        get: symbolGetter,
+      });
+      seedStoredConnection(connection);
+      mockSuccessfulActivityData();
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.athlete).toEqual({
+        id: 123456,
+        firstName: 'Synthetic',
+        lastName: 'Athlete',
+        username: 'synthetic-athlete',
+        profileUrl: 'https://images.example.test/synthetic-athlete.png',
+      });
+      unknownGetters.forEach(({ getter }) => expect(getter).not.toHaveBeenCalled());
+      expect(symbolGetter).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
+
+    test('preserves the copied primitive snapshot after the raw record mutates', async () => {
+      const connection = validStoredConnection();
+      seedStoredConnection(connection);
+      mockSuccessfulActivityData(() => {
+        Object.assign(connection, {
+          athleteId: 999999,
+          firstName: 'Mutated',
+          lastName: 'Connection',
+          username: 'mutated-connection',
+          profileUrl: 'https://images.example.test/mutated.png',
+        });
+      });
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        'https://www.strava.com/api/v3/athletes/123456/stats',
+        { headers: { Authorization: 'Bearer fresh_access_token_test' } },
+      );
+      expect(result.athlete).toEqual({
+        id: 123456,
+        firstName: 'Synthetic',
+        lastName: 'Athlete',
+        username: 'synthetic-athlete',
+        profileUrl: 'https://images.example.test/synthetic-athlete.png',
+      });
+      expect(connection.athleteId).toBe(999999);
+      expectNoWritesOrLogs();
+    });
+
+    test.each([
+      ['minimum athlete ID', { athleteId: 1 }],
+      ['maximum athlete ID', { athleteId: Number.MAX_SAFE_INTEGER }],
+      ['valid Unicode text', {
+        firstName: 'Zoë 🏃🏽‍♀️',
+        lastName: '李',
+        username: 'e\u0301 runner',
+      }],
+      ['exact text and URL bounds', {
+        firstName: 'x'.repeat(MAX_PROFILE_TEXT_LENGTH),
+        profileUrl: `https://images.example.test/${'p'.repeat(
+          MAX_PROFILE_URL_LENGTH - 'https://images.example.test/'.length,
+        )}`,
+      }],
+    ])('accepts %s without normalization', async (_case, overrides) => {
+      const connection = validStoredConnection(overrides);
+      seedStoredConnection(connection);
+      mockSuccessfulActivityData();
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.athlete).toEqual({
+        id: connection.athleteId,
+        firstName: connection.firstName,
+        lastName: connection.lastName,
+        username: connection.username,
+        profileUrl: connection.profileUrl,
+      });
+      expectTwoFreshBearerReads(connection.athleteId);
+      expectNoWritesOrLogs();
+    });
+
+    test('accepts frozen non-enumerable own selected data descriptors', async () => {
+      const connection = {};
+      Object.entries(CONNECTION).forEach(([field, value]) => {
+        Object.defineProperty(connection, field, {
+          configurable: false,
+          enumerable: false,
+          value,
+          writable: false,
+        });
+      });
+      Object.freeze(connection);
+      seedStoredConnection(connection);
+      mockSuccessfulActivityData();
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.athlete).toEqual({
+        id: 123456,
+        firstName: 'Synthetic',
+        lastName: 'Athlete',
+        username: 'synthetic-athlete',
+        profileUrl: 'https://images.example.test/synthetic-athlete.png',
+      });
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+  });
 
   test('does not read or expose a failed activities response body or status', async () => {
     seedFreshConnection();

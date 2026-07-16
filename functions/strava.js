@@ -174,6 +174,42 @@ function optionalProfileUrl(record) {
   return isCredentialFreeHttpsUrl(value) ? value : INVALID_SELECTED_VALUE;
 }
 
+function optionalStoredProfileUrl(record) {
+  const value = selectedOwnDataValue(record, 'profileUrl', false);
+  if (value === MISSING_SELECTED_VALUE || value === null || value === '') return null;
+  return isCredentialFreeHttpsUrl(value) ? value : INVALID_SELECTED_VALUE;
+}
+
+function snapshotStoredConnection(record) {
+  if (!isPlainJsonRecord(record)) return null;
+
+  const provider = selectedOwnDataValue(record, 'provider', true);
+  const athleteId = selectedOwnDataValue(record, 'athleteId', true);
+  const firstName = optionalProfileText(record, 'firstName');
+  const lastName = optionalProfileText(record, 'lastName');
+  const username = optionalProfileText(record, 'username');
+  const profileUrl = optionalStoredProfileUrl(record);
+  if (
+    provider !== 'strava'
+    || !isPositiveSafeInteger(athleteId)
+    || firstName === INVALID_SELECTED_VALUE
+    || lastName === INVALID_SELECTED_VALUE
+    || username === INVALID_SELECTED_VALUE
+    || profileUrl === INVALID_SELECTED_VALUE
+  ) {
+    return null;
+  }
+
+  return objectFreeze({
+    provider,
+    athleteId,
+    firstName,
+    lastName,
+    username,
+    profileUrl,
+  });
+}
+
 function snapshotAuthorizationExchangeResponse(response) {
   if (!isPlainJsonRecord(response)) return null;
 
@@ -432,7 +468,10 @@ exports.stravaFetchStats = functions
     if (!connSnap.exists) {
       throw new functions.https.HttpsError('failed-precondition', 'Strava not connected');
     }
-    const conn = connSnap.data();
+    const conn = snapshotStoredConnection(connSnap.data());
+    if (!conn) {
+      throw stravaDataError('internal');
+    }
     const token = await getFreshAccessToken(uid);
 
     const headers = { Authorization: `Bearer ${token}` };
