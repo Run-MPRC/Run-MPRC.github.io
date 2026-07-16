@@ -10,37 +10,46 @@ interface Props {
 }
 
 interface State {
-  error: Error | null;
+  hasError: boolean;
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { error: null };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { error };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
-  componentDidCatch(error: Error) {
-    captureException(error);
+  componentDidCatch(error: unknown) {
     reportClientFailure(clientFailureEvents.renderFailed);
+    try {
+      captureException(error);
+    } catch {
+      // Best-effort monitoring must not replace the recovery UI.
+    }
   }
 
   handleReset = () => {
-    this.setState({ error: null });
+    this.setState({ hasError: false });
   };
 
   render() {
-    const { error } = this.state;
+    const { hasError } = this.state;
     const { children } = this.props;
-    if (!error) return children;
+    if (!hasError) return children;
     return (
       <div className="container mx-auto p-6 max-w-xl text-center">
         <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
-        <p className="text-gray-700 mb-4">
-          We hit an unexpected error rendering this page. The team has been notified.
+        <p
+          className="text-gray-700 mb-4"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          Try again, and contact an MPRC officer if this keeps happening.
         </p>
         <div className="flex gap-2 justify-center">
           <button
@@ -57,13 +66,6 @@ class ErrorBoundary extends React.Component<Props, State> {
             Go home
           </a>
         </div>
-        {process.env.NODE_ENV === 'development' && (
-          <pre className="mt-6 text-left text-xs text-red-700 bg-red-50 p-3 rounded overflow-auto max-h-64">
-            {error.message}
-            {'\n\n'}
-            {error.stack}
-          </pre>
-        )}
       </div>
     );
   }
