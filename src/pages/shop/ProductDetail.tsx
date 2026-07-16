@@ -47,7 +47,7 @@ function ProductDetail() {
   }, [user]);
 
   if (loading) return <div className="container mx-auto p-6">Loading...</div>;
-  if (error || !product) {
+  if (!product) {
     return (
       <div className="container mx-auto p-6">
         <p role={!product && error ? 'alert' : undefined} aria-live={!product && error ? 'assertive' : undefined} aria-atomic={!product && error ? true : undefined} className="text-red-500">{error || 'Product not found.'}</p>
@@ -81,8 +81,8 @@ function ProductDetail() {
         },
       );
       window.location.href = result.url;
-    } catch (err: any) {
-      setError(err?.message || 'Checkout failed');
+    } catch {
+      setError('We could not confirm checkout. Please wait before trying again.');
       setSubmitting(false);
     }
   }
@@ -180,7 +180,7 @@ function ProductDetail() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
               />
-              {error && <p className="text-red-600 text-sm">{error}</p>}
+              {error && <p role="alert" aria-live="assertive" aria-atomic="true" className="text-red-600 text-sm">{error}</p>}
               <button
                 type="submit"
                 disabled={!canBuy || submitting}

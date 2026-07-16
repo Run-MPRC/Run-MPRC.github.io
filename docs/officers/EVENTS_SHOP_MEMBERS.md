@@ -563,6 +563,48 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Public Shop checkout-start failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give a public Shop visitor one plain instruction when the website cannot confirm that checkout started, without adding any failure-supplied contact value, database, Firebase, Stripe, provider, endpoint, or technical error to the page.
+
+**Approver:** communications lead plus platform/security owner. Add the treasurer before any live-commerce review.
+
+**Prerequisites:** issue [#272](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/272) must be merged for source review. Use only a made-up product, made-up buyer, and mocked rejected checkout request. Calling the sentence live also requires a protected website publication and an exact revision check on `runmprc.com/shop` without submitting a form or starting checkout. This source change does not prove whether a rejected request reached Firebase or Stripe, make a repeat safe, contact a provider, deploy Firebase, use production data, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Made-up Shop form"] --> B["Mocked checkout-start request"]
+    B -- "Rejected" --> C["Fixed inline alert; product and form remain"]
+    B -- "Resolved" --> D["Existing redirect behavior"]
+```
+
+In words: a mocked rejection keeps the made-up product and form on the page and shows one fixed inline alert; the successful redirect path is unchanged.
+
+Officer review steps after the source merge:
+
+1. Keep the checkout-start failure sentence marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #272 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the test uses only a made-up active product, made-up buyer fields, and a mocked checkout Function rejection.
+4. Confirm the rejection shows exactly `We could not confirm checkout. Please wait before trying again.`
+5. Confirm the complete sentence is announced as one urgent screen-reader alert.
+6. Confirm the made-up product and form values remain visible, no redirect occurs, and the existing busy state ends.
+7. Confirm no contact value supplied only by the rejection, database, Firebase, Stripe, provider, endpoint, token-shaped, or technical detail appears on the page, in five browser console methods, or in analytics. The made-up buyer values remain only in their existing form inputs.
+8. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
+9. Confirm the mocked request still receives the same made-up product slug, buyer fields, optional size/color values, and Firebase app exactly once.
+10. Record website publication, `runmprc.com/shop`, Firebase, Stripe/provider, checkout, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** the reviewed source discards the complete rejected value and uses one fixed inline instruction that does not claim checkout definitely failed. The product and entered values remain visible, the existing busy state ends, and the successful redirect path is unchanged. The button becomes available again as it did before, but this source slice does not prove a repeat is safe; follow the displayed wait instruction until PAY-002/PAY-003 provide durable idempotency, result persistence, and reconciliation.
+
+**Stop conditions:** any real member, customer, order, product, name, email, phone, address, payment, Session, or provider data; a real form submission or checkout attempt; a request for a raw error, private endpoint, token, provider ID, or screenshot containing private values; an attempt to force a production failure; a Firebase, Stripe, or provider change; an unapproved retry; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live or a repeat is safe.
+
+**Success proof:** for source completion, record the exact #272 issue, reviewed pull request, merged commit, two intended old-source failures, green synthetic route tests, relevant full checks, and independent privacy/accessibility review. For live availability, separately record the approved website publication, published revision, and a dated read-only `runmprc.com/shop` revision check without submitting a form or forcing an error. Record Firebase deployment, Stripe/provider configuration or calls, production-data actions, orders, payments, and checkout attempts as **not performed** for this frontend-only change. The failure path remains synthetic-test evidence unless an approved isolated staging plan later proves it with test-mode providers and reconciliation.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com/shop`. Do not undo by changing a product, order, member account, database record, payment, permission, Firebase setting, or Stripe/provider setting.
+
+**Escalation:** communications lead plus platform/security owner. Add the treasurer and use the private incident path if a live request may have reached checkout. Add the privacy owner if any failure-supplied contact value or any provider, endpoint, token-shaped, or technical detail appeared outside the retained made-up form inputs. Do not copy the detail into an issue, message, screenshot, email, or AI tool.
+
 ## Public Events-list load failure privacy — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**
