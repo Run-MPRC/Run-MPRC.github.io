@@ -493,7 +493,7 @@ This is source and synthetic-test evidence only. Record source changed, tests pa
 
 ### Stripe SDK Checkout Session observations — TEST ONLY, UNUSED
 
-PAY-002B2C4C2A [#275](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/275) pins the installed `stripe` 14.25.0 behavior needed to review a later C4C2B allowlisting projector. The suite uses Stripe's exported but experimental/unstable `HttpClient` interface with a fully synthetic in-memory fake. This is an installed-version observation and dependency-upgrade gate, not a Stripe provider contract. It creates no production source or runtime import and makes no DNS, socket, HTTP, Firebase, Firestore, or provider call.
+PAY-002B2C4C2A [#275](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/275) pins the installed `stripe` 14.25.0 behavior used by the C4C2B1 [#280](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/280) allowlist projection below. The suite uses Stripe's exported but experimental/unstable `HttpClient` interface with a fully synthetic in-memory fake. This is an installed-version observation and dependency-upgrade gate, not a Stripe provider contract. It creates no production source or runtime import and makes no DNS, socket, HTTP, Firebase, Firestore, or provider call.
 
 ```mermaid
 flowchart LR
@@ -501,11 +501,12 @@ flowchart LR
     S --> O["Forgeable Session own data"]
     S --> L["Forgeable non-enumerable lastResponse"]
     O --> X["Sensitive fields and unvalidated URL may survive"]
-    O --> P["Stop: explicit C4C2B allowlist required"]
+    O --> P["C4C2B1 unused untrusted allowlist projection required"]
     L --> P
+    P --> R["C4C2B2 runtime call, URL, binding, and persistence still required"]
 ```
 
-Text alternative: the fake client can make the installed SDK expose a Session and response metadata containing controlled values, including sensitive fields and an unvalidated URL, so these observations are forgeable and a later explicit allowlist is still required.
+Text alternative: the fake client can make the installed SDK expose forgeable Session and response values, C4C2B1 now supplies only the unused untrusted allowlist projection, and C4C2B2 still must control runtime URL use, binding, and approved persistence.
 
 Run only with Node 20 and repository lockfiles. Do not add or upgrade a package for this check:
 
@@ -521,9 +522,43 @@ Synthetic unknown fields, customer/contact values, metadata, a client secret, a 
 
 Stop if a real credential, host, DNS/socket/network path, Firebase project, customer/member/business record, or provider object is needed; if production code imports the suite; if a test prints or snapshots a dynamically captured raw value; or if any output is described as provider, account, dispatch, delivery, idempotency, plan/send, application-environment, business-clock, payment, capacity, inventory, or business truth. Do not describe the SDK as observing no internal platform/time behavior; the safety proof is that no application or business clock/environment value becomes trusted evidence.
 
-Do not enumerate, spread, clone, stringify, log, or persist a whole Session in future runtime code. C4C2B must separately allowlist the pinned fields and remains untrusted until a runtime-adjacent adapter controls the call and binds exact plan, send, dispatch, persistence, and business evidence. The later saga persists only server-only Session ID, expiry, and minimal reviewed evidence—never the capability URL. Replay retrieves the Session by stored ID and revalidates its bindings, state, expiry, and approved URL origin before returning a current URL.
+Do not enumerate, spread, clone, stringify, log, or persist a whole Session in future runtime code. C4C2B1/#280 now adds only the unused untrusted allowlist projection; its Session primitives and categories remain unsafe to log or persist. C4C2B2 still must control the runtime call and raw memory-only comparisons, validate the URL, bind exact plan/send/dispatch/business/time evidence, and perform approved persistence. The later saga persists only approved server evidence—never the capability URL. Replay retrieves the Session by stored ID and revalidates its bindings, state, expiry, and approved URL origin before returning a current URL without logging or storing the URL.
 
 Record source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, production data changed, and production behavior verified as separate states. #275 can prove only the test/source and later merge states; it creates no officer task and proves none of the external or live states.
+
+### Server-only Checkout Session allowlist projection — SOURCE ONLY, UNUSED
+
+PAY-002B2C4C2B1 [#280](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/280) adds one pure synchronous allowlist projection for the Session shape pinned by #275. No endpoint or Functions index imports it. It makes no SDK, Firebase, Firestore, journal, configuration, environment, clock, logger, network, filesystem, provider, or persistence call.
+
+```mermaid
+flowchart LR
+    U["Untrusted Session-like object"] --> D{"Selected own data descriptors valid?"}
+    D -- "No" --> E["Fixed redacted error"]
+    D -- "Yes" --> P["Fresh frozen server-only projection"]
+    P --> R["Raw URL and response facts reduced to categories"]
+    R --> S["Stop: not safe to log, expose, or persist"]
+    S --> F["Future C4C2B2 runtime binding and approved persistence"]
+```
+
+Text alternative: the unused projector copies only named technically bounded Session primitives and fixed redacted categories, then stops before runtime trust, URL use, logging, persistence, or a business change.
+
+Run only with Node 20 and repository lockfiles. Use synthetic values and no provider credential:
+
+```bash
+npm --prefix functions run test:run -- --runInBand stripeCheckoutSessionProjection.test.js
+npm --prefix functions run lint
+npm --prefix functions run test:run -- --runInBand
+```
+
+Expected result: test/live bounded Session IDs and the installed mode/status/payment-status shapes project to fresh frozen null-prototype records. Selected fields must be own data properties with the expected descriptor flags. Root and `lastResponse` proxies, selected accessors, inherited selected fields, coercion objects, and malformed technical values fail with one fixed redacted error. `Object.prototype` pollution is isolated: valid input still projects, and inherited accessors are never invoked. Unknown fields, including metadata, customer/contact values, client secrets, callback URLs, and future accessors, remain unobserved.
+
+The output fixes `checkoutSessionProjectionSchemaVersion: 1`, `provider: stripe`, and `providerOperation: checkout_session_create`, then may contain a technically bounded Session ID and business primitives. The fixed labels describe this projector; they are not provider-origin or execution proof. Every retained value remains forgeable, server-only, unsafe to log, and not persistence-authorized. The raw Checkout URL is never returned; only `bounded_https_capability_present` or `absent` survives, and that category approves no host, callback, or fragment. Raw request ID, idempotency key, Stripe account ID, and API-version text also never leave the input boundary; only fixed present/missing, expected/other API-version, and status categories survive. No output or error may contain response bodies, headers, sockets, raw `lastResponse`, metadata, contact data, client secrets, or a raw canary.
+
+Stop if a test needs a real Stripe object, credential, provider/Firebase project, customer/member/business record, network call, production service, or raw provider value in a matcher, snapshot, log, issue, or artifact. Stop if any output is described as accepted, verified, authorized, paid, current, safe to persist, safe to log, or evidence of origin/account/dispatch/delivery/key use/plan-send binding/business truth.
+
+C4C2B2 remains required to control the SDK promise, compare raw memory-only response facts with trusted C4A/C4B and configuration evidence, validate the memory-only URL against approved origins/callbacks, bind current time and business facts, persist only approved server evidence under the retention decision, and return a current URL without logging or storing the URL.
+
+Record these states separately: source changed; tests passed; code merged; website published; `runmprc.com` verified; Firebase deployed; Stripe/provider configured; production data changed; production behavior verified. #280 creates no officer action and proves none of the external or live states.
 
 ### Target payment integration suite
 
