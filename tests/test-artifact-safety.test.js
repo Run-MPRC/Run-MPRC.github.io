@@ -17,7 +17,7 @@ const temporaryDirectories = [];
 const JOB_ID = 'test-artifact-scrubber';
 const JOB_NAME = 'Test artifact scrubber';
 const TEST_COMMAND = 'node --test tests/test-artifact-safety.test.js';
-const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js';
+const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
 const NEVER_RUN = ['$', '{{ false }}'].join('');
 const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const BRACKET_SECRET = ['$', "{{ secrets['SYNTHETIC_CANARY'] }}"].join('');
@@ -917,7 +917,22 @@ test('frontend independently runs the exact workflow safety suite without a skip
     ' tests/test-artifact-safety.test.js',
     '',
   );
+  assert.notEqual(missingSafetyTest, ciWorkflow);
   assert.notDeepEqual(frontendValidationErrors(missingSafetyTest), []);
+
+  const missingDependencyTest = ciWorkflow.replace(
+    ' tests/root-dependency-security.test.js',
+    '',
+  );
+  assert.notEqual(missingDependencyTest, ciWorkflow);
+  assert.notDeepEqual(frontendValidationErrors(missingDependencyTest), []);
+
+  const swallowedValidation = ciWorkflow.replace(
+    FRONTEND_TEST_COMMAND,
+    `${FRONTEND_TEST_COMMAND} || true`,
+  );
+  assert.notEqual(swallowedValidation, ciWorkflow);
+  assert.notDeepEqual(frontendValidationErrors(swallowedValidation), []);
 
   const skippedValidation = ciWorkflow.replace(
     '      - name: Validate protected release workflow\n        run: |',

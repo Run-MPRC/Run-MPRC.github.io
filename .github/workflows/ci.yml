@@ -38,7 +38,7 @@ jobs:
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/ci.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)'
-          node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js
+          node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js
       - name: Build
         env:
           CI: 'true'
