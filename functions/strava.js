@@ -239,6 +239,23 @@ function snapshotRefreshTokenResponse(response) {
   return objectFreeze({ accessToken, refreshToken, expiresAt });
 }
 
+function snapshotStoredTokenSecret(record) {
+  if (!isPlainJsonRecord(record)) return null;
+
+  const accessToken = selectedOwnDataValue(record, 'access_token', true);
+  const refreshToken = selectedOwnDataValue(record, 'refresh_token', true);
+  const expiresAt = selectedOwnDataValue(record, 'expires_at', true);
+  if (
+    !isBoundedVisibleAscii(accessToken, STRAVA_TOKEN_MAX_LENGTH)
+    || !isBoundedVisibleAscii(refreshToken, STRAVA_TOKEN_MAX_LENGTH)
+    || !isPositiveSafeInteger(expiresAt)
+  ) {
+    return null;
+  }
+
+  return objectFreeze({ accessToken, refreshToken, expiresAt });
+}
+
 function getStravaCreds() {
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
@@ -334,15 +351,16 @@ async function getFreshAccessToken(uid) {
   if (!snap.exists) {
     throw new functions.https.HttpsError('failed-precondition', 'Strava not connected');
   }
-  const tokens = snap.data();
-  const nowSec = Math.floor(Date.now() / 1000);
-  const expiresAt = tokens.expires_at || 0;
-  if (expiresAt - nowSec > 60) {
-    return tokens.access_token;
+  const stored = snapshotStoredTokenSecret(snap.data());
+  if (!stored) {
+    throw stravaRefreshError('internal');
   }
-  const refreshed = await refreshToken(tokens.refresh_token);
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (stored.expiresAt - nowSec > 60) {
+    return stored.accessToken;
+  }
+  const refreshed = await refreshToken(stored.refreshToken);
   await secretDocRef(uid).set({
-    ...tokens,
     access_token: refreshed.accessToken,
     refresh_token: refreshed.refreshToken,
     expires_at: refreshed.expiresAt,
