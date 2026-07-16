@@ -1,6 +1,8 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { Timestamp } = require('firebase-admin/firestore');
+const { URL: NodeURL } = require('node:url');
+const { types: { isProxy } } = require('node:util');
 const { requireAppCheck } = require('./stripeHelpers');
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
@@ -9,8 +11,27 @@ const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities'
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
 const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
 const STRAVA_AUTHORIZATION_CODE_MAX_LENGTH = 1_024;
+const STRAVA_TOKEN_MAX_LENGTH = 2_048;
+const STRAVA_SCOPE_MAX_LENGTH = 1_024;
+const STRAVA_PROFILE_TEXT_MAX_LENGTH = 1_024;
+const STRAVA_PROFILE_URL_MAX_LENGTH = 2_048;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
+const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
+const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5b\x5d-\x7e]+(?: [\x21\x23-\x5b\x5d-\x7e]+)*$/;
+const PROFILE_WHITESPACE_OR_BACKSLASH_PATTERN = /[\s\\]/u;
+const HTTPS_PREFIX_PATTERN = /^https:\/\//iu;
+const objectFreeze = Object.freeze;
+const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const objectGetPrototypeOf = Object.getPrototypeOf;
+const objectHasOwnProperty = Object.prototype.hasOwnProperty;
+const objectPrototype = Object.prototype;
+const numberIsSafeInteger = Number.isSafeInteger;
+const reflectApply = Reflect.apply;
+const regexpTest = RegExp.prototype.test;
+const stringCharCodeAt = String.prototype.charCodeAt;
+const INVALID_SELECTED_VALUE = Symbol('invalid-selected-value');
+const MISSING_SELECTED_VALUE = Symbol('missing-selected-value');
 
 function stravaAuthorizationError(code) {
   return new functions.https.HttpsError(code, STRAVA_AUTHORIZATION_ERROR_MESSAGE);
@@ -22,6 +43,183 @@ function stravaRefreshError(code) {
 
 function stravaDataError(code) {
   return new functions.https.HttpsError(code, STRAVA_DATA_ERROR_MESSAGE);
+}
+
+function patternMatches(pattern, value) {
+  return reflectApply(regexpTest, pattern, [value]);
+}
+
+function isPlainJsonRecord(value) {
+  if (value === null || typeof value !== 'object' || isProxy(value)) return false;
+  try {
+    return objectGetPrototypeOf(value) === objectPrototype;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function selectedOwnDataValue(record, key, required) {
+  let descriptor;
+  try {
+    descriptor = objectGetOwnPropertyDescriptor(record, key);
+  } catch (_error) {
+    return INVALID_SELECTED_VALUE;
+  }
+  if (!descriptor) return required ? INVALID_SELECTED_VALUE : MISSING_SELECTED_VALUE;
+  if (!reflectApply(objectHasOwnProperty, descriptor, ['value'])) {
+    return INVALID_SELECTED_VALUE;
+  }
+  return descriptor.value;
+}
+
+function isBoundedVisibleAscii(value, maxLength) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= maxLength
+    && patternMatches(VISIBLE_ASCII_PATTERN, value);
+}
+
+function isPositiveSafeInteger(value) {
+  return typeof value === 'number' && numberIsSafeInteger(value) && value > 0;
+}
+
+function hasLoneSurrogate(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = reflectApply(stringCharCodeAt, value, [index]);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      if (index + 1 >= value.length) return true;
+      const nextCodeUnit = reflectApply(stringCharCodeAt, value, [index + 1]);
+      if (nextCodeUnit < 0xdc00 || nextCodeUnit > 0xdfff) return true;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasControlCharacter(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = reflectApply(stringCharCodeAt, value, [index]);
+    if (codeUnit <= 0x1f || (codeUnit >= 0x7f && codeUnit <= 0x9f)) return true;
+  }
+  return false;
+}
+
+function isBoundedProfileText(value, maxLength) {
+  return typeof value === 'string'
+    && value.length <= maxLength
+    && !hasLoneSurrogate(value)
+    && !hasControlCharacter(value);
+}
+
+function optionalProfileText(record, key) {
+  const value = selectedOwnDataValue(record, key, false);
+  if (value === MISSING_SELECTED_VALUE || value === null || value === '') return null;
+  if (!isBoundedProfileText(value, STRAVA_PROFILE_TEXT_MAX_LENGTH)) {
+    return INVALID_SELECTED_VALUE;
+  }
+  return value;
+}
+
+function optionalScope(record) {
+  const value = selectedOwnDataValue(record, 'scope', false);
+  if (value === MISSING_SELECTED_VALUE || value === null || value === '') return null;
+  if (
+    typeof value !== 'string'
+    || value.length > STRAVA_SCOPE_MAX_LENGTH
+    || !patternMatches(OAUTH_SCOPE_PATTERN, value)
+  ) {
+    return INVALID_SELECTED_VALUE;
+  }
+  return value;
+}
+
+function isCredentialFreeHttpsUrl(value) {
+  if (
+    !isBoundedProfileText(value, STRAVA_PROFILE_URL_MAX_LENGTH)
+    || value.length === 0
+    || patternMatches(PROFILE_WHITESPACE_OR_BACKSLASH_PATTERN, value)
+    || !patternMatches(HTTPS_PREFIX_PATTERN, value)
+  ) {
+    return false;
+  }
+
+  let parsed;
+  try {
+    parsed = new NodeURL(value);
+  } catch (_error) {
+    return false;
+  }
+  if (
+    parsed.protocol !== 'https:'
+    || parsed.hostname.length === 0
+    || parsed.username.length !== 0
+    || parsed.password.length !== 0
+  ) {
+    return false;
+  }
+
+  const authorityStart = 'https://'.length;
+  const authorityEndCandidate = value.slice(authorityStart).search(/[/?#]/u);
+  const authorityEnd = authorityEndCandidate === -1
+    ? value.length
+    : authorityStart + authorityEndCandidate;
+  return !value.slice(authorityStart, authorityEnd).includes('@');
+}
+
+function optionalProfileUrl(record) {
+  const value = selectedOwnDataValue(record, 'profile', false);
+  if (value === MISSING_SELECTED_VALUE || value === null || value === '') return null;
+  return isCredentialFreeHttpsUrl(value) ? value : INVALID_SELECTED_VALUE;
+}
+
+function snapshotAuthorizationExchangeResponse(response) {
+  if (!isPlainJsonRecord(response)) return null;
+
+  const accessToken = selectedOwnDataValue(response, 'access_token', true);
+  const refreshToken = selectedOwnDataValue(response, 'refresh_token', true);
+  const expiresAt = selectedOwnDataValue(response, 'expires_at', true);
+  const scope = optionalScope(response);
+  const athleteRecord = selectedOwnDataValue(response, 'athlete', true);
+  if (
+    !isBoundedVisibleAscii(accessToken, STRAVA_TOKEN_MAX_LENGTH)
+    || !isBoundedVisibleAscii(refreshToken, STRAVA_TOKEN_MAX_LENGTH)
+    || !isPositiveSafeInteger(expiresAt)
+    || scope === INVALID_SELECTED_VALUE
+    || !isPlainJsonRecord(athleteRecord)
+  ) {
+    return null;
+  }
+
+  const athleteId = selectedOwnDataValue(athleteRecord, 'id', true);
+  const firstName = optionalProfileText(athleteRecord, 'firstname');
+  const lastName = optionalProfileText(athleteRecord, 'lastname');
+  const username = optionalProfileText(athleteRecord, 'username');
+  const profileUrl = optionalProfileUrl(athleteRecord);
+  if (
+    !isPositiveSafeInteger(athleteId)
+    || firstName === INVALID_SELECTED_VALUE
+    || lastName === INVALID_SELECTED_VALUE
+    || username === INVALID_SELECTED_VALUE
+    || profileUrl === INVALID_SELECTED_VALUE
+  ) {
+    return null;
+  }
+
+  return objectFreeze({
+    accessToken,
+    refreshToken,
+    expiresAt,
+    scope,
+    athlete: objectFreeze({
+      id: athleteId,
+      firstName,
+      lastName,
+      username,
+      profileUrl,
+    }),
+  });
 }
 
 function getStravaCreds() {
@@ -68,11 +266,17 @@ async function exchangeCode(code) {
   if (!resp || resp.ok !== true) {
     throw stravaAuthorizationError('invalid-argument');
   }
+  let response;
   try {
-    return await resp.json();
+    response = await resp.json();
   } catch (_error) {
     throw stravaAuthorizationError('unavailable');
   }
+  const exchange = snapshotAuthorizationExchangeResponse(response);
+  if (!exchange) {
+    throw stravaAuthorizationError('internal');
+  }
+  return exchange;
 }
 
 async function refreshToken(refresh) {
@@ -141,29 +345,28 @@ exports.stravaExchangeCode = functions
     }
     const { uid } = context.auth;
 
-    const tokenResp = await exchangeCode(code);
-    const athlete = tokenResp.athlete || {};
+    const exchange = await exchangeCode(code);
 
     await secretDocRef(uid).set({
-      access_token: tokenResp.access_token,
-      refresh_token: tokenResp.refresh_token,
-      expires_at: tokenResp.expires_at,
-      scope: tokenResp.scope || null,
+      access_token: exchange.accessToken,
+      refresh_token: exchange.refreshToken,
+      expires_at: exchange.expiresAt,
+      scope: exchange.scope,
       updatedAt: Timestamp.now(),
     }, { merge: true });
 
     await connectionDocRef(uid).set({
       provider: 'strava',
-      athleteId: athlete.id || null,
-      firstName: athlete.firstname || null,
-      lastName: athlete.lastname || null,
-      username: athlete.username || null,
-      profileUrl: athlete.profile || null,
+      athleteId: exchange.athlete.id,
+      firstName: exchange.athlete.firstName,
+      lastName: exchange.athlete.lastName,
+      username: exchange.athlete.username,
+      profileUrl: exchange.athlete.profileUrl,
       connectedAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     }, { merge: true });
 
-    return { ok: true, athleteId: athlete.id || null };
+    return { ok: true, athleteId: exchange.athlete.id };
   });
 
 exports.stravaFetchStats = functions
