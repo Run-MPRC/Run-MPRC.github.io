@@ -1005,6 +1005,55 @@ Officer review steps after the source merge:
 
 No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected failure display.
 
+### Admin Product editor load failure privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one plain instruction when the Admin Product editor cannot load the named product, without showing a Firebase, database, provider, account, endpoint, token-shaped, or technical detail and without leaving an editable form available for an unknown product state.
+
+**Approver:** shop lead plus platform/security and privacy owners. Add the treasurer before any future live commerce-admin review.
+
+**Prerequisites:** issue [#296](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/296) must be merged for source review. Use only a mocked admin identity, mocked database references, made-up products, and mocked lookup results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply: this slice does not approve the editor, role, permissions, backup, preview, rollback, product saving, publication, checkout, or production use. It does not change create/update behavior, deploy Firebase, change Rules, permissions, or product records, contact Stripe or another provider, use production data, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Made-up Admin Product edit route"] --> B["Mocked current product lookup"]
+    B -- "Resolved product" --> C["Existing populated edit form"]
+    B -- "Resolved missing" --> D["Existing Product not found result"]
+    B -- "Rejected or unknown" --> E["Fixed alert; no form or Save action"]
+    F["Older route or service result"] -. "Ignored" .-> C
+```
+
+Text alternative: only the current mocked lookup may settle the editor. A current product keeps the existing form, a current missing result keeps the existing not-found result, and a rejected or unknown result shows one fixed alert with no editable form; an older result cannot replace the current page.
+
+Officer review steps after the source merge:
+
+1. Keep this failure sentence and the complete Admin Product editor marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #296 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, made-up products, and mocked lookups.
+4. Confirm a mocked rejection shows exactly `We could not load this product right now. Please try again later.`
+5. Confirm assistive technology receives the complete sentence immediately as one alert.
+6. Confirm no rejection-only database, Firebase, provider, account, endpoint, token-shaped, or technical detail appears on the page, in analytics, or in five browser console methods.
+7. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
+8. Confirm a rejected lookup ends loading and shows no product form or **Save changes** action.
+9. Confirm the generic **Edit product** heading and **All products** link remain without following the link.
+10. Confirm an older route or service rejection cannot replace a later current product, and a later current success can recover from an earlier failure.
+11. Confirm a current missing made-up product keeps the existing `Product not found` result and a current successful made-up product keeps its existing fields and disabled slug.
+12. Confirm the mocked lookup receives only the current mocked database reference and route slug. Do not submit or save the form.
+13. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider, product-record, production-data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** the reviewed source discards the complete rejected value without binding, inspecting, logging, measuring, storing, or rendering it. A rejection shows one fixed accessible retry-later sentence and no editable form. Only the current route and database lookup may settle the page; older results are inert, and a later current success recovers. Existing current missing-product and successful-product displays remain distinct. Save, create, update, validation, and navigation behavior are unchanged. This does not authorize an officer to open, edit, or save an Admin Product screen live.
+
+**Stop conditions:** any real officer, member, product, price, inventory, order, checkout, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a product form or Save action after an unknown result; a stale product after the route or database changes; an attempted product/admin write; a Firebase, Rules, provider, or permission change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or editor is live.
+
+**Success proof:** for source completion, record the exact #296 issue, reviewed pull request, merged commit, intended old-source failure, nine green synthetic actual-route tests, relevant full checks, and independent privacy, accessibility, lifecycle, and officer-continuity reviews. The safe review path stops at source and synthetic tests because the Admin screen is not approved for officer use. Live availability requires a later separately approved Admin-screen release and dated exact-revision verification after every prerequisite above is complete. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, product-record changes, production-data actions, saves, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After any later approved publication, use the same protected website release path and verify the replacement revision. Do not undo by changing or deleting a product, order, payment, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** shop lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, Firebase, provider, account, product, order, payment, endpoint, token-shaped, or technical detail appeared. Add the treasurer if a commerce or payment state might be involved. Do not copy private details into an issue, message, screenshot, email, or AI tool.
+
+No system-topology diagram changes for this source slice because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the editor's load-result display and current-request lifecycle.
+
 ### Admin event-list load failure privacy — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**
