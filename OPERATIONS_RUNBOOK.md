@@ -491,6 +491,40 @@ Stop if any test needs a real Stripe object, key, Session ID/URL, money, member/
 
 This is source and synthetic-test evidence only. Record source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe configured, production data changed, and production behavior verified as separate states. #246 proves none of the external/live states and creates no officer task. A later reviewed child must add trusted dispatch evidence, raw-result projection/provider validation, persistence, and business attachment before any result may advance.
 
+### Stripe SDK Checkout Session observations — TEST ONLY, UNUSED
+
+PAY-002B2C4C2A [#275](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/275) pins the installed `stripe` 14.25.0 behavior needed to review a later C4C2B allowlisting projector. The suite uses Stripe's exported but experimental/unstable `HttpClient` interface with a fully synthetic in-memory fake. This is an installed-version observation and dependency-upgrade gate, not a Stripe provider contract. It creates no production source or runtime import and makes no DNS, socket, HTTP, Firebase, Firestore, or provider call.
+
+```mermaid
+flowchart LR
+    F["Synthetic fake body and headers"] --> S["Installed public SDK create path"]
+    S --> O["Forgeable Session own data"]
+    S --> L["Forgeable non-enumerable lastResponse"]
+    O --> X["Sensitive fields and unvalidated URL may survive"]
+    O --> P["Stop: explicit C4C2B allowlist required"]
+    L --> P
+```
+
+Text alternative: the fake client can make the installed SDK expose a Session and response metadata containing controlled values, including sensitive fields and an unvalidated URL, so these observations are forgeable and a later explicit allowlist is still required.
+
+Run only with Node 20 and repository lockfiles. Do not add or upgrade a package for this check:
+
+```bash
+npm --prefix functions run test:run -- --runInBand stripeCheckoutSessionSdkObservation.test.js
+npm --prefix functions run lint
+npm --prefix functions run test:run -- --runInBand
+```
+
+Expected result: every normal or error SDK observation uses the exact synthetic HTTPS host and `POST /v1/checkout/sessions` through one fake request. One separate negative harness case proves an unexpected request boundary rejects before its response factory runs. Selected Session fields are own data properties. `lastResponse` is the same fake raw-response object attached by the SDK as an own non-enumerable, non-writable property; the SDK adds selected header-derived request ID, API version, idempotency-key, and optional Stripe-account observations, while any observed `statusCode` comes from the fake raw object itself. This does not model an exhaustive production `IncomingMessage`.
+
+Synthetic unknown fields, customer/contact values, metadata, a client secret, a fragment-bearing standard Checkout URL, and an HTTPS custom `.invalid` URL survive as unvalidated pass-through values. Raw JSON serialization omits `lastResponse` but retains unsafe Session fields. The suite may keep clearly synthetic fixture literals in test source, but no dynamically captured raw Session, URL, request body, key, header, error, or canary may enter a snapshot, log, issue, screenshot, or artifact. A normal synthetic Stripe error envelope rejects, while a bare non-2xx response without that envelope may resolve; malformed body and fake transport failure follow the pinned installed-SDK behavior. Resolve/reject status alone is never evidence of provider acceptance or failure.
+
+Stop if a real credential, host, DNS/socket/network path, Firebase project, customer/member/business record, or provider object is needed; if production code imports the suite; if a test prints or snapshots a dynamically captured raw value; or if any output is described as provider, account, dispatch, delivery, idempotency, plan/send, application-environment, business-clock, payment, capacity, inventory, or business truth. Do not describe the SDK as observing no internal platform/time behavior; the safety proof is that no application or business clock/environment value becomes trusted evidence.
+
+Do not enumerate, spread, clone, stringify, log, or persist a whole Session in future runtime code. C4C2B must separately allowlist the pinned fields and remains untrusted until a runtime-adjacent adapter controls the call and binds exact plan, send, dispatch, persistence, and business evidence. The later saga persists only server-only Session ID, expiry, and minimal reviewed evidence—never the capability URL. Replay retrieves the Session by stored ID and revalidates its bindings, state, expiry, and approved URL origin before returning a current URL.
+
+Record source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, production data changed, and production behavior verified as separate states. #275 can prove only the test/source and later merge states; it creates no officer task and proves none of the external or live states.
+
 ### Target payment integration suite
 
 CI/staging must eventually include:
