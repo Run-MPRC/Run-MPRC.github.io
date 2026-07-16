@@ -256,6 +256,15 @@ function snapshotStoredTokenSecret(record) {
   return objectFreeze({ accessToken, refreshToken, expiresAt });
 }
 
+function snapshotStoredDisconnectAccessToken(record) {
+  if (!isPlainJsonRecord(record)) return null;
+
+  const accessToken = selectedOwnDataValue(record, 'access_token', false);
+  return isBoundedVisibleAscii(accessToken, STRAVA_TOKEN_MAX_LENGTH)
+    ? accessToken
+    : null;
+}
+
 function getStravaCreds() {
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
@@ -497,7 +506,7 @@ exports.stravaDisconnect = functions
     const { uid } = context.auth;
     const secretSnap = await secretDocRef(uid).get();
     if (secretSnap.exists) {
-      const { access_token: accessToken } = secretSnap.data();
+      const accessToken = snapshotStoredDisconnectAccessToken(secretSnap.data());
       if (accessToken) {
         try {
           await fetch(STRAVA_DEAUTH_URL, {
