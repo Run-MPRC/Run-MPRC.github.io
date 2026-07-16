@@ -14,6 +14,7 @@ import {
   listMemberEvents,
   listPublicEvents,
 } from './services/events/eventsService';
+import { track } from './services/analytics/analytics';
 import { getProductBySlug, listActiveProducts } from './services/shop/shopService';
 import App from './App';
 
@@ -46,6 +47,11 @@ jest.mock('./services/events/eventsService', () => {
   };
 });
 
+jest.mock('./services/analytics/analytics', () => {
+  const actual = jest.requireActual('./services/analytics/analytics');
+  return { ...actual, track: jest.fn() };
+});
+
 jest.mock('./services/hooks/useAuth', () => ({
   useAuth: () => ({
     user: null,
@@ -67,6 +73,7 @@ beforeEach(() => {
   getEventBySlug.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
+  track.mockReset();
 });
 
 afterEach(() => {
@@ -443,6 +450,23 @@ describe('public Events-calendar failure boundary', () => {
 });
 
 describe('public Event-detail load failure boundary', () => {
+  function makeEvent(slug, title) {
+    return {
+      id: slug,
+      slug,
+      title,
+      description: `A made-up ${title} used only for this test.`,
+      startAt: { toDate: () => new Date('2030-01-12T16:00:00Z') },
+      location: 'Made-up Park',
+      capacity: null,
+      registeredCount: 0,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 1000, nonMemberCents: 1500 },
+      resultsUrl: null,
+    };
+  }
+
   beforeEach(() => {
     useServiceLocator.mockReturnValue({
       services: { firebaseResources: { firestore } },
@@ -543,6 +567,114 @@ describe('public Event-detail load failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
     expect(getEventBySlug).toHaveBeenCalledTimes(1);
+  });
+
+  test('clears a prior lookup failure when the current slug succeeds', async () => {
+    getEventBySlug
+      .mockRejectedValueOnce(new Error('prior-event-failure-canary'))
+      .mockResolvedValueOnce(makeEvent('current-event', 'Current Event'));
+
+    renderPublicEventDetail();
+    expect((await screen.findByRole('alert')).textContent).toBe(EVENT_DETAIL_LOAD_FAILURE);
+
+    window.history.pushState({}, '', '/events/current-event');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Current Event' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' }))
+      .toHaveAttribute('href', '/events/current-event/register');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('prior-event-failure-canary');
+    expect(getEventBySlug).toHaveBeenNthCalledWith(2, firestore, 'current-event');
+  });
+
+  test('clears a prior not-found result when the current slug succeeds', async () => {
+    getEventBySlug
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makeEvent('current-event', 'Current Event'));
+
+    renderPublicEventDetail();
+    expect(await screen.findByText('Event not found')).toBeInTheDocument();
+
+    window.history.pushState({}, '', '/events/current-event');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Current Event' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' }))
+      .toHaveAttribute('href', '/events/current-event/register');
+    expect(screen.queryByText('Event not found')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(getEventBySlug).toHaveBeenNthCalledWith(2, firestore, 'current-event');
+  });
+
+  test('ignores an older rejection after the current slug succeeds', async () => {
+    const olderLookup = {};
+    olderLookup.promise = new Promise((_resolve, reject) => {
+      olderLookup.reject = reject;
+    });
+    getEventBySlug
+      .mockImplementationOnce(() => olderLookup.promise)
+      .mockResolvedValueOnce(makeEvent('current-event', 'Current Event'));
+
+    renderPublicEventDetail();
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+
+    window.history.pushState({}, '', '/events/current-event');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Current Event' }))
+      .toBeInTheDocument();
+
+    await act(async () => {
+      olderLookup.reject(new Error('older-event-rejection-canary'));
+      await olderLookup.promise.catch(() => undefined);
+    });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Current Event' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' }))
+      .toHaveAttribute('href', '/events/current-event/register');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('older-event-rejection-canary');
+    expect(window.location.pathname).toBe('/events/current-event');
+  });
+
+  test('ignores an older event and analytics after the current slug succeeds', async () => {
+    const olderLookup = {};
+    olderLookup.promise = new Promise((resolve) => {
+      olderLookup.resolve = resolve;
+    });
+    getEventBySlug
+      .mockImplementationOnce(() => olderLookup.promise)
+      .mockResolvedValueOnce(makeEvent('current-event', 'Current Event'));
+
+    renderPublicEventDetail();
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+
+    window.history.pushState({}, '', '/events/current-event');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Current Event' }))
+      .toBeInTheDocument();
+    expect(track).toHaveBeenCalledWith('event_view', {
+      slug: 'current-event',
+      title: 'Current Event',
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      olderLookup.resolve(makeEvent('older-event', 'Older Event'));
+      await olderLookup.promise;
+    });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Current Event' }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Older Event' }))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' }))
+      .toHaveAttribute('href', '/events/current-event/register');
+    expect(window.location.pathname).toBe('/events/current-event');
+    expect(track).toHaveBeenCalledTimes(1);
   });
 });
 

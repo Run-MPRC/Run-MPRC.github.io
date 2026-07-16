@@ -32,16 +32,16 @@ function EventDetail() {
   const cancelled = searchParams.get('cancelled') === '1';
 
   useEffect(() => {
-    if (!isReady || !services || !slug) return;
-    setLoading(true);
+    if (!isReady || !services || !slug) return () => undefined;
+    let active = true; setLoading(true); setEvent(null); setError(null);
     getEventBySlug(services.firebaseResources.firestore, slug)
       .then((e) => {
-        setEvent(e);
-        setLoading(false);
+        if (!active) return;
+        setEvent(e); setLoading(false);
         if (!e) setError('Event not found');
         else track(analyticsEvents.eventView, { slug: e.slug, title: e.title });
       })
-      .catch(() => { setError('We could not load this event right now. Please try again later.'); setLoading(false); });
+      .catch(() => { if (active) { setError('We could not load this event right now. Please try again later.'); setLoading(false); } }); return () => { active = false; };
   }, [services, isReady, slug]);
 
   if (loading) return <div className="container mx-auto p-6">Loading...</div>;

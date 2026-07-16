@@ -669,6 +669,41 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Public event-detail lookup lifecycle — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep a public event page tied to the event named in its current address when a visitor moves between event pages, even if an older lookup finishes later.
+
+**Approver:** events lead plus platform/security owner.
+
+**Prerequisites:** issue [#264](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/264) must be merged for source review. Calling the repair live also requires a protected website publication and an exact revision check on the affected `runmprc.com/events/...` pages. This source change does not choose the canonical event source, schema, importer, or publication workflow reserved to #121; deploy Firebase; change database permissions; contact an outside provider; change event records; use production data; or prove live behavior. It leaves the separate commerce-result work in #249 unchanged.
+
+Officer review steps after the source merge:
+
+1. Keep the public event-detail lifecycle repair marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #264 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only made-up event names, mocked event lookups, and a mocked database reference.
+4. Confirm moving from a failed made-up event to a successful one clears the old alert and shows the current event.
+5. Confirm moving from a missing made-up event to a successful one clears the old not-found result and shows the current event.
+6. Confirm an older rejection that finishes after the current event cannot replace that event with an alert.
+7. Confirm an older success that finishes after the current event cannot replace its title, registration link, or event-view measurement.
+8. Confirm the current event keeps its own title, registration link, and one event-view measurement.
+9. Confirm the fixed failure sentence and missing-event result from #262 still work for the current event.
+10. Record source change, tests, merge, preview, website publication, the exact `runmprc.com` event pages, Firebase, provider, event-record, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** each changed event address starts a fresh loading state, clears the preceding event and alert, and accepts a result only from its own active lookup. A completed older lookup cannot replace the current event, registration link, alert, or measurement. The current event retains the existing success, missing-event, and fixed failure displays. This source slice does not approve #121 event-source decisions or change #249 commerce-result work.
+
+**Stop conditions:** any real member, registration, event record, private location, discount, payment, waiver, or contact data; a request to force a production race between lookups; a production Firebase or provider change; a stale title, registration link, alert, or event-view measurement after the address changes; an attempt to decide #121 work or edit #249 work in this slice; or a claim that source, tests, merge, preview, or a green workflow proves the repair is live.
+
+**Success proof:** for source completion, record the exact #264 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic lifecycle tests, relevant full checks, and independent integrity review. For live availability, separately record the approved website publication, published revision, and a dated check that navigation between two approved public `runmprc.com` event pages keeps the address, title, and registration link aligned. Record Firebase deployment, database-permission changes, provider configuration, event-record changes, and production-data actions as **not performed** for this frontend-only change. A synthetic timing test proves source behavior; it does not prove production behavior.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on the affected `runmprc.com` event pages. Do not undo by changing an event, member account, registration, database record, permission, source document, or provider setting.
+
+**Escalation:** events lead plus platform/security owner. Add the privacy owner and use the private incident path if a stale page exposed a wrong event, private detail, registration destination, or measurement. Do not copy private details into an issue, message, screenshot, email, or AI tool.
+
+No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
