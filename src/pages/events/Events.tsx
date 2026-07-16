@@ -25,7 +25,7 @@ const structuredData = {
   description: SEO_CONFIG.description,
   url: SEO_CONFIG.url,
 };
-
+function EventsSubscriptionAlertBox({ children }: { children: React.ReactNode }) { return <p className="text-red-500" role="alert" aria-live="assertive" aria-atomic="true">{children}</p>; }
 function PriceBadge({ event }: { event: Event }) {
   const { memberCents, nonMemberCents, earlyBirdCents } = event.pricing || {};
   if (!memberCents && !nonMemberCents && !earlyBirdCents) {
@@ -98,7 +98,7 @@ function Events() {
     const unsub = lister(
       db,
       (evs) => { setEvents(evs); setLoading(false); },
-      (err) => { setError(err.message); setLoading(false); },
+      () => { setError('We could not load events right now. Please try again later.'); setLoading(false); },
     );
     return unsub;
   }, [services, isReady, isMember]);
@@ -121,7 +121,7 @@ function Events() {
           </Link>
         </div>
         {loading && <p className="text-gray-500">Loading events...</p>}
-        {error && <p className="text-red-500">Error: {error}</p>}
+        {error && <EventsSubscriptionAlertBox>Error: {error}</EventsSubscriptionAlertBox>}
         {!loading && !error && events.length === 0 && (
           <p className="text-gray-500">No events scheduled at this time.</p>
         )}
