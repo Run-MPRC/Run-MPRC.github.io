@@ -2334,10 +2334,12 @@ describe('Strava disconnect failure log boundary', () => {
     Object.values(consoleSpies).forEach((spy) => spy.mockRestore());
   });
 
-  function seedAccessToken() {
-    admin.__setDocument(SECRET_PATH, {
-      access_token: 'synthetic_disconnect_access_token_test',
-    });
+  function seedStoredSecret(secret) {
+    admin.__setDocument(SECRET_PATH, secret);
+  }
+
+  function seedAccessToken(accessToken = 'synthetic_disconnect_access_token_test') {
+    seedStoredSecret({ access_token: accessToken });
   }
 
   function expectLocalDeletes() {
@@ -2347,6 +2349,18 @@ describe('Strava disconnect failure log boundary', () => {
 
   function expectNoLogs() {
     Object.values(consoleSpies).forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  async function expectRejectedStoredSecret(secret) {
+    seedStoredSecret(secret);
+
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(admin.__getReads()).toEqual([SECRET_PATH]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectLocalDeletes();
+    expectNoLogs();
   }
 
   test('runs App Check before Auth, Firestore, provider access, or deletion', async () => {
@@ -2386,6 +2400,257 @@ describe('Strava disconnect failure log boundary', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expectLocalDeletes();
     expectNoLogs();
+  });
+
+  describe('stored disconnect token validation before provider use', () => {
+    class DisconnectSecret {
+      constructor() {
+        this.access_token = 'synthetic_disconnect_access_token_test';
+      }
+    }
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a boolean', true],
+      ['a number', 1],
+      ['a string', 'synthetic_disconnect_access_token_test'],
+      ['an array', ['synthetic_disconnect_access_token_test']],
+      ['a null-prototype record', Object.assign(Object.create(null), {
+        access_token: 'synthetic_disconnect_access_token_test',
+      })],
+      ['a custom-prototype record', Object.assign(Object.create({ inherited: true }), {
+        access_token: 'synthetic_disconnect_access_token_test',
+      })],
+      ['a Date', new Date(0)],
+      ['a class instance', new DisconnectSecret()],
+    ])('rejects %s root without provider access and still deletes locally', async (
+      _case,
+      secret,
+    ) => {
+      await expectRejectedStoredSecret(secret);
+    });
+
+    test('rejects a transparent root Proxy without invoking any trap', async () => {
+      const traps = {
+        get: jest.fn(() => {
+          throw new Error('disconnect-token-canary root get trap');
+        }),
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('disconnect-token-canary root descriptor trap');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('disconnect-token-canary root prototype trap');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('disconnect-token-canary root ownKeys trap');
+        }),
+      };
+      const secret = new Proxy({
+        access_token: 'synthetic_disconnect_access_token_test',
+      }, traps);
+
+      await expectRejectedStoredSecret(secret);
+
+      Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('rejects a revoked root Proxy without reflection', async () => {
+      const { proxy, revoke } = Proxy.revocable({
+        access_token: 'synthetic_disconnect_access_token_test',
+      }, {});
+      revoke();
+
+      await expectRejectedStoredSecret(proxy);
+    });
+
+    test('does not invoke an access_token accessor', async () => {
+      const getter = jest.fn(() => 'synthetic_disconnect_access_token_test');
+      const secret = {};
+      Object.defineProperty(secret, 'access_token', {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectRejectedStoredSecret(secret);
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test('does not consult an inherited access_token getter', async () => {
+      const inheritedGetter = jest.fn(() => 'synthetic_disconnect_access_token_test');
+      Object.defineProperty(Object.prototype, 'access_token', {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectRejectedStoredSecret({});
+      } finally {
+        delete Object.prototype.access_token;
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    const invalidStoredTokens = [
+      ['missing', undefined, true],
+      ['own undefined', undefined, false],
+      ['null', null, false],
+      ['empty', '', false],
+      ['literal space', 'token canary', false],
+      ['control', 'token\ncanary', false],
+      ['DEL control', String.fromCharCode(0x7f), false],
+      ['non-ASCII', 'tökén', false],
+      ['oversized', 'x'.repeat(MAX_TOKEN_LENGTH + 1), false],
+      ['a boolean', true, false],
+      ['a number', 1, false],
+      ['a bigint', 1n, false],
+      ['a symbol', Symbol('disconnect-token-canary'), false],
+      ['boxed', Object('synthetic_disconnect_access_token_test'), false],
+      ['structured', { token: 'synthetic_disconnect_access_token_test' }, false],
+    ];
+
+    test.each(invalidStoredTokens)(
+      'rejects access_token that is %s without coercion or provider access',
+      async (_case, value, remove) => {
+        const secret = { access_token: 'synthetic_disconnect_access_token_test' };
+        if (remove) delete secret.access_token;
+        else secret.access_token = value;
+
+        await expectRejectedStoredSecret(secret);
+      },
+    );
+
+    test('does not invoke access_token coercion or JSON hooks', async () => {
+      const hooks = {
+        toJSON: jest.fn(() => 'disconnect-token-canary'),
+        toString: jest.fn(() => 'disconnect-token-canary'),
+        valueOf: jest.fn(() => 'disconnect-token-canary'),
+        [Symbol.toPrimitive]: jest.fn(() => 'disconnect-token-canary'),
+      };
+
+      await expectRejectedStoredSecret({ access_token: hooks });
+
+      expect(hooks.toJSON).not.toHaveBeenCalled();
+      expect(hooks.toString).not.toHaveBeenCalled();
+      expect(hooks.valueOf).not.toHaveBeenCalled();
+      expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test('ignores unknown hostile fields without enumeration or access', async () => {
+      const unknownGetters = ['refresh_token', 'expires_at', 'scope', 'updatedAt', 'toJSON']
+        .map((field) => {
+          const getter = jest.fn(() => {
+            throw new Error(`disconnect-token-canary unknown ${field}`);
+          });
+          return { field, getter };
+        });
+      const symbolGetter = jest.fn(() => {
+        throw new Error('disconnect-token-canary unknown symbol');
+      });
+      const secret = { access_token: 'synthetic_disconnect_access_token_test' };
+      unknownGetters.forEach(({ field, getter }) => {
+        Object.defineProperty(secret, field, {
+          configurable: true,
+          enumerable: true,
+          get: getter,
+        });
+      });
+      Object.defineProperty(secret, Symbol('unknown'), {
+        configurable: true,
+        enumerable: true,
+        get: symbolGetter,
+      });
+      seedStoredSecret(secret);
+      fetchMock.mockResolvedValue({ ok: true });
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      unknownGetters.forEach(({ getter }) => expect(getter).not.toHaveBeenCalled());
+      expect(symbolGetter).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.strava.com/oauth/deauthorize',
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
+        },
+      );
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test('uses the admitted primitive after the raw record mutates during provider dispatch', async () => {
+      const secret = { access_token: 'synthetic_disconnect_access_token_test' };
+      seedStoredSecret(secret);
+      fetchMock.mockImplementation(async () => {
+        secret.access_token = 'mutated_disconnect_access_token_test';
+        return { ok: true };
+      });
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.strava.com/oauth/deauthorize',
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
+        },
+      );
+      expect(secret.access_token).toBe('mutated_disconnect_access_token_test');
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test.each([
+      ['minimum', 'a'],
+      ['maximum', 'x'.repeat(MAX_TOKEN_LENGTH)],
+    ])('accepts the exact %s token bound byte-for-byte', async (_case, accessToken) => {
+      seedAccessToken(accessToken);
+      fetchMock.mockResolvedValue({ ok: true });
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.strava.com/oauth/deauthorize',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test('accepts a frozen non-enumerable own token data descriptor', async () => {
+      const secret = {};
+      Object.defineProperty(secret, 'access_token', {
+        configurable: false,
+        enumerable: false,
+        value: 'synthetic_disconnect_access_token_test',
+        writable: false,
+      });
+      Object.freeze(secret);
+      seedStoredSecret(secret);
+      fetchMock.mockResolvedValue({ ok: true });
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.strava.com/oauth/deauthorize',
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
+        },
+      );
+      expectLocalDeletes();
+      expectNoLogs();
+    });
   });
 
   test('preserves the successful best-effort provider POST and local deletes', async () => {
