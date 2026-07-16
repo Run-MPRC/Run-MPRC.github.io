@@ -201,6 +201,7 @@ const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Pleas
 const EVENT_REGISTER_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
 const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Please try again later.';
+const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
@@ -237,6 +238,11 @@ function renderPublicEventRegister() {
 
 function renderAdminProducts() {
   window.history.pushState({}, '', '/admin/products');
+  return render(<App />);
+}
+
+function renderAdminProductEditor() {
+  window.history.pushState({}, '', '/admin/products/synthetic-product/edit');
   return render(<App />);
 }
 
@@ -1672,6 +1678,377 @@ describe('Admin Products list-load failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(listAllProducts).toHaveBeenCalledWith(firestore);
     expect(listAllProducts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Admin Product editor load-failure boundary', () => {
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    getProductBySlug.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces rejected load details with one fixed accessible result and no editable form', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    getProductBySlug.mockRejectedValueOnce(Object.assign(
+      new Error('admin-product-editor-private-canary officer@example.test'),
+      {
+        code: 'firestore/admin-product-editor-private-canary',
+        endpoint: 'https://provider.example.test/?token=admin-product-editor-secret-canary',
+      },
+    ));
+
+    renderAdminProductEditor();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_PRODUCT_EDITOR_LOAD_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /admin-product-editor-private-canary|officer@example\.test|provider\.example|admin-product-editor-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-product-editor-private-canary|officer@example\.test|provider\.example|admin-product-editor-secret-canary/i,
+    );
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Product not found')).not.toBeInTheDocument();
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Edit product' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /All products/ }))
+      .toHaveAttribute('href', '/admin/products');
+    expect(getProductBySlug).toHaveBeenCalledWith(firestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/admin/products/synthetic-product/edit');
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect, log, or measure a hostile load rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-product-editor-message-getter-canary');
+    });
+    getProductBySlug.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderAdminProductEditor();
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(ADMIN_PRODUCT_EDITOR_LOAD_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('admin-product-editor-message-getter-canary');
+    expect(JSON.stringify(track.mock.calls))
+      .not.toContain('admin-product-editor-message-getter-canary');
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('fails closed for a later service rejection and recovers on a later current success', async () => {
+    getProductBySlug.mockResolvedValueOnce({
+      id: 'synthetic-product',
+      slug: 'synthetic-product',
+      title: 'Synthetic Product',
+      description: 'A made-up product used only for this test.',
+      imageUrl: '',
+      priceCents: 3000,
+      status: 'active',
+      sizes: ['S'],
+      colors: ['Blue'],
+    });
+    const view = renderAdminProductEditor();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit: Synthetic Product' }))
+      .toBeInTheDocument();
+    expect(document.querySelector('form')).not.toBeNull();
+
+    const retryFirestore = { name: 'synthetic-firestore-retry' };
+    getProductBySlug.mockRejectedValueOnce(
+      new Error('admin-product-editor-transition-private-canary'),
+    );
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: retryFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(ADMIN_PRODUCT_EDITOR_LOAD_FAILURE);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('Synthetic Product');
+    expect(document.body).not.toHaveTextContent(
+      'admin-product-editor-transition-private-canary',
+    );
+
+    const recoveredFirestore = { name: 'synthetic-firestore-recovered' };
+    getProductBySlug.mockResolvedValueOnce({
+      id: 'recovered-product',
+      slug: 'synthetic-product',
+      title: 'Recovered Product',
+      description: 'A recovered made-up product.',
+      imageUrl: 'https://images.example.test/recovered-product.jpg',
+      priceCents: 3250,
+      status: 'draft',
+      sizes: ['M', 'L'],
+      colors: ['Green'],
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: recoveredFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit: Recovered Product' }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText('Title *')).toHaveValue('Recovered Product');
+    expect(screen.getByLabelText('Price (USD) *')).toHaveValue(32.5);
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      'admin-product-editor-transition-private-canary',
+    );
+    expect(getProductBySlug).toHaveBeenNthCalledWith(1, firestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenNthCalledWith(2, retryFirestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenNthCalledWith(3, recoveredFirestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenCalledTimes(3);
+  });
+
+  test('ignores an older hostile rejection after the current route loads', async () => {
+    let rejectOlderLookup;
+    const olderLookup = new Promise((_resolve, reject) => {
+      rejectOlderLookup = reject;
+    });
+    getProductBySlug
+      .mockReturnValueOnce(olderLookup)
+      .mockResolvedValueOnce({
+        id: 'current-product',
+        slug: 'current-product',
+        title: 'Current Product',
+        description: 'A made-up current product.',
+        imageUrl: '',
+        priceCents: 4000,
+        status: 'active',
+        sizes: [],
+        colors: [],
+      });
+
+    renderAdminProductEditor();
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+
+    window.history.pushState({}, '', '/admin/products/current-product/edit');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit: Current Product' }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText('Title *')).toHaveValue('Current Product');
+
+    const messageGetter = jest.fn(() => {
+      throw new Error('admin-product-editor-older-message-getter-canary');
+    });
+    await act(async () => {
+      rejectOlderLookup(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await olderLookup.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { level: 1, name: 'Edit: Current Product' }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText('Title *')).toHaveValue('Current Product');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      'admin-product-editor-older-message-getter-canary',
+    );
+    expect(window.location.pathname).toBe('/admin/products/current-product/edit');
+    expect(getProductBySlug).toHaveBeenNthCalledWith(1, firestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenNthCalledWith(2, firestore, 'current-product');
+    expect(getProductBySlug).toHaveBeenCalledTimes(2);
+  });
+
+  test('ignores an older hostile success after the current route loads', async () => {
+    let resolveOlderLookup;
+    const olderLookup = new Promise((resolve) => {
+      resolveOlderLookup = resolve;
+    });
+    getProductBySlug
+      .mockReturnValueOnce(olderLookup)
+      .mockResolvedValueOnce({
+        id: 'current-product',
+        slug: 'current-product',
+        title: 'Current Product',
+        description: 'A made-up current product.',
+        imageUrl: '',
+        priceCents: 4000,
+        status: 'active',
+        sizes: [],
+        colors: [],
+      });
+
+    renderAdminProductEditor();
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+
+    window.history.pushState({}, '', '/admin/products/current-product/edit');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit: Current Product' }))
+      .toBeInTheDocument();
+
+    const titleGetter = jest.fn(() => {
+      throw new Error('admin-product-editor-older-title-getter-canary');
+    });
+    const olderProduct = Object.defineProperty({
+      id: 'older-product',
+      slug: 'synthetic-product',
+      description: 'An obsolete made-up product.',
+      imageUrl: '',
+      priceCents: 1000,
+      status: 'draft',
+      sizes: [],
+      colors: [],
+    }, 'title', {
+      configurable: true,
+      get: titleGetter,
+    });
+    await act(async () => {
+      resolveOlderLookup(olderProduct);
+      await olderLookup;
+      await Promise.resolve();
+    });
+
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { level: 1, name: 'Edit: Current Product' }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText('Title *')).toHaveValue('Current Product');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      'admin-product-editor-older-title-getter-canary',
+    );
+    expect(window.location.pathname).toBe('/admin/products/current-product/edit');
+    expect(getProductBySlug).toHaveBeenNthCalledWith(1, firestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenNthCalledWith(2, firestore, 'current-product');
+    expect(getProductBySlug).toHaveBeenCalledTimes(2);
+  });
+
+  test('preserves the fresh new-product route without starting a product lookup', async () => {
+    window.history.pushState({}, '', '/admin/products/new');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Create product' }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText('Title *')).toHaveValue('');
+    expect(screen.getByLabelText(/^Slug \*/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Slug \*/)).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create product' })).toBeEnabled();
+    expect(screen.getByRole('link', { name: /All products/ }))
+      .toHaveAttribute('href', '/admin/products');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(getProductBySlug).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/admin/products/new');
+  });
+
+  test('preserves AdminGuard denial without starting a product lookup', async () => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-non-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: false,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+
+    renderAdminProductEditor();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Admins only' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('This page is restricted to club admins.'))
+      .toBeInTheDocument();
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('link', { name: /All products/ })).not.toBeInTheDocument();
+    expect(getProductBySlug).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/admin/products/synthetic-product/edit');
+  });
+
+  test('preserves the existing missing-product result', async () => {
+    renderAdminProductEditor();
+
+    expect(await screen.findByText('Product not found')).toBeInTheDocument();
+    expect(document.querySelector('form')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.getByRole('link', { name: /All products/ }))
+      .toHaveAttribute('href', '/admin/products');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(getProductBySlug).toHaveBeenCalledWith(firestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the existing loaded product projection and admin route', async () => {
+    getProductBySlug.mockResolvedValueOnce({
+      id: 'synthetic-product',
+      slug: 'synthetic-product',
+      title: 'Synthetic Club Shirt',
+      description: 'A made-up product used only for this test.',
+      imageUrl: 'https://images.example.test/synthetic-club-shirt.jpg',
+      priceCents: 3250,
+      status: 'active',
+      sizes: ['S', 'M'],
+      colors: ['Blue', 'Green'],
+    });
+
+    renderAdminProductEditor();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit: Synthetic Club Shirt' }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText('Title *')).toHaveValue('Synthetic Club Shirt');
+    expect(screen.getByLabelText(/^Slug \*/)).toHaveValue('synthetic-product');
+    expect(screen.getByLabelText(/^Slug \*/)).toBeDisabled();
+    expect(screen.getByLabelText('Description'))
+      .toHaveValue('A made-up product used only for this test.');
+    expect(screen.getByLabelText('Price (USD) *')).toHaveValue(32.5);
+    expect(screen.getByLabelText(/^Image URL/))
+      .toHaveValue('https://images.example.test/synthetic-club-shirt.jpg');
+    expect(screen.getByLabelText('Sizes (comma-separated, optional)')).toHaveValue('S, M');
+    expect(screen.getByLabelText('Colors (comma-separated, optional)'))
+      .toHaveValue('Blue, Green');
+    expect(screen.getByLabelText('Status')).toHaveValue('active');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.getByRole('link', { name: /All products/ }))
+      .toHaveAttribute('href', '/admin/products');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(getProductBySlug).toHaveBeenCalledWith(firestore, 'synthetic-product');
+    expect(getProductBySlug).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/admin/products/synthetic-product/edit');
   });
 });
 

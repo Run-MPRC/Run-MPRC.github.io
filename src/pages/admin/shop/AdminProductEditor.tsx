@@ -29,23 +29,47 @@ const EMPTY: FormState = {
   imageUrl: '', sizes: '', colors: '', status: 'draft',
 };
 
+const LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
+
+interface ProductLoadOutcome {
+  firestore: unknown;
+  slug: string;
+  status: 'loading' | 'resolved' | 'unavailable';
+}
+
 function Inner() {
   const { slug: routeSlug } = useParams<{ slug: string }>();
   const isEdit = !!routeSlug;
   const navigate = useNavigate();
   const { services, isReady } = useServiceLocator();
   const { user } = useAuth();
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
 
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [loading, setLoading] = useState(isEdit);
+  const [loadOutcome, setLoadOutcome] = useState<ProductLoadOutcome | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  let currentLoadStatus: ProductLoadOutcome['status'] = 'loading';
+  if (!isEdit) currentLoadStatus = 'resolved';
+  else if (loadOutcome?.firestore === firestore && loadOutcome.slug === routeSlug) {
+    currentLoadStatus = loadOutcome.status;
+  }
+
   useEffect(() => {
-    if (!isEdit) return;
-    if (!isReady || !services) return;
-    getProductBySlug(services.firebaseResources.firestore, routeSlug!)
+    if (!isEdit || !firestore || !routeSlug) return () => undefined;
+    let active = true;
+    const outcomeKey = { firestore, slug: routeSlug };
+
+    setLoadOutcome({ ...outcomeKey, status: 'loading' });
+    setForm(EMPTY);
+    setError(null);
+
+    getProductBySlug(firestore, routeSlug)
       .then((p) => {
+        if (!active) return;
         if (!p) { setError('Product not found'); }
         else {
           setForm({
@@ -59,10 +83,15 @@ function Inner() {
             status: p.status,
           });
         }
-        setLoading(false);
+        setLoadOutcome({ ...outcomeKey, status: 'resolved' });
       })
-      .catch((err) => { setError(err.message); setLoading(false); });
-  }, [services, isReady, routeSlug, isEdit]);
+      .catch(() => {
+        if (!active) return;
+        setLoadOutcome({ ...outcomeKey, status: 'unavailable' });
+      });
+
+    return () => { active = false; };
+  }, [firestore, routeSlug, isEdit]);
 
   function patch(p: Partial<FormState>) {
     setForm((f) => ({ ...f, ...p }));
@@ -106,7 +135,31 @@ function Inner() {
     }
   }
 
-  if (loading) return <div className="container mx-auto p-6">Loading...</div>;
+  if (currentLoadStatus === 'loading') {
+    return <div className="container mx-auto p-6">Loading...</div>;
+  }
+
+  if (currentLoadStatus === 'unavailable') {
+    return (
+      <>
+        <SEO title="Edit product" noindex />
+        <div className="container mx-auto p-4 max-w-2xl">
+          <Link to="/admin/products" className="text-sm text-blue-600 hover:underline">
+            ← All products
+          </Link>
+          <h1 className="text-2xl font-bold mt-2">Edit product</h1>
+          <p
+            className="text-red-600 text-sm mt-4"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {LOAD_FAILURE}
+          </p>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
