@@ -928,9 +928,11 @@ describe('Strava token refresh failure boundary', () => {
   beforeEach(() => {
     process.env.STRAVA_CLIENT_ID = 'strava_client_test';
     process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
+    admin.__clearDeletes();
     admin.__clearDocuments();
     admin.__clearReads();
     admin.__clearWrites();
+    Timestamp.now.mockClear();
     requireAppCheck.mockReset();
     fetchMock = jest.fn();
     global.fetch = fetchMock;
@@ -951,8 +953,75 @@ describe('Strava token refresh failure boundary', () => {
   }
 
   function expectNoWritesOrLogs() {
+    expect(admin.__getDeletes()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
+    expect(Timestamp.now).not.toHaveBeenCalled();
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  function validRefreshResponse() {
+    return {
+      token_type: 'Bearer',
+      access_token: 'refreshed_access_token_test',
+      expires_at: 1_900_000_000,
+      expires_in: 21_600,
+      refresh_token: 'refreshed_refresh_token_test',
+    };
+  }
+
+  function mockRefreshResponse(response) {
+    const json = jest.fn().mockResolvedValue(response);
+    fetchMock.mockResolvedValueOnce({ ok: true, json });
+    return json;
+  }
+
+  function mockValidRefreshFlow(response = validRefreshResponse()) {
+    const refreshJson = mockRefreshResponse(response);
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue([]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          ytd_run_totals: { distance: 0, count: 0 },
+          ytd_ride_totals: { distance: 0, count: 0 },
+          all_run_totals: { distance: 0, count: 0 },
+        }),
+      });
+    return refreshJson;
+  }
+
+  async function expectInvalidSuccessfulRefresh(response) {
+    seedExpiredConnection();
+    const json = mockRefreshResponse(response);
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://www.strava.com/api/v3/oauth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: 'strava_client_test',
+          client_secret: 'strava_secret_test',
+          refresh_token: 'synthetic_refresh_token_test',
+          grant_type: 'refresh_token',
+        }),
+      },
+    );
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expectNoWritesOrLogs();
   }
 
   test('runs App Check before Auth, Firestore, or provider access', async () => {
@@ -1081,6 +1150,322 @@ describe('Strava token refresh failure boundary', () => {
     expectNoWritesOrLogs();
   });
 
+  describe('successful refresh response validation', () => {
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a primitive', true],
+      ['an array', []],
+      ['a null-prototype record', Object.create(null)],
+      ['a custom-prototype record', Object.create({ inherited: true })],
+    ])('rejects %s root before timestamps, writes, downstream calls, or logs', async (
+      _case,
+      response,
+    ) => {
+      await expectInvalidSuccessfulRefresh(response);
+    });
+
+    test('rejects a transparent root Proxy after exactly one promise then lookup', async () => {
+      const observedGetKeys = [];
+      const secondThenFailure = new Error(
+        'second-then-canary access_token=provider-secret-canary',
+      );
+      const reflectionTraps = {
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('root descriptor trap must not run');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('root prototype trap must not run');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('root ownKeys trap must not run');
+        }),
+      };
+      const response = new Proxy(validRefreshResponse(), {
+        get: (_target, key) => {
+          observedGetKeys.push(key);
+          if (key !== 'then') {
+            throw new Error(`unexpected root Proxy read: ${String(key)}`);
+          }
+          if (observedGetKeys.length > 1) throw secondThenFailure;
+          return undefined;
+        },
+        ...reflectionTraps,
+      });
+
+      await expectInvalidSuccessfulRefresh(response);
+
+      expect(observedGetKeys).toEqual(['then']);
+      Object.values(reflectionTraps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('keeps a throwing first root then lookup inside the unavailable JSON boundary', async () => {
+      seedExpiredConnection();
+      const response = new Proxy(validRefreshResponse(), {
+        get: (_target, key) => {
+          if (key === 'then') {
+            throw new Error('root-then-canary refresh_token=provider-secret-canary');
+          }
+          throw new Error('unexpected root Proxy read');
+        },
+      });
+      const json = mockRefreshResponse(response);
+
+      const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(error)).toEqual({
+        code: 'unavailable',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify(publicError(error)))
+        .not.toMatch(/root-then-canary|provider-secret/i);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expectNoWritesOrLogs();
+    });
+
+    test.each([
+      ['access_token', undefined, true],
+      ['access_token', null, false],
+      ['access_token', '', false],
+      ['access_token', 'token canary', false],
+      ['access_token', 'token\ncanary', false],
+      ['access_token', 'tökén', false],
+      ['access_token', 'x'.repeat(MAX_TOKEN_LENGTH + 1), false],
+      ['access_token', Object('boxed-token'), false],
+      ['access_token', { token: 'structured' }, false],
+      ['refresh_token', undefined, true],
+      ['refresh_token', null, false],
+      ['refresh_token', '', false],
+      ['refresh_token', 'token canary', false],
+      ['refresh_token', 'token\rcanary', false],
+      ['refresh_token', 'tökén', false],
+      ['refresh_token', 'x'.repeat(MAX_TOKEN_LENGTH + 1), false],
+      ['refresh_token', Object('boxed-token'), false],
+      ['refresh_token', { token: 'structured' }, false],
+    ])('rejects invalid required %s without coercion, writes, or use', async (
+      field,
+      value,
+      remove,
+    ) => {
+      const response = validRefreshResponse();
+      if (remove) delete response[field];
+      else response[field] = value;
+
+      await expectInvalidSuccessfulRefresh(response);
+    });
+
+    test.each([
+      ['missing', undefined, true],
+      ['null', null, false],
+      ['a string', '1900000000', false],
+      ['zero', 0, false],
+      ['a negative integer', -1, false],
+      ['a fraction', 1.5, false],
+      ['positive infinity', Number.POSITIVE_INFINITY, false],
+      ['not-a-number', Number.NaN, false],
+      ['an unsafe integer', Number.MAX_SAFE_INTEGER + 1, false],
+    ])('rejects expires_at that is %s without writes or use', async (
+      _case,
+      value,
+      remove,
+    ) => {
+      const response = validRefreshResponse();
+      if (remove) delete response.expires_at;
+      else response.expires_at = value;
+
+      await expectInvalidSuccessfulRefresh(response);
+    });
+
+    test.each([
+      ['access_token'],
+      ['refresh_token'],
+      ['expires_at'],
+    ])('does not invoke a selected %s accessor', async (field) => {
+      const response = validRefreshResponse();
+      const selectedValue = response[field];
+      const selectedGetter = jest.fn(() => selectedValue);
+      Object.defineProperty(response, field, {
+        configurable: true,
+        enumerable: true,
+        get: selectedGetter,
+      });
+
+      await expectInvalidSuccessfulRefresh(response);
+
+      expect(selectedGetter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['access_token', 'refreshed_access_token_test'],
+      ['refresh_token', 'refreshed_refresh_token_test'],
+      ['expires_at', 1_900_000_000],
+    ])('does not consult an inherited required %s getter', async (field, selectedValue) => {
+      const response = validRefreshResponse();
+      const inheritedGetter = jest.fn(() => selectedValue);
+      delete response[field];
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectInvalidSuccessfulRefresh(response);
+      } finally {
+        delete Object.prototype[field];
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test('does not invoke selected token coercion hooks', async () => {
+      const coercionHooks = {
+        toString: jest.fn(() => 'refreshed_access_token_test'),
+        valueOf: jest.fn(() => 'refreshed_access_token_test'),
+        [Symbol.toPrimitive]: jest.fn(() => 'refreshed_access_token_test'),
+      };
+      const response = validRefreshResponse();
+      response.access_token = coercionHooks;
+
+      await expectInvalidSuccessfulRefresh(response);
+
+      expect(coercionHooks.toString).not.toHaveBeenCalled();
+      expect(coercionHooks.valueOf).not.toHaveBeenCalled();
+      expect(coercionHooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test('does not invoke expires_at coercion hooks', async () => {
+      const coercionHooks = {
+        toString: jest.fn(() => '1900000000'),
+        valueOf: jest.fn(() => 1_900_000_000),
+        [Symbol.toPrimitive]: jest.fn(() => 1_900_000_000),
+      };
+      const response = validRefreshResponse();
+      response.expires_at = coercionHooks;
+
+      await expectInvalidSuccessfulRefresh(response);
+
+      expect(coercionHooks.toString).not.toHaveBeenCalled();
+      expect(coercionHooks.valueOf).not.toHaveBeenCalled();
+      expect(coercionHooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test('ignores unknown hostile fields without enumeration or access', async () => {
+      const unknownGetters = [
+        ['token_type', 'Bearer'],
+        ['expires_in', 21_600],
+        ['scope', 'read'],
+        ['provider_debug', 'private-provider-value'],
+      ].map(([field, value]) => {
+        const getter = jest.fn(() => value);
+        return { field, getter };
+      });
+      const unknownSymbolGetter = jest.fn(() => {
+        throw new Error('unknown-symbol-canary refresh_token=provider-secret-canary');
+      });
+      const response = validRefreshResponse();
+      unknownGetters.forEach(({ field, getter }) => {
+        Object.defineProperty(response, field, {
+          configurable: true,
+          enumerable: true,
+          get: getter,
+        });
+      });
+      Object.defineProperty(response, Symbol('unknown'), {
+        configurable: true,
+        enumerable: true,
+        get: unknownSymbolGetter,
+      });
+      seedExpiredConnection();
+      mockValidRefreshFlow(response);
+
+      await stravaFetchStats({}, CONTEXT);
+
+      unknownGetters.forEach(({ getter }) => expect(getter).not.toHaveBeenCalled());
+      expect(unknownSymbolGetter).not.toHaveBeenCalled();
+      expect(admin.__getWrites()).toHaveLength(1);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test.each([
+      ['minimum', 'a', 'b'],
+      ['maximum', 'a'.repeat(MAX_TOKEN_LENGTH), 'b'.repeat(MAX_TOKEN_LENGTH)],
+    ])('accepts exact %s token bounds byte-for-byte', async (
+      _case,
+      accessToken,
+      refreshToken,
+    ) => {
+      const response = validRefreshResponse();
+      response.access_token = accessToken;
+      response.refresh_token = refreshToken;
+      seedExpiredConnection();
+      mockValidRefreshFlow(response);
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(admin.__getWrites()[0].data).toMatchObject({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: response.expires_at,
+      });
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        'https://www.strava.com/api/v3/athlete/activities?per_page=5',
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('accepts frozen and non-enumerable selected own data descriptors', async () => {
+      const response = validRefreshResponse();
+      Object.defineProperty(response, 'access_token', {
+        configurable: false,
+        enumerable: false,
+        value: response.access_token,
+        writable: false,
+      });
+      Object.freeze(response);
+      seedExpiredConnection();
+      mockValidRefreshFlow(response);
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(admin.__getWrites()[0].data).toMatchObject({
+        access_token: 'refreshed_access_token_test',
+        refresh_token: 'refreshed_refresh_token_test',
+        expires_at: 1_900_000_000,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('persists an unchanged returned refresh token as the latest token', async () => {
+      const response = validRefreshResponse();
+      response.refresh_token = EXPIRED_SECRET.refresh_token;
+      seedExpiredConnection();
+      mockValidRefreshFlow(response);
+
+      await stravaFetchStats({}, CONTEXT);
+
+      expect(admin.__getWrites()[0].data).toMatchObject({
+        access_token: 'refreshed_access_token_test',
+        refresh_token: 'synthetic_refresh_token_test',
+        expires_at: 1_900_000_000,
+        scope: 'read',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+  });
+
   test('preserves successful refresh, secret update, and downstream stats result', async () => {
     seedExpiredConnection();
     fetchMock
@@ -1180,6 +1565,8 @@ describe('Strava token refresh failure boundary', () => {
       },
       options: { merge: true },
     }]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(Timestamp.now).toHaveBeenCalledTimes(1);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
