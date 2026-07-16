@@ -121,17 +121,17 @@ function EventRegister() {
   }, [user]);
 
   useEffect(() => {
-    if (!isReady || !services || !slug) return;
-    setLoading(true);
+    if (!isReady || !services || !slug) return () => undefined;
+    let active = true; setLoading(true); setEvent(null); setError(null);
     getEventBySlug(services.firebaseResources.firestore, slug)
       .then((e) => {
-        setEvent(e);
-        setLoading(false);
+        if (!active) return;
+        setEvent(e); setLoading(false);
         if (!e) setError('Event not found');
       })
-      .catch(() => { setError(EVENT_LOAD_FAILURE); setLoading(false); });
+      .catch(() => { if (active) { setError(EVENT_LOAD_FAILURE); setLoading(false); } });
+    return () => { active = false; };
   }, [services, isReady, slug]);
-
   const effectiveTier: PriceTier = useMemo(() => {
     if (!event) return 'nonMember';
     const now = Date.now();

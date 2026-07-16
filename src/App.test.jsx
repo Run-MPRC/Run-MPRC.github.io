@@ -685,6 +685,26 @@ describe('public Event-detail load failure boundary', () => {
 });
 
 describe('public Event-registration load failure boundary', () => {
+  function makeRegistrationEvent(slug, title, nonMemberCents = 1500) {
+    return {
+      id: slug,
+      slug,
+      title,
+      description: `A made-up ${title} used only for this test.`,
+      startAt: { toDate: () => new Date('2030-01-12T16:00:00Z') },
+      location: 'Made-up Park',
+      capacity: null,
+      registeredCount: 0,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 1000, nonMemberCents },
+      customFields: [],
+      volunteerFields: [],
+      volunteerEnabled: false,
+      waiverText: `Made-up waiver for ${title}.`,
+    };
+  }
+
   beforeEach(() => {
     useServiceLocator.mockReturnValue({
       services: { firebaseResources: { firestore } },
@@ -793,6 +813,134 @@ describe('public Event-registration load failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
     expect(getEventBySlug).toHaveBeenCalledTimes(1);
+  });
+
+  test('clears a prior lookup failure when the current registration slug succeeds', async () => {
+    getEventBySlug
+      .mockRejectedValueOnce(new Error('prior-registration-failure-canary'))
+      .mockResolvedValueOnce(makeRegistrationEvent('current-event', 'Current Registration'));
+
+    renderPublicEventRegister();
+    expect((await screen.findByRole('alert')).textContent).toBe(EVENT_REGISTER_LOAD_FAILURE);
+
+    window.history.pushState({}, '', '/events/current-event/register');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Current Registration',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to event/ }))
+      .toHaveAttribute('href', '/events/current-event');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('prior-registration-failure-canary');
+    expect(getEventBySlug).toHaveBeenNthCalledWith(2, firestore, 'current-event');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('clears a prior not-found result when the current registration slug succeeds', async () => {
+    getEventBySlug
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makeRegistrationEvent('current-event', 'Current Registration'));
+
+    renderPublicEventRegister();
+    expect(await screen.findByText('Event not found')).toBeInTheDocument();
+
+    window.history.pushState({}, '', '/events/current-event/register');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Current Registration',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to event/ }))
+      .toHaveAttribute('href', '/events/current-event');
+    expect(screen.queryByText('Event not found')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(getEventBySlug).toHaveBeenNthCalledWith(2, firestore, 'current-event');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('ignores an older rejection after the current registration slug succeeds', async () => {
+    const olderLookup = {};
+    olderLookup.promise = new Promise((_resolve, reject) => {
+      olderLookup.reject = reject;
+    });
+    getEventBySlug
+      .mockImplementationOnce(() => olderLookup.promise)
+      .mockResolvedValueOnce(makeRegistrationEvent('current-event', 'Current Registration'));
+
+    renderPublicEventRegister();
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+
+    window.history.pushState({}, '', '/events/current-event/register');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Current Registration',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      olderLookup.reject(new Error('older-registration-rejection-canary'));
+      await olderLookup.promise.catch(() => undefined);
+    });
+
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Register for Current Registration',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to event/ }))
+      .toHaveAttribute('href', '/events/current-event');
+    expect(screen.getByText('$15.00')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('older-registration-rejection-canary');
+    expect(window.location.pathname).toBe('/events/current-event/register');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('ignores an older event after the current registration slug succeeds', async () => {
+    const olderLookup = {};
+    olderLookup.promise = new Promise((resolve) => {
+      olderLookup.resolve = resolve;
+    });
+    getEventBySlug
+      .mockImplementationOnce(() => olderLookup.promise)
+      .mockResolvedValueOnce(makeRegistrationEvent(
+        'current-event',
+        'Current Registration',
+        2500,
+      ));
+
+    renderPublicEventRegister();
+    expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
+
+    window.history.pushState({}, '', '/events/current-event/register');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Current Registration',
+    })).toBeInTheDocument();
+    expect(screen.getByText('$25.00')).toBeInTheDocument();
+
+    await act(async () => {
+      olderLookup.resolve(makeRegistrationEvent('older-event', 'Older Registration', 9900));
+      await olderLookup.promise;
+    });
+
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Register for Current Registration',
+    })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', {
+      level: 1,
+      name: 'Register for Older Registration',
+    })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to event/ }))
+      .toHaveAttribute('href', '/events/current-event');
+    expect(screen.getByText('$25.00')).toBeInTheDocument();
+    expect(screen.queryByText('$99.00')).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe('/events/current-event/register');
+    expect(track).not.toHaveBeenCalled();
   });
 });
 
