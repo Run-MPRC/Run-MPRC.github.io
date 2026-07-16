@@ -10,11 +10,12 @@ import {
 import { resolvePath } from 'react-router-dom';
 import { useServiceLocator } from './services/ServiceLocatorContext';
 import {
+  createCheckoutSession,
   getEventBySlug,
   listMemberEvents,
   listPublicEvents,
 } from './services/events/eventsService';
-import { track } from './services/analytics/analytics';
+import { events as analyticsEvents, track } from './services/analytics/analytics';
 import {
   createMerchCheckout,
   getProductBySlug,
@@ -46,6 +47,7 @@ jest.mock('./services/events/eventsService', () => {
   const actual = jest.requireActual('./services/events/eventsService');
   return {
     ...actual,
+    createCheckoutSession: jest.fn(),
     getEventBySlug: jest.fn(),
     listMemberEvents: jest.fn(),
     listPublicEvents: jest.fn(),
@@ -76,6 +78,7 @@ beforeEach(() => {
   createMerchCheckout.mockReset();
   getProductBySlug.mockReset();
   listActiveProducts.mockReset();
+  createCheckoutSession.mockReset();
   getEventBySlug.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
@@ -171,6 +174,7 @@ const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please t
 const EVENTS_CALENDAR_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
+const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
 const firebaseApp = { name: 'synthetic-firebase-app' };
 const firestore = { name: 'synthetic-firestore' };
 
@@ -949,6 +953,173 @@ describe('public Event-registration load failure boundary', () => {
     expect(screen.queryByText('$99.00')).not.toBeInTheDocument();
     expect(window.location.pathname).toBe('/events/current-event/register');
     expect(track).not.toHaveBeenCalled();
+  });
+});
+
+describe('public Event-registration submit failure boundary', () => {
+  const syntheticEvent = {
+    id: 'synthetic-event',
+    slug: 'synthetic-event',
+    title: 'Synthetic Registration Event',
+    description: 'A made-up event used only for this test.',
+    startAt: { toDate: () => new Date('2030-01-12T16:00:00Z') },
+    location: 'Made-up Park',
+    capacity: null,
+    registeredCount: 0,
+    status: 'open',
+    visibility: 'public',
+    pricing: { memberCents: 1000, nonMemberCents: 1500 },
+    customFields: [],
+    volunteerFields: [],
+    volunteerEnabled: false,
+    waiverText: 'Made-up waiver text.',
+  };
+
+  beforeEach(() => {
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValue(syntheticEvent);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function fillRequiredRegistrationFields() {
+    fireEvent.change(screen.getByRole('textbox', { name: 'First name *' }), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Last name *' }), {
+      target: { value: 'Runner' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email *' }), {
+      target: { value: 'runner@example.test' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /accept the waiver/i }));
+  }
+
+  test('replaces rejected submission details with one fixed accessible result', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    createCheckoutSession.mockRejectedValueOnce(Object.assign(
+      new Error('registration-provider-private-canary private-leak@example.test'),
+      {
+        code: 'functions/registration-provider-private-canary',
+        endpoint: 'https://provider.example.test/?token=registration-secret-canary',
+      },
+    ));
+
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRequiredRegistrationFields();
+    fireEvent.change(screen.getAllByRole('textbox', { name: 'Phone' })[0], {
+      target: { value: '+1 555 010 2740' },
+    });
+    fireEvent.change(screen.getByLabelText('Date of birth'), {
+      target: { value: '1990-01-02' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Shirt size' }), {
+      target: { value: 'M' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: 'Synthetic Contact' },
+    });
+    fireEvent.change(screen.getAllByRole('textbox', { name: 'Phone' })[1], {
+      target: { value: '+1 555 010 2741' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment — $15.00' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(EVENT_REGISTER_SUBMIT_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /registration-provider-private-canary|private-leak@example\.test|provider\.example|registration-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /registration-provider-private-canary|private-leak@example\.test|provider\.example|registration-secret-canary/i,
+    );
+    expect(createCheckoutSession).toHaveBeenCalledWith(firebaseApp, {
+      eventId: 'synthetic-event',
+      runner: {
+        firstName: 'Synthetic',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+        phone: '+1 555 010 2740',
+        dob: '1990-01-02',
+        shirtSize: 'M',
+        emergencyContactName: 'Synthetic Contact',
+        emergencyContactPhone: '+1 555 010 2741',
+      },
+      customFields: {},
+      signupType: 'participant',
+      acceptedWaiver: true,
+      priceTier: 'nonMember',
+    });
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenNthCalledWith(1, analyticsEvents.registrationSubmitAttempt, {
+      slug: 'synthetic-event', tier: 'nonMember', signup_type: 'participant',
+    });
+    expect(track).toHaveBeenNthCalledWith(2, analyticsEvents.registrationError, {
+      slug: 'synthetic-event',
+    });
+    expect(track).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'First name *' })).toHaveValue('Synthetic');
+    expect(screen.getByRole('textbox', { name: 'Last name *' })).toHaveValue('Runner');
+    expect(screen.getByRole('textbox', { name: 'Email *' })).toHaveValue('runner@example.test');
+    expect(screen.getByRole('checkbox', { name: /accept the waiver/i })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Continue to payment — $15.00' })).toBeEnabled();
+    expect(window.location.pathname).toBe('/events/synthetic-event/register');
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect or log a hostile submission rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => {
+      throw new Error('registration-message-getter-canary');
+    });
+    createCheckoutSession.mockRejectedValueOnce(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    );
+
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRequiredRegistrationFields();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment — $15.00' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(EVENT_REGISTER_SUBMIT_FAILURE);
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('registration-message-getter-canary');
+    expect(JSON.stringify(track.mock.calls)).not.toContain('registration-message-getter-canary');
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenNthCalledWith(2, analyticsEvents.registrationError, {
+      slug: 'synthetic-event',
+    });
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Email *' })).toHaveValue('runner@example.test');
+    expect(screen.getByRole('checkbox', { name: /accept the waiver/i })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Continue to payment — $15.00' })).toBeEnabled();
+    expect(window.location.pathname).toBe('/events/synthetic-event/register');
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
 

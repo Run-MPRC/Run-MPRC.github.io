@@ -15,8 +15,8 @@ import buildRaceCheckoutRequest, {
   customValuesAfterSignupTypeChange,
 } from './raceCheckoutRequest';
 
+const SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
 type PriceTier = 'member' | 'nonMember' | 'earlyBird';
-
 interface RunnerFormState {
   firstName: string;
   lastName: string;
@@ -152,7 +152,7 @@ function EventRegister() {
   }, [event, effectiveTier]);
 
   if (loading) return <div className="container mx-auto p-6">Loading...</div>;
-  if (error || !event) {
+  if (!event) {
     return (
       <div className="container mx-auto p-6">
         <p role={error === EVENT_LOAD_FAILURE ? 'alert' : undefined} aria-live={error === EVENT_LOAD_FAILURE ? 'assertive' : undefined} aria-atomic={error === EVENT_LOAD_FAILURE ? true : undefined} className="text-red-500">{error || 'Event not found.'}</p>
@@ -220,11 +220,11 @@ function EventRegister() {
         return;
       }
       setError('Unexpected response from checkout service.');
-    } catch (err: any) {
+    } catch {
       track(analyticsEvents.registrationError, {
-        slug: event?.slug, message: err?.message?.slice(0, 100),
+        slug: event.slug,
       });
-      setError(err?.message || 'Registration failed.');
+      setError(SUBMIT_FAILURE);
     } finally {
       setSubmitting(false);
     }
@@ -455,7 +455,7 @@ function EventRegister() {
             </fieldset>
           )}
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && <p role="alert" aria-live="assertive" aria-atomic="true" className="text-red-600 text-sm">{error}</p>}
 
           <button
             type="submit"
