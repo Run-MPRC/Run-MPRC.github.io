@@ -3,7 +3,10 @@ import {
   Link, useNavigate, useParams,
 } from 'react-router-dom';
 import SEO from '../../../components/SEO';
-import { useServiceLocator } from '../../../services/ServiceLocatorContext';
+import {
+  ServiceLocatorContextValue,
+  useServiceLocator,
+} from '../../../services/ServiceLocatorContext';
 import { useAuth } from '../../../services/hooks/useAuth';
 import AdminGuard from '../AdminGuard';
 import { CustomField, Event } from '../../../types/events';
@@ -97,6 +100,14 @@ const DEFAULT_FORM: FormState = {
   resultsUrl: '',
   resultsText: '',
 };
+
+const LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
+
+interface EventLoadOutcome {
+  firestore: unknown;
+  slug: string;
+  status: 'loading' | 'resolved' | 'missing' | 'unavailable';
+}
 
 function eventToForm(e: Event): FormState {
   return {
@@ -277,32 +288,59 @@ function CustomFieldsEditor({
   );
 }
 
-function Inner() {
-  const { slug: routeSlug } = useParams<{ slug: string }>();
+function Inner({
+  routeSlug,
+  services,
+  isReady,
+}: {
+  routeSlug?: string;
+  services: ServiceLocatorContextValue['services'];
+  isReady: boolean;
+}) {
   const isEdit = !!routeSlug;
   const navigate = useNavigate();
-  const { services, isReady } = useServiceLocator();
   const { user } = useAuth();
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [loading, setLoading] = useState(isEdit);
+  const [loadOutcome, setLoadOutcome] = useState<EventLoadOutcome | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  let currentLoadStatus: EventLoadOutcome['status'] = 'loading';
+  if (!isEdit) currentLoadStatus = 'resolved';
+  else if (loadOutcome?.firestore === firestore && loadOutcome.slug === routeSlug) {
+    currentLoadStatus = loadOutcome.status;
+  }
+
   useEffect(() => {
-    if (!isEdit) return;
-    if (!isReady || !services) return;
-    getEventBySlug(services.firebaseResources.firestore, routeSlug!)
+    if (!isEdit || !firestore || !routeSlug) return () => undefined;
+    let active = true;
+    const outcomeKey = { firestore, slug: routeSlug };
+
+    setLoadOutcome({ ...outcomeKey, status: 'loading' });
+    setForm(DEFAULT_FORM);
+    setError(null);
+
+    getEventBySlug(firestore, routeSlug)
       .then((e) => {
+        if (!active) return;
         if (!e) {
-          setError('Event not found');
-        } else {
-          setForm(eventToForm(e));
+          setLoadOutcome({ ...outcomeKey, status: 'missing' });
+          return;
         }
-        setLoading(false);
+        setForm(eventToForm(e));
+        setLoadOutcome({ ...outcomeKey, status: 'resolved' });
       })
-      .catch((err) => { setError(err.message); setLoading(false); });
-  }, [services, isReady, routeSlug, isEdit]);
+      .catch(() => {
+        if (!active) return;
+        setLoadOutcome({ ...outcomeKey, status: 'unavailable' });
+      });
+
+    return () => { active = false; };
+  }, [firestore, routeSlug, isEdit]);
 
   function patch(p: Partial<FormState>) {
     setForm((f) => ({ ...f, ...p }));
@@ -331,7 +369,32 @@ function Inner() {
     }
   }
 
-  if (loading) return <div className="container mx-auto p-6">Loading...</div>;
+  if (currentLoadStatus === 'loading') {
+    return <div className="container mx-auto p-6">Loading...</div>;
+  }
+
+  if (currentLoadStatus === 'missing' || currentLoadStatus === 'unavailable') {
+    const unavailable = currentLoadStatus === 'unavailable';
+    return (
+      <>
+        <SEO title="Edit event" noindex />
+        <div className="container mx-auto p-4 max-w-3xl">
+          <Link to="/admin/events" className="text-sm text-blue-600 hover:underline">
+            ← All events
+          </Link>
+          <h1 className="text-2xl font-bold mt-2">Edit event</h1>
+          <p
+            className="text-red-600 text-sm mt-4"
+            role={unavailable ? 'alert' : undefined}
+            aria-live={unavailable ? 'assertive' : undefined}
+            aria-atomic={unavailable ? 'true' : undefined}
+          >
+            {unavailable ? LOAD_FAILURE : 'Event not found'}
+          </p>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -637,10 +700,26 @@ function Inner() {
   );
 }
 
+function EditorRoute() {
+  const { slug: routeSlug } = useParams<{ slug: string }>();
+  const locator = useServiceLocator();
+  const readinessKey = locator.isReady && locator.services ? 'ready' : 'not-ready';
+  const editorKey = routeSlug ? `edit:${routeSlug}:${readinessKey}` : 'new';
+
+  return (
+    <Inner
+      key={editorKey}
+      routeSlug={routeSlug}
+      services={locator.services}
+      isReady={locator.isReady}
+    />
+  );
+}
+
 function AdminEventEditor() {
   return (
     <AdminGuard>
-      <Inner />
+      <EditorRoute />
     </AdminGuard>
   );
 }
