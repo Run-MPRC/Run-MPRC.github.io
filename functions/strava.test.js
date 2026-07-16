@@ -74,7 +74,7 @@ jest.mock('firebase-admin/firestore', () => {
   let tick = 1_800_000_000;
   return {
     Timestamp: {
-      now: () => ({ _seconds: tick += 1 }),
+      now: jest.fn(() => ({ _seconds: tick += 1 })),
     },
   };
 });
@@ -85,6 +85,7 @@ jest.mock('./stripeHelpers', () => ({
 
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
+const { Timestamp } = require('firebase-admin/firestore');
 const { requireAppCheck } = require('./stripeHelpers');
 const { stravaDisconnect, stravaExchangeCode, stravaFetchStats } = require('./strava');
 
@@ -99,6 +100,10 @@ const CONTEXT = Object.freeze({
 });
 const CODE = 'synthetic_authorization_code';
 const MAX_AUTHORIZATION_CODE_LENGTH = 1_024;
+const MAX_TOKEN_LENGTH = 2_048;
+const MAX_SCOPE_LENGTH = 1_024;
+const MAX_PROFILE_TEXT_LENGTH = 1_024;
+const MAX_PROFILE_URL_LENGTH = 2_048;
 const CONNECTION_PATH = 'members/synthetic-member-000001/connections/strava';
 const SECRET_PATH = 'members/synthetic-member-000001/secrets/strava';
 
@@ -131,6 +136,7 @@ describe('Strava authorization exchange failure boundary', () => {
     admin.__clearDocuments();
     admin.__clearReads();
     admin.__clearWrites();
+    Timestamp.now.mockClear();
     requireAppCheck.mockReset();
     fetchMock = jest.fn();
     global.fetch = fetchMock;
@@ -149,26 +155,53 @@ describe('Strava authorization exchange failure boundary', () => {
     expect(admin.__getDeletes()).toEqual([]);
     expect(admin.__getReads()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
+    expect(Timestamp.now).not.toHaveBeenCalled();
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
 
-  function mockSuccessfulExchange() {
+  function validExchangeResponse() {
+    return {
+      access_token: 'access_token_test',
+      refresh_token: 'refresh_token_test',
+      expires_at: 1_900_000_000,
+      scope: 'read',
+      athlete: {
+        id: 123456,
+        firstname: 'Synthetic',
+        lastname: 'Athlete',
+        username: 'synthetic-athlete',
+        profile: 'https://images.example.test/synthetic-athlete.png',
+      },
+    };
+  }
+
+  function mockExchangeResponse(response) {
+    const json = jest.fn().mockResolvedValue(response);
     fetchMock.mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        access_token: 'access_token_test',
-        refresh_token: 'refresh_token_test',
-        expires_at: 1_900_000_000,
-        scope: 'read',
-        athlete: {
-          id: 123456,
-          firstname: 'Synthetic',
-          lastname: 'Athlete',
-          username: 'synthetic-athlete',
-          profile: 'https://images.example.test/synthetic-athlete.png',
-        },
-      }),
+      json,
     });
+    return json;
+  }
+
+  function mockSuccessfulExchange() {
+    return mockExchangeResponse(validExchangeResponse());
+  }
+
+  async function expectInvalidSuccessfulResponse(response) {
+    const json = mockExchangeResponse(response);
+
+    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expectNoSideEffects();
   }
 
   test('runs App Check before Auth, provider exchange, or Firestore', async () => {
@@ -364,8 +397,461 @@ describe('Strava authorization exchange failure boundary', () => {
     expectNoSideEffects();
   });
 
+  describe('successful provider response validation', () => {
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a primitive', true],
+      ['an array', []],
+      ['a null-prototype record', Object.create(null)],
+      ['a custom-prototype record', Object.create({ inherited: true })],
+    ])('rejects %s root before timestamps, Firestore, or logs', async (_case, response) => {
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test('rejects a transparent root Proxy before validator-controlled reflection', async () => {
+      const observedGetKeys = [];
+      const secondThenFailure = new Error(
+        'second-then-canary access_token=provider-secret-canary',
+      );
+      const reflectionTraps = {
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('root descriptor trap must not run');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('root prototype trap must not run');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('root ownKeys trap must not run');
+        }),
+      };
+      const response = new Proxy(validExchangeResponse(), {
+        get: (_target, key) => {
+          observedGetKeys.push(key);
+          if (key !== 'then') {
+            throw new Error(`unexpected root Proxy read: ${String(key)}`);
+          }
+          if (observedGetKeys.length > 1) throw secondThenFailure;
+          return undefined;
+        },
+        ...reflectionTraps,
+      });
+
+      await expectInvalidSuccessfulResponse(response);
+
+      expect(observedGetKeys).toEqual(['then']);
+      Object.values(reflectionTraps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('keeps a throwing root then trap inside the existing unavailable JSON boundary', async () => {
+      const thenFailure = new Error('root-then-canary access_token=provider-secret-canary');
+      const response = new Proxy(validExchangeResponse(), {
+        get: (_target, key) => {
+          if (key === 'then') throw thenFailure;
+          throw new Error('unexpected root Proxy read');
+        },
+      });
+      mockExchangeResponse(response);
+
+      const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+
+      expect(publicError(error)).toEqual({
+        code: 'unavailable',
+        message: FIXED_AUTHORIZATION_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify(publicError(error))).not.toMatch(/root-then-canary|provider-secret/i);
+      expectNoSideEffects();
+    });
+
+    test.each([
+      ['access_token', undefined, true],
+      ['access_token', null, false],
+      ['access_token', '', false],
+      ['access_token', 'token\ncanary', false],
+      ['access_token', 'tökén', false],
+      ['access_token', 'x'.repeat(MAX_TOKEN_LENGTH + 1), false],
+      ['access_token', Object('boxed-token'), false],
+      ['refresh_token', undefined, true],
+      ['refresh_token', null, false],
+      ['refresh_token', '', false],
+      ['refresh_token', 'token\rcanary', false],
+      ['refresh_token', 'tökén', false],
+      ['refresh_token', 'x'.repeat(MAX_TOKEN_LENGTH + 1), false],
+      ['refresh_token', { token: 'structured' }, false],
+    ])('rejects invalid required %s value without coercion or writes', async (
+      field,
+      value,
+      remove,
+    ) => {
+      const response = validExchangeResponse();
+      if (remove) delete response[field];
+      else response[field] = value;
+
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test.each([
+      ['expires_at', undefined, true],
+      ['expires_at', null, false],
+      ['expires_at', '1900000000', false],
+      ['expires_at', 0, false],
+      ['expires_at', -1, false],
+      ['expires_at', 1.5, false],
+      ['expires_at', Number.MAX_SAFE_INTEGER + 1, false],
+      ['athlete.id', undefined, true],
+      ['athlete.id', null, false],
+      ['athlete.id', '123456', false],
+      ['athlete.id', 0, false],
+      ['athlete.id', -1, false],
+      ['athlete.id', 1.5, false],
+      ['athlete.id', Number.MAX_SAFE_INTEGER + 1, false],
+    ])('rejects invalid positive-safe-integer %s without writes', async (
+      field,
+      value,
+      remove,
+    ) => {
+      const response = validExchangeResponse();
+      const target = field === 'athlete.id' ? response.athlete : response;
+      const key = field === 'athlete.id' ? 'id' : field;
+      if (remove) delete target[key];
+      else target[key] = value;
+
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test.each([
+      ['missing', undefined, true],
+      ['null', null, false],
+      ['exact empty', '', false],
+    ])('preserves %s scope as unknown null without inferring permission', async (
+      _case,
+      scope,
+      remove,
+    ) => {
+      const response = validExchangeResponse();
+      if (remove) delete response.scope;
+      else response.scope = scope;
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(admin.__getWrites()[0].data.scope).toBeNull();
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test.each([
+      ['a number', 1],
+      ['leading whitespace', ' read'],
+      ['trailing whitespace', 'read '],
+      ['repeated separators', 'read  activity:read'],
+      ['a quote', 'read"activity:read'],
+      ['a backslash', 'read\\activity:read'],
+      ['a control', 'read\nactivity:read'],
+      ['an oversized value', 'r'.repeat(MAX_SCOPE_LENGTH + 1)],
+    ])('rejects present scope with %s without making an entitlement decision', async (
+      _case,
+      scope,
+    ) => {
+      const response = validExchangeResponse();
+      response.scope = scope;
+
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test.each([
+      ['a null athlete', null],
+      ['an array athlete', []],
+      ['a custom-prototype athlete', Object.create({ inherited: true })],
+    ])('rejects %s before nested field access', async (_case, athlete) => {
+      const response = validExchangeResponse();
+      response.athlete = athlete;
+
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test('rejects a nested athlete Proxy without invoking any trap', async () => {
+      const traps = ['get', 'getOwnPropertyDescriptor', 'getPrototypeOf', 'ownKeys']
+        .reduce((result, name) => ({
+          ...result,
+          [name]: jest.fn(() => {
+            throw new Error(`nested athlete ${name} trap must not run`);
+          }),
+        }), {});
+      const response = validExchangeResponse();
+      response.athlete = new Proxy(response.athlete, traps);
+
+      await expectInvalidSuccessfulResponse(response);
+
+      Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test.each([
+      ['firstname', 1],
+      ['firstname', 'line\nbreak'],
+      ['lastname', '\ud800'],
+      ['username', 'x'.repeat(MAX_PROFILE_TEXT_LENGTH + 1)],
+      ['username', Object('boxed-username')],
+    ])('rejects invalid optional %s without coercion or partial writes', async (field, value) => {
+      const response = validExchangeResponse();
+      response.athlete[field] = value;
+
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test.each([
+      ['a relative path', '/profile.png'],
+      ['plain HTTP', 'http://images.example.test/profile.png'],
+      ['credentials', 'https://user:pass@images.example.test/profile.png'],
+      ['raw whitespace', 'https://images.example.test/profile image.png'],
+      ['a backslash', 'https://images.example.test/profile\\image.png'],
+      ['a malformed URL', 'https://'],
+      ['an oversized URL', `https://images.example.test/${'x'.repeat(MAX_PROFILE_URL_LENGTH)}`],
+    ])('rejects profile URL with %s before writes', async (_case, profile) => {
+      const response = validExchangeResponse();
+      response.athlete.profile = profile;
+
+      await expectInvalidSuccessfulResponse(response);
+    });
+
+    test.each([
+      ['access_token', 'root', 'access_token'],
+      ['refresh_token', 'root', 'refresh_token'],
+      ['expires_at', 'root', 'expires_at'],
+      ['scope', 'root', 'scope'],
+      ['athlete', 'root', 'athlete'],
+      ['athlete.id', 'athlete', 'id'],
+      ['athlete.firstname', 'athlete', 'firstname'],
+      ['athlete.lastname', 'athlete', 'lastname'],
+      ['athlete.username', 'athlete', 'username'],
+      ['athlete.profile', 'athlete', 'profile'],
+    ])('does not invoke a selected %s accessor', async (_path, targetName, key) => {
+      const response = validExchangeResponse();
+      const target = targetName === 'root' ? response : response.athlete;
+      const selectedGetter = jest.fn(() => target[key]);
+      Object.defineProperty(target, key, {
+        configurable: true,
+        enumerable: true,
+        get: selectedGetter,
+      });
+
+      await expectInvalidSuccessfulResponse(response);
+
+      expect(selectedGetter).not.toHaveBeenCalled();
+    });
+
+    test('does not consult an inherited required-field getter', async () => {
+      const inheritedGetter = jest.fn(() => 'access_token_test');
+      const response = validExchangeResponse();
+      delete response.access_token;
+      Object.defineProperty(Object.prototype, 'access_token', {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectInvalidSuccessfulResponse(response);
+      } finally {
+        delete Object.prototype.access_token;
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test('ignores an inherited optional-field value', async () => {
+      const response = validExchangeResponse();
+      delete response.athlete.firstname;
+      Object.defineProperty(Object.prototype, 'firstname', {
+        configurable: true,
+        value: 'Inherited',
+      });
+
+      try {
+        mockExchangeResponse(response);
+        const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+        expect(result).toEqual({ ok: true, athleteId: 123456 });
+        expect(admin.__getWrites()[1].data.firstName).toBeNull();
+        expect(Timestamp.now).toHaveBeenCalledTimes(3);
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      } finally {
+        delete Object.prototype.firstname;
+      }
+    });
+
+    test('does not invoke selected token coercion hooks', async () => {
+      const coercionHooks = {
+        toString: jest.fn(() => 'access_token_test'),
+        valueOf: jest.fn(() => 'access_token_test'),
+        [Symbol.toPrimitive]: jest.fn(() => 'access_token_test'),
+      };
+      const response = validExchangeResponse();
+      response.access_token = coercionHooks;
+
+      await expectInvalidSuccessfulResponse(response);
+
+      expect(coercionHooks.toString).not.toHaveBeenCalled();
+      expect(coercionHooks.valueOf).not.toHaveBeenCalled();
+      expect(coercionHooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['firstname', 'firstName', 'missing', undefined, true],
+      ['firstname', 'firstName', 'null', null, false],
+      ['firstname', 'firstName', 'exact empty', '', false],
+      ['lastname', 'lastName', 'missing', undefined, true],
+      ['lastname', 'lastName', 'null', null, false],
+      ['lastname', 'lastName', 'exact empty', '', false],
+      ['username', 'username', 'missing', undefined, true],
+      ['username', 'username', 'null', null, false],
+      ['username', 'username', 'exact empty', '', false],
+      ['profile', 'profileUrl', 'missing', undefined, true],
+      ['profile', 'profileUrl', 'null', null, false],
+      ['profile', 'profileUrl', 'exact empty', '', false],
+    ])('projects optional athlete.%s to %s as null when %s', async (
+      providerField,
+      documentField,
+      _case,
+      value,
+      remove,
+    ) => {
+      const response = validExchangeResponse();
+      if (remove) delete response.athlete[providerField];
+      else response.athlete[providerField] = value;
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(admin.__getWrites()[1].data[documentField]).toBeNull();
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('preserves valid Unicode profile text, scope bytes, and HTTPS URL exactly', async () => {
+      const response = validExchangeResponse();
+      response.scope = 'future:Read,Variant read activity:read activity:read';
+      response.athlete.firstname = 'Zoë 🏃🏽‍♀️';
+      response.athlete.lastname = '李';
+      response.athlete.username = 'e\u0301 runner';
+      response.athlete.profile = 'https://例え.example/athlete/%E2%98%83?size=large#profile';
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(admin.__getWrites()[0].data.scope).toBe(response.scope);
+      expect(admin.__getWrites()[1].data).toMatchObject({
+        firstName: response.athlete.firstname,
+        lastName: response.athlete.lastname,
+        username: response.athlete.username,
+        profileUrl: response.athlete.profile,
+      });
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('accepts exact technical string bounds without normalization', async () => {
+      const response = validExchangeResponse();
+      const profilePrefix = 'https://images.example.test/';
+      response.access_token = 'a'.repeat(MAX_TOKEN_LENGTH);
+      response.refresh_token = 'b'.repeat(MAX_TOKEN_LENGTH);
+      response.scope = 'r'.repeat(MAX_SCOPE_LENGTH);
+      response.athlete.firstname = 'Z'.repeat(MAX_PROFILE_TEXT_LENGTH);
+      response.athlete.profile = profilePrefix
+        + 'p'.repeat(MAX_PROFILE_URL_LENGTH - profilePrefix.length);
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(admin.__getWrites()[0].data).toMatchObject({
+        access_token: response.access_token,
+        refresh_token: response.refresh_token,
+        scope: response.scope,
+      });
+      expect(admin.__getWrites()[1].data).toMatchObject({
+        firstName: response.athlete.firstname,
+        profileUrl: response.athlete.profile,
+      });
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('accepts frozen JSON-shaped selected data descriptors', async () => {
+      const response = validExchangeResponse();
+      Object.freeze(response.athlete);
+      Object.freeze(response);
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(admin.__getWrites()).toHaveLength(2);
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('accepts non-enumerable selected own data descriptors', async () => {
+      const response = validExchangeResponse();
+      Object.defineProperty(response, 'access_token', {
+        configurable: false,
+        enumerable: false,
+        value: response.access_token,
+        writable: false,
+      });
+      Object.defineProperty(response.athlete, 'firstname', {
+        configurable: false,
+        enumerable: false,
+        value: response.athlete.firstname,
+        writable: false,
+      });
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(admin.__getWrites()[0].data.access_token).toBe('access_token_test');
+      expect(admin.__getWrites()[1].data.firstName).toBe('Synthetic');
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('ignores unknown hostile fields without enumeration or access', async () => {
+      const unknownGetter = jest.fn(() => {
+        throw new Error('unknown-field-canary access_token=provider-secret-canary');
+      });
+      const unknownSymbolGetter = jest.fn(() => {
+        throw new Error('unknown-symbol-canary refresh_token=provider-secret-canary');
+      });
+      const response = validExchangeResponse();
+      Object.defineProperty(response, 'provider_debug', {
+        configurable: true,
+        enumerable: true,
+        get: unknownGetter,
+      });
+      Object.defineProperty(response.athlete, Symbol('unknown'), {
+        configurable: true,
+        enumerable: true,
+        get: unknownSymbolGetter,
+      });
+      mockExchangeResponse(response);
+
+      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(unknownGetter).not.toHaveBeenCalled();
+      expect(unknownSymbolGetter).not.toHaveBeenCalled();
+      expect(admin.__getWrites()).toHaveLength(2);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+  });
+
   test('preserves the successful server-only exchange, writes, and minimal result', async () => {
-    mockSuccessfulExchange();
+    const json = mockSuccessfulExchange();
 
     const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
 
@@ -385,6 +871,7 @@ describe('Strava authorization exchange failure boundary', () => {
         }),
       },
     );
+    expect(json).toHaveBeenCalledTimes(1);
     expect(admin.__getWrites()).toEqual([
       {
         path: 'members/synthetic-member-000001/secrets/strava',
@@ -412,6 +899,9 @@ describe('Strava authorization exchange failure boundary', () => {
         options: { merge: true },
       },
     ]);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(Timestamp.now).toHaveBeenCalledTimes(3);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
