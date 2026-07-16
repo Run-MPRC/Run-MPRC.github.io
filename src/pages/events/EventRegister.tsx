@@ -38,7 +38,7 @@ const EMPTY_RUNNER: RunnerFormState = {
   emergencyContactName: '',
   emergencyContactPhone: '',
 };
-
+const EVENT_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 function CustomFieldInput({
   field, value, onChange,
 }: {
@@ -129,7 +129,7 @@ function EventRegister() {
         setLoading(false);
         if (!e) setError('Event not found');
       })
-      .catch((err) => { setError(err.message); setLoading(false); });
+      .catch(() => { setError(EVENT_LOAD_FAILURE); setLoading(false); });
   }, [services, isReady, slug]);
 
   const effectiveTier: PriceTier = useMemo(() => {
@@ -155,7 +155,7 @@ function EventRegister() {
   if (error || !event) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-red-500">{error || 'Event not found.'}</p>
+        <p role={error === EVENT_LOAD_FAILURE ? 'alert' : undefined} aria-live={error === EVENT_LOAD_FAILURE ? 'assertive' : undefined} aria-atomic={error === EVENT_LOAD_FAILURE ? true : undefined} className="text-red-500">{error || 'Event not found.'}</p>
         <Link to="/events" className="text-blue-600 hover:underline">
           ← Back to events
         </Link>
