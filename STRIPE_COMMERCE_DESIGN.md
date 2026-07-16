@@ -237,7 +237,7 @@ Launch with quantity `1` unless cart and multi-line inventory semantics are expl
 }
 ```
 
-Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof, C3C must separately authorize/version a later attempt, C4A must bind its immutable plan, and C4B [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238) must record separate pre-send evidence before returning a new Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
+Within PAY-002B2C2's conservative stored safe-send window, returning the same request reuses the exact B2C1 plan, parameters, and Stripe idempotency key. After that window—or when first-send time is unknown—the server must stop automatic POST retries. PAY-002B2C3A can classify only already-verified closed evidence; C3B must persist that proof, C3C must separately authorize/version a later attempt, C4A must bind its immutable plan, and C4B [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238) must record separate pre-send evidence. C4C1 [#246](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/246) can classify only a canonical serialized reported result shape as unbound; a later trusted dispatch observer, result projector/persistence boundary, and business transaction are still required before returning a Session. If a Session is proven expired, a versioned new attempt can be created against the same business record only under an explicit verified transition.
 
 ### Pure command identity and provider-key contract (PAY-002B1)
 
@@ -462,16 +462,37 @@ After the transaction, a fresh trusted time is captured without re-reading lifec
 
 The fixed permitted output contains only schema versions, `send_permitted`, and `pre_send_recorded`. The fixed ambiguous output contains only schema versions, `reconciliation_required`, and `provider_outcome_unknown`. These are retry-safety classifications, not caller authorization, current business-state proof, Stripe-account control, proof that a request began, or a provider result. The pair stores no raw account, parameters, key, caller, UUID, transition value, provider/business/member ID, money, URL, response, secret, or personal data.
 
-#238 is limited to `checkout_session_create` with `POST /v1/checkout/sessions`. It cannot create attempt `3`, call Stripe/network code, write a registration/order/hold, replay a result, or enter an endpoint/Functions index. Attempt-2 result and reconciliation work remains separate. Product/Price creation, Session expiry, refunds, and privileged provider operations still need their own operation-specific plan, pre-send, result, and reconciliation boundaries.
+#238 is limited to `checkout_session_create` with `POST /v1/checkout/sessions`. It cannot create attempt `3`, call Stripe/network code, write a registration/order/hold, replay a result, or enter an endpoint/Functions index. PAY-002B2C4C1 [#246](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/246) owns only the separate unbound result-evidence policy below. Product/Price creation, Session expiry, refunds, and privileged provider operations still need their own operation-specific plan, pre-send, result, and reconciliation boundaries.
 
 This is source and synthetic-test design evidence only. Source changed, tests passed, code merged, Firebase deployed, Stripe configured, production data changed, website published, `runmprc.com` verified, and live behavior verified are separate states. #238 does not by itself prove any deployment, provider setting, production behavior, or officer action.
+
+### Unbound attempt-2 result-evidence policy (PAY-002B2C4C1)
+
+PAY-002B2C4C1 source/tests are tracked in live [#246](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/246). The unused pure `classifyAuthorizedStripeCheckoutResultEvidence` API accepts only a primitive, length-bounded, canonical JSON string encoding the reported flat 16-field version-1 assertion envelope for provider `stripe`, attempt `2`, and operation `checkout_session_create`. Deterministic reserialization must match the input exactly. This creates the ordinary record inside the module instead of guessing object provenance from mutable JavaScript prototypes. It parses no Stripe object, makes no network call, reads no journal, and writes nothing.
+
+```mermaid
+flowchart LR
+    Report["Canonical serialized direct-response evidence\nfrom a future adapter"] --> Policy{"Exact closed C4C1 shape?"}
+    Pre["Reported C4B pre-send binding"] -. "Assertion only" .-> Policy
+    Policy -- "No or ambiguous" --> Reconcile["reconciliation_required"]
+    Policy -- "Yes" --> Candidate["unbound_result_candidate"]
+    Candidate --> Stop["Stop: require trusted dispatch evidence,\npersistence, and business validation"]
+```
+
+Text alternative: a canonical serialized response and C4B-binding assertion may enter the pure policy; the sole matching shape is still unbound and stops before trusted dispatch evidence, persistence, and business validation.
+
+The sole unbound tuple reports an exact plan and C4B pre-send binding, complete direct-response evidence, response category `accepted`, an open Checkout Session shape, exact environment and parameter projections, a bounded opaque reference, a validated Checkout redirect, unpaid state, and future expiry. Every one of the 46 alternate closed enum values returns the same fixed `reconciliation_required` result. Non-string objects—including proxies, re-branded native objects, and private-slot class instances—fail before property access. Empty, oversized, invalid, whitespace-bearing, reordered, duplicate-key, missing/extra-key, alternate-encoding, future, or otherwise non-canonical serialized input throws one fixed redacted error. A hard-coded Node 20 `Object.prototype` baseline also rejects pollution present before module load or introduced later without invoking hostile accessors.
+
+The fixed positive output is only `unbound_result_candidate` with `requires_dispatch_evidence_persistence_and_business_validation`. The policy has no dispatch, idempotency, or result binding. It does not prove that a POST began, that the expected key was used, that Stripe returned anything, that a Session reference or URL may be stored or returned, or that payment/business state may advance. A later runtime-adjacent boundary must observe trusted dispatch evidence, validate/project the raw result, persist a recoverable reference without a Checkout URL, and attach the result through the relevant business transaction.
+
+#246 adds no journal record, Firestore/Rules change, endpoint/index import, Stripe SDK call, result projector, persistence, response replay, business write, package, workflow, provider setting, migration, production-data action, deployment, website change, or officer task. Source, tests, merge, Firebase deployment, Stripe configuration, production behavior, and website publication remain separate states.
 
 ## 7. Persistence-first checkout saga
 
 External Stripe calls cannot be part of a Firestore transaction. Use this sequence:
 
 1. Validate the request and read server-controlled catalog/event state.
-2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, and C4A/C4B must separately bind and pre-send-gate any later Checkout Session generation.
+2. Derive the PAY-002B1 command key and payload fingerprint; PAY-002B2A must register and compare them, PAY-002B2B must provide the current fence, PAY-002B2C1 must bind the immutable initial plan, B2C2 must record/freshness-check pre-send evidence, C3A/C3B/C3C must classify, persist, and authorize verified reconciliation evidence, C4A/C4B must separately bind and pre-send-gate any later Checkout Session generation, and C4C1 may classify only an unbound reported result shape.
 3. In one Firestore transaction:
    - Reuse a matching prior request or reject a conflicting reuse.
    - Lock/read the event capacity counter or SKU variant.
@@ -484,7 +505,7 @@ External Stripe calls cannot be part of a Firestore transaction. Use this sequen
 6. Store Session ID, URL, expiry, and attempt state.
 7. Return the URL.
 8. If Stripe definitively rejects creation, run a compensating transaction that marks the attempt failed and releases the hold once.
-9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and C4B/#238 must separately record fresh pre-send evidence before completing step 6.
+9. If the function loses its response after Stripe creates the Session, PAY-002B2C2 retries the exact B2C1 plan/key only inside its stored safe-send window. After the deadline—or when first-send time is unknown—it stops POSTing. C3A alone cannot retrieve or trust provider facts; C3B/C3C must persist verified evidence and authorize a later generation, C4A must bind its plan, and C4B/#238 must separately record fresh pre-send evidence. C4C1/#246 can classify a reported result shape only; step 6 still requires a later trusted dispatch observer, result persistence, and business validation.
 
 Create the local business record before calling Stripe. That lets a very fast webhook resolve metadata directly and eliminates the current record-not-found race.
 

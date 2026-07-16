@@ -462,6 +462,35 @@ Stop if the emulator names a non-demo project, any provider credential is presen
 
 This is source and synthetic-test evidence only. Record these states separately: source changed; tests passed; code merged; website published; `runmprc.com` verified; Firebase deployed; Stripe/provider configured; production data changed; production behavior verified. #238 does not itself prove any deployment, provider setting, live behavior, or officer action. PAY-002C/D/PAY-003B still need trusted business, result, reconciliation, and runtime work. Never test this boundary with a real registration, order, Stripe object, customer, or member.
 
+### Unbound Stripe attempt-2 result evidence — SOURCE ONLY, UNUSED
+
+PAY-002B2C4C1 [#246](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/246) adds one pure policy for a primitive, length-bounded, canonical JSON string encoding a reported 16-field attempt-2 Checkout Session assertion envelope. Deterministic reserialization must match exactly; parsing creates the ordinary record inside the module, so object provenance is never guessed from mutable prototypes. No endpoint or Functions index imports it. It does not parse a Stripe response, call Stripe, read or write Firestore, create a journal record, store a Session ID/URL, or change a registration, order, hold, or payment state.
+
+```mermaid
+flowchart LR
+    R["Canonical serialized direct-response assertion"] --> P{"Exact closed C4C1 shape?"}
+    B["Reported C4B pre-send binding"] -. "Assertion only" .-> P
+    P -- "No" --> Q["reconciliation_required"]
+    P -- "Yes" --> U["unbound_result_candidate"]
+    U --> F["Future trusted dispatch evidence\nprojector/provider validation\npersistence and business validation"]
+```
+
+Text alternative: a matching canonical serialized envelope remains unbound and must stop until future trusted dispatch evidence, projector/provider validation, persistence, and business validation are available.
+
+Run only with Node 20 and repository lockfiles. These tests use synthetic closed enums and no Firebase emulator or provider credential:
+
+```bash
+npm --prefix functions run test:run -- --runInBand commerceProviderResult.test.js
+npm --prefix functions run lint
+npm --prefix functions run test:run -- --runInBand
+```
+
+Expected result: the sole exact canonical serialized tuple returns the frozen `unbound_result_candidate`; all 46 single-enum alternatives return the same frozen `reconciliation_required`. Non-string values fail before property access. Empty, oversized, invalid, whitespace-bearing, reordered, duplicate, missing/extra, alternate-encoding, wrong-type, future, and Unicode-confusable serialized values produce one fixed redacted error. Re-branded native objects, private-slot class instances, and `Object.prototype` pollution present before module load or added later also fail without hostile invocation. Static checks prove no dispatch/idempotency/result binding and no journal, Stripe, Firebase, network, persistence, index, or runtime edge.
+
+Stop if any test needs a real Stripe object, key, Session ID/URL, money, member/business data, Firebase project, network call, or production service. Stop if the result says accepted, sent, succeeded, paid, executable, persistable, or business-valid; if any production file imports the policy; or if a diagram links C4B directly to a trusted provider result.
+
+This is source and synthetic-test evidence only. Record source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe configured, production data changed, and production behavior verified as separate states. #246 proves none of the external/live states and creates no officer task. A later reviewed child must add trusted dispatch evidence, raw-result projection/provider validation, persistence, and business attachment before any result may advance.
+
 ### Target payment integration suite
 
 CI/staging must eventually include:
