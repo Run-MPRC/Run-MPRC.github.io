@@ -235,6 +235,50 @@ Officer source-review steps:
 
 **Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if any submitted person or event detail appears in output.
 
+## Late-registration amount format guard — SOURCE ONLY, NOT LIVE
+
+**Purpose:** stop a missing, malformed, or out-of-range late-registration amount before the server allocates a registration identifier, writes a paid record, or asks Stripe to create a Product, Price, or Payment Link.
+
+**Approver:** event lead plus treasurer and platform/security owner.
+
+**Prerequisites for source review:** issue [#331](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/331) is merged; the exact reviewed commit is named; and tests use only an invented event, invented runner, and mocked Stripe methods. The complete Admin screens remain **NOT AVAILABLE YET**. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before any deployment or data repair. PAY-001D still owns the complete admin request schema, and PAY-004C still owns replacement of reusable late-registration Payment Links. This format guard does not approve a price or make that flow safe.
+
+```mermaid
+flowchart LR
+    A["Made-up late-registration request passes earlier access and availability checks"] --> B["Read the amount without conversion"]
+    B --> C{"Exact whole-number cents?"}
+    C -- "No, below 50 unless zero, or over eight digits" --> D["Fixed stop result; no identifier, registration write, or Stripe method"]
+    C -- "Exact zero" --> E["Existing path creates a local record marked paid without Stripe"]
+    C -- "50 through 99,999,999" --> F["Existing unfinished paid path may continue"]
+    E -. "Not payment, free, or comp authority; not live" .-> G["PAY-001D and PAY-004 remain open"]
+    F -. "Reusable Payment Link remains unsafe" .-> G
+```
+
+Text alternative: after earlier access and availability checks, the server accepts only exact whole-number cents: zero, or 50 through 99,999,999. Anything else stops before an identifier, registration write, or Stripe method. Exact zero still creates a local record marked paid without Stripe; that is not proof of payment or authority to call the registration free or comp. Both accepted branches are unfinished and unavailable for officer use.
+
+Officer source-review steps:
+
+1. Keep late registration and every Admin registration action marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #331 pull request, merge commit, and synthetic test result.
+3. Confirm the test uses only an invented event and runner plus mocked Stripe methods.
+4. Confirm missing values, text or objects that only look like numbers, values from 1 through 49 cents, fractions, negative values, and values over eight digits receive exactly `Invalid late registration amount`.
+5. Confirm a rejected amount is not opened, transformed, printed, or copied into the result. Ask the specialist to keep the detailed object-safety proof in the synthetic test report.
+6. Confirm a rejection allocates no registration identifier, writes no event or registration record, and calls no Stripe Product, Price, or Payment Link method.
+7. Confirm exact zero, 50 cents, and 99,999,999 cents keep their current source behavior. Exact zero still creates a local record marked paid without Stripe. Do not treat that record as payment evidence, call it free or comp without approved authority, or treat any technical boundary as an approved price.
+8. Record source change, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, production data, and live behavior as separate results.
+
+**Expected result:** malformed late-registration amounts fail closed with one plain result and no registration or provider side effect. Exact zero and exact whole-number values from 50 through 99,999,999 retain the current source behavior. The zero-amount path still creates a local record marked paid without Stripe and is not payment, free, or comp authority. This guard neither proves an approved business price nor fixes reusable Payment Links, capacity, idempotency, reconciliation, authorization, or deployment.
+
+**Stop conditions:** any real runner, event, price, payment, Firebase record, Stripe object, provider call, or production test; a request to enter or repair a value directly in Firestore or Stripe; a missing exact commit; an amount derived from an unapproved browser choice; a rejection that allocates or writes anything; or a claim that source, tests, merge, preview, or a green workflow proves late registration is safe or live.
+
+**Success proof:** exact #331 pull request and merge commit; the recorded old-source failures; green synthetic boundary, Functions, Rules, commerce-emulator, frontend, safety, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, provider configuration, production data, and live behavior were not changed or verified. Any future live release needs separate approved price authority, one-off payment design, Firebase deployment/readback, Stripe test-mode proof, reconciliation, and rollback evidence.
+
+**Undo:** before any Firebase deployment, use one reviewed source-and-guide revert or safe roll-forward. After any Firebase Function deployment, use the protected backend release path or a reviewed safe roll-forward, then verify the exact Function revision, provider readback boundary, and made-up test-mode behavior. Record website publication, `runmprc.com`, Stripe/provider state, and production-data state separately. Never undo by changing an event, registration, paid status, Product, Price, Payment Link, or payment record by hand.
+
+**Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if runner or event details appeared. Use the private incident path if a malformed request might have created a registration or provider object. Do not copy private details or provider identifiers into an issue, screenshot, email, message, or AI tool.
+
+No system-topology map changes are required because this source slice adds one validation stop and changes no account, permission, data-store, provider, or deployment topology. The small diagram above records the new stop boundary and the two still-unfinished accepted branches.
+
 ## Profile permission error
 
 **Status: AUTOMATIC REPAIR NOT LIVE YET**

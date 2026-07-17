@@ -25,6 +25,13 @@ const {
   validateSucceededRefundResponse,
 } = require('./refundResponseValidation');
 
+const numberIsSafeInteger = Number.isSafeInteger;
+const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const objectHasOwn = Object.hasOwn;
+const objectIs = Object.is;
+const STRIPE_MINIMUM_USD_CENTS = 50;
+const STRIPE_UNIT_AMOUNT_MAX_CENTS = 99_999_999;
+
 const ACTIONS = new Set([
   'refund_full',
   'refund_partial',
@@ -39,6 +46,24 @@ function regRef(eventId, registrationId) {
   return admin.firestore()
     .collection('events').doc(eventId)
     .collection('registrations').doc(registrationId);
+}
+
+function readLateRegistrationAmountCents(registration) {
+  const descriptor = objectGetOwnPropertyDescriptor(registration, 'amountCents');
+  if (!descriptor || !objectHasOwn(descriptor, 'value')) return null;
+
+  const amountCents = descriptor.value;
+  if (
+    typeof amountCents !== 'number'
+    || !numberIsSafeInteger(amountCents)
+    || objectIs(amountCents, -0)
+    || amountCents < 0
+    || (amountCents !== 0 && amountCents < STRIPE_MINIMUM_USD_CENTS)
+    || amountCents > STRIPE_UNIT_AMOUNT_MAX_CENTS
+  ) {
+    return null;
+  }
+  return amountCents;
 }
 
 async function refund({
@@ -193,7 +218,13 @@ async function addLateRegistration({
   if (!registration || !isValidEmail(registration.runner?.email)) {
     throw new functions.https.HttpsError('invalid-argument', 'registration.runner.email required');
   }
-  const amountCents = Number(registration.amountCents) || 0;
+  const amountCents = readLateRegistrationAmountCents(registration);
+  if (amountCents === null) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Invalid late registration amount',
+    );
+  }
   const priceTier = registration.priceTier || 'nonMember';
 
   const event = eventSnap.data();
