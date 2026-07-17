@@ -47,7 +47,7 @@ function Inner() {
   currentFirestoreRef.current = firestore;
   const requestSequence = useRef(0);
   const [loadOutcome, setLoadOutcome] = useState<OrdersLoadOutcome | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -57,12 +57,12 @@ function Inner() {
   const orders = currentOutcome?.status === 'resolved' ? currentOutcome.orders : [];
 
   async function reload() {
-    if (!firestore || currentFirestoreRef.current !== firestore) return;
+    if (actionError || !firestore || currentFirestoreRef.current !== firestore) return;
     requestSequence.current += 1;
     const requestId = requestSequence.current;
     const outcomeKey = { firestore };
     setLoadOutcome({ ...outcomeKey, status: 'loading', orders: [] });
-    setError(null);
+    // An unconfirmed action remains locked until this page is left.
     try {
       const all = await listAllOrders(firestore);
       if (requestId !== requestSequence.current
@@ -86,13 +86,13 @@ function Inner() {
   }, [firestore]);
 
   async function run(orderId: string, action: AdminOrderAction, payload?: Record<string, unknown>) {
-    if (!services) return;
+    if (!services || actionError) return;
     setBusy(orderId);
     try {
       await adminOrderAction(services.firebaseResources.app, { orderId, action, payload });
       await reload();
-    } catch (err: any) {
-      setError(err?.message || 'Action failed');
+    } catch {
+      setActionError('We could not confirm that order action. Do not repeat it. Stop and contact the treasurer and platform owner.');
     } finally {
       setBusy(null);
     }
@@ -191,7 +191,7 @@ function Inner() {
           </>
         )}
 
-        {currentStatus === 'loading' && <p>Loading...</p>}
+        {currentStatus === 'loading' && !actionError && <p>Loading...</p>}
         {currentStatus === 'unavailable' && (
           <p
             className="text-red-500 text-sm"
@@ -202,8 +202,15 @@ function Inner() {
             {LOAD_FAILURE}
           </p>
         )}
-        {currentStatus === 'resolved' && error && (
-          <p className="text-red-500 text-sm">{error}</p>
+        {actionError && (
+          <p
+            className="text-red-500 text-sm"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {actionError}
+          </p>
         )}
 
         {currentStatus === 'resolved' && (
@@ -263,7 +270,7 @@ function Inner() {
                         <button
                           type="button"
                           onClick={() => promptFulfill(o.id)}
-                          disabled={isBusy}
+                          disabled={isBusy || Boolean(actionError)}
                           className="text-blue-600 hover:underline mr-2 text-xs"
                         >
                           Fulfill
@@ -273,7 +280,7 @@ function Inner() {
                         <button
                           type="button"
                           onClick={() => promptRefund(o.id, o.amountCents || 0)}
-                          disabled={isBusy}
+                          disabled={isBusy || Boolean(actionError)}
                           className="text-red-600 hover:underline mr-2 text-xs"
                         >
                           Refund
@@ -283,7 +290,7 @@ function Inner() {
                         <button
                           type="button"
                           onClick={() => promptCancel(o.id)}
-                          disabled={isBusy}
+                          disabled={isBusy || Boolean(actionError)}
                           className="text-amber-700 hover:underline text-xs"
                         >
                           Cancel
