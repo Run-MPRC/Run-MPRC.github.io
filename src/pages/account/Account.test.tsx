@@ -388,6 +388,39 @@ describe('Account profile recovery', () => {
     expect(signOut).not.toHaveBeenCalled();
   });
 
+  test('accepted resend guidance names the configured sender without claiming delivery', async () => {
+    const ENV_KEY = 'REACT_APP_ACCOUNT_EMAIL_SENDER';
+    const originalSender = process.env[ENV_KEY];
+    process.env[ENV_KEY] = 'Synthetic Club Sender';
+    try {
+      let finishRequest: (() => void) | undefined;
+      resendVerificationEmail.mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finishRequest = resolve;
+      }));
+      renderAccount();
+
+      const button = await screen.findByRole('button', {
+        name: 'Request another verification email',
+      });
+      await act(async () => {
+        fireEvent.click(button);
+      });
+      await act(async () => finishRequest?.());
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('The request was accepted.');
+      expect(status).toHaveTextContent('mark the message from Synthetic Club Sender as');
+      expect(status).toHaveTextContent('it does not fix delivery for everyone');
+      expect(status).not.toHaveTextContent(/\bsent\b|\bdelivered\b/i);
+    } finally {
+      if (originalSender === undefined) {
+        delete process.env[ENV_KEY];
+      } else {
+        process.env[ENV_KEY] = originalSender;
+      }
+    }
+  });
+
   test('shows one fixed failure result without provider details', async () => {
     const consoleSpies = [
       jest.spyOn(console, 'log').mockImplementation(() => undefined),
@@ -464,8 +497,7 @@ describe('Account profile recovery', () => {
       name: 'Request another verification email',
     }));
     await act(async () => Promise.resolve());
-    expect(await screen.findByText('The request was accepted. Delivery can take time. Check Inbox and Spam.'))
-      .toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('The request was accepted.');
     expect(screen.getByRole('button', { name: /Try again in/ })).toBeDisabled();
     expect(jest.getTimerCount()).toBe(1);
 

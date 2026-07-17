@@ -35,7 +35,7 @@ const CLEAN_COMMANDS = Object.freeze([
   'test -z "$frontend_git_status"',
 ]);
 const LINT_SCRIPT = 'node .github/scripts/check-frontend-lint.cjs';
-const EXPECTED_LINT_FILES = 106;
+const EXPECTED_LINT_FILES = 108;
 const EXPECTED_LINT_ERRORS = 123;
 const EXPECTED_LINT_WARNINGS = 7;
 const YAML_TO_JSON = [

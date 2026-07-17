@@ -10,11 +10,11 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 106,
+  "scannedFileCount": 108,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 33,
+    ".ts": 35,
     ".tsx": 26
   },
   "errorCount": 123,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 7
   },
-  "fingerprint": "sha256:f13e11e28a21ee078931352287e4074e8e5e7d5e9b39c76b3f1337df207e76ea",
+  "fingerprint": "sha256:3b3373bab8ca879d16ab45032b1a46c462175150fd8cca8eec75ebf3bc720773",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -106,6 +106,8 @@
     "src/services/account/accountService.test.ts",
     "src/services/account/accountService.ts",
     "src/services/account/adminMembersService.ts",
+    "src/services/accountEmail/accountEmailSender.test.ts",
+    "src/services/accountEmail/accountEmailSender.ts",
     "src/services/analytics/analytics.test.ts",
     "src/services/analytics/analytics.ts",
     "src/services/events/adminService.ts",

@@ -7,6 +7,7 @@ import Header from '../../components/Header';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 import { getSafeLoginReturnPath } from './loginReturnPath';
+import { getSpamGuidance } from '../../services/accountEmail/accountEmailSender';
 import './LoginForm.css';
 
 const RESET_COOLDOWN_SECONDS = 60;
@@ -189,7 +190,8 @@ function LoginForm() {
                 <p className="registration-outcome__message">
                   The email service accepted the verification email request.
                   Delivery is not guaranteed. Check your Inbox and Spam folder.
-                  If it is in Spam, mark it “Not spam.”
+                  {' '}
+                  {getSpamGuidance()}
                 </p>
               ) : (
                 <p className="registration-outcome__message">
@@ -243,8 +245,10 @@ function LoginForm() {
                 <p className="password-reset-outcome__message">
                   For privacy, this page always shows the same result. Email delivery
                   cannot be confirmed. Wait a few minutes, then check Inbox and Spam.
-                  If you find a reset message in Spam, mark it “Not spam.” Never share
-                  a reset link or code.
+                  {' '}
+                  {getSpamGuidance()}
+                  {' '}
+                  Never share a reset link or code.
                 </p>
               </div>
               <p
