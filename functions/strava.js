@@ -15,6 +15,11 @@ const STRAVA_TOKEN_MAX_LENGTH = 2_048;
 const STRAVA_SCOPE_MAX_LENGTH = 1_024;
 const STRAVA_PROFILE_TEXT_MAX_LENGTH = 1_024;
 const STRAVA_PROFILE_URL_MAX_LENGTH = 2_048;
+const STRAVA_RECENT_ACTIVITY_LIMIT = 5;
+const STRAVA_ACTIVITY_NAME_MAX_LENGTH = 1_024;
+const STRAVA_ACTIVITY_TYPE_MAX_LENGTH = 128;
+const STRAVA_ACTIVITY_DATE_MAX_LENGTH = 64;
+const STRAVA_LONG_MAX_AS_NUMBER = 9_223_372_036_854_776_000;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
 const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
@@ -26,8 +31,14 @@ const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectGetPrototypeOf = Object.getPrototypeOf;
 const objectHasOwnProperty = Object.prototype.hasOwnProperty;
 const objectPrototype = Object.prototype;
+const arrayIsArray = Array.isArray;
+const arrayPrototype = Array.prototype;
+const arrayPush = Array.prototype.push;
+const numberIsFinite = Number.isFinite;
+const numberIsInteger = Number.isInteger;
 const numberIsSafeInteger = Number.isSafeInteger;
 const reflectApply = Reflect.apply;
+const reflectHas = Reflect.has;
 const regexpTest = RegExp.prototype.test;
 const stringCharCodeAt = String.prototype.charCodeAt;
 const INVALID_SELECTED_VALUE = Symbol('invalid-selected-value');
@@ -72,6 +83,18 @@ function selectedOwnDataValue(record, key, required) {
   return descriptor.value;
 }
 
+function selectedProviderDataValue(record, key, required) {
+  const selected = selectedOwnDataValue(record, key, required);
+  if (selected !== MISSING_SELECTED_VALUE) return selected;
+  try {
+    return reflectApply(reflectHas, Reflect, [record, key])
+      ? INVALID_SELECTED_VALUE
+      : MISSING_SELECTED_VALUE;
+  } catch (_error) {
+    return INVALID_SELECTED_VALUE;
+  }
+}
+
 function isBoundedVisibleAscii(value, maxLength) {
   return typeof value === 'string'
     && value.length > 0
@@ -81,6 +104,25 @@ function isBoundedVisibleAscii(value, maxLength) {
 
 function isPositiveSafeInteger(value) {
   return typeof value === 'number' && numberIsSafeInteger(value) && value > 0;
+}
+
+function isNonNegativeSafeInteger(value) {
+  return typeof value === 'number' && numberIsSafeInteger(value) && value >= 0;
+}
+
+function isFiniteNumberInRange(value, maximum) {
+  return typeof value === 'number'
+    && numberIsFinite(value)
+    && value >= 0
+    && value <= maximum;
+}
+
+function isPositiveIntegerInRange(value, maximum) {
+  return typeof value === 'number'
+    && numberIsFinite(value)
+    && numberIsInteger(value)
+    && value > 0
+    && value <= maximum;
 }
 
 function hasLoneSurrogate(value) {
@@ -178,6 +220,167 @@ function optionalStoredProfileUrl(record) {
   const value = selectedOwnDataValue(record, 'profileUrl', false);
   if (value === MISSING_SELECTED_VALUE || value === null || value === '') return null;
   return isCredentialFreeHttpsUrl(value) ? value : INVALID_SELECTED_VALUE;
+}
+
+function isPlainActivityArray(value) {
+  if (value === null || typeof value !== 'object' || isProxy(value)) return false;
+  try {
+    return arrayIsArray(value) && objectGetPrototypeOf(value) === arrayPrototype;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isMissingFallbackValue(value) {
+  return value === MISSING_SELECTED_VALUE
+    || value === undefined
+    || value === null
+    || value === '';
+}
+
+function selectActivityFallbackText(record, preferredKey, fallbackKey, validator) {
+  const preferred = selectedProviderDataValue(record, preferredKey, false);
+  if (preferred === INVALID_SELECTED_VALUE) return INVALID_SELECTED_VALUE;
+  if (!isMissingFallbackValue(preferred)) {
+    return validator(preferred) ? preferred : INVALID_SELECTED_VALUE;
+  }
+
+  const fallback = selectedProviderDataValue(record, fallbackKey, false);
+  if (
+    fallback === INVALID_SELECTED_VALUE
+    || isMissingFallbackValue(fallback)
+    || !validator(fallback)
+  ) {
+    return INVALID_SELECTED_VALUE;
+  }
+  return fallback;
+}
+
+function isBoundedActivityName(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && isBoundedProfileText(value, STRAVA_ACTIVITY_NAME_MAX_LENGTH);
+}
+
+function isBoundedActivityType(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && isBoundedProfileText(value, STRAVA_ACTIVITY_TYPE_MAX_LENGTH);
+}
+
+function snapshotProviderActivity(record) {
+  if (!isPlainJsonRecord(record)) return null;
+
+  const id = selectedOwnDataValue(record, 'id', true);
+  const name = selectedOwnDataValue(record, 'name', true);
+  const type = selectActivityFallbackText(
+    record,
+    'type',
+    'sport_type',
+    isBoundedActivityType,
+  );
+  const distance = selectedOwnDataValue(record, 'distance', true);
+  const movingTime = selectedOwnDataValue(record, 'moving_time', true);
+  const startDate = selectActivityFallbackText(
+    record,
+    'start_date_local',
+    'start_date',
+    (value) => isBoundedVisibleAscii(value, STRAVA_ACTIVITY_DATE_MAX_LENGTH),
+  );
+  if (
+    !isPositiveIntegerInRange(id, STRAVA_LONG_MAX_AS_NUMBER)
+    || !isBoundedActivityName(name)
+    || type === INVALID_SELECTED_VALUE
+    || !isFiniteNumberInRange(distance, Number.MAX_SAFE_INTEGER)
+    || !isNonNegativeSafeInteger(movingTime)
+    || startDate === INVALID_SELECTED_VALUE
+  ) {
+    return null;
+  }
+
+  return objectFreeze({
+    id,
+    name,
+    type,
+    distanceMeters: distance,
+    movingTimeSeconds: movingTime,
+    startDate,
+  });
+}
+
+function snapshotProviderActivities(response) {
+  if (!isPlainActivityArray(response)) return null;
+
+  const length = selectedOwnDataValue(response, 'length', true);
+  if (
+    !isNonNegativeSafeInteger(length)
+    || length > STRAVA_RECENT_ACTIVITY_LIMIT
+  ) {
+    return null;
+  }
+
+  const activities = [];
+  for (let index = 0; index < length; index += 1) {
+    const record = selectedOwnDataValue(response, String(index), true);
+    if (record === INVALID_SELECTED_VALUE) return null;
+    const activity = snapshotProviderActivity(record);
+    if (!activity) return null;
+    reflectApply(arrayPush, activities, [activity]);
+  }
+  return objectFreeze(activities);
+}
+
+function snapshotProviderTotal(root, key) {
+  const selected = selectedProviderDataValue(root, key, false);
+  if (selected === INVALID_SELECTED_VALUE) return null;
+  if (selected === MISSING_SELECTED_VALUE || selected === null) {
+    return objectFreeze({ distance: 0, count: 0 });
+  }
+  if (selected === root || !isPlainJsonRecord(selected)) return null;
+
+  const rawDistance = selectedProviderDataValue(selected, 'distance', false);
+  const rawCount = selectedProviderDataValue(selected, 'count', false);
+  if (
+    rawDistance === INVALID_SELECTED_VALUE
+    || rawCount === INVALID_SELECTED_VALUE
+  ) {
+    return null;
+  }
+  const distance = rawDistance === MISSING_SELECTED_VALUE || rawDistance === null
+    ? 0
+    : rawDistance;
+  const count = rawCount === MISSING_SELECTED_VALUE || rawCount === null
+    ? 0
+    : rawCount;
+  if (
+    !isFiniteNumberInRange(distance, Number.MAX_SAFE_INTEGER)
+    || !isNonNegativeSafeInteger(count)
+  ) {
+    return null;
+  }
+  return objectFreeze({ distance, count });
+}
+
+function snapshotProviderStats(response) {
+  if (!isPlainJsonRecord(response)) return null;
+
+  const yearRun = snapshotProviderTotal(response, 'ytd_run_totals');
+  const yearRide = snapshotProviderTotal(response, 'ytd_ride_totals');
+  const allRun = snapshotProviderTotal(response, 'all_run_totals');
+  if (!yearRun || !yearRide || !allRun) return null;
+
+  return objectFreeze({
+    yearToDate: objectFreeze({
+      runMeters: yearRun.distance,
+      runCount: yearRun.count,
+      rideMeters: yearRide.distance,
+      rideCount: yearRide.count,
+    }),
+    allTime: objectFreeze({
+      runMeters: allRun.distance,
+      runCount: allRun.count,
+    }),
+  });
 }
 
 function snapshotStoredConnection(record) {
@@ -490,49 +693,44 @@ exports.stravaFetchStats = functions
     if (!activitiesResp || !activitiesResp.ok) {
       throw stravaDataError('internal');
     }
-    let activities;
+    let rawActivities;
     try {
-      activities = await activitiesResp.json();
+      rawActivities = await activitiesResp.json();
     } catch (_error) {
       throw stravaDataError('unavailable');
     }
-    let stats = null;
+    const recentActivities = snapshotProviderActivities(rawActivities);
+    if (!recentActivities) {
+      throw stravaDataError('internal');
+    }
+
+    let projectedStats = null;
     if (statsResp && statsResp.ok) {
+      let rawStats;
       try {
-        stats = await statsResp.json();
+        rawStats = await statsResp.json();
       } catch (_error) {
         throw stravaDataError('unavailable');
       }
+      projectedStats = snapshotProviderStats(rawStats);
+      if (!projectedStats) {
+        throw stravaDataError('internal');
+      }
     }
 
-    return {
+    return objectFreeze({
       connected: true,
-      athlete: {
+      athlete: objectFreeze({
         id: conn.athleteId,
         firstName: conn.firstName,
         lastName: conn.lastName,
         username: conn.username,
         profileUrl: conn.profileUrl,
-      },
-      recentActivities: (activities || []).slice(0, 5).map((a) => ({
-        id: a.id,
-        name: a.name,
-        type: a.type || a.sport_type,
-        distanceMeters: a.distance,
-        movingTimeSeconds: a.moving_time,
-        startDate: a.start_date_local || a.start_date,
-      })),
-      yearToDate: stats ? {
-        runMeters: stats.ytd_run_totals?.distance || 0,
-        runCount: stats.ytd_run_totals?.count || 0,
-        rideMeters: stats.ytd_ride_totals?.distance || 0,
-        rideCount: stats.ytd_ride_totals?.count || 0,
-      } : null,
-      allTime: stats ? {
-        runMeters: stats.all_run_totals?.distance || 0,
-        runCount: stats.all_run_totals?.count || 0,
-      } : null,
-    };
+      }),
+      recentActivities,
+      yearToDate: projectedStats ? projectedStats.yearToDate : null,
+      allTime: projectedStats ? projectedStats.allTime : null,
+    });
   });
 
 exports.stravaDisconnect = functions

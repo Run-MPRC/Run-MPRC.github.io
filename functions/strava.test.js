@@ -105,6 +105,10 @@ const MAX_TOKEN_LENGTH = 2_048;
 const MAX_SCOPE_LENGTH = 1_024;
 const MAX_PROFILE_TEXT_LENGTH = 1_024;
 const MAX_PROFILE_URL_LENGTH = 2_048;
+const MAX_ACTIVITY_NAME_LENGTH = 1_024;
+const MAX_ACTIVITY_TYPE_LENGTH = 128;
+const MAX_ACTIVITY_DATE_LENGTH = 64;
+const MAX_STRAVA_LONG_AS_NUMBER = 9_223_372_036_854_776_000;
 const CONNECTION_PATH = 'members/synthetic-member-000001/connections/strava';
 const SECRET_PATH = 'members/synthetic-member-000001/secrets/strava';
 
@@ -2128,6 +2132,42 @@ describe('Strava activity data failure boundary', () => {
     return { activitiesJson, statsJson };
   }
 
+  function validProviderActivity(overrides = {}) {
+    return {
+      id: 987654,
+      name: 'Synthetic Morning Run',
+      sport_type: 'Run',
+      distance: 5000.5,
+      moving_time: 1500,
+      start_date: '2026-01-02T12:00:00Z',
+      ...overrides,
+    };
+  }
+
+  function validProviderStats(overrides = {}) {
+    return {
+      ytd_run_totals: { distance: 12000.5, count: 3 },
+      ytd_ride_totals: { distance: 20000.25, count: 2 },
+      all_run_totals: { distance: 345000.75, count: 84 },
+      ...overrides,
+    };
+  }
+
+  function mockSuccessfulProviderData(options = {}) {
+    const activities = Object.prototype.hasOwnProperty.call(options, 'activities')
+      ? options.activities
+      : [validProviderActivity()];
+    const stats = Object.prototype.hasOwnProperty.call(options, 'stats')
+      ? options.stats
+      : validProviderStats();
+    const activitiesJson = jest.fn(() => activities);
+    const statsJson = jest.fn(() => stats);
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+      .mockResolvedValueOnce({ ok: true, json: statsJson });
+    return { activitiesJson, statsJson };
+  }
+
   function expectTwoFreshBearerReads(athleteId = 123456) {
     const headers = { Authorization: 'Bearer fresh_access_token_test' };
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -2146,6 +2186,31 @@ describe('Strava activity data failure boundary', () => {
   function expectNoWritesOrLogs() {
     expect(admin.__getWrites()).toEqual([]);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  async function expectInvalidSuccessfulProviderData(options) {
+    const { invalidSurface } = options;
+    seedFreshConnection();
+    const { activitiesJson, statsJson } = mockSuccessfulProviderData(options);
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_DATA_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error)))
+      .not.toMatch(/provider|canary|secret|token|access|refresh/i);
+    expect(activitiesJson).toHaveBeenCalledTimes(1);
+    expect(statsJson).toHaveBeenCalledTimes(invalidSurface === 'activities' ? 0 : 1);
+    expectTwoFreshBearerReads();
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    expectNoWritesOrLogs();
   }
 
   async function expectRejectedStoredConnection(connection) {
@@ -2554,6 +2619,672 @@ describe('Strava activity data failure boundary', () => {
         username: 'synthetic-athlete',
         profileUrl: 'https://images.example.test/synthetic-athlete.png',
       });
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+  });
+
+  describe('successful Strava activity and statistics response validation', () => {
+    class ProviderActivities extends Array {}
+
+    class ProviderActivity {
+      constructor() {
+        Object.assign(this, validProviderActivity());
+      }
+    }
+
+    class ProviderStats {
+      constructor() {
+        Object.assign(this, validProviderStats());
+      }
+    }
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a boolean', true],
+      ['a number', 1],
+      ['a string', 'activities'],
+      ['a function', () => []],
+      ['a plain record', {}],
+      ['a Date', new Date(0)],
+      ['a null-prototype record', Object.create(null)],
+      ['a custom-prototype record', Object.create({ inherited: true })],
+      ['an Array subclass', new ProviderActivities()],
+    ])('rejects activities root that is %s', async (_case, activities) => {
+      await expectInvalidSuccessfulProviderData({
+        activities,
+        invalidSurface: 'activities',
+      });
+    });
+
+    test('rejects a transparent activities Proxy without inspecting it after await', async () => {
+      const getTrap = jest.fn((_target, key) => {
+        if (key === 'then') return undefined;
+        throw new Error(`activities-root-canary ${String(key)}`);
+      });
+      const activities = new Proxy([validProviderActivity()], {
+        get: getTrap,
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('activities-root-canary descriptor');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('activities-root-canary prototype');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('activities-root-canary ownKeys');
+        }),
+      });
+
+      await expectInvalidSuccessfulProviderData({
+        activities,
+        invalidSurface: 'activities',
+      });
+
+      expect(getTrap.mock.calls.map(([, key]) => key)).toEqual(['then']);
+    });
+
+    test('keeps a revoked activities root inside the fixed unavailable JSON boundary', async () => {
+      seedFreshConnection();
+      const { proxy, revoke } = Proxy.revocable([validProviderActivity()], {});
+      revoke();
+      const activitiesJson = jest.fn(() => proxy);
+      const statsJson = jest.fn(() => validProviderStats());
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+      const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(error)).toEqual({
+        code: 'unavailable',
+        message: FIXED_DATA_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(activitiesJson).toHaveBeenCalledTimes(1);
+      expect(statsJson).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
+
+    test('rejects a revoked Proxy activity entry without reflection', async () => {
+      const { proxy, revoke } = Proxy.revocable(validProviderActivity(), {});
+      revoke();
+
+      await expectInvalidSuccessfulProviderData({
+        activities: [proxy],
+        invalidSurface: 'activities',
+      });
+    });
+
+    test.each([
+      ['oversized', Array.from({ length: 6 }, (_unused, index) => (
+        validProviderActivity({ id: index + 1 })
+      ))],
+      ['sparse', new Array(1)],
+    ])('rejects an %s activity array', async (_case, activities) => {
+      await expectInvalidSuccessfulProviderData({
+        activities,
+        invalidSurface: 'activities',
+      });
+    });
+
+    test('rejects an accessor-indexed activity array without invoking it', async () => {
+      const indexGetter = jest.fn(() => validProviderActivity());
+      const accessorIndexed = [];
+      Object.defineProperty(accessorIndexed, '0', {
+        configurable: true,
+        enumerable: true,
+        get: indexGetter,
+      });
+      accessorIndexed.length = 1;
+      await expectInvalidSuccessfulProviderData({
+        activities: accessorIndexed,
+        invalidSurface: 'activities',
+      });
+      expect(indexGetter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['null', null],
+      ['an array', []],
+      ['a Date', new Date(0)],
+      ['a class instance', new ProviderActivity()],
+      ['a null-prototype record', Object.assign(Object.create(null), validProviderActivity())],
+      ['a custom-prototype record', Object.assign(
+        Object.create({ inherited: true }),
+        validProviderActivity(),
+      )],
+    ])('rejects an activity entry that is %s', async (_case, activity) => {
+      await expectInvalidSuccessfulProviderData({
+        activities: [activity],
+        invalidSurface: 'activities',
+      });
+    });
+
+    test.each([
+      ['missing id', (activity) => { delete activity.id; }],
+      ['undefined id', (activity) => { activity.id = undefined; }],
+      ['zero id', (activity) => { activity.id = 0; }],
+      ['negative id', (activity) => { activity.id = -1; }],
+      ['fractional id', (activity) => { activity.id = 1.5; }],
+      ['NaN id', (activity) => { activity.id = Number.NaN; }],
+      ['infinite id', (activity) => { activity.id = Number.POSITIVE_INFINITY; }],
+      ['next-representable over-cap id', (activity) => {
+        activity.id = MAX_STRAVA_LONG_AS_NUMBER + 2_048;
+      }],
+      ['over-cap id', (activity) => { activity.id = MAX_STRAVA_LONG_AS_NUMBER * 2; }],
+      ['string id', (activity) => { activity.id = '987654'; }],
+      ['boxed id', (activity) => { activity.id = Object(987654); }],
+      ['structured id', (activity) => { activity.id = { value: 987654 }; }],
+      ['bigint id', (activity) => { activity.id = 987654n; }],
+      ['symbol id', (activity) => { activity.id = Symbol('activity-id-canary'); }],
+      ['empty name', (activity) => { activity.name = ''; }],
+      ['oversized name', (activity) => { activity.name = 'n'.repeat(MAX_ACTIVITY_NAME_LENGTH + 1); }],
+      ['control in name', (activity) => { activity.name = 'Morning\nRun'; }],
+      ['lone surrogate in name', (activity) => { activity.name = '\ud800'; }],
+      ['oversized type', (activity) => { activity.sport_type = 't'.repeat(MAX_ACTIVITY_TYPE_LENGTH + 1); }],
+      ['control in type', (activity) => { activity.sport_type = 'Run\rRide'; }],
+      ['malformed preferred type', (activity) => {
+        activity.type = { value: 'Run' };
+        activity.sport_type = 'Run';
+      }],
+      ['negative distance', (activity) => { activity.distance = -1; }],
+      ['NaN distance', (activity) => { activity.distance = Number.NaN; }],
+      ['infinite distance', (activity) => { activity.distance = Number.POSITIVE_INFINITY; }],
+      ['over-cap distance', (activity) => { activity.distance = Number.MAX_SAFE_INTEGER + 1; }],
+      ['string distance', (activity) => { activity.distance = '5000'; }],
+      ['negative moving time', (activity) => { activity.moving_time = -1; }],
+      ['fractional moving time', (activity) => { activity.moving_time = 1.5; }],
+      ['unsafe moving time', (activity) => { activity.moving_time = Number.MAX_SAFE_INTEGER + 1; }],
+      ['string moving time', (activity) => { activity.moving_time = '1500'; }],
+      ['empty date', (activity) => { activity.start_date = ''; }],
+      ['oversized date', (activity) => { activity.start_date = 'd'.repeat(MAX_ACTIVITY_DATE_LENGTH + 1); }],
+      ['non-visible date', (activity) => { activity.start_date = '2026-01-02\n12:00:00Z'; }],
+      ['malformed preferred date', (activity) => {
+        activity.start_date_local = { value: '2026-01-02T12:00:00Z' };
+        activity.start_date = '2026-01-02T12:00:00Z';
+      }],
+    ])('rejects an activity with %s', async (_case, mutate) => {
+      const activity = validProviderActivity();
+      mutate(activity);
+
+      await expectInvalidSuccessfulProviderData({
+        activities: [activity],
+        invalidSurface: 'activities',
+      });
+    });
+
+    test.each([
+      ['id', 987654],
+      ['name', 'Synthetic Morning Run'],
+      ['type', 'Run'],
+      ['distance', 5000.5],
+      ['moving_time', 1500],
+      ['start_date_local', '2026-01-02T12:00:00Z'],
+    ])('rejects a selected %s accessor without invoking it', async (field, value) => {
+      const getter = jest.fn(() => value);
+      const activity = validProviderActivity();
+      if (field === 'type') delete activity.sport_type;
+      if (field === 'start_date_local') delete activity.start_date;
+      Object.defineProperty(activity, field, {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectInvalidSuccessfulProviderData({
+        activities: [activity],
+        invalidSurface: 'activities',
+      });
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test('preserves fallback precedence without touching hostile fallback fields', async () => {
+      seedFreshConnection();
+      const sportTypeGetter = jest.fn(() => {
+        throw new Error('sport-type-fallback-canary');
+      });
+      const startDateGetter = jest.fn(() => {
+        throw new Error('start-date-fallback-canary');
+      });
+      const preferred = validProviderActivity({
+        id: 1,
+        type: 'TrailRun',
+        start_date_local: '2026-02-03T04:05:06Z',
+      });
+      Object.defineProperty(preferred, 'sport_type', {
+        configurable: true,
+        enumerable: true,
+        get: sportTypeGetter,
+      });
+      Object.defineProperty(preferred, 'start_date', {
+        configurable: true,
+        enumerable: true,
+        get: startDateGetter,
+      });
+      const fallback = validProviderActivity({
+        id: 2,
+        type: '',
+        sport_type: 'Run',
+        start_date_local: null,
+        start_date: '2026-03-04T05:06:07Z',
+      });
+      mockSuccessfulProviderData({ activities: [preferred, fallback] });
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.recentActivities.map(({ id, type, startDate }) => ({ id, type, startDate })))
+        .toEqual([
+          { id: 1, type: 'TrailRun', startDate: '2026-02-03T04:05:06Z' },
+          { id: 2, type: 'Run', startDate: '2026-03-04T05:06:07Z' },
+        ]);
+      expect(sportTypeGetter).not.toHaveBeenCalled();
+      expect(startDateGetter).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+
+    test('accepts exact bounds, five dense entries, and the rounded signed-Long ceiling', async () => {
+      seedFreshConnection();
+      const longId = MAX_STRAVA_LONG_AS_NUMBER;
+      const activities = Array.from({ length: 5 }, (_unused, index) => validProviderActivity({
+        id: index === 0 ? longId : index + 1,
+        name: index === 0 ? '🏃'.repeat(MAX_ACTIVITY_NAME_LENGTH / 2) : `Run ${index}`,
+        type: index === 0 ? 't'.repeat(MAX_ACTIVITY_TYPE_LENGTH) : undefined,
+        sport_type: index === 0 ? 'ignored' : 'Run',
+        distance: index === 0 ? Number.MAX_SAFE_INTEGER : 5000.5,
+        moving_time: index === 0 ? Number.MAX_SAFE_INTEGER : 1500,
+        start_date_local: index === 0 ? 'd'.repeat(MAX_ACTIVITY_DATE_LENGTH) : undefined,
+      }));
+      mockSuccessfulProviderData({ activities });
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.recentActivities).toHaveLength(5);
+      expect(result.recentActivities[0]).toEqual({
+        id: longId,
+        name: '🏃'.repeat(MAX_ACTIVITY_NAME_LENGTH / 2),
+        type: 't'.repeat(MAX_ACTIVITY_TYPE_LENGTH),
+        distanceMeters: Number.MAX_SAFE_INTEGER,
+        movingTimeSeconds: Number.MAX_SAFE_INTEGER,
+        startDate: 'd'.repeat(MAX_ACTIVITY_DATE_LENGTH),
+      });
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a boolean', true],
+      ['a number', 1],
+      ['a string', 'stats'],
+      ['a function', () => ({})],
+      ['an array', []],
+      ['a Date', new Date(0)],
+      ['a null-prototype record', Object.create(null)],
+      ['a custom-prototype record', Object.create({ inherited: true })],
+      ['a class instance', new ProviderStats()],
+    ])('rejects successful statistics root that is %s', async (_case, stats) => {
+      await expectInvalidSuccessfulProviderData({
+        stats,
+        invalidSurface: 'stats',
+      });
+    });
+
+    test('rejects a transparent statistics Proxy without inspecting it after await', async () => {
+      const getTrap = jest.fn((_target, key) => {
+        if (key === 'then') return undefined;
+        throw new Error(`stats-root-canary ${String(key)}`);
+      });
+      const stats = new Proxy(validProviderStats(), {
+        get: getTrap,
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('stats-root-canary descriptor');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('stats-root-canary prototype');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('stats-root-canary ownKeys');
+        }),
+      });
+
+      await expectInvalidSuccessfulProviderData({ stats, invalidSurface: 'stats' });
+
+      expect(getTrap.mock.calls.map(([, key]) => key)).toEqual(['then']);
+    });
+
+    test('keeps a revoked statistics root inside the fixed unavailable JSON boundary', async () => {
+      seedFreshConnection();
+      const { proxy, revoke } = Proxy.revocable(validProviderStats(), {});
+      revoke();
+      const activitiesJson = jest.fn(() => [validProviderActivity()]);
+      const statsJson = jest.fn(() => proxy);
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+      const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(error)).toEqual({
+        code: 'unavailable',
+        message: FIXED_DATA_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(activitiesJson).toHaveBeenCalledTimes(1);
+      expect(statsJson).toHaveBeenCalledTimes(1);
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
+
+    test.each([
+      ['an own undefined group', { ytd_run_totals: undefined }],
+      ['an empty string group', { ytd_run_totals: '' }],
+      ['an array group', { ytd_run_totals: [] }],
+      ['a proxied group', { ytd_run_totals: new Proxy({ distance: 1, count: 1 }, {}) }],
+      ['negative distance', { ytd_run_totals: { distance: -1, count: 1 } }],
+      ['infinite distance', {
+        ytd_run_totals: { distance: Number.POSITIVE_INFINITY, count: 1 },
+      }],
+      ['over-cap distance', {
+        ytd_run_totals: { distance: Number.MAX_SAFE_INTEGER + 1, count: 1 },
+      }],
+      ['string distance', { ytd_run_totals: { distance: '1', count: 1 } }],
+      ['own undefined distance', {
+        ytd_run_totals: { distance: undefined, count: 1 },
+      }],
+      ['negative count', { ytd_run_totals: { distance: 1, count: -1 } }],
+      ['fractional count', { ytd_run_totals: { distance: 1, count: 1.5 } }],
+      ['unsafe count', {
+        ytd_run_totals: { distance: 1, count: Number.MAX_SAFE_INTEGER + 1 },
+      }],
+      ['string count', { ytd_run_totals: { distance: 1, count: '1' } }],
+    ])('rejects statistics with %s', async (_case, overrides) => {
+      await expectInvalidSuccessfulProviderData({
+        stats: validProviderStats(overrides),
+        invalidSurface: 'stats',
+      });
+    });
+
+    test('rejects a selected statistics group that cycles to the root', async () => {
+      const stats = validProviderStats();
+      stats.ytd_run_totals = stats;
+
+      await expectInvalidSuccessfulProviderData({ stats, invalidSurface: 'stats' });
+    });
+
+    test.each([
+      ['ytd_run_totals', { distance: 1, count: 1 }],
+      ['ytd_ride_totals', { distance: 1, count: 1 }],
+      ['all_run_totals', { distance: 1, count: 1 }],
+    ])('rejects a selected %s accessor without invoking it', async (field, value) => {
+      const getter = jest.fn(() => value);
+      const stats = validProviderStats();
+      Object.defineProperty(stats, field, {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectInvalidSuccessfulProviderData({ stats, invalidSurface: 'stats' });
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['distance', 1],
+      ['count', 1],
+    ])('rejects a selected statistics %s accessor without invoking it', async (field, value) => {
+      const getter = jest.fn(() => value);
+      const total = { distance: 1, count: 1 };
+      Object.defineProperty(total, field, {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectInvalidSuccessfulProviderData({
+        stats: validProviderStats({ ytd_run_totals: total }),
+        invalidSurface: 'stats',
+      });
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test('rejects inherited required activity data without invoking its getter', async () => {
+      const inheritedGetter = jest.fn(() => 987654);
+      const activity = validProviderActivity();
+      delete activity.id;
+      Object.defineProperty(Object.prototype, 'id', {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectInvalidSuccessfulProviderData({
+          activities: [activity],
+          invalidSurface: 'activities',
+        });
+      } finally {
+        delete Object.prototype.id;
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test('rejects an inherited preferred activity field without invoking it', async () => {
+      const inheritedGetter = jest.fn(() => 'InheritedRun');
+      const activity = validProviderActivity();
+      Object.defineProperty(Object.prototype, 'type', {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectInvalidSuccessfulProviderData({
+          activities: [activity],
+          invalidSurface: 'activities',
+        });
+      } finally {
+        delete Object.prototype.type;
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['an activity distance', (hooks) => ({
+        activities: [validProviderActivity({ distance: hooks })],
+        invalidSurface: 'activities',
+      })],
+      ['a statistics count', (hooks) => ({
+        stats: validProviderStats({
+          ytd_run_totals: { distance: 1, count: hooks },
+        }),
+        invalidSurface: 'stats',
+      })],
+    ])('does not invoke coercion or JSON hooks for %s', async (_case, makeOptions) => {
+      const hooks = {
+        toJSON: jest.fn(() => 1),
+        toString: jest.fn(() => '1'),
+        valueOf: jest.fn(() => 1),
+        [Symbol.toPrimitive]: jest.fn(() => 1),
+      };
+
+      await expectInvalidSuccessfulProviderData(makeOptions(hooks));
+
+      expect(hooks.toJSON).not.toHaveBeenCalled();
+      expect(hooks.toString).not.toHaveBeenCalled();
+      expect(hooks.valueOf).not.toHaveBeenCalled();
+      expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['selected totals group', 'ytd_run_totals', {}],
+      ['selected total distance', 'distance', { ytd_run_totals: {} }],
+    ])('rejects an inherited %s getter without invoking it', async (_case, field, stats) => {
+      const inheritedGetter = jest.fn(() => ({ distance: 999, count: 999 }));
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        get: inheritedGetter,
+      });
+
+      try {
+        await expectInvalidSuccessfulProviderData({ stats, invalidSurface: 'stats' });
+      } finally {
+        delete Object.prototype[field];
+      }
+
+      expect(inheritedGetter).not.toHaveBeenCalled();
+    });
+
+    test('preserves zero totals for missing and null selected groups and values', async () => {
+      seedFreshConnection();
+      const stats = {
+        ytd_run_totals: { distance: null },
+        ytd_ride_totals: null,
+      };
+      mockSuccessfulProviderData({ stats });
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.yearToDate).toEqual({
+        runMeters: 0,
+        runCount: 0,
+        rideMeters: 0,
+        rideCount: 0,
+      });
+      expect(result.allTime).toEqual({ runMeters: 0, runCount: 0 });
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+
+    test('ignores unknown provider getters, symbols, hooks, and cycles', async () => {
+      seedFreshConnection();
+      const unknownActivityGetter = jest.fn(() => {
+        throw new Error('unknown-activity-canary');
+      });
+      const unknownStatsGetter = jest.fn(() => {
+        throw new Error('unknown-stats-canary');
+      });
+      const unknownTotalGetter = jest.fn(() => {
+        throw new Error('unknown-total-canary');
+      });
+      const activity = validProviderActivity({
+        raw_token: 'provider-secret-canary',
+      });
+      Object.defineProperty(activity, 'unknown', {
+        configurable: true,
+        enumerable: true,
+        get: unknownActivityGetter,
+      });
+      activity.self = activity;
+      activity[Symbol('activity-unknown')] = { secret: 'symbol-secret-canary' };
+      const runTotals = { distance: 12000.5, count: 3 };
+      Object.defineProperty(runTotals, 'unknown', {
+        configurable: true,
+        enumerable: true,
+        get: unknownTotalGetter,
+      });
+      runTotals.self = runTotals;
+      const stats = validProviderStats({ ytd_run_totals: runTotals });
+      Object.defineProperty(stats, 'unknown', {
+        configurable: true,
+        enumerable: true,
+        get: unknownStatsGetter,
+      });
+      stats.self = stats;
+      mockSuccessfulProviderData({ activities: [activity], stats });
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result).toEqual({
+        connected: true,
+        athlete: {
+          id: 123456,
+          firstName: 'Synthetic',
+          lastName: 'Athlete',
+          username: 'synthetic-athlete',
+          profileUrl: 'https://images.example.test/synthetic-athlete.png',
+        },
+        recentActivities: [{
+          id: 987654,
+          name: 'Synthetic Morning Run',
+          type: 'Run',
+          distanceMeters: 5000.5,
+          movingTimeSeconds: 1500,
+          startDate: '2026-01-02T12:00:00Z',
+        }],
+        yearToDate: {
+          runMeters: 12000.5,
+          runCount: 3,
+          rideMeters: 20000.25,
+          rideCount: 2,
+        },
+        allTime: { runMeters: 345000.75, runCount: 84 },
+      });
+      expect(JSON.stringify(result)).not.toMatch(/provider-secret|symbol-secret|canary/i);
+      expect(unknownActivityGetter).not.toHaveBeenCalled();
+      expect(unknownStatsGetter).not.toHaveBeenCalled();
+      expect(unknownTotalGetter).not.toHaveBeenCalled();
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(Object.isFrozen(result.athlete)).toBe(true);
+      expect(Object.isFrozen(result.recentActivities)).toBe(true);
+      expect(Object.isFrozen(result.recentActivities[0])).toBe(true);
+      expect(Object.isFrozen(result.yearToDate)).toBe(true);
+      expect(Object.isFrozen(result.allTime)).toBe(true);
+      expectTwoFreshBearerReads();
+      expectNoWritesOrLogs();
+    });
+
+    test('snapshots activities before awaiting statistics JSON', async () => {
+      seedFreshConnection();
+      const activity = validProviderActivity();
+      let resolveStats;
+      let markStatsStarted;
+      const statsStarted = new Promise((resolve) => { markStatsStarted = resolve; });
+      const statsPending = new Promise((resolve) => { resolveStats = resolve; });
+      const activitiesJson = jest.fn(() => [activity]);
+      const statsJson = jest.fn(() => {
+        markStatsStarted();
+        return statsPending;
+      });
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+      const resultPromise = stravaFetchStats({}, CONTEXT);
+      await statsStarted;
+      Object.assign(activity, {
+        id: 999999,
+        name: 'Mutated Provider Activity',
+        sport_type: 'Ride',
+        distance: 999999,
+        moving_time: 999999,
+        start_date: '2099-01-01T00:00:00Z',
+      });
+      resolveStats(validProviderStats());
+      const result = await resultPromise;
+
+      expect(result.recentActivities).toEqual([{
+        id: 987654,
+        name: 'Synthetic Morning Run',
+        type: 'Run',
+        distanceMeters: 5000.5,
+        movingTimeSeconds: 1500,
+        startDate: '2026-01-02T12:00:00Z',
+      }]);
       expectTwoFreshBearerReads();
       expectNoWritesOrLogs();
     });
