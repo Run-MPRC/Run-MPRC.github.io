@@ -8,6 +8,7 @@ const mockGenerateToken = jest.fn();
 const mockResolveCallerRole = jest.fn();
 const mockCountActiveRegistrations = jest.fn();
 const mockRegistrationAllocation = jest.fn();
+const mockOrderAllocation = jest.fn();
 
 jest.mock('firebase-functions', () => {
   class HttpsError extends Error {
@@ -81,6 +82,7 @@ jest.mock('firebase-admin', () => {
         registrationSequence += 1;
         resolvedId = `reg-new-${registrationSequence}`;
       } else if (!resolvedId && this.path === 'orders') {
+        mockOrderAllocation(this.path);
         orderSequence += 1;
         resolvedId = `order-new-${orderSequence}`;
       }
@@ -192,6 +194,7 @@ describe('Checkout promotion policy', () => {
     mockResolveCallerRole.mockReset();
     mockCountActiveRegistrations.mockReset();
     mockRegistrationAllocation.mockReset();
+    mockOrderAllocation.mockReset();
     mockGetStripe.mockReturnValue({
       checkout: { sessions: { create: mockCheckoutCreate } },
       products: { create: mockProductCreate },
@@ -884,6 +887,271 @@ describe('Checkout promotion policy', () => {
       stripeSessionId: 'cs_order_policy',
     });
     expect(mockProductCreate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['a string price', '2000'],
+    ['a sub-minimum paid price', 49],
+    ['zero', 0],
+    ['a fractional price', 50.5],
+    ['a non-finite price', Number.NaN],
+    ['a price over the provider limit', 100_000_000],
+  ])('rejects %s before order and provider side effects', async (
+    _name,
+    priceCents,
+  ) => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      description: 'Synthetic test product',
+      slug: 'hat',
+      status: 'active',
+      priceCents,
+    });
+    mockProductCreate.mockResolvedValue({ id: 'prod_should_not_exist' });
+
+    const outcome = await createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} }).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+
+    expect({
+      settled: outcome.error ? 'rejected' : 'resolved',
+      code: outcome.error?.code || null,
+      message: outcome.error?.message || null,
+      rateLimitCalls: mockRateLimit.mock.calls.length,
+      tokenCalls: mockGenerateToken.mock.calls.length,
+      orderAllocations: mockOrderAllocation.mock.calls.length,
+      writes: mockFirestoreWrite.mock.calls.length,
+      stripeAccesses: mockGetStripe.mock.calls.length,
+      productCreates: mockProductCreate.mock.calls.length,
+      checkoutCreates: mockCheckoutCreate.mock.calls.length,
+    }).toEqual({
+      settled: 'rejected',
+      code: 'failed-precondition',
+      message: 'This item is unavailable',
+      rateLimitCalls: 2,
+      tokenCalls: 0,
+      orderAllocations: 0,
+      writes: 0,
+      stripeAccesses: 0,
+      productCreates: 0,
+      checkoutCreates: 0,
+    });
+    expect(admin.__get('products/hat').stripeProductId).toBeUndefined();
+    expect(admin.__get('orders/order-new-1')).toBeUndefined();
+  });
+
+  test.each([50, 99_999_999])(
+    'preserves the valid merchandise boundary %s in the order and Session',
+    async (priceCents) => {
+      admin.__seed('products/hat', {
+        checkoutEnabled: true,
+        title: 'Synthetic Hat',
+        slug: 'hat',
+        status: 'active',
+        priceCents,
+        stripeProductId: 'prod_hat_policy',
+      });
+
+      await createMerchCheckout({
+        productSlug: 'hat',
+        buyer: {
+          firstName: 'Test',
+          lastName: 'Buyer',
+          email: 'buyer@example.test',
+        },
+      }, { auth: null, rawRequest: {} });
+
+      expect(admin.__get('orders/order-new-1')).toMatchObject({
+        amountCents: priceCents,
+        currency: 'usd',
+      });
+      expect(mockCheckoutCreate.mock.calls[0][0]
+        .line_items[0].price_data.unit_amount).toBe(priceCents);
+      expect(mockProductCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  test('uses one copied price when the admitted product changes after projection', async () => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      slug: 'hat',
+      status: 'active',
+      priceCents: 2_000,
+      stripeProductId: 'prod_hat_policy',
+    });
+    mockGenerateToken.mockImplementation(() => {
+      admin.__get('products/hat').priceCents = 49;
+      return 'synthetic-confirmation-token';
+    });
+
+    await createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} });
+
+    expect(admin.__get('products/hat').priceCents).toBe(49);
+    expect(admin.__get('orders/order-new-1').amountCents).toBe(2_000);
+    expect(mockCheckoutCreate.mock.calls[0][0]
+      .line_items[0].price_data.unit_amount).toBe(2_000);
+  });
+
+  test('does not log or copy a hostile invalid merchandise price', async () => {
+    const canary = 'merch_price_secret_canary';
+    const productBefore = {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      slug: 'hat',
+      status: 'active',
+      priceCents: canary,
+    };
+    admin.__seed('products/hat', productBefore);
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+    try {
+      const outcome = await createMerchCheckout({
+        productSlug: 'hat',
+        buyer: {
+          firstName: 'Test',
+          lastName: 'Buyer',
+          email: 'buyer@example.test',
+        },
+      }, { auth: null, rawRequest: {} }).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+
+      expect(outcome.error).toMatchObject({
+        code: 'failed-precondition',
+        message: 'This item is unavailable',
+      });
+      const publicError = [
+        outcome.error.code,
+        outcome.error.message,
+        outcome.error.stack,
+      ].join('\n');
+      expect(publicError).not.toContain(canary);
+      expect(publicError).not.toContain('priceCents');
+
+      expect(mockRateLimit).toHaveBeenCalledTimes(2);
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(mockOrderAllocation).not.toHaveBeenCalled();
+      expect(mockFirestoreWrite).not.toHaveBeenCalled();
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockProductCreate).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(admin.__get('products/hat')).toEqual(productBefore);
+      expect(admin.__get('orders/order-new-1')).toBeUndefined();
+    } finally {
+      consoleSpies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
+  test.each([
+    ['size', { sizes: ['M'], colors: ['blue'] }, { size: 'XL' }, 'Invalid size'],
+    ['color', { sizes: ['M'], colors: ['blue'] }, { color: 'red' }, 'Invalid color'],
+  ])('keeps invalid %s ahead of the price guard', async (
+    _name,
+    options,
+    selection,
+    message,
+  ) => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      slug: 'hat',
+      status: 'active',
+      priceCents: 'invalid-price',
+      ...options,
+    });
+
+    await expect(createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+      ...selection,
+    }, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message,
+    });
+
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(mockGenerateToken).not.toHaveBeenCalled();
+    expect(mockOrderAllocation).not.toHaveBeenCalled();
+    expect(mockFirestoreWrite).not.toHaveBeenCalled();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+  });
+
+  test('keeps sold-out status ahead of the price guard', async () => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      slug: 'hat',
+      status: 'sold_out',
+      priceCents: 'invalid-price',
+    });
+
+    await expect(createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'This item is sold out',
+    });
+
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(mockGenerateToken).not.toHaveBeenCalled();
+    expect(mockOrderAllocation).not.toHaveBeenCalled();
+    expect(mockFirestoreWrite).not.toHaveBeenCalled();
+    expect(mockGetStripe).not.toHaveBeenCalled();
+  });
+
+  test('keeps valid missing-Product mapping and checkout behavior', async () => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      slug: 'hat',
+      status: 'active',
+      priceCents: 2_000,
+    });
+    mockProductCreate.mockResolvedValue({ id: 'prod_hat_created' });
+
+    await createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} });
+
+    expect(mockProductCreate).toHaveBeenCalledTimes(1);
+    expect(admin.__get('products/hat').stripeProductId).toBe('prod_hat_created');
+    expect(admin.__get('orders/order-new-1').amountCents).toBe(2_000);
+    expect(mockCheckoutCreate.mock.calls[0][0]
+      .line_items[0].price_data.unit_amount).toBe(2_000);
   });
 
   test.each([

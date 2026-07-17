@@ -277,6 +277,52 @@ Officer source-review steps:
 
 **Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if any submitted person or event detail appears in output.
 
+## Merchandise price format guard — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop an invalid stored product price before the server creates an order identifier, changes a product record, or asks Stripe to create a Product or Checkout Session.
+
+**Approver:** shop lead plus treasurer and platform/security owner.
+
+**Prerequisites:** issue [#339](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/339) must be merged for source review. Use only a made-up active product, a made-up buyer, and test replacements that do not contact Stripe. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before any deployment or catalog repair. This price check does not approve a product, price, tax, shipping rule, return policy, or live sale.
+
+```mermaid
+flowchart LR
+    A["Made-up product passes earlier checkout checks"] --> B["Read one stored price without conversion"]
+    B --> C{"Whole-number USD cents from 50 through 99,999,999?"}
+    C -- "No or unknown" --> D["Fixed unavailable result; no token, order, product change, or Stripe method"]
+    C -- "Yes" --> E["Copy the same cents into the unfinished order and Checkout request"]
+```
+
+Text alternative: after earlier checkout and request-count checks, an invalid stored price stops before a confirmation token, order, stored Stripe Product link, or Stripe call; a whole-number price inside the stated limits is copied unchanged into both later amount fields.
+
+Officer source-review steps:
+
+1. Keep live Shop checkout unavailable.
+2. Ask the platform owner for the exact #339 pull request and merge commit.
+3. Ask for the made-up test report from that same commit.
+4. Confirm the report uses only a made-up product and buyer.
+5. Confirm prices that are missing, zero, below 50 cents, negative, decimal, text, special computer values that are not usable prices, or numbers longer than eight digits receive exactly `This item is unavailable`.
+6. Confirm a rejected price creates no confirmation token or order identifier.
+7. Confirm a rejected price writes no order or stored Stripe Product link.
+8. Confirm a rejected price calls no Stripe Product or Checkout Session method.
+9. Confirm 50 cents, one ordinary test price, and 99,999,999 cents are copied unchanged into the made-up order and a test Checkout request that does not contact Stripe.
+10. Confirm the report says that earlier request, access, status, and option checks may already have run, and earlier request-count safety counters may already have been written and are not rolled back.
+11. Record source change, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe state, catalog or order data, migration, and live behavior as separate results.
+
+**Expected result:** malformed stored prices stop safely with one plain result and no later order, stored Stripe Product link, or Stripe call or change. Exact whole-number values from 50 through 99,999,999 pass this source check and are copied without conversion. These technical limits are not approval to charge any amount or proof that Stripe will accept a later request. Complete product and option records, stock control, safe repeat handling, checking Stripe's answer, and matching club orders to Stripe are still unfinished.
+
+**Stop conditions:** any real buyer, product, price, order, payment, Firebase record, Stripe object, Stripe call, production test, or request to repair Firestore or Stripe by hand; a missing exact commit; a raw price or technical detail in output; a rejection that allocates an order identifier or performs a later order or stored Stripe Product-link write; or a claim that source, tests, merge, preview, or a green workflow proves Shop checkout is safe or live.
+
+**Success proof:** exact #339 pull request and merge commit; recorded old-source failures; green price-check tests, full server tests, database-permission tests, isolated test-database commerce tests, website tests, safety checks, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe settings, production data, migration, and live behavior were not changed or verified. Any future live release needs a private catalog inventory, approved business policy, isolated Stripe test-mode proof, Firebase deployment and readback, proof that club orders match Stripe, and rollback evidence.
+
+**Undo:** before Firebase deployment, use one reviewed pull request that reverses the change or corrects it safely. After any later approved backend deployment, use the approved backend release process and confirm the exact published Function revision. Never undo by changing a product, price, order, Product, Session, payment, or Stripe setting by hand.
+
+**Escalation:** shop lead plus treasurer and platform/security owner. Add the privacy owner if buyer or order details appeared. Use the private incident path if a malformed price might have created an order or Stripe object. Do not copy private details or Stripe IDs into an issue, screenshot, email, message, or AI tool.
+
+No main system map needs to change because this source change adds one price stop without changing who owns an account, who has permission, where records are stored, which Stripe boundary is used, or how the website is published. The small diagram above records the new failure path and the unchanged valid-price continuation.
+
 ## Late-registration amount format guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** stop a missing, malformed, or out-of-range late-registration amount before the server allocates a registration identifier, writes a paid record, or asks Stripe to create a Product, Price, or Payment Link.
