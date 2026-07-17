@@ -6358,6 +6358,323 @@ describe('Admin Orders list-load failure boundary', () => {
   });
 });
 
+describe('Admin Orders action unknown-outcome boundary', () => {
+  const ACTION_FAILURE = 'We could not confirm that order action. Do not repeat it. Stop and contact the treasurer and platform owner.';
+
+  function syntheticTimestamp(value) {
+    const date = new Date(value);
+    return { toDate: () => date };
+  }
+
+  function syntheticOrder({
+    id = 'synthetic-action-order',
+    title = 'Synthetic Action Shirt',
+    status = 'paid',
+    amountCents = 2500,
+  } = {}) {
+    return {
+      id,
+      productTitle: title,
+      buyer: {
+        firstName: 'Synthetic',
+        lastName: id,
+        email: `${id}@example.test`,
+      },
+      shipping: null,
+      size: 'M',
+      color: 'Blue',
+      amountCents,
+      currency: 'usd',
+      status,
+      trackingNumber: null,
+      createdAt: syntheticTimestamp('2030-01-12T20:00:00Z'),
+    };
+  }
+
+  function spyOnBrowserConsole() {
+    return ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  }
+
+  function mockDialogs({ prompts = [], confirmations = [] }) {
+    const promptSpy = jest.spyOn(window, 'prompt');
+    prompts.forEach((answer) => promptSpy.mockReturnValueOnce(answer));
+    const confirmSpy = jest.spyOn(window, 'confirm');
+    confirmations.forEach((answer) => confirmSpy.mockReturnValueOnce(answer));
+    return { promptSpy, confirmSpy };
+  }
+
+  async function renderActionableOrders(orders = [
+    syntheticOrder(),
+    syntheticOrder({
+      id: 'synthetic-other-order',
+      title: 'Synthetic Other Order',
+      status: 'fulfilled',
+      amountCents: 3500,
+    }),
+  ]) {
+    listAllOrders.mockResolvedValueOnce(orders);
+    renderAdminOrders();
+    expect(await screen.findByText(orders[0].productTitle)).toBeInTheDocument();
+    return orders;
+  }
+
+  function expectEveryOrderActionDisabled() {
+    const buttons = screen.getAllByRole('button', {
+      name: /^(Fulfill|Refund|Cancel)$/,
+    });
+    expect(buttons.length).toBeGreaterThan(3);
+    buttons.forEach((button) => expect(button).toBeDisabled());
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    {
+      label: 'fulfillment',
+      buttonName: 'Fulfill',
+      prompts: ['SYNTHETIC-TRACKING', 'Synthetic fulfillment note'],
+      confirmations: [],
+      expected: {
+        orderId: 'synthetic-action-order',
+        action: 'mark_fulfilled',
+        payload: {
+          trackingNumber: 'SYNTHETIC-TRACKING',
+          note: 'Synthetic fulfillment note',
+        },
+      },
+    },
+    {
+      label: 'full refund',
+      buttonName: 'Refund',
+      prompts: [''],
+      confirmations: [true],
+      expected: {
+        orderId: 'synthetic-action-order',
+        action: 'refund_full',
+        payload: undefined,
+      },
+    },
+    {
+      label: 'partial refund',
+      buttonName: 'Refund',
+      prompts: ['12.34'],
+      confirmations: [],
+      expected: {
+        orderId: 'synthetic-action-order',
+        action: 'refund_partial',
+        payload: { amountCents: 1234 },
+      },
+    },
+    {
+      label: 'cancellation',
+      buttonName: 'Cancel',
+      prompts: ['Synthetic cancellation reason'],
+      confirmations: [true],
+      expected: {
+        orderId: 'synthetic-action-order',
+        action: 'cancel',
+        payload: { note: 'Synthetic cancellation reason' },
+      },
+    },
+  ])('redacts an unconfirmed $label and locks every order action', async ({
+    label,
+    buttonName,
+    prompts,
+    confirmations,
+    expected,
+  }) => {
+    const consoleSpies = spyOnBrowserConsole();
+    const canary = `admin-order-${label.replace(' ', '-')}-private@example.test`;
+    adminOrderAction.mockRejectedValueOnce(Object.assign(new Error(canary), {
+      code: `functions/admin-order-${label.replace(' ', '-')}-private-canary`,
+      endpoint: 'https://provider.example.test/?token=admin-order-secret-canary',
+    }));
+    const orders = await renderActionableOrders();
+    mockDialogs({ prompts, confirmations });
+
+    const actionButton = screen.getAllByRole('button', { name: buttonName })[0];
+    fireEvent.click(actionButton);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ACTION_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(adminOrderAction).toHaveBeenCalledWith(firebaseApp, expected);
+    expect(adminOrderAction).toHaveBeenCalledTimes(1);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(orders[0].productTitle)).toBeInTheDocument();
+    expect(screen.getByText(orders[1].productTitle)).toBeInTheDocument();
+    expectEveryOrderActionDisabled();
+    expect(document.body).not.toHaveTextContent(
+      /admin-order-.*private|provider\.example|admin-order-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-order-.*private|provider\.example|admin-order-secret-canary/i,
+    );
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+
+    fireEvent.click(actionButton);
+    await act(async () => { await Promise.resolve(); });
+    expect(adminOrderAction).toHaveBeenCalledTimes(1);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    {
+      label: 'an accessor-backed rejection',
+      makeRejectedValue() {
+        const messageGetter = jest.fn(() => 'admin-order-accessor-private-canary');
+        return {
+          value: Object.defineProperty({}, 'message', {
+            configurable: true,
+            get: messageGetter,
+          }),
+          probes: [messageGetter],
+        };
+      },
+    },
+    {
+      label: 'a Proxy rejection',
+      makeRejectedValue() {
+        const getTrap = jest.fn(() => 'admin-order-proxy-private-canary');
+        const ownKeysTrap = jest.fn(() => []);
+        const descriptorTrap = jest.fn(() => undefined);
+        return {
+          value: new Proxy({}, {
+            get: getTrap,
+            ownKeys: ownKeysTrap,
+            getOwnPropertyDescriptor: descriptorTrap,
+          }),
+          probes: [getTrap, ownKeysTrap, descriptorTrap],
+        };
+      },
+    },
+    {
+      label: 'a coercible rejection',
+      makeRejectedValue() {
+        const toString = jest.fn(() => 'admin-order-coercion-private-canary');
+        const valueOf = jest.fn(() => 7);
+        return { value: { toString, valueOf }, probes: [toString, valueOf] };
+      },
+    },
+    {
+      label: 'a primitive rejection',
+      makeRejectedValue() {
+        return { value: 'admin-order-primitive-private-canary', probes: [] };
+      },
+    },
+  ])('does not inspect or render $label', async ({ makeRejectedValue }) => {
+    const consoleSpies = spyOnBrowserConsole();
+    const { value, probes } = makeRejectedValue();
+    adminOrderAction.mockRejectedValueOnce(value);
+    await renderActionableOrders();
+    mockDialogs({
+      prompts: ['SYNTHETIC-TRACKING', 'Synthetic fulfillment note'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fulfill' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ACTION_FAILURE);
+    probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+    expect(document.body).not.toHaveTextContent(/admin-order-.*private-canary/i);
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(/admin-order-.*private-canary/i);
+    expect(adminOrderAction).toHaveBeenCalledTimes(1);
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expectEveryOrderActionDisabled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('keeps the stop state terminal across a same-page Firestore change', async () => {
+    const orders = [syntheticOrder()];
+    listAllOrders.mockResolvedValueOnce(orders);
+    adminOrderAction.mockRejectedValueOnce(new Error('admin-order-transition-private-canary'));
+    const view = renderAdminOrders();
+    expect(await screen.findByText(orders[0].productTitle)).toBeInTheDocument();
+    mockDialogs({
+      prompts: ['SYNTHETIC-TRACKING', 'Synthetic fulfillment note'],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Fulfill' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(ACTION_FAILURE);
+
+    const changedFirestore = { name: 'synthetic-firestore-after-unknown-action' };
+    useServiceLocator.mockReturnValue({
+      services: {
+        firebaseResources: { app: firebaseApp, firestore: changedFirestore },
+      },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    await act(async () => { await Promise.resolve(); });
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(ACTION_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.queryByText(orders[0].productTitle)).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Fulfill|Refund|Cancel)$/ }))
+      .not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('admin-order-transition-private-canary');
+    expect(listAllOrders).toHaveBeenCalledTimes(1);
+    expect(adminOrderAction).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves one successful action and its existing list reload', async () => {
+    const initialOrder = syntheticOrder();
+    const updatedOrder = syntheticOrder({
+      title: 'Synthetic Reloaded Shirt',
+      status: 'fulfilled',
+    });
+    listAllOrders
+      .mockResolvedValueOnce([initialOrder])
+      .mockResolvedValueOnce([updatedOrder]);
+    adminOrderAction.mockResolvedValueOnce({ ok: true });
+    renderAdminOrders();
+    expect(await screen.findByText(initialOrder.productTitle)).toBeInTheDocument();
+    mockDialogs({
+      prompts: ['SYNTHETIC-TRACKING', 'Synthetic fulfillment note'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fulfill' }));
+
+    expect(await screen.findByText(updatedOrder.productTitle)).toBeInTheDocument();
+    expect(adminOrderAction).toHaveBeenCalledWith(firebaseApp, {
+      orderId: 'synthetic-action-order',
+      action: 'mark_fulfilled',
+      payload: {
+        trackingNumber: 'SYNTHETIC-TRACKING',
+        note: 'Synthetic fulfillment note',
+      },
+    });
+    expect(adminOrderAction).toHaveBeenCalledTimes(1);
+    expect(listAllOrders).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    screen.getAllByRole('button', { name: /^(Refund|Cancel)$/ })
+      .forEach((button) => expect(button).not.toBeDisabled());
+  });
+});
+
 describe('Admin website-account role-list load failure boundary', () => {
   function syntheticTimestamp(value) {
     const date = new Date(value);

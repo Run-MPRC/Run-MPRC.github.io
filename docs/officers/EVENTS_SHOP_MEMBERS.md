@@ -1493,7 +1493,7 @@ Officer review steps after the source merge:
 
 **Expected result:** the reviewed source shows order-derived content only after the current mocked list read succeeds. Loading shows no order-derived content. A rejection shows one fixed accessible stop sentence and no rejected detail, false zero, old row, or action button. Older results are inert. Successful empty and made-up populated results keep their existing displays. The fixed sentence tells the officer to stop because a failed refresh can follow an action that may already have completed.
 
-The existing Fulfill, Refund, and Cancel requests, prompts, action responses, raw action-error text, idempotency, reconciliation, and audit behavior are separate unfinished work. This slice does not make Admin Orders or its actions safe.
+The existing Fulfill, Refund, and Cancel requests, prompts, and action responses remain unfinished work. Issue [#333](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/333) contains only rejected-value privacy and a current-page repeat-click guard. Repeat safety, record comparison, audit, and live action safety remain open. Neither slice makes Admin Orders safe for officer use.
 
 **Stop conditions:** any real officer, buyer, address, phone, email, order, tracking number, product, payment, refund, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a zero, stale row, buyer detail, or action button during loading or failure; an attempted order action; a Firebase, Rules, provider, permission, or record change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or screen is live.
 
@@ -1504,6 +1504,58 @@ The existing Fulfill, Refund, and Cancel requests, prompts, action responses, ra
 **Escalation:** treasurer plus platform/security owner. Add the shop lead and privacy owner. Use the private incident path if any personal, order, payment, provider, endpoint, token-shaped, or technical detail appeared, or if an action might have completed without a current readback. Do not copy private details into an issue, message, screenshot, email, or AI tool.
 
 No system-topology diagram changes for this source slice because page hierarchy, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected list-result display and current-request behavior.
+
+### Admin order-action unknown result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** give an officer one safe instruction after a Fulfill, Refund, or Cancel request has an unknown result. The page must not show a private technical detail or invite another action that could duplicate money or fulfillment work.
+
+**Approver:** treasurer plus shop lead, platform/security owner, and privacy owner. All four roles must approve any future live review. This source slice does not provide that approval.
+
+**Prerequisites:** issues [#303](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/303) and [#333](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/333) must be merged for source review. Use only a made-up admin identity, mocked database reference, made-up orders, mocked prompts, and a mocked action request. Do not open the Admin screen or test an action on the production website. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply.
+
+```mermaid
+flowchart LR
+    A["Made-up known order row"] --> B["One mocked action request"]
+    B -- "Resolved" --> C["Existing mocked list reload"]
+    B -- "Rejected" --> D["Fixed unknown-result alert"]
+    D --> E["All order-action buttons disabled on this page"]
+    E --> F["Stop; contact treasurer and platform owner"]
+    G["Complete rejected value"] -. "Discarded" .-> H["No page, analytics, or console detail"]
+```
+
+Text alternative: a successful mocked action keeps the existing one-time list reload. A rejected action discards the complete rejected value, shows one fixed alert, disables every order-action button on the current page, and tells the officer to stop.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Orders screen marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #333 issue, reviewed pull request, merged commit, and synthetic test result.
+3. Confirm the review used only a made-up admin identity, made-up orders, mocked prompts, and a mocked action request.
+4. Confirm the old-source test recorded eight intended failures and one successful-action compatibility result.
+5. Confirm the green tests cover Fulfill, full Refund, partial Refund, and Cancel with their existing made-up request shapes.
+6. Confirm every mocked rejection shows exactly `We could not confirm that order action. Do not repeat it. Stop and contact the treasurer and platform owner.`
+7. Confirm assistive technology receives the complete sentence immediately as one alert.
+8. Confirm the complete rejected value is not inspected, coerced, logged, stored, sent to analytics, or displayed.
+9. Confirm a mocked rejection starts no automatic retry or list reload and leaves the last known made-up row visible.
+10. Confirm every visible Fulfill, Refund, and Cancel button is disabled after the unknown result, including buttons on other rows.
+11. Confirm another click on that page cannot start a second mocked request.
+12. Confirm one successful mocked action still performs exactly one existing list reload and shows no alert.
+13. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Stripe, permissions, order records, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** a rejected mocked action shows one fixed accessible instruction with no rejected detail. The current made-up order list stays visible, every order-action button is disabled for that open page, and no automatic retry or reload runs. A resolved mocked action keeps the existing single reload. The alert says the result is unknown; it does not claim the action failed.
+
+Refreshing, closing, or reopening the page can restore the action buttons. It does not prove what happened and never makes a repeat safe. Stop and contact the treasurer and platform owner instead.
+
+**Stop conditions:** any real officer, buyer, address, phone, email, order, tracking number, product, payment, refund, Firebase, Stripe, provider, endpoint, credential, or production record used; an attempt to force a production failure; a raw detail in the page, analytics, console, screenshot, issue, email, or AI tool; an automatic retry or reload after rejection; an enabled order-action button after the alert; a repeated action; or a claim that a browser button lock, source change, test, merge, preview, or green workflow proves financial safety or live behavior.
+
+**Success proof:** for source completion, record the exact #333 issue, reviewed pull request, merged commit, eight intended old-source failures, ten green focused tests, relevant full checks, and independent privacy/security, compatibility, and officer-continuity reviews. The safe officer review stops at those records. A later live process still needs authorization, repeat safety, durable audit, record comparison, backup, rollback, provider, deployment, and exact-revision evidence.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Do not undo by refreshing the page, repeating an order action, or changing or deleting an order, payment, refund, shipment, account, permission, database record, or provider setting.
+
+**Escalation:** stop and contact the treasurer plus platform/security owner. Add the shop lead and privacy owner. Use the private incident path if an action might have completed, any private or technical detail appeared, or another request was attempted. Do not copy private details into an issue, message, screenshot, email, or AI tool.
+
+No system-topology diagram changes for this source slice because page hierarchy, data movement, permissions, account ownership, and deployment topology are unchanged. The diagram above records only the current page's action-result display and repeat-click guard.
 
 ### Admin website-account role-list load failure privacy — SOURCE ONLY, NOT LIVE
 
