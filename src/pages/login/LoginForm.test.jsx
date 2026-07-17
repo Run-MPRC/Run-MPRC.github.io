@@ -607,3 +607,72 @@ describe('LoginForm return navigation', () => {
     );
   });
 });
+
+describe('LoginForm account-email spam guidance (AUTH-MAIL-002 C6)', () => {
+  const ENV_KEY = 'REACT_APP_ACCOUNT_EMAIL_SENDER';
+  const originalSender = process.env[ENV_KEY];
+  const register = jest.fn();
+  const sendPasswordReset = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    register.mockResolvedValue({
+      user: { email: 'member@example.test' },
+      verificationEmailRequest: 'accepted',
+    });
+    sendPasswordReset.mockResolvedValue(undefined);
+    useServiceLocator.mockReturnValue({
+      isReady: true,
+      services: {
+        identityService: { signIn: jest.fn(), register, sendPasswordReset },
+      },
+    });
+    useAuth.mockReturnValue({
+      isLoading: false,
+      isAuthenticated: false,
+      isAdmin: false,
+    });
+  });
+
+  afterEach(() => {
+    if (originalSender === undefined) {
+      delete process.env[ENV_KEY];
+    } else {
+      process.env[ENV_KEY] = originalSender;
+    }
+    jest.restoreAllMocks();
+  });
+
+  test('registration guidance names the configured sender and warns delivery is not universal', async () => {
+    process.env[ENV_KEY] = 'Synthetic Club Sender';
+    renderLogin();
+    submitRegistration();
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('mark the message from Synthetic Club Sender as');
+    expect(status).toHaveTextContent('it does not fix delivery for everyone');
+  });
+
+  test('registration guidance stays generic when no sender is configured', async () => {
+    delete process.env[ENV_KEY];
+    renderLogin();
+    submitRegistration();
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent("mark the message from the club's account email as");
+    expect(status).toHaveTextContent('it does not fix delivery for everyone');
+  });
+
+  test('password-reset guidance names the sender behind the fixed generic result', async () => {
+    process.env[ENV_KEY] = 'Synthetic Club Sender';
+    renderLogin();
+    requestPasswordReset();
+
+    await screen.findByText('Password reset request finished.');
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('this page always shows the same result');
+    expect(status).toHaveTextContent('mark the message from Synthetic Club Sender as');
+    expect(status).toHaveTextContent('it does not fix delivery for everyone');
+    expect(status).toHaveTextContent('Never share a reset link or code.');
+  });
+});

@@ -19,6 +19,7 @@ import {
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
 import StravaSection from './StravaSection';
 import { getLocationReturnPath } from '../login/loginReturnPath';
+import { getSpamGuidance } from '../../services/accountEmail/accountEmailSender';
 import './Account.css';
 
 function tsToDate(ts: Timestamp | null | undefined) {
@@ -121,6 +122,8 @@ function ResendVerificationButton() {
           className="verification-resend__result verification-resend__result--accepted"
         >
           The request was accepted. Delivery can take time. Check Inbox and Spam.
+          {' '}
+          {getSpamGuidance()}
         </p>
       )}
       {state === 'unavailable' && (
