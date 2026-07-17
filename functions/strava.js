@@ -516,14 +516,14 @@ function getStravaCreds() {
   return { clientId, clientSecret };
 }
 
-function connectionDocRef(uid) {
-  return admin.firestore()
+function connectionDocRef(uid, db = admin.firestore()) {
+  return db
     .collection('members').doc(uid)
     .collection('connections').doc('strava');
 }
 
-function secretDocRef(uid) {
-  return admin.firestore()
+function secretDocRef(uid, db = admin.firestore()) {
+  return db
     .collection('members').doc(uid)
     .collection('secrets').doc('strava');
 }
@@ -636,24 +636,30 @@ exports.stravaExchangeCode = functions
 
     const exchange = await exchangeCode(code);
 
-    await secretDocRef(uid).set({
-      access_token: exchange.accessToken,
-      refresh_token: exchange.refreshToken,
-      expires_at: exchange.expiresAt,
-      scope: exchange.scope,
-      updatedAt: Timestamp.now(),
-    }, { merge: true });
-
-    await connectionDocRef(uid).set({
-      provider: 'strava',
-      athleteId: exchange.athlete.id,
-      firstName: exchange.athlete.firstName,
-      lastName: exchange.athlete.lastName,
-      username: exchange.athlete.username,
-      profileUrl: exchange.athlete.profileUrl,
-      connectedAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    }, { merge: true });
+    try {
+      const db = admin.firestore();
+      const batch = db.batch();
+      batch.set(secretDocRef(uid, db), {
+        access_token: exchange.accessToken,
+        refresh_token: exchange.refreshToken,
+        expires_at: exchange.expiresAt,
+        scope: exchange.scope,
+        updatedAt: Timestamp.now(),
+      }, { merge: true });
+      batch.set(connectionDocRef(uid, db), {
+        provider: 'strava',
+        athleteId: exchange.athlete.id,
+        firstName: exchange.athlete.firstName,
+        lastName: exchange.athlete.lastName,
+        username: exchange.athlete.username,
+        profileUrl: exchange.athlete.profileUrl,
+        connectedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      }, { merge: true });
+      await batch.commit();
+    } catch (_error) {
+      throw stravaAuthorizationError('internal');
+    }
 
     return { ok: true, athleteId: exchange.athlete.id };
   });

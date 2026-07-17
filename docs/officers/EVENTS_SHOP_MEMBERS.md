@@ -462,6 +462,54 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Strava connection record pairing — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep the server-only Strava token record and its matching non-secret connection record together. A database failure must save both records or neither record.
+
+**Approver:** membership lead plus platform/security owner. Add the privacy owner if an earlier record may already be mismatched.
+
+**Prerequisites:** issue [#329](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/329) must be merged for source review. Use only a made-up website account, made-up athlete, mocked Strava response, and mocked database. Calling this protection live also requires an approved Firebase Functions deployment and a dated deployment readback. This source change does not contact Strava, inspect or repair production records, change provider settings, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Validated made-up Strava exchange"] --> B["One Firestore batch"]
+    B -- "Commit is confirmed" --> C["Server-only token and matching connection metadata appear together"]
+    B -- "Confirmed before commit" --> D["Neither record changes; fixed failure result"]
+    B -- "Commit result is unavailable" --> F["Both or neither may be present; stop and verify safely"]
+    E["Strava provider exchange happened first"] -. "Not part of the Firestore batch" .-> B
+```
+
+Text alternative: after a made-up Strava response is validated, one Firestore batch saves the hidden token record and matching connection metadata together. A confirmed failure before commit changes neither record. If the commit result is unavailable, both records may be present or neither may be present; one record must never appear alone. Stop and use the normal safe connection check. The earlier Strava provider exchange is outside that local batch.
+
+Officer review steps after the source merge:
+
+1. Keep this protection marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for issue #329, the reviewed pull request, the merged commit, and synthetic test results.
+3. Confirm every test uses only made-up values and mocked Strava and database results.
+4. Confirm a successful mock creates one batch with exactly two paired record writes.
+5. Confirm a mocked failure before commit changes neither record.
+6. Confirm the same failure preserves an earlier matched pair without replacing only one side.
+7. Confirm a mocked lost commit result can leave both records together, never only one.
+8. Confirm every persistence failure gives only `Strava authorization could not be completed.`
+9. Confirm no token, athlete detail, database path, rejected value, or technical error appears in the result or logs.
+10. Confirm an unknown commit result says to stop and use the normal safe connection check. Do not repeat the old code.
+11. Confirm the browser never receives or edits the token record.
+12. Record source, tests, review, merge, Firebase deployment, provider configuration, production-data action, repair, and live behavior as separate results.
+
+**Expected result:** reviewed source uses one database batch for the two records, so Firestore applies both or neither. A confirmed failure before commit changes neither record. A lost or rejected commit result can leave the caller unsure whether both records changed or neither changed. It must never be described as proof of no change. Every returned persistence failure uses one fixed sentence. The officer stops and asks the platform owner to verify through the normal safe connection surface before any fresh connection start.
+
+This source slice does not make the provider exchange and Firestore one transaction. It does not make a repeated authorization code safe, decide which concurrent connection wins, verify one athlete per website account, approve scopes, repair an earlier mismatch, revoke access, add a durable audit, configure the provider, deploy Firebase, or prove live behavior. Those items remain under issue #88 and the private inventory in #113.
+
+**Stop conditions:** any real member, Strava account, athlete, token, authorization code, provider response, database record, or production data; a request to inspect or repair Firestore manually; a real provider call; a Firebase or Strava setting change; a raw detail in a result or log; an attempt to repeat a failed code; a claim that an unknown commit result proves no change; or a claim that source, tests, merge, preview, or green CI proves this protection is live.
+
+**Success proof:** for source completion, record issue #329, the exact reviewed pull request and merge, the old-source partial-write failure, green synthetic atomicity tests, relevant full checks, and independent security, test, and officer reviews. For live availability, separately record an approved Firebase Functions deployment and a dated exact-revision readback. Record website publication, `runmprc.com`, Strava/provider configuration, production-data access, migration, repair, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before deployment, use one reviewed Functions-and-guide revert or safe replacement. After any later approved deployment, use the protected Firebase rollback path and verify the replacement revision. Never undo by editing, deleting, copying, or recreating a token or connection record.
+
+**Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if a token, athlete detail, provider response, database path, or mismatched record may have appeared. Do not copy that detail into an issue, screenshot, message, email, or AI tool.
+
 ## Strava activity failure privacy — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**

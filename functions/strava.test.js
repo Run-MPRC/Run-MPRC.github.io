@@ -18,14 +18,28 @@ jest.mock('firebase-functions', () => {
 });
 
 jest.mock('firebase-admin', () => {
+  let batchCommitFailure;
+  let batchCommitPostApplyFailure;
+  let batchCreateAttempts = 0;
+  let batchCreationFailure;
+  const batchCommitAttempts = [];
+  const batchSetAttempts = [];
+  const batchSetFailures = new Map();
   const deleteFailures = new Map();
   const deletes = [];
+  const directSetAttempts = [];
   const documents = new Map();
   const reads = [];
+  const writeFailures = new Map();
   const writes = [];
+
+  function applyWrite(operation) {
+    writes.push(operation);
+  }
 
   function document(path) {
     return {
+      path,
       collection: (name) => ({
         doc: (id) => document(`${path}/${name}/${id}`),
       }),
@@ -45,29 +59,100 @@ jest.mock('firebase-admin', () => {
         };
       },
       set: async (data, options) => {
-        writes.push({ path, data, options });
+        const operation = { path, data, options };
+        directSetAttempts.push(operation);
+        if (writeFailures.has(path)) {
+          throw writeFailures.get(path);
+        }
+        applyWrite(operation);
       },
     };
   }
 
-  return {
-    firestore: () => ({
+  function firestore() {
+    return {
+      batch: () => {
+        batchCreateAttempts += 1;
+        if (batchCreationFailure) {
+          throw batchCreationFailure;
+        }
+        const staged = [];
+        const batch = {
+          set: (ref, data, options) => {
+            const operation = { path: ref.path, data, options };
+            batchSetAttempts.push(operation);
+            if (batchSetFailures.has(ref.path)) {
+              throw batchSetFailures.get(ref.path);
+            }
+            staged.push(operation);
+            return batch;
+          },
+          commit: async () => {
+            batchCommitAttempts.push([...staged]);
+            if (batchCommitFailure) {
+              throw batchCommitFailure;
+            }
+            for (const operation of staged) {
+              if (writeFailures.has(operation.path)) {
+                throw writeFailures.get(operation.path);
+              }
+            }
+            staged.forEach(applyWrite);
+            if (batchCommitPostApplyFailure) {
+              throw batchCommitPostApplyFailure;
+            }
+          },
+        };
+        return batch;
+      },
       collection: (name) => ({
         doc: (id) => document(`${name}/${id}`),
       }),
-    }),
+    };
+  }
+
+  return {
+    firestore,
     __clearDeletes: () => {
       deleteFailures.clear();
       deletes.splice(0, deletes.length);
     },
     __clearDocuments: () => documents.clear(),
     __clearReads: () => reads.splice(0, reads.length),
-    __clearWrites: () => writes.splice(0, writes.length),
+    __clearWrites: () => {
+      batchCommitFailure = undefined;
+      batchCommitPostApplyFailure = undefined;
+      batchCreateAttempts = 0;
+      batchCreationFailure = undefined;
+      batchCommitAttempts.splice(0, batchCommitAttempts.length);
+      batchSetAttempts.splice(0, batchSetAttempts.length);
+      batchSetFailures.clear();
+      directSetAttempts.splice(0, directSetAttempts.length);
+      writeFailures.clear();
+      writes.splice(0, writes.length);
+    },
+    __getBatchCommitAttempts: () => [...batchCommitAttempts],
+    __getBatchCreateAttempts: () => batchCreateAttempts,
+    __getBatchSetAttempts: () => [...batchSetAttempts],
     __getDeletes: () => [...deletes],
+    __getDirectSetAttempts: () => [...directSetAttempts],
+    __getDocument: (path) => documents.get(path),
     __getReads: () => [...reads],
     __getWrites: () => [...writes],
+    __hasDocument: (path) => documents.has(path),
+    __setBatchCommitFailure: (error) => {
+      batchCommitFailure = error;
+    },
+    __setBatchCommitPostApplyFailure: (error) => {
+      batchCommitPostApplyFailure = error;
+    },
+    __setBatchCreationFailure: (error) => {
+      batchCreationFailure = error;
+    },
+    __setBatchSetFailure: (path, error) => batchSetFailures.set(path, error),
     __setDeleteFailure: (path, error) => deleteFailures.set(path, error),
     __setDocument: (path, data) => documents.set(path, data),
+    __setWriteFailure: (path, error) => writeFailures.set(path, error),
   };
 });
 
@@ -191,6 +276,78 @@ describe('Strava authorization exchange failure boundary', () => {
 
   function mockSuccessfulExchange() {
     return mockExchangeResponse(validExchangeResponse());
+  }
+
+  function expectedExchangeWrites() {
+    return [
+      {
+        path: SECRET_PATH,
+        data: {
+          access_token: 'access_token_test',
+          refresh_token: 'refresh_token_test',
+          expires_at: 1_900_000_000,
+          scope: 'read',
+          updatedAt: expect.any(Object),
+        },
+        options: { merge: true },
+      },
+      {
+        path: CONNECTION_PATH,
+        data: {
+          provider: 'strava',
+          athleteId: 123456,
+          firstName: 'Synthetic',
+          lastName: 'Athlete',
+          username: 'synthetic-athlete',
+          profileUrl: 'https://images.example.test/synthetic-athlete.png',
+          connectedAt: expect.any(Object),
+          updatedAt: expect.any(Object),
+        },
+        options: { merge: true },
+      },
+    ];
+  }
+
+  function hostilePersistenceFailure() {
+    const failure = Object.create(null);
+    const probes = ['cause', 'code', 'details', 'message', 'stack', 'toString']
+      .map((key) => {
+        const probe = jest.fn(() => `persistence-canary-${key}`);
+        Object.defineProperty(failure, key, {
+          configurable: false,
+          enumerable: true,
+          get: probe,
+        });
+        return probe;
+      });
+    return { failure, probes };
+  }
+
+  async function expectFixedPersistenceFailure(configure) {
+    const { failure, probes } = hostilePersistenceFailure();
+    configure(failure);
+    const json = mockSuccessfulExchange();
+
+    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const exposed = publicError(error);
+
+    expect(exposed).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(exposed)).not.toContain('persistence-canary');
+    probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDirectSetAttempts()).toEqual([]);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
+    expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
 
   async function expectInvalidSuccessfulResponse(response) {
@@ -855,6 +1012,109 @@ describe('Strava authorization exchange failure boundary', () => {
     });
   });
 
+  test.each([
+    [
+      'batch construction',
+      (failure) => admin.__setBatchCreationFailure(failure),
+    ],
+    [
+      'secret staging',
+      (failure) => admin.__setBatchSetFailure(SECRET_PATH, failure),
+    ],
+    [
+      'connection staging',
+      (failure) => admin.__setBatchSetFailure(CONNECTION_PATH, failure),
+    ],
+    [
+      'pre-apply batch commit',
+      (failure) => admin.__setBatchCommitFailure(failure),
+    ],
+  ])('maps %s failure to one fixed error and commits neither document', async (
+    _stage,
+    configure,
+  ) => {
+    await expectFixedPersistenceFailure(configure);
+  });
+
+  test.each([
+    ['a first connection', false],
+    ['a reconnect with an existing matched pair', true],
+  ])('keeps both records unchanged when %s has a pre-apply rejection', async (
+    _name,
+    seedExisting,
+  ) => {
+    const previousSecret = Object.freeze({ marker: 'previous-secret-record' });
+    const previousConnection = Object.freeze({ marker: 'previous-connection-record' });
+    if (seedExisting) {
+      admin.__setDocument(SECRET_PATH, previousSecret);
+      admin.__setDocument(CONNECTION_PATH, previousConnection);
+    }
+    const { failure, probes } = hostilePersistenceFailure();
+    admin.__setWriteFailure(CONNECTION_PATH, failure);
+    const json = mockSuccessfulExchange();
+
+    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const exposed = publicError(error);
+    const expectedWrites = expectedExchangeWrites();
+
+    expect(admin.__getWrites()).toEqual([]);
+    if (seedExisting) {
+      expect(admin.__getDocument(SECRET_PATH)).toBe(previousSecret);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(previousConnection);
+    } else {
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
+    }
+    expect(exposed).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(exposed)).not.toContain('persistence-canary');
+    probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(admin.__getBatchCreateAttempts()).toBe(1);
+    expect(admin.__getBatchSetAttempts()).toEqual(expectedWrites);
+    expect(admin.__getBatchCommitAttempts()).toEqual([expectedWrites]);
+    expect(admin.__getDirectSetAttempts()).toEqual([]);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(Timestamp.now).toHaveBeenCalledTimes(3);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('keeps an acknowledgement-lost outcome atomic and returns one fixed error', async () => {
+    const { failure, probes } = hostilePersistenceFailure();
+    admin.__setBatchCommitPostApplyFailure(failure);
+    const json = mockSuccessfulExchange();
+
+    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const exposed = publicError(error);
+    const expectedWrites = expectedExchangeWrites();
+
+    expect(admin.__getWrites()).toEqual(expectedWrites);
+    expect(admin.__getBatchCreateAttempts()).toBe(1);
+    expect(admin.__getBatchSetAttempts()).toEqual(expectedWrites);
+    expect(admin.__getBatchCommitAttempts()).toEqual([expectedWrites]);
+    expect(admin.__getDirectSetAttempts()).toEqual([]);
+    expect(exposed).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(exposed)).not.toContain('persistence-canary');
+    probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(Timestamp.now).toHaveBeenCalledTimes(3);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
   test('preserves the successful server-only exchange, writes, and minimal result', async () => {
     const json = mockSuccessfulExchange();
 
@@ -877,33 +1137,12 @@ describe('Strava authorization exchange failure boundary', () => {
       },
     );
     expect(json).toHaveBeenCalledTimes(1);
-    expect(admin.__getWrites()).toEqual([
-      {
-        path: 'members/synthetic-member-000001/secrets/strava',
-        data: {
-          access_token: 'access_token_test',
-          refresh_token: 'refresh_token_test',
-          expires_at: 1_900_000_000,
-          scope: 'read',
-          updatedAt: expect.any(Object),
-        },
-        options: { merge: true },
-      },
-      {
-        path: 'members/synthetic-member-000001/connections/strava',
-        data: {
-          provider: 'strava',
-          athleteId: 123456,
-          firstName: 'Synthetic',
-          lastName: 'Athlete',
-          username: 'synthetic-athlete',
-          profileUrl: 'https://images.example.test/synthetic-athlete.png',
-          connectedAt: expect.any(Object),
-          updatedAt: expect.any(Object),
-        },
-        options: { merge: true },
-      },
-    ]);
+    const expectedWrites = expectedExchangeWrites();
+    expect(admin.__getBatchCreateAttempts()).toBe(1);
+    expect(admin.__getBatchSetAttempts()).toEqual(expectedWrites);
+    expect(admin.__getBatchCommitAttempts()).toEqual([expectedWrites]);
+    expect(admin.__getWrites()).toEqual(expectedWrites);
+    expect(admin.__getDirectSetAttempts()).toEqual([]);
     expect(admin.__getReads()).toEqual([]);
     expect(admin.__getDeletes()).toEqual([]);
     expect(Timestamp.now).toHaveBeenCalledTimes(3);
