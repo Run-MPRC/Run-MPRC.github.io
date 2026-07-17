@@ -916,6 +916,64 @@ This source slice does **not** make the current confirmation address safe. DATA-
 
 No system-topology diagram changes for this source slice; the state-flow diagram above records the page's current-route display and timer boundary, while data movement, permissions, account ownership, and deployment topology remain unchanged.
 
+## Shop purchase confirmation route privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep one buyer's purchase details tied to the private confirmation address that requested them. Moving to another address must hide the earlier name, email, item, total, order ID, and confirmation result at once.
+
+**Approver:** merchandise lead, treasurer, platform/security owner, and privacy owner.
+
+**Prerequisites:** issue [#321](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/321) must be merged for source review. Issue [#319](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/319) is the separate registration-route source boundary; it does not cover shop purchases and is not live. Use only made-up buyers, orders, products, amounts, route values, and mocked services. Do not open, copy, request, or test a real purchase confirmation address. A later publication claim requires a protected website publication and a separate exact `runmprc.com` revision check without opening a real confirmation address. Neither result proves that the private route works in production.
+
+```mermaid
+flowchart TD
+    A["Made-up purchase address A"] --> B["Mocked order lookup A starts"]
+    B --> C["Move to made-up address B"]
+    C --> D["Hide A details at once; clear A timer"]
+    D --> E{"Which mocked result finishes?"}
+    E -- "Old A" --> F["Ignore it; show nothing from A"]
+    E -- "Current B is pending" --> G["Keep waiting; show no buyer or order details"]
+    E -- "Current B is paid or fulfilled" --> H["Show only B purchase details"]
+```
+
+Text alternative: changing from made-up purchase address A to B immediately hides A and clears its timer; every late A result does nothing, while only current B may keep waiting or show its own paid or fulfilled purchase details.
+
+Officer source-review steps:
+
+1. Keep the shop purchase route marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #321 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm every test uses made-up buyers, orders, products, amounts, route values, and a mocked order lookup.
+4. Confirm no test opens a real confirmation address or contacts real Firebase, Stripe, analytics, or another outside service.
+5. Confirm moving from made-up address A to unresolved address B hides A's name, email, item, size, color, total, order ID, and confirmed heading before B finishes.
+6. Confirm a pending B result keeps the waiting page and shows no buyer or order details.
+7. Confirm a late A success cannot replace B or show any A detail.
+8. Confirm a late A failure is ignored without reading its private or hostile detail.
+9. Confirm A's old timer is cleared and cannot start another lookup after the move to B.
+10. Confirm a readiness, Firebase app, service, route, or page-close change makes the older work inactive and clears its timer.
+11. Confirm returning from A to B and back to A starts fresh work instead of reusing the first A result.
+12. Confirm only the current paid or fulfilled result shows the existing made-up buyer and order details.
+13. Confirm current pending, timeout, denied, error, not-ready, and missing-address results keep their existing plain displays.
+14. Record these as separate results: source changed, tests passed, code merged, website published, exact `runmprc.com` revision verified, Firebase deployed, Stripe or another provider configured, production data changed, and live route behavior verified.
+
+**Expected result:** only the current made-up address may decide what the page shows. An address or service change hides the preceding result immediately. Current pending work shows no buyer or order details. Old results, failures, and timers do nothing. The current paid or fulfilled result keeps the existing made-up name, email, item, total, and order ID. This changes reviewed source, tests, and this guide only.
+
+**Stop conditions:** any real buyer, order, email, item, amount, payment, Stripe payment session, confirmation address, token, screenshot, provider value, or production record; a request to paste a private address or detail into GitHub, email, chat, or an AI tool; a production Firebase, Stripe, analytics, or other provider action; an attempt to force a live failure or timing race; an old result appearing under a new address; or a claim that source, tests, merge, preview, or a green workflow proves the change is published or live.
+
+**Success proof:** for source completion, record the exact #321 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic route and timer tests, relevant full checks, and independent privacy, lifecycle, and officer reviews. Record #319 as separate registration-route source evidence only. The intended #321 completion states are: source changed, tests passed, and code merged. Website publication, `runmprc.com` verification, Firebase deployment, Stripe or other provider configuration or calls, real order or payment access, production-data action, and live route behavior remain **not performed**. A later release must record its protected website publication and exact `runmprc.com` revision separately without opening a real confirmation address.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision without opening a real confirmation address. Do not change or delete an order, payment, account, database record, token, permission, Firebase setting, analytics setting, or Stripe/provider setting.
+
+**Escalation:** merchandise lead, treasurer, platform/security owner, and privacy owner. Use the private incident path if one buyer's details may have appeared under another address. Do not copy the address, token, buyer or order details, screenshot, payment value, or provider value into an issue, message, email, or AI tool.
+
+This #321 source slice does **not** make the current purchase confirmation address safe. The separate #319 registration source boundary does not cover this route and is still not live.
+
+The remaining DATA-001A work still owns replacing private values in confirmation addresses with a verified Stripe payment session or signed-in account handoff. For visitors who are not signed in, it must store the private value safely, make it expire, and prevent reuse. It must also remove the value from browser history, keep it out of monitoring and links to other sites, and reduce the server response to the minimum approved fields.
+
+Firebase request checking (App Check) for the shop lookup (`lookupOrder`) remains deferred until that safe handoff and its matching safety tests are complete. The server may still return more buyer and order data than the page needs. The current page still shows the current buyer's name, email, item, total, and order ID. Data purpose, access, retention, deletion, payment authority, Stripe behavior, confirmation email, Firebase and provider settings, deployment, production data, and live behavior remain open or unchanged.
+
+No system-topology diagram changes for this source slice; the state-flow diagram above records only the shop page's current-route display and timer boundary, while data movement, permissions, account ownership, and deployment topology remain unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
