@@ -18,6 +18,7 @@ import {
   listEventRegistrations,
   listMemberEvents,
   listPublicEvents,
+  lookupRegistration,
 } from './services/events/eventsService';
 import {
   adminRegistrationAction,
@@ -74,6 +75,7 @@ jest.mock('./services/events/eventsService', () => {
     listEventRegistrations: jest.fn(),
     listMemberEvents: jest.fn(),
     listPublicEvents: jest.fn(),
+    lookupRegistration: jest.fn(),
   };
 });
 
@@ -130,6 +132,7 @@ beforeEach(() => {
   listEventRegistrations.mockReset();
   listMemberEvents.mockReset();
   listPublicEvents.mockReset();
+  lookupRegistration.mockReset();
   adminRegistrationAction.mockReset();
   createEvent.mockReset();
   listAllEvents.mockReset();
@@ -280,6 +283,39 @@ function renderPublicEventDetail() {
 function renderPublicEventRegister() {
   window.history.pushState({}, '', '/events/synthetic-event/register');
   return render(<App />);
+}
+
+function registrationSuccessPath({
+  event = 'synthetic-confirmation-event',
+  reg = 'synthetic-confirmation-registration',
+  token = 'synthetic-confirmation-capability',
+} = {}) {
+  const params = new URLSearchParams();
+  if (event !== null) params.set('event', event);
+  if (reg !== null) params.set('reg', reg);
+  if (token !== null) params.set('token', token);
+  return `/register/success?${params.toString()}`;
+}
+
+function renderRegistrationSuccess(query) {
+  window.history.pushState({}, '', registrationSuccessPath(query));
+  return render(<App />);
+}
+
+let registrationHistoryKey = 0;
+
+function navigateRegistrationSuccess(query) {
+  registrationHistoryKey += 1;
+  const currentIndex = typeof window.history.state?.idx === 'number'
+    ? window.history.state.idx
+    : 0;
+  const nextState = {
+    usr: null,
+    key: `synthetic-registration-${registrationHistoryKey}`,
+    idx: currentIndex + 1,
+  };
+  window.history.pushState(nextState, '', registrationSuccessPath(query));
+  fireEvent(window, new PopStateEvent('popstate', { state: nextState }));
 }
 
 function renderAdminProducts() {
@@ -1234,6 +1270,840 @@ describe('public Event-registration submit failure boundary', () => {
     expect(screen.getByRole('button', { name: 'Continue to payment — $15.00' })).toBeEnabled();
     expect(window.location.pathname).toBe('/events/synthetic-event/register');
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});
+
+describe('DATA-001A1 registration confirmation attempt isolation', () => {
+  const routeA = {
+    event: 'synthetic-route-a-event',
+    reg: 'synthetic-route-a-registration',
+    token: 'synthetic-route-a-capability',
+  };
+  const routeB = {
+    event: 'synthetic-route-b-event',
+    reg: 'synthetic-route-b-registration',
+    token: 'synthetic-route-b-capability',
+  };
+
+  function readyLocator(app = firebaseApp) {
+    return {
+      services: { firebaseResources: { app } },
+      isReady: true,
+    };
+  }
+
+  function registrationResult({
+    status = 'pending',
+    id = 'synthetic-confirmation-registration',
+    eventId = 'synthetic-confirmation-event',
+    firstName = 'Synthetic',
+    email = 'synthetic-runner@example.test',
+    amountCents = 1500,
+  } = {}) {
+    return {
+      id,
+      status,
+      priceTier: 'nonMember',
+      amountCents,
+      currency: 'usd',
+      runner: {
+        firstName,
+        lastName: 'Runner',
+        email,
+        shirtSize: null,
+      },
+      eventId,
+      paidAt: null,
+      createdAt: null,
+    };
+  }
+
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+  }
+
+  async function flushRegistrationWork() {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  async function resolveDeferred(job, value) {
+    await act(async () => {
+      job.resolve(value);
+      await job.promise;
+      await Promise.resolve();
+    });
+  }
+
+  async function rejectDeferred(job, reason) {
+    await act(async () => {
+      job.reject(reason);
+      await job.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+  }
+
+  async function advancePollIntervals(remaining) {
+    if (remaining === 0) return;
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+    await advancePollIntervals(remaining - 1);
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2030-01-12T16:00:00Z'));
+    useServiceLocator.mockReturnValue(readyLocator());
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  test('hides route A immediately and keeps a pending route B unconfirmed', async () => {
+    const routeBLookup = deferred();
+    lookupRegistration
+      .mockResolvedValueOnce(registrationResult({
+        status: 'paid',
+        id: routeA.reg,
+        eventId: routeA.event,
+        firstName: 'Prior',
+        email: 'prior-runner@example.test',
+      }))
+      .mockReturnValueOnce(routeBLookup.promise);
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+    expect(screen.getByRole('heading', { name: "You're in!" })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('prior-runner@example.test');
+
+    navigateRegistrationSuccess(routeB);
+    const immediateRouteText = document.body.textContent;
+
+    await resolveDeferred(routeBLookup, registrationResult({
+      status: 'pending',
+      id: routeB.reg,
+      eventId: routeB.event,
+      firstName: 'Pending',
+      email: 'pending-runner@example.test',
+    }));
+    const pendingRouteText = document.body.textContent;
+
+    expect(immediateRouteText).toContain('Processing your registration...');
+    expect(immediateRouteText).not.toMatch(
+      /Prior|prior-runner@example\.test|synthetic-route-a-registration|You're in!/,
+    );
+    expect(pendingRouteText).toContain('Processing your registration...');
+    expect(pendingRouteText).not.toMatch(
+      /Pending|pending-runner@example\.test|synthetic-route-b-registration|You're in!/,
+    );
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    'route',
+    'services identity',
+    'Firebase app identity',
+    'readiness',
+  ])('hides confirmed details in the first %s-change commit', async (changedBoundary) => {
+    const initialLocator = readyLocator();
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    const profiledApp = () => (
+      <React.Profiler id="registration-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>
+    );
+    useServiceLocator.mockReturnValue(initialLocator);
+    lookupRegistration.mockResolvedValueOnce(registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Prior',
+      email: 'prior-commit@example.test',
+    }));
+    window.history.pushState({}, '', registrationSuccessPath(routeA));
+    const view = render(profiledApp());
+    await flushRegistrationWork();
+    expect(document.body).toHaveTextContent('prior-commit@example.test');
+
+    commits.length = 0;
+    lookupRegistration.mockReturnValueOnce(new Promise(() => {}));
+    if (changedBoundary === 'route') {
+      navigateRegistrationSuccess(routeB);
+    } else {
+      let nextLocator = readyLocator();
+      if (changedBoundary === 'Firebase app identity') {
+        initialLocator.services.firebaseResources.app = {
+          name: 'synthetic-confirmation-app-b',
+        };
+        nextLocator = initialLocator;
+      } else if (changedBoundary === 'readiness') {
+        nextLocator = { services: initialLocator.services, isReady: false };
+      }
+      useServiceLocator.mockReturnValue(nextLocator);
+      view.rerender(profiledApp());
+    }
+
+    expect(commits).not.toHaveLength(0);
+    expect(commits[0]).toContain('Processing your registration...');
+    expect(commits[0]).not.toMatch(
+      /Prior|prior-commit@example\.test|synthetic-route-a-registration|You're in!/,
+    );
+  });
+
+  test('keeps one attempt when the router republishes the same history entry', async () => {
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    lookupRegistration.mockResolvedValueOnce(registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Current',
+      email: 'same-history-entry@example.test',
+    }));
+    window.history.pushState({}, '', registrationSuccessPath(routeA));
+    render(
+      <React.Profiler id="registration-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>,
+    );
+    await flushRegistrationWork();
+    expect(document.body).toHaveTextContent('same-history-entry@example.test');
+
+    commits.length = 0;
+    const sameEntryState = {
+      ...window.history.state,
+      usr: { syntheticObjectRefresh: true },
+    };
+    window.history.replaceState(
+      sameEntryState,
+      '',
+      registrationSuccessPath(routeA),
+    );
+    fireEvent(window, new PopStateEvent('popstate', { state: sameEntryState }));
+    await flushRegistrationWork();
+
+    expect(commits).not.toHaveLength(0);
+    expect(document.body).toHaveTextContent('same-history-entry@example.test');
+    expect(lookupRegistration).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['event', { ...routeA, event: routeB.event }],
+    ['registration', { ...routeA, reg: routeB.reg }],
+    ['token', { ...routeA, token: routeB.token }],
+  ])('hides confirmed details when one history key changes only %s', async (
+    _changedField,
+    changedRoute,
+  ) => {
+    const routeBLookup = deferred();
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    lookupRegistration
+      .mockResolvedValueOnce(registrationResult({
+        status: 'paid',
+        id: routeA.reg,
+        eventId: routeA.event,
+        firstName: 'Prior',
+        email: 'prior-same-key@example.test',
+      }))
+      .mockReturnValueOnce(routeBLookup.promise);
+    window.history.pushState({}, '', registrationSuccessPath(routeA));
+    render(
+      <React.Profiler id="registration-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>,
+    );
+    await flushRegistrationWork();
+    expect(document.body).toHaveTextContent('prior-same-key@example.test');
+    expect(track).toHaveBeenCalledTimes(1);
+
+    commits.length = 0;
+    const preservedHistoryState = { ...window.history.state };
+    const preservedHistoryKey = window.history.state?.key;
+    window.history.replaceState(
+      preservedHistoryState,
+      '',
+      registrationSuccessPath(changedRoute),
+    );
+    fireEvent(window, new PopStateEvent('popstate', { state: preservedHistoryState }));
+
+    expect(window.history.state?.key).toBe(preservedHistoryKey);
+    expect(commits).not.toHaveLength(0);
+    expect(commits[0]).toContain('Processing your registration...');
+    expect(commits[0]).not.toMatch(
+      /Prior|prior-same-key@example\.test|synthetic-route-a-registration|You're in!/,
+    );
+    expect(lookupRegistration).toHaveBeenNthCalledWith(2, firebaseApp, {
+      eventId: changedRoute.event,
+      registrationId: changedRoute.reg,
+      token: changedRoute.token,
+    });
+
+    await resolveDeferred(routeBLookup, registrationResult({
+      status: 'pending',
+      id: changedRoute.reg,
+      eventId: changedRoute.event,
+      firstName: 'Pending',
+      email: 'pending-same-key@example.test',
+    }));
+
+    expect(screen.getByRole('heading', { name: 'Processing your registration...' }))
+      .toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(
+      /prior-same-key@example\.test|pending-same-key@example\.test|You're in!/,
+    );
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores a stale route success before inspecting it or emitting analytics', async () => {
+    const staleLookup = deferred();
+    lookupRegistration
+      .mockReturnValueOnce(staleLookup.promise)
+      .mockResolvedValueOnce(registrationResult({
+        status: 'paid',
+        id: routeB.reg,
+        eventId: routeB.event,
+        firstName: 'Current',
+        email: 'current-runner@example.test',
+      }));
+
+    renderRegistrationSuccess(routeA);
+    navigateRegistrationSuccess(routeB);
+    await flushRegistrationWork();
+
+    const statusGetter = jest.fn(() => 'paid');
+    const staleResult = registrationResult({
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Obsolete',
+      email: 'obsolete-runner@example.test',
+    });
+    delete staleResult.status;
+    Object.defineProperty(staleResult, 'status', {
+      configurable: true,
+      enumerable: true,
+      get: statusGetter,
+    });
+    await resolveDeferred(staleLookup, staleResult);
+
+    expect(screen.getByRole('heading', { name: "You're in!" })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('current-runner@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-runner@example.test');
+    expect(statusGetter).not.toHaveBeenCalled();
+    expect(track).toHaveBeenCalledWith(analyticsEvents.registrationConfirmed, {
+      eventId: routeB.event,
+      status: 'paid',
+      amount_cents: 1500,
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores a stale hostile rejection before reading code or details', async () => {
+    const staleLookup = deferred();
+    lookupRegistration
+      .mockReturnValueOnce(staleLookup.promise)
+      .mockResolvedValueOnce(registrationResult({
+        status: 'comp',
+        id: routeB.reg,
+        eventId: routeB.event,
+        firstName: 'Current',
+        email: 'current-comp@example.test',
+        amountCents: 0,
+      }));
+
+    renderRegistrationSuccess(routeA);
+    navigateRegistrationSuccess(routeB);
+    await flushRegistrationWork();
+
+    const codeGetter = jest.fn(() => '');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const hostileRejection = {};
+    Object.defineProperties(hostileRejection, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+    await rejectDeferred(staleLookup, hostileRejection);
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: "You're in!" })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('current-comp@example.test');
+    expect(screen.queryByText("Can't confirm this registration")).not.toBeInTheDocument();
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('clears a route-owned poll timer and prevents another old lookup', async () => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+    const routeBLookup = deferred();
+    const neverSettles = new Promise(() => {});
+    lookupRegistration
+      .mockResolvedValueOnce(registrationResult({
+        status: 'pending',
+        id: routeA.reg,
+        eventId: routeA.event,
+      }))
+      .mockReturnValueOnce(routeBLookup.promise)
+      .mockReturnValue(neverSettles);
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+    const pollTimerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 2000);
+    expect(pollTimerIndex).toBeGreaterThanOrEqual(0);
+    const pollTimerId = setTimeoutSpy.mock.results[pollTimerIndex].value;
+
+    navigateRegistrationSuccess(routeB);
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+
+    const routeACalls = lookupRegistration.mock.calls.filter(([, args]) => (
+      args.registrationId === routeA.reg
+    ));
+    expect(routeACalls).toHaveLength(1);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(pollTimerId);
+    expect(lookupRegistration).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    'services identity',
+    'Firebase app identity',
+  ])('invalidates an in-flight lookup when %s changes', async (changedIdentity) => {
+    const appA = { name: 'synthetic-confirmation-app-a' };
+    const appB = changedIdentity === 'Firebase app identity'
+      ? { name: 'synthetic-confirmation-app-b' }
+      : appA;
+    const initialLocator = readyLocator(appA);
+    const staleLookup = deferred();
+    lookupRegistration
+      .mockReturnValueOnce(staleLookup.promise)
+      .mockResolvedValueOnce(registrationResult({
+        status: 'paid',
+        id: routeA.reg,
+        eventId: routeA.event,
+        firstName: 'Current',
+        email: 'current-service@example.test',
+      }));
+    useServiceLocator.mockReturnValue(initialLocator);
+
+    const view = renderRegistrationSuccess(routeA);
+    if (changedIdentity === 'Firebase app identity') {
+      initialLocator.services.firebaseResources.app = appB;
+      useServiceLocator.mockReturnValue(initialLocator);
+    } else {
+      useServiceLocator.mockReturnValue(readyLocator(appB));
+    }
+    view.rerender(<App />);
+    await flushRegistrationWork();
+    await resolveDeferred(staleLookup, registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Obsolete',
+      email: 'obsolete-service@example.test',
+    }));
+
+    expect(lookupRegistration).toHaveBeenNthCalledWith(1, appA, {
+      eventId: routeA.event,
+      registrationId: routeA.reg,
+      token: routeA.token,
+    });
+    expect(lookupRegistration).toHaveBeenNthCalledWith(2, appB, {
+      eventId: routeA.event,
+      registrationId: routeA.reg,
+      token: routeA.token,
+    });
+    expect(document.body).toHaveTextContent('current-service@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-service@example.test');
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('invalidates an in-flight lookup when readiness is lost', async () => {
+    const staleLookup = deferred();
+    lookupRegistration.mockReturnValueOnce(staleLookup.promise);
+    const view = renderRegistrationSuccess(routeA);
+
+    useServiceLocator.mockReturnValue({ services: null, isReady: false });
+    view.rerender(<App />);
+    await resolveDeferred(staleLookup, registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Obsolete',
+      email: 'obsolete-readiness@example.test',
+    }));
+
+    expect(screen.getByRole('heading', { name: 'Processing your registration...' }))
+      .toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-readiness@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('treats A to B to A as three generations', async () => {
+    const firstRouteALookup = deferred();
+    const routeBLookup = deferred();
+    lookupRegistration
+      .mockReturnValueOnce(firstRouteALookup.promise)
+      .mockReturnValueOnce(routeBLookup.promise)
+      .mockResolvedValueOnce(registrationResult({
+        status: 'paid',
+        id: routeA.reg,
+        eventId: routeA.event,
+        firstName: 'Current',
+        email: 'current-returned-route@example.test',
+      }));
+
+    renderRegistrationSuccess(routeA);
+    navigateRegistrationSuccess(routeB);
+    navigateRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+    await resolveDeferred(firstRouteALookup, registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Obsolete',
+      email: 'obsolete-first-route@example.test',
+    }));
+
+    expect(document.body).toHaveTextContent('current-returned-route@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-first-route@example.test');
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the second StrictMode effect current and ignores the first effect', async () => {
+    const firstEffectLookup = deferred();
+    const secondEffectLookup = deferred();
+    lookupRegistration
+      .mockReturnValueOnce(firstEffectLookup.promise)
+      .mockReturnValueOnce(secondEffectLookup.promise);
+    window.history.pushState({}, '', registrationSuccessPath(routeA));
+
+    render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+    expect(lookupRegistration).toHaveBeenCalledTimes(2);
+
+    await resolveDeferred(secondEffectLookup, registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Current',
+      email: 'current-strict-mode@example.test',
+    }));
+    const statusGetter = jest.fn(() => 'paid');
+    const firstEffectResult = registrationResult({
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Obsolete',
+      email: 'obsolete-strict-mode@example.test',
+    });
+    delete firstEffectResult.status;
+    Object.defineProperty(firstEffectResult, 'status', {
+      configurable: true,
+      enumerable: true,
+      get: statusGetter,
+    });
+    await resolveDeferred(firstEffectLookup, firstEffectResult);
+
+    expect(statusGetter).not.toHaveBeenCalled();
+    expect(document.body).toHaveTextContent('current-strict-mode@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-strict-mode@example.test');
+    expect(track).toHaveBeenCalledWith(analyticsEvents.registrationConfirmed, {
+      eventId: routeA.event,
+      status: 'paid',
+      amount_cents: 1500,
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not emit analytics when a lookup resolves after unmount', async () => {
+    const staleLookup = deferred();
+    lookupRegistration.mockReturnValueOnce(staleLookup.promise);
+    const view = renderRegistrationSuccess(routeA);
+
+    view.unmount();
+    await resolveDeferred(staleLookup, registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Unmounted',
+      email: 'unmounted-runner@example.test',
+    }));
+
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('does not inspect a rejection that arrives after unmount', async () => {
+    const staleLookup = deferred();
+    lookupRegistration.mockReturnValueOnce(staleLookup.promise);
+    const view = renderRegistrationSuccess(routeA);
+    const codeGetter = jest.fn(() => '');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const hostileRejection = {};
+    Object.defineProperties(hostileRejection, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+
+    view.unmount();
+    await rejectDeferred(staleLookup, hostileRejection);
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['paid', 1500],
+    ['comp', 0],
+  ])('preserves a current %s confirmation and bounded analytics', async (status, amountCents) => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    lookupRegistration.mockResolvedValueOnce(registrationResult({
+      status,
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Confirmed',
+      email: 'confirmed-runner@example.test',
+      amountCents,
+    }));
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(screen.getByRole('heading', { name: "You're in!" })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('Confirmed');
+    expect(document.body).toHaveTextContent('confirmed-runner@example.test');
+    expect(document.body).toHaveTextContent(routeA.reg);
+    expect(track).toHaveBeenCalledWith(analyticsEvents.registrationConfirmed, {
+      eventId: routeA.event,
+      status,
+      amount_cents: amountCents,
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(track.mock.calls)).not.toContain(routeA.token);
+    expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(false);
+  });
+
+  test('preserves current pending polling before a paid confirmation', async () => {
+    lookupRegistration
+      .mockResolvedValueOnce(registrationResult({
+        status: 'pending',
+        id: routeA.reg,
+        eventId: routeA.event,
+      }))
+      .mockResolvedValueOnce(registrationResult({
+        status: 'paid',
+        id: routeA.reg,
+        eventId: routeA.event,
+        firstName: 'Polled',
+        email: 'polled-runner@example.test',
+      }));
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+    expect(screen.getByRole('heading', { name: 'Processing your registration...' }))
+      .toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+
+    await advancePollIntervals(1);
+
+    expect(screen.getByRole('heading', { name: "You're in!" })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('polled-runner@example.test');
+    expect(lookupRegistration).toHaveBeenCalledTimes(2);
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the current pending timeout outcome', async () => {
+    lookupRegistration.mockResolvedValue(registrationResult({
+      status: 'pending',
+      id: routeA.reg,
+      eventId: routeA.event,
+    }));
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+    await advancePollIntervals(15);
+
+    expect(screen.getByRole('heading', { name: 'Processing your registration...' }))
+      .toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+
+    await advancePollIntervals(1);
+
+    expect(screen.getByRole('heading', { name: 'Still processing...' })).toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['top-level', { code: 'permission-denied' }],
+    ['nested', { details: { code: 'permission-denied' } }],
+    ['nested after an empty direct code', { code: '', details: { code: 'permission-denied' } }],
+  ])('preserves the current %s permission-denied outcome', async (_shape, rejection) => {
+    lookupRegistration.mockRejectedValueOnce(rejection);
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(screen.getByRole('heading', { name: "Can't confirm this registration" }))
+      .toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('preserves a truthy malformed direct code ahead of nested permission denial', async () => {
+    lookupRegistration.mockRejectedValueOnce({
+      code: {},
+      details: { code: 'permission-denied' },
+    });
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.queryByText("Can't confirm this registration")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('classifies current accessor error fields without invoking them', async () => {
+    const codeGetter = jest.fn(() => 'permission-denied');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const rejection = {};
+    Object.defineProperties(rejection, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+    lookupRegistration.mockRejectedValueOnce(rejection);
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.queryByText("Can't confirm this registration")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('classifies inherited error fields without invoking them', async () => {
+    const codeGetter = jest.fn(() => 'permission-denied');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const prototype = {};
+    Object.defineProperties(prototype, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+    const rejection = Object.create(prototype);
+    lookupRegistration.mockRejectedValueOnce(rejection);
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.queryByText("Can't confirm this registration")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('contains a throwing descriptor trap while classifying a current error', async () => {
+    const descriptorTrap = jest.fn(() => {
+      throw new Error('synthetic-descriptor-trap-private-canary');
+    });
+    const valueReadTrap = jest.fn(() => {
+      throw new Error('synthetic-value-read-trap-private-canary');
+    });
+    const rejection = new Proxy({}, {
+      get: valueReadTrap,
+      getOwnPropertyDescriptor: descriptorTrap,
+    });
+    lookupRegistration.mockRejectedValueOnce(rejection);
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(descriptorTrap).toHaveBeenCalledTimes(2);
+    expect(valueReadTrap).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      /synthetic-(descriptor|value-read)-trap-private-canary/,
+    );
+    expect(screen.queryByText("Can't confirm this registration")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('preserves a generic current lookup error without exposing its message', async () => {
+    lookupRegistration.mockRejectedValueOnce(
+      new Error('synthetic-registration-provider-private-canary'),
+    );
+
+    renderRegistrationSuccess(routeA);
+    await flushRegistrationWork();
+
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      'synthetic-registration-provider-private-canary',
+    );
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('waits for services and then uses the current Firebase app and capability', async () => {
+    useServiceLocator.mockReturnValue({ services: null, isReady: false });
+    lookupRegistration.mockResolvedValueOnce(registrationResult({
+      status: 'paid',
+      id: routeA.reg,
+      eventId: routeA.event,
+      firstName: 'Ready',
+      email: 'ready-runner@example.test',
+    }));
+
+    const view = renderRegistrationSuccess(routeA);
+    expect(screen.getByRole('heading', { name: 'Processing your registration...' }))
+      .toBeInTheDocument();
+    expect(lookupRegistration).not.toHaveBeenCalled();
+
+    useServiceLocator.mockReturnValue(readyLocator());
+    view.rerender(<App />);
+    await flushRegistrationWork();
+
+    expect(lookupRegistration).toHaveBeenCalledWith(firebaseApp, {
+      eventId: routeA.event,
+      registrationId: routeA.reg,
+      token: routeA.token,
+    });
+    expect(lookupRegistration).toHaveBeenCalledTimes(1);
+    expect(document.body).toHaveTextContent('ready-runner@example.test');
+  });
+
+  test('preserves the missing-parameter error without starting a lookup', () => {
+    renderRegistrationSuccess({ ...routeA, token: null });
+
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(lookupRegistration).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
   });
 });
 
