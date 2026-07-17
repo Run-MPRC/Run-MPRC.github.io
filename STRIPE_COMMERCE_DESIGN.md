@@ -665,6 +665,23 @@ A successful business transition and `processed` event marker must be atomic whe
 
 Stripe does not guarantee delivery order. Never assume Checkout completion arrives before a refund or dispute. When state is ambiguous, retrieve the canonical Stripe object and reduce it into the current local state.
 
+### Fulfilled order payment-failure conflict — SOURCE ONLY, NOT LIVE
+
+PAY-003A1 [#337](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/337) narrows one legacy webhook gap. After binding and adjustment checks pass, a signed failed or expired unpaid Checkout Session no longer disappears as an ordinary stale Event when the order is already `fulfilled` but its compatible `paymentStatus` marker is not exactly `paid`. The source preserves fulfillment, writes no cancellation, and uses the existing fixed `fulfilled_without_verified_payment` review reason in the same transaction as the processed Event ledger. A fulfilled record whose existing `paymentStatus` marker says `paid` remains unchanged because the later failure or expiry is stale evidence; that marker is not independent Stripe proof.
+
+```mermaid
+flowchart TD
+    A["Signed failed or expired Checkout Event"] --> B{"Bound, valid, and unpaid?"}
+    B -- "No" --> C["Use the existing fixed review path"]
+    B -- "Yes" --> D{"Current order state?"}
+    D -- "Pending" --> E["Cancel through the existing path"]
+    D -- "Fulfilled; existing marker says paid" --> F["Ignore the stale failure or expiry"]
+    D -- "Fulfilled; existing marker does not say paid" --> G["Keep fulfilled; mark payment review"]
+    D -- "Other" --> H["Keep the existing terminal-state behavior"]
+```
+
+Text alternative: a valid unpaid failure or expiry still cancels a pending order. After fulfillment it is ignored only when the existing compatibility marker says paid; that marker is not independent Stripe proof. Otherwise fulfillment stays unchanged and the fixed payment-review flag is recorded. This source change does not inspect old records, create an operator alert, define the canonical PAY-002/PAY-003 state model, deploy Firebase, or prove live Stripe behavior.
+
 ### Verification before marking paid
 
 At minimum verify:

@@ -1220,6 +1220,223 @@ describe('stripeWebhook', () => {
   });
 
   test.each([
+    ['failure', 'checkout.session.async_payment_failed', 'failed', 'payment.async_failed'],
+    ['expiry', 'checkout.session.expired', 'expired', 'session.expired'],
+  ])('preserves the existing pending-order async %s cancellation', async (
+    label,
+    type,
+    paymentStatus,
+    auditAction,
+  ) => {
+    const eventId = `evt_pending_regression_${label}`;
+    seedOrder({ pendingMarker: 'unchanged' });
+    const beforeOrder = JSON.parse(JSON.stringify(admin.__get('orders/order-1')));
+
+    const response = await deliver(stripeEvent(
+      eventId,
+      type,
+      orderSession({ payment_status: 'unpaid' }),
+    ));
+    const order = admin.__get('orders/order-1');
+    const ledger = admin.__get(`stripeEvents/${eventId}`);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: `payment_${paymentStatus}`,
+      requiresReview: false,
+    }));
+    expect(order).toMatchObject({
+      status: 'cancelled',
+      paymentStatus,
+      stripePaymentStatus: 'unpaid',
+      stripeSessionId: 'cs_order_1',
+      stripePaymentIntentId: 'pi_order_1',
+      pendingMarker: 'unchanged',
+      lastStripeEventId: eventId,
+    });
+    expect(order.cancelledAt).toBeDefined();
+    expect(order.updatedAt).toBeDefined();
+    expect(order.auditLog).toHaveLength(1);
+    expect(order.auditLog[0]).toMatchObject({
+      actorUid: null,
+      actorEmail: null,
+      action: `order.${auditAction}`,
+      note: `event=${eventId}`,
+    });
+    const changedFields = new Set([
+      'auditLog',
+      'cancelledAt',
+      'lastStripeEventId',
+      'paymentStatus',
+      'status',
+      'stripePaymentIntentId',
+      'stripePaymentStatus',
+      'stripeSessionId',
+      'updatedAt',
+    ]);
+    const unchangedProjection = (record) => Object.fromEntries(
+      Object.entries(record).filter(([field]) => !changedFields.has(field)),
+    );
+    expect(unchangedProjection(order)).toEqual(unchangedProjection(beforeOrder));
+    expect(ledger).toMatchObject({
+      status: 'processed',
+      outcome: `payment_${paymentStatus}`,
+      requiresReview: false,
+      targetType: 'order',
+      targetPath: 'orders/order-1',
+    });
+  });
+
+  test.each([
+    ['failure_missing', 'checkout.session.async_payment_failed', false, undefined],
+    ['expiry_null', 'checkout.session.expired', true, null],
+    ['failure_processing', 'checkout.session.async_payment_failed', true, 'processing'],
+    ['expiry_failed', 'checkout.session.expired', true, 'failed'],
+    ['failure_expired', 'checkout.session.async_payment_failed', true, 'expired'],
+    ['expiry_legacy_unknown', 'checkout.session.expired', true, 'legacy_unknown'],
+  ])('quarantines async evidence when fulfillment lacks the existing paid marker: %s', async (
+    label,
+    type,
+    hasPaymentStatus,
+    paymentStatus,
+  ) => {
+    const eventId = `evt_fulfilled_unverified_${label}`;
+    const privateCanaries = {
+      email: `private-email-${label}@example.test`,
+      name: `private-name-${label}`,
+      line1: `private-address-${label}`,
+      city: `private-city-${label}`,
+      postalCode: `private-postal-${label}`,
+    };
+    const recordPatch = {
+      status: 'fulfilled',
+      fulfilledAt: { _milliseconds: 1_799_999_999_000 },
+      fulfillmentReference: 'synthetic-fulfillment-reference',
+    };
+    if (hasPaymentStatus) recordPatch.paymentStatus = paymentStatus;
+    seedOrder(recordPatch);
+    const beforeOrder = JSON.parse(JSON.stringify(admin.__get('orders/order-1')));
+    const event = stripeEvent(
+      eventId,
+      type,
+      orderSession({
+        payment_status: 'unpaid',
+        customer_details: { email: privateCanaries.email },
+        shipping_details: {
+          name: privateCanaries.name,
+          address: {
+            line1: privateCanaries.line1,
+            city: privateCanaries.city,
+            postal_code: privateCanaries.postalCode,
+            country: 'US',
+          },
+        },
+      }),
+    );
+
+    const firstResponse = await deliver(event);
+    const replayResponse = await deliver(event);
+    const order = admin.__get('orders/order-1');
+    const ledger = admin.__get(`stripeEvents/${eventId}`);
+
+    expect(firstResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:fulfilled_without_verified_payment',
+      requiresReview: true,
+    }));
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'needs_review:fulfilled_without_verified_payment',
+    }));
+    const expectedOrder = {
+      status: 'fulfilled',
+      fulfilledAt: { _milliseconds: 1_799_999_999_000 },
+      fulfillmentReference: 'synthetic-fulfillment-reference',
+      paymentReviewRequired: true,
+      paymentReviewReason: 'fulfilled_without_verified_payment',
+      lastStripeEventId: eventId,
+    };
+    if (hasPaymentStatus) expectedOrder.paymentStatus = paymentStatus;
+    expect(order).toMatchObject(expectedOrder);
+    expect(Object.hasOwn(beforeOrder, 'paymentStatus')).toBe(hasPaymentStatus);
+    expect(Object.hasOwn(order, 'paymentStatus')).toBe(hasPaymentStatus);
+    if (hasPaymentStatus) expect(order.paymentStatus).toBe(paymentStatus);
+    expect(order.cancelledAt).toBeUndefined();
+    const withoutAllowedReviewMutation = (record) => {
+      const unchanged = { ...record };
+      [
+        'auditLog',
+        'updatedAt',
+        'paymentReviewRequired',
+        'paymentReviewReason',
+        'lastStripeEventId',
+      ].forEach((field) => delete unchanged[field]);
+      return unchanged;
+    };
+    expect(withoutAllowedReviewMutation(order))
+      .toEqual(withoutAllowedReviewMutation(beforeOrder));
+    expect(order.updatedAt).toBeDefined();
+    expect(order.auditLog).toHaveLength(1);
+    expect(order.auditLog[0]).toMatchObject({
+      actorUid: null,
+      actorEmail: null,
+      action: 'order.payment.review_required',
+      note: `event=${eventId} reason=fulfilled_without_verified_payment`,
+    });
+    expect(ledger).toMatchObject({
+      status: 'processed',
+      outcome: 'needs_review:fulfilled_without_verified_payment',
+      requiresReview: true,
+      targetType: 'order',
+      targetPath: 'orders/order-1',
+    });
+    const persistedOrExposed = JSON.stringify({
+      response: firstResponse.json.mock.calls,
+      replay: replayResponse.json.mock.calls,
+      order,
+      ledger,
+      logs: consoleError.mock.calls,
+    });
+    Object.values(privateCanaries).forEach((canary) => {
+      expect(persistedOrExposed).not.toContain(canary);
+    });
+  });
+
+  test.each([
+    ['failure', 'checkout.session.async_payment_failed', 'failed'],
+    ['expiry', 'checkout.session.expired', 'expired'],
+  ])('ignores an async %s when the fulfilled record has the existing paid marker', async (
+    label,
+    type,
+    reason,
+  ) => {
+    seedOrder({
+      status: 'fulfilled',
+      paymentStatus: 'paid',
+      paymentReviewRequired: false,
+      paymentReviewReason: null,
+    });
+    const beforeOrder = JSON.parse(JSON.stringify(admin.__get('orders/order-1')));
+
+    await deliver(stripeEvent(
+      `evt_verified_fulfilled_${label}`,
+      type,
+      orderSession({ payment_status: 'unpaid' }),
+    ));
+
+    const order = admin.__get('orders/order-1');
+    expect(order).toEqual(beforeOrder);
+    expect(order.cancelledAt).toBeUndefined();
+    expect(admin.__get(`stripeEvents/evt_verified_fulfilled_${label}`)).toMatchObject({
+      outcome: `${reason}_ignored:fulfilled`,
+      requiresReview: false,
+    });
+  });
+
+  test.each([
     ['failure', 'checkout.session.async_payment_failed', 'failed'],
     ['expiry', 'checkout.session.expired', 'expired'],
   ])('an ordinary async %s preserves an earlier review flag', async (_label, type, status) => {

@@ -150,6 +150,48 @@ Officer steps:
 
 **Escalation:** treasurer plus platform owner; add security if an adjustment reached paid/fulfilled state.
 
+## Fulfilled order payment-failure conflict — SOURCE ONLY, NOT LIVE
+
+**Purpose:** keep a fulfilled order unchanged while making a signed Stripe failure or expiry visible for review when the existing payment marker does not say paid.
+
+**Approver:** treasurer plus platform/security owner.
+
+**Prerequisites:** issue [#337](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/337) is merged; the exact webhook Function is deployed through a protected release and read back; made-up Stripe test-mode evidence passes; and PAY-003 launch blockers remain clearly open. A merge or green workflow alone is not enough.
+
+```mermaid
+flowchart TD
+    A["Stripe reports failed or expired"] --> B{"Is the order already fulfilled?"}
+    B -- "No" --> C["Use the normal payment path"]
+    B -- "Yes" --> D{"Does the existing payment marker say paid?"}
+    D -- "Yes" --> E["Keep the order unchanged"]
+    D -- "No" --> F["Keep fulfilled; require payment review"]
+    F --> G["Stop manual changes and escalate privately"]
+```
+
+In words: a fulfilled order is never cancelled by this source change. If its existing compatibility marker does not say paid, the backend records one fixed review flag without copying customer details into the review note. That old marker is not separate proof from Stripe.
+
+Steps after every prerequisite is proven:
+
+1. Confirm the release names the exact webhook Function and commit.
+2. Confirm the release readback says the Function was deployed.
+3. Review only made-up test-mode failure and expiry evidence.
+4. Confirm the order remains `fulfilled` in the approved test report.
+5. Confirm the report says payment review is required.
+6. Confirm the report contains no name, address, email, Session link, or payment secret.
+7. If a real conflict is reported, stop all manual record changes.
+8. Open a private finance incident with the treasurer and platform/security owner.
+9. Do not copy the order, customer, Stripe, or payment details into GitHub, email, screenshots, or an AI tool.
+
+**Expected result:** the signed Event is processed once. Fulfillment remains unchanged. A missing or non-paid compatibility marker produces the fixed `fulfilled_without_verified_payment` review result. A fulfilled order whose existing marker already says paid remains unchanged. This does not prove payment independently or decide collection, refund, shipping, stock, or customer-contact policy.
+
+**Stop conditions:** no exact Function deployment/readback, any production test, a request to edit Firestore or Stripe manually, customer or payment details in a shared artifact, an attempt to cancel fulfillment automatically, or no named treasurer/platform owner.
+
+**Success proof:** exact issue, pull request, merge commit, Node 20 signed synthetic tests, protected Firebase deployment and Function readback, made-up Stripe test-mode delivery, one processed Event, one redacted review audit, and a separate statement that website, provider, production-data, and live behavior were or were not verified.
+
+**Undo:** deploy and read back one reviewed backend revert or safe roll-forward. Do not delete the Event ledger, clear the review flag by hand, change payment state, or alter fulfillment records manually.
+
+**Escalation:** treasurer plus platform/security owner. Add the fulfillment owner only after payment evidence has been reviewed privately. Customer contact requires the separately approved communication path.
+
 ## Race signup data guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** stop malformed or unexpected race and volunteer signup data before anything is saved or sent to Stripe.
