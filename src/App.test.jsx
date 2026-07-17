@@ -40,6 +40,7 @@ import {
   listActiveProducts,
   listAllOrders,
   listAllProducts,
+  lookupOrder,
 } from './services/shop/shopService';
 import App from './App';
 
@@ -63,6 +64,7 @@ jest.mock('./services/shop/shopService', () => {
     listActiveProducts: jest.fn(),
     listAllOrders: jest.fn(),
     listAllProducts: jest.fn(),
+    lookupOrder: jest.fn(),
   };
 });
 
@@ -127,6 +129,7 @@ beforeEach(() => {
   listActiveProducts.mockReset();
   listAllOrders.mockReset();
   listAllProducts.mockReset();
+  lookupOrder.mockReset();
   createCheckoutSession.mockReset();
   getEventBySlug.mockReset();
   listEventRegistrations.mockReset();
@@ -315,6 +318,37 @@ function navigateRegistrationSuccess(query) {
     idx: currentIndex + 1,
   };
   window.history.pushState(nextState, '', registrationSuccessPath(query));
+  fireEvent(window, new PopStateEvent('popstate', { state: nextState }));
+}
+
+function purchaseSuccessPath({
+  order = 'synthetic-confirmation-order',
+  token = 'synthetic-order-capability',
+} = {}) {
+  const params = new URLSearchParams();
+  if (order !== null) params.set('order', order);
+  if (token !== null) params.set('token', token);
+  return `/shop/purchase/success?${params.toString()}`;
+}
+
+function renderPurchaseSuccess(query) {
+  window.history.pushState({}, '', purchaseSuccessPath(query));
+  return render(<App />);
+}
+
+let purchaseHistoryKey = 0;
+
+function navigatePurchaseSuccess(query) {
+  purchaseHistoryKey += 1;
+  const currentIndex = typeof window.history.state?.idx === 'number'
+    ? window.history.state.idx
+    : 0;
+  const nextState = {
+    usr: null,
+    key: `synthetic-purchase-${purchaseHistoryKey}`,
+    idx: currentIndex + 1,
+  };
+  window.history.pushState(nextState, '', purchaseSuccessPath(query));
   fireEvent(window, new PopStateEvent('popstate', { state: nextState }));
 }
 
@@ -2103,6 +2137,847 @@ describe('DATA-001A1 registration confirmation attempt isolation', () => {
 
     expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
     expect(lookupRegistration).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+});
+
+describe('DATA-001A2 purchase confirmation attempt isolation', () => {
+  const routeA = {
+    order: 'synthetic-route-a-order',
+    token: 'synthetic-route-a-order-capability',
+  };
+  const routeB = {
+    order: 'synthetic-route-b-order',
+    token: 'synthetic-route-b-order-capability',
+  };
+
+  function readyLocator(app = firebaseApp) {
+    return {
+      services: { firebaseResources: { app } },
+      isReady: true,
+    };
+  }
+
+  function orderResult({
+    status = 'pending',
+    id = 'synthetic-confirmation-order',
+    firstName = 'Synthetic',
+    email = 'synthetic-buyer@example.test',
+    productTitle = 'Synthetic Club Jacket',
+    amountCents = 1500,
+    size = 'M',
+    color = 'Navy',
+  } = {}) {
+    return {
+      id,
+      status,
+      amountCents,
+      currency: 'usd',
+      productSlug: 'synthetic-club-jacket',
+      productTitle,
+      size,
+      color,
+      buyer: {
+        firstName,
+        lastName: 'Buyer',
+        email,
+      },
+      paidAt: null,
+      createdAt: null,
+    };
+  }
+
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+  }
+
+  async function flushPurchaseWork() {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  async function resolveDeferred(job, value) {
+    await act(async () => {
+      job.resolve(value);
+      await job.promise;
+      await Promise.resolve();
+    });
+  }
+
+  async function rejectDeferred(job, reason) {
+    await act(async () => {
+      job.reject(reason);
+      await job.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+  }
+
+  async function advancePollIntervals(remaining) {
+    if (remaining === 0) return;
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+    await advancePollIntervals(remaining - 1);
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2030-01-12T16:00:00Z'));
+    useServiceLocator.mockReturnValue(readyLocator());
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  test('hides order A immediately and keeps a pending order B private', async () => {
+    const routeBLookup = deferred();
+    lookupOrder
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeA.order,
+        firstName: 'Prior',
+        email: 'prior-buyer@example.test',
+      }))
+      .mockReturnValueOnce(routeBLookup.promise);
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+    expect(screen.getByRole('heading', { name: 'Order confirmed!' })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('prior-buyer@example.test');
+
+    navigatePurchaseSuccess(routeB);
+    const immediateRouteText = document.body.textContent;
+
+    await resolveDeferred(routeBLookup, orderResult({
+      status: 'pending',
+      id: routeB.order,
+      firstName: 'Pending',
+      email: 'pending-buyer@example.test',
+    }));
+    const pendingRouteText = document.body.textContent;
+
+    expect(immediateRouteText).toContain('Processing your order...');
+    expect(immediateRouteText).not.toMatch(
+      /Prior|prior-buyer@example\.test|synthetic-route-a-order|Order confirmed!|Synthetic Club Jacket/,
+    );
+    expect(pendingRouteText).toContain('Processing your order...');
+    expect(pendingRouteText).not.toMatch(
+      /Pending|pending-buyer@example\.test|synthetic-route-b-order|Order confirmed!|Synthetic Club Jacket/,
+    );
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'route',
+    'services identity',
+    'Firebase app identity',
+    'readiness',
+  ])('hides confirmed order details in the first %s-change commit', async (changedBoundary) => {
+    const initialLocator = readyLocator();
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    const profiledApp = () => (
+      <React.Profiler id="purchase-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>
+    );
+    useServiceLocator.mockReturnValue(initialLocator);
+    lookupOrder.mockResolvedValueOnce(orderResult({
+      status: 'paid',
+      id: routeA.order,
+      firstName: 'Prior',
+      email: 'prior-order-commit@example.test',
+    }));
+    window.history.pushState({}, '', purchaseSuccessPath(routeA));
+    const view = render(profiledApp());
+    await flushPurchaseWork();
+    expect(document.body).toHaveTextContent('prior-order-commit@example.test');
+
+    commits.length = 0;
+    lookupOrder.mockReturnValueOnce(new Promise(() => {}));
+    if (changedBoundary === 'route') {
+      navigatePurchaseSuccess(routeB);
+    } else {
+      let nextLocator = readyLocator();
+      if (changedBoundary === 'Firebase app identity') {
+        initialLocator.services.firebaseResources.app = {
+          name: 'synthetic-purchase-app-b',
+        };
+        nextLocator = initialLocator;
+      } else if (changedBoundary === 'readiness') {
+        nextLocator = { services: initialLocator.services, isReady: false };
+      }
+      useServiceLocator.mockReturnValue(nextLocator);
+      view.rerender(profiledApp());
+    }
+
+    expect(commits).not.toHaveLength(0);
+    expect(commits[0]).toContain('Processing your order...');
+    expect(commits[0]).not.toMatch(
+      /Prior|prior-order-commit@example\.test|synthetic-route-a-order|Order confirmed!|Synthetic Club Jacket/,
+    );
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('keeps one attempt when the router republishes the same purchase entry', async () => {
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    lookupOrder.mockResolvedValueOnce(orderResult({
+      status: 'paid',
+      id: routeA.order,
+      firstName: 'Current',
+      email: 'same-purchase-entry@example.test',
+    }));
+    window.history.pushState({}, '', purchaseSuccessPath(routeA));
+    render(
+      <React.Profiler id="purchase-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>,
+    );
+    await flushPurchaseWork();
+    expect(document.body).toHaveTextContent('same-purchase-entry@example.test');
+
+    commits.length = 0;
+    const sameEntryState = {
+      ...window.history.state,
+      usr: { syntheticObjectRefresh: true },
+    };
+    window.history.replaceState(
+      sameEntryState,
+      '',
+      purchaseSuccessPath(routeA),
+    );
+    fireEvent(window, new PopStateEvent('popstate', { state: sameEntryState }));
+    await flushPurchaseWork();
+
+    expect(commits).not.toHaveLength(0);
+    expect(document.body).toHaveTextContent('same-purchase-entry@example.test');
+    expect(lookupOrder).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['order', { ...routeA, order: routeB.order }],
+    ['token', { ...routeA, token: routeB.token }],
+  ])('hides confirmed details when one history key changes only %s', async (
+    _changedField,
+    changedRoute,
+  ) => {
+    const routeBLookup = deferred();
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    lookupOrder
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeA.order,
+        firstName: 'Prior',
+        email: 'prior-same-key-order@example.test',
+      }))
+      .mockReturnValueOnce(routeBLookup.promise);
+    window.history.pushState({}, '', purchaseSuccessPath(routeA));
+    render(
+      <React.Profiler id="purchase-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>,
+    );
+    await flushPurchaseWork();
+    expect(document.body).toHaveTextContent('prior-same-key-order@example.test');
+
+    commits.length = 0;
+    const preservedHistoryState = { ...window.history.state };
+    const preservedHistoryKey = window.history.state?.key;
+    window.history.replaceState(
+      preservedHistoryState,
+      '',
+      purchaseSuccessPath(changedRoute),
+    );
+    fireEvent(window, new PopStateEvent('popstate', { state: preservedHistoryState }));
+
+    expect(window.history.state?.key).toBe(preservedHistoryKey);
+    expect(commits).not.toHaveLength(0);
+    expect(commits[0]).toContain('Processing your order...');
+    expect(commits[0]).not.toMatch(
+      /Prior|prior-same-key-order@example\.test|synthetic-route-a-order|Order confirmed!|Synthetic Club Jacket/,
+    );
+    expect(lookupOrder).toHaveBeenNthCalledWith(2, firebaseApp, {
+      orderId: changedRoute.order,
+      token: changedRoute.token,
+    });
+
+    await resolveDeferred(routeBLookup, orderResult({
+      status: 'pending',
+      id: changedRoute.order,
+      firstName: 'Pending',
+      email: 'pending-same-key-order@example.test',
+    }));
+
+    expect(screen.getByRole('heading', { name: 'Processing your order...' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(
+      /prior-same-key-order@example\.test|pending-same-key-order@example\.test|Order confirmed!/,
+    );
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('starts a new attempt when a new history entry repeats the same purchase tuple', async () => {
+    const commits = [];
+    const captureCommit = () => {
+      commits.push(document.querySelector('main')?.textContent ?? '');
+    };
+    lookupOrder
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeA.order,
+        firstName: 'Prior',
+        email: 'prior-new-key-order@example.test',
+      }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    window.history.pushState({}, '', purchaseSuccessPath(routeA));
+    render(
+      <React.Profiler id="purchase-confirmation" onRender={captureCommit}>
+        <App />
+      </React.Profiler>,
+    );
+    await flushPurchaseWork();
+
+    commits.length = 0;
+    navigatePurchaseSuccess(routeA);
+
+    expect(commits).not.toHaveLength(0);
+    expect(commits[0]).toContain('Processing your order...');
+    expect(commits[0]).not.toMatch(
+      /Prior|prior-new-key-order@example\.test|synthetic-route-a-order|Order confirmed!|Synthetic Club Jacket/,
+    );
+    expect(lookupOrder).toHaveBeenCalledTimes(2);
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('ignores a stale route success before inspecting it', async () => {
+    const staleLookup = deferred();
+    lookupOrder
+      .mockReturnValueOnce(staleLookup.promise)
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeB.order,
+        firstName: 'Current',
+        email: 'current-order@example.test',
+      }));
+
+    renderPurchaseSuccess(routeA);
+    navigatePurchaseSuccess(routeB);
+    await flushPurchaseWork();
+
+    const statusGetter = jest.fn(() => 'paid');
+    const staleResult = orderResult({
+      id: routeA.order,
+      firstName: 'Obsolete',
+      email: 'obsolete-order@example.test',
+    });
+    delete staleResult.status;
+    Object.defineProperty(staleResult, 'status', {
+      configurable: true,
+      enumerable: true,
+      get: statusGetter,
+    });
+    await resolveDeferred(staleLookup, staleResult);
+
+    expect(statusGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Order confirmed!' })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('current-order@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('ignores a stale hostile rejection before reading code or details', async () => {
+    const staleLookup = deferred();
+    lookupOrder
+      .mockReturnValueOnce(staleLookup.promise)
+      .mockResolvedValueOnce(orderResult({
+        status: 'fulfilled',
+        id: routeB.order,
+        firstName: 'Current',
+        email: 'current-fulfilled-order@example.test',
+      }));
+
+    renderPurchaseSuccess(routeA);
+    navigatePurchaseSuccess(routeB);
+    await flushPurchaseWork();
+
+    const codeGetter = jest.fn(() => '');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const hostileRejection = {};
+    Object.defineProperties(hostileRejection, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+    await rejectDeferred(staleLookup, hostileRejection);
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Order confirmed!' })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('current-fulfilled-order@example.test');
+    expect(screen.queryByText("Can't confirm this order")).not.toBeInTheDocument();
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('clears an order-owned poll timer and prevents another old lookup', async () => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+    const routeBLookup = deferred();
+    const neverSettles = new Promise(() => {});
+    lookupOrder
+      .mockResolvedValueOnce(orderResult({
+        status: 'pending',
+        id: routeA.order,
+      }))
+      .mockReturnValueOnce(routeBLookup.promise)
+      .mockReturnValue(neverSettles);
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+    const pollTimerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 2000);
+    expect(pollTimerIndex).toBeGreaterThanOrEqual(0);
+    const pollTimerId = setTimeoutSpy.mock.results[pollTimerIndex].value;
+
+    navigatePurchaseSuccess(routeB);
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+
+    const routeACalls = lookupOrder.mock.calls.filter(([, args]) => (
+      args.orderId === routeA.order
+    ));
+    expect(routeACalls).toHaveLength(1);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(pollTimerId);
+    expect(lookupOrder).toHaveBeenCalledTimes(2);
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'services identity',
+    'Firebase app identity',
+  ])('invalidates an in-flight order lookup when %s changes', async (changedIdentity) => {
+    const appA = { name: 'synthetic-purchase-app-a' };
+    const appB = changedIdentity === 'Firebase app identity'
+      ? { name: 'synthetic-purchase-app-b' }
+      : appA;
+    const initialLocator = readyLocator(appA);
+    const staleLookup = deferred();
+    lookupOrder
+      .mockReturnValueOnce(staleLookup.promise)
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeA.order,
+        firstName: 'Current',
+        email: 'current-service-order@example.test',
+      }));
+    useServiceLocator.mockReturnValue(initialLocator);
+
+    const view = renderPurchaseSuccess(routeA);
+    if (changedIdentity === 'Firebase app identity') {
+      initialLocator.services.firebaseResources.app = appB;
+      useServiceLocator.mockReturnValue(initialLocator);
+    } else {
+      useServiceLocator.mockReturnValue(readyLocator(appB));
+    }
+    view.rerender(<App />);
+    await flushPurchaseWork();
+    await resolveDeferred(staleLookup, orderResult({
+      status: 'paid',
+      id: routeA.order,
+      firstName: 'Obsolete',
+      email: 'obsolete-service-order@example.test',
+    }));
+
+    expect(lookupOrder).toHaveBeenNthCalledWith(1, appA, {
+      orderId: routeA.order,
+      token: routeA.token,
+    });
+    expect(lookupOrder).toHaveBeenNthCalledWith(2, appB, {
+      orderId: routeA.order,
+      token: routeA.token,
+    });
+    expect(document.body).toHaveTextContent('current-service-order@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-service-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('invalidates an in-flight order lookup when readiness is lost', async () => {
+    const staleLookup = deferred();
+    lookupOrder.mockReturnValueOnce(staleLookup.promise);
+    const view = renderPurchaseSuccess(routeA);
+
+    useServiceLocator.mockReturnValue({ services: null, isReady: false });
+    view.rerender(<App />);
+    await resolveDeferred(staleLookup, orderResult({
+      status: 'paid',
+      id: routeA.order,
+      firstName: 'Obsolete',
+      email: 'obsolete-readiness-order@example.test',
+    }));
+
+    expect(screen.getByRole('heading', { name: 'Processing your order...' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-readiness-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('treats purchase A to B to A as three generations', async () => {
+    const firstRouteALookup = deferred();
+    const routeBLookup = deferred();
+    lookupOrder
+      .mockReturnValueOnce(firstRouteALookup.promise)
+      .mockReturnValueOnce(routeBLookup.promise)
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeA.order,
+        firstName: 'Current',
+        email: 'current-returned-order@example.test',
+      }));
+
+    renderPurchaseSuccess(routeA);
+    navigatePurchaseSuccess(routeB);
+    navigatePurchaseSuccess(routeA);
+    await flushPurchaseWork();
+    await resolveDeferred(firstRouteALookup, orderResult({
+      status: 'paid',
+      id: routeA.order,
+      firstName: 'Obsolete',
+      email: 'obsolete-first-order@example.test',
+    }));
+
+    expect(document.body).toHaveTextContent('current-returned-order@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-first-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('keeps the second StrictMode purchase effect current', async () => {
+    const firstEffectLookup = deferred();
+    const secondEffectLookup = deferred();
+    lookupOrder
+      .mockReturnValueOnce(firstEffectLookup.promise)
+      .mockReturnValueOnce(secondEffectLookup.promise);
+    window.history.pushState({}, '', purchaseSuccessPath(routeA));
+
+    render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+    expect(lookupOrder).toHaveBeenCalledTimes(2);
+
+    await resolveDeferred(secondEffectLookup, orderResult({
+      status: 'fulfilled',
+      id: routeA.order,
+      firstName: 'Current',
+      email: 'current-strict-order@example.test',
+    }));
+    const statusGetter = jest.fn(() => 'paid');
+    const firstEffectResult = orderResult({
+      id: routeA.order,
+      firstName: 'Obsolete',
+      email: 'obsolete-strict-order@example.test',
+    });
+    delete firstEffectResult.status;
+    Object.defineProperty(firstEffectResult, 'status', {
+      configurable: true,
+      enumerable: true,
+      get: statusGetter,
+    });
+    await resolveDeferred(firstEffectLookup, firstEffectResult);
+
+    expect(statusGetter).not.toHaveBeenCalled();
+    expect(document.body).toHaveTextContent('current-strict-order@example.test');
+    expect(document.body).not.toHaveTextContent('obsolete-strict-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('does not inspect an order result after unmount', async () => {
+    const staleLookup = deferred();
+    lookupOrder.mockReturnValueOnce(staleLookup.promise);
+    const view = renderPurchaseSuccess(routeA);
+    const statusGetter = jest.fn(() => 'paid');
+    const staleResult = orderResult({
+      id: routeA.order,
+      firstName: 'Unmounted',
+      email: 'unmounted-order@example.test',
+    });
+    delete staleResult.status;
+    Object.defineProperty(staleResult, 'status', {
+      configurable: true,
+      enumerable: true,
+      get: statusGetter,
+    });
+
+    view.unmount();
+    await resolveDeferred(staleLookup, staleResult);
+
+    expect(statusGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('does not inspect an order rejection after unmount', async () => {
+    const staleLookup = deferred();
+    lookupOrder.mockReturnValueOnce(staleLookup.promise);
+    const view = renderPurchaseSuccess(routeA);
+    const codeGetter = jest.fn(() => '');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const hostileRejection = {};
+    Object.defineProperties(hostileRejection, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+
+    view.unmount();
+    await rejectDeferred(staleLookup, hostileRejection);
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'paid',
+    'fulfilled',
+  ])('preserves a current %s order without analytics', async (status) => {
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    lookupOrder.mockResolvedValueOnce(orderResult({
+      status,
+      id: routeA.order,
+      firstName: 'Confirmed',
+      email: 'confirmed-order@example.test',
+    }));
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(screen.getByRole('heading', { name: 'Order confirmed!' })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('Confirmed');
+    expect(document.body).toHaveTextContent('confirmed-order@example.test');
+    expect(document.body).toHaveTextContent('Synthetic Club Jacket');
+    expect(document.body).toHaveTextContent('size M');
+    expect(document.body).toHaveTextContent('Navy');
+    expect(document.body).toHaveTextContent('$15.00');
+    expect(document.body).toHaveTextContent(routeA.order);
+    expect(screen.getByRole('link', { name: '← Back to shop' })).toHaveAttribute('href', '/shop');
+    expect(lookupOrder).toHaveBeenCalledWith(firebaseApp, {
+      orderId: routeA.order,
+      token: routeA.token,
+    });
+    expect(lookupOrder).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    expect(JSON.stringify(track.mock.calls)).not.toContain(routeA.token);
+    expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(false);
+  });
+
+  test('preserves current pending polling before a paid order', async () => {
+    lookupOrder
+      .mockResolvedValueOnce(orderResult({
+        status: 'pending',
+        id: routeA.order,
+        firstName: 'Pending',
+        email: 'pending-current-order@example.test',
+      }))
+      .mockResolvedValueOnce(orderResult({
+        status: 'paid',
+        id: routeA.order,
+        firstName: 'Polled',
+        email: 'polled-order@example.test',
+      }));
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+    expect(screen.getByRole('heading', { name: 'Processing your order...' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('pending-current-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+
+    await advancePollIntervals(1);
+
+    expect(screen.getByRole('heading', { name: 'Order confirmed!' })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('polled-order@example.test');
+    expect(lookupOrder).toHaveBeenCalledTimes(2);
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('preserves the current pending order timeout outcome', async () => {
+    lookupOrder.mockResolvedValue(orderResult({
+      status: 'pending',
+      id: routeA.order,
+    }));
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+    await advancePollIntervals(15);
+
+    expect(screen.getByRole('heading', { name: 'Processing your order...' })).toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+
+    await advancePollIntervals(1);
+
+    expect(screen.getByRole('heading', { name: 'Still processing...' })).toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['top-level', { code: 'permission-denied' }],
+    ['nested', { details: { code: 'permission-denied' } }],
+    ['nested after an empty direct code', { code: '', details: { code: 'permission-denied' } }],
+  ])('preserves the current %s order permission-denied outcome', async (_shape, rejection) => {
+    lookupOrder.mockRejectedValueOnce(rejection);
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(screen.getByRole('heading', { name: "Can't confirm this order" }))
+      .toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('preserves a malformed direct order code ahead of nested permission denial', async () => {
+    lookupOrder.mockRejectedValueOnce({
+      code: {},
+      details: { code: 'permission-denied' },
+    });
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.queryByText("Can't confirm this order")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('classifies current order accessor fields without invoking them', async () => {
+    const codeGetter = jest.fn(() => 'permission-denied');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const rejection = {};
+    Object.defineProperties(rejection, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+    lookupOrder.mockRejectedValueOnce(rejection);
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.queryByText("Can't confirm this order")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('classifies inherited order error fields without invoking them', async () => {
+    const codeGetter = jest.fn(() => 'permission-denied');
+    const detailsGetter = jest.fn(() => ({ code: 'permission-denied' }));
+    const prototype = {};
+    Object.defineProperties(prototype, {
+      code: { configurable: true, get: codeGetter },
+      details: { configurable: true, get: detailsGetter },
+    });
+    const rejection = Object.create(prototype);
+    lookupOrder.mockRejectedValueOnce(rejection);
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(codeGetter).not.toHaveBeenCalled();
+    expect(detailsGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.queryByText("Can't confirm this order")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('contains a descriptor trap while classifying a current order error', async () => {
+    const descriptorTrap = jest.fn(() => {
+      throw new Error('synthetic-order-descriptor-trap-private-canary');
+    });
+    const valueReadTrap = jest.fn((_target, key) => {
+      if (key === 'code') return 'permission-denied';
+      return undefined;
+    });
+    const rejection = new Proxy({}, {
+      get: valueReadTrap,
+      getOwnPropertyDescriptor: descriptorTrap,
+    });
+    lookupOrder.mockRejectedValueOnce(rejection);
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(descriptorTrap).toHaveBeenCalledTimes(2);
+    expect(valueReadTrap).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('synthetic-order-descriptor-trap-private-canary');
+    expect(screen.queryByText("Can't confirm this order")).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('preserves a generic current order error without exposing its message', async () => {
+    lookupOrder.mockRejectedValueOnce(
+      new Error('synthetic-order-provider-private-canary'),
+    );
+
+    renderPurchaseSuccess(routeA);
+    await flushPurchaseWork();
+
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('synthetic-order-provider-private-canary');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('waits for services and then uses the current app and order capability', async () => {
+    useServiceLocator.mockReturnValue({ services: null, isReady: false });
+    lookupOrder.mockResolvedValueOnce(orderResult({
+      status: 'paid',
+      id: routeA.order,
+      firstName: 'Ready',
+      email: 'ready-order@example.test',
+    }));
+
+    const view = renderPurchaseSuccess(routeA);
+    expect(screen.getByRole('heading', { name: 'Processing your order...' })).toBeInTheDocument();
+    expect(lookupOrder).not.toHaveBeenCalled();
+
+    useServiceLocator.mockReturnValue(readyLocator());
+    view.rerender(<App />);
+    await flushPurchaseWork();
+
+    expect(lookupOrder).toHaveBeenCalledWith(firebaseApp, {
+      orderId: routeA.order,
+      token: routeA.token,
+    });
+    expect(lookupOrder).toHaveBeenCalledTimes(1);
+    expect(document.body).toHaveTextContent('ready-order@example.test');
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['order', { ...routeA, order: null }],
+    ['token', { ...routeA, token: null }],
+  ])('preserves the missing-%s error without starting an order lookup', (_field, route) => {
+    renderPurchaseSuccess(route);
+
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(lookupOrder).not.toHaveBeenCalled();
     expect(track).not.toHaveBeenCalled();
   });
 });
