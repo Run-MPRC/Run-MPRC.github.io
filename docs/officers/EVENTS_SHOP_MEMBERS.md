@@ -494,7 +494,7 @@ Officer review steps after the source merge:
 10. Confirm the failure sentence is announced as an urgent screen-reader alert.
 11. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, failed-security-check, success, and Back-to-account behavior stays in place. This does not remove the callback details from the browser address.
+**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, failed-security-check, success, and Back-to-account behavior stays in place. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange. It does not erase earlier browser, provider, hosting, or network copies or complete issue #88.
 
 **Stop conditions:** any real member or Strava account; a request for a callback URL, authorization code, state value, provider error, private browser history, or screenshot containing private values; a real provider call; a production Firebase or Strava change; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the wording is live.
 
@@ -504,7 +504,58 @@ Officer review steps after the source merge:
 
 **Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if any callback or provider detail appeared. Do not copy the detail into an issue, message, screenshot, or AI tool.
 
-No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+For #242 alone, page structure, data movement, permissions, account ownership, and deployment topology were unchanged. The separate #335 procedure and diagram below record the later current-address data-order change.
+
+## Strava callback current-address cleanup — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** remove made-up Strava callback address details after `?` or `#` before the page checks the callback or starts a mocked exchange.
+
+**Approver:** membership lead plus platform/security and privacy owners.
+
+**Prerequisites:** issue [#335](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/335) must be merged at an exact reviewed commit. Use no real Strava account, callback, code, state, provider error, or member data. Calling this published also requires a protected website release and an exact revision check on `runmprc.com`. That still does not prove live OAuth behavior. This child does not deploy Firebase, configure Strava, call the provider, or inspect production data.
+
+```mermaid
+flowchart LR
+    A["Made-up callback address details after ? or #"] --> B["Keep three selected fields in temporary page memory"]
+    B --> C{"Both current entries proven clean?"}
+    C -- "Not yet" --> W["Wait; no state check or exchange"]
+    W -. "Detected replacement failure" .-> D["Fixed accessible stop"]
+    C -- "Yes" --> E["Continue the existing sign-in, error, code, and state checks"]
+    E --> F["One mocked exchange may continue"]
+    G["Earlier browser, provider, hosting, or network copies"] -. "Not erased" .-> H["Back is not proof of cleanup"]
+```
+
+Text alternative: the page first cleans the current browser and page entry. While cleanup is unconfirmed, it waits without checking state or starting an exchange. A detected replacement failure shows the fixed stop. Cleaning the current entry does not erase earlier history or outside copies.
+
+Officer review steps after the source merge:
+
+1. Keep this procedure marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for issue #335, the reviewed pull request, the exact merge commit, and synthetic test results.
+3. Confirm every test uses only made-up callback values and mocked services.
+4. Confirm the current address has no details after `?` or `#` before any callback decision, state check, or exchange.
+5. Confirm the page's current route also has no address details after `?` or `#`, or saved callback detail.
+6. Confirm unconfirmed cleanup keeps waiting and performs no state check or exchange.
+7. Confirm a detected failed or ineffective replacement shows one fixed accessible result.
+8. Confirm that failure performs no state check and no exchange.
+9. Confirm a second callback loaded into the same page is discarded and does not start another exchange.
+10. Confirm a changed signed-in account or service prevents an older browser result from navigating or showing success.
+11. Confirm successful cleanup preserves the existing #242 sign-in, provider-error, missing-code, invalid-state, pending, success, and fixed-failure behavior.
+12. Confirm made-up values do not appear in the page, console, analytics, screenshots, or saved test artifacts.
+13. Record source changed, tests passed, merged, website published, `runmprc.com` revision verified, Firebase deployed, Strava configured, production data changed, and live behavior verified as separate results.
+
+**Expected result:** the current visible callback entry is clean before processing. A cleanup failure stops safely. Callback values exist only temporarily in page memory. A changed account or service prevents an obsolete browser result from navigating or showing success, but it does not cancel an exchange that already reached the server or provider. That outcome may still occur and need separate reconciliation. Earlier browser history, address suggestions or sync, provider records, hosting records, and network records are not erased. Back may return to an earlier page and must never be treated as proof of cleanup.
+
+**Stop conditions:** a request for a real callback, code, state, provider error, screenshot, browser-history view, developer-tools capture, or copied address; callback details remaining after cleanup; processing after cleanup failure; a real provider or Firebase service call; or a claim that source, tests, merge, or green CI proves live behavior.
+
+**Success proof:** for source completion, record issue #335, the reviewed pull request, exact commit, intended old-source failures, green synthetic ordering/failure/lifecycle tests, relevant full checks, and independent privacy/officer review. For publication evidence, separately record the protected website publication and exact `runmprc.com` revision. Those checks do not make this procedure available or prove production OAuth behavior. A separately approved non-production plan may prove staged behavior only.
+
+**Undo:** before publication, use a reviewed revert or corrective pull request. After publication, use the protected website rollback process and verify the restored revision. Never paste, save, inspect, or replay an old callback address during rollback.
+
+**Escalation:** contact the platform/security and privacy owners if callback details may have appeared outside the current clean page. Use the private incident path. Do not copy a value into an issue, message, screenshot, or AI tool.
+
+This child keeps canonical issue #88 open and incomplete. Server-issued one-use state, UID/session binding, expiry and replay protection, App Check handoff, account and scope policy, concurrency, revoke/audit behavior, IAM/encryption, provider configuration, deployment, and live verification remain separate work.
 
 ## Strava connection record pairing — SOURCE ONLY, NOT LIVE
 

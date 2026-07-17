@@ -130,6 +130,26 @@ flowchart LR
 
 Text alternative: the 404 page temporarily carries the complete return route to the root page; an early referrer policy keeps the path/query/fragment out of subresource request headers, and the root page deletes the temporary value before accepting only a same-origin route. App Check, Analytics, and Sentry stay off on that initial capability-bearing callback. The bridge does not prove payment, OAuth state, or identity. Server/provider verification still decides the result.
 
+### Strava callback current-address cleanup — source only, not live
+
+OAUTH-001C1G [#335](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/335) adds a second boundary after the existing Pages handoff. The Strava callback keeps only its initial `code`, `state`, and provider-error fields in temporary component memory. It replaces the current native browser and React Router entry with the same path, no address details after `?` or `#`, and no saved callback detail before the callback mounts its Auth/service work, verifies state, or starts the existing exchange attempt.
+
+```mermaid
+flowchart LR
+    Route["Strava callback with made-up address details after ? or #"] --> Capture["Capture three selected fields in temporary page memory"]
+    Capture --> Replace["Replace current browser and Router entry with path only"]
+    Replace --> Clean{"Both current locations clean?"}
+    Clean -- "Not yet" --> Wait["Wait; no state check or exchange"]
+    Wait -. "Detected replacement failure" .-> Stop["Fixed accessible failure"]
+    Clean -- "Yes" --> Checks["Existing sign-in, provider-error, code, and state checks"]
+    Checks --> Exchange["At most one exchange attempt for the same signed-in account and app"]
+    Outside["Earlier browser, provider, hosting, or network copies"] -. "Remain outside this boundary" .-> Residual["Back or history is not cleanup proof"]
+```
+
+Text alternative: the callback captures three selected made-up fields in temporary page memory, replaces the current browser and Router entry with the clean path, and proceeds to the existing checks only after both current locations are clean. Unconfirmed cleanup waits without state verification or exchange. A detected replacement failure shows the fixed stop. Cleaning the current entry does not erase earlier browser or outside copies.
+
+The source also discards a later same-route callback. After unmount or a signed-in UID, service, Firebase resources, or app change, an obsolete browser result cannot navigate or show success. That does not cancel an exchange that already reached the server or provider; its outcome may still occur and require separate reconciliation. This child does not change the Pages bridge, provider request, server state model, App Check enforcement, scopes, membership, or deployment. Source, tests, merge, website publication, `runmprc.com` revision verification, Firebase deployment, Strava configuration, production data, and live OAuth behavior remain separate states. Canonical [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) remains open for server-issued one-use state, expiry/replay, account and scope policy, concurrency, reconciliation, revoke/audit, IAM/encryption, provider configuration, deployment, and live proof.
+
 ### Firebase Auth action link — source only, not live
 
 ```mermaid
