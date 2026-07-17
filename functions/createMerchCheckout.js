@@ -15,6 +15,9 @@ const {
   COMMERCE_OPERATIONS,
   requireCommerceAdmission,
 } = require('./commerceControl');
+const {
+  projectMerchandisePriceCents,
+} = require('./merchCheckoutValidation');
 
 const HOUR_MS = 60 * 60 * 1000;
 const MERCH_PER_IP_PER_HOUR = 20;
@@ -100,6 +103,14 @@ exports.createMerchCheckout = functions
       throw new functions.https.HttpsError('invalid-argument', 'Invalid color');
     }
 
+    const priceCents = projectMerchandisePriceCents(product);
+    if (priceCents === null) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'This item is unavailable',
+      );
+    }
+
     const confirmationToken = generateToken();
     const orderRef = db.collection('orders').doc();
 
@@ -115,7 +126,7 @@ exports.createMerchCheckout = functions
       shipping: null,
       size: size || null,
       color: color || null,
-      amountCents: product.priceCents,
+      amountCents: priceCents,
       currency: 'usd',
       status: 'pending',
       stripeSessionId: null,
@@ -151,7 +162,7 @@ exports.createMerchCheckout = functions
       line_items: [{
         price_data: {
           currency: 'usd',
-          unit_amount: product.priceCents,
+          unit_amount: priceCents,
           product: stripeProductId,
         },
         quantity: 1,
