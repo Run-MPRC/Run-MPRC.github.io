@@ -277,6 +277,63 @@ Officer source-review steps:
 
 **Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if any submitted person or event detail appears in output.
 
+## Early-bird cutoff format guard — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** treat a missing or malformed stored early-bird cutoff as inactive before later registration or Stripe work.
+
+**Approver:** event lead plus treasurer and platform/security owner.
+
+**Prerequisites for source review:** issue [#341](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/341) must be merged. The exact pull request and merge commit must be named. Tests must use only a made-up event, a made-up runner, and replacements that cannot contact Firebase or Stripe. A Firebase date-and-time value means the database's own `Timestamp` format. Text and an ordinary JavaScript date value do not count. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before deployment or data repair. This check does not approve a cutoff date, timezone, price, membership rule, or eligibility policy.
+
+```mermaid
+flowchart TD
+    A["Made-up race checkout passes earlier checks"] --> B{"Cutoff uses the exact Firebase date-and-time format?"}
+    B -- "No" --> C["Treat early bird as inactive"]
+    B -- "Yes" --> D{"Is the test clock before the cutoff?"}
+    D -- "No" --> C
+    D -- "Yes" --> E["Continue to the separate price check"]
+    C --> F{"Did the request explicitly choose early bird?"}
+    F -- "Yes" --> G["Fixed unavailable result; no later registration or Stripe work"]
+    F -- "No" --> H["Use the existing member or nonmember fallback"]
+```
+
+Text alternative: after earlier checkout checks, a missing, malformed, or reached cutoff makes early bird inactive. An explicit early-bird choice receives one fixed unavailable result and stops before later registration or Stripe work. Automatic price selection uses the existing member or nonmember fallback. Only the exact Firebase date-and-time format later than the test clock may continue to the separate price check.
+
+Officer source-review steps:
+
+1. Keep live race checkout unavailable.
+2. Ask the platform owner for the exact #341 pull request.
+3. Ask the platform owner for the exact merge commit.
+4. Ask for the made-up test report from that same commit.
+5. Confirm the report uses only a made-up event and runner.
+6. Confirm missing, null, text, ordinary JavaScript date, altered, or distinguishably fake cutoff values are inactive.
+7. Confirm one valid cutoff is active before its exact time.
+8. Confirm that cutoff is inactive at its exact time or later.
+9. Confirm malformed values cannot run a method stored inside them.
+10. Confirm malformed values cannot expose their stored value in the new fixed result or guard logs.
+11. Confirm an explicit early-bird request receives exactly `Early-bird pricing is no longer available`.
+12. Confirm that rejection creates no confirmation token.
+13. Confirm that rejection creates no registration identifier or registration write.
+14. Confirm that rejection creates no Stripe Product or Checkout Session.
+15. Confirm earlier checkout, access, capacity, and role checks may already have run.
+16. Confirm earlier request-count safety counters may already have been written and are not rolled back.
+17. Confirm automatic price selection uses the existing member or nonmember fallback when early bird is inactive.
+18. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe state, production data, migration, and live behavior as separate results.
+
+**Expected result:** only the exact current Firebase date-and-time format can make early bird active, and only while the clock is strictly before it. Missing or malformed cutoffs are inactive without running stored code or exposing the value. An explicit early-bird choice stops with the fixed unavailable result before later registration or Stripe work. Automatic selection keeps its existing fallback. The separate race price guard still checks the selected amount. This cutoff check does not approve that amount or prove that the complete checkout is safe.
+
+**Stop conditions:** any real runner, event, registration, payment, Firebase record, Stripe object, Stripe call, or production test; a request to repair Firebase or Stripe by hand; a missing exact commit; private or raw cutoff details in shared evidence; a rejection that allocates a registration identifier, writes a registration, or reaches Stripe; deployment before the #113 inventory; or a claim that source, tests, merge, preview, or a green workflow approves the business cutoff or proves live checkout behavior.
+
+**Success proof:** exact #341 pull request and merge commit; recorded old-source failures using made-up values; green cutoff, caller, full server, database-permission, isolated test-database commerce, website, safety, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, production data, migration, and live behavior were not changed or verified. A future live release also needs an owner-approved date, timezone, price, and fallback policy; the private #113 inventory; isolated Stripe test-mode proof; exact Firebase Function deployment and readback; and rollback evidence.
+
+**Undo:** before Firebase deployment, use one reviewed pull request that reverses the change or corrects it safely. After any approved backend deployment, use the protected backend release process and confirm the exact published Function revision. Never undo by changing an event, cutoff, registration, Product, Session, or payment record by hand.
+
+**Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if runner or event details appeared. Use the private incident path if a malformed cutoff may have reached registration or Stripe work. Do not copy private details, cutoff values, or provider identifiers into an issue, screenshot, email, message, or AI tool.
+
+No main system map needs to change because this source change adds one failure stop without changing ownership, permissions, storage locations, the Stripe boundary, or website publishing. The small diagram above records the new failure path and the unchanged fallback paths.
+
 ## Merchandise price format guard — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**

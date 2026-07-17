@@ -30,6 +30,7 @@ jest.mock('./serverConfig', () => ({
 }));
 
 const {
+  isEarlyBirdActive,
   isRegistrationOpen,
   pickPriceCents,
   requireAdmin,
@@ -43,6 +44,445 @@ const NOW_MS = 1_735_689_600_000;
 function openEvent(overrides = {}) {
   return { status: 'open', ...overrides };
 }
+
+describe('early-bird cutoff validation', () => {
+  function eventWithCutoff(earlyBirdUntil, earlyBirdCents = 2_000) {
+    return {
+      pricing: {
+        earlyBirdCents,
+        earlyBirdUntil,
+      },
+    };
+  }
+
+  test.each([
+    ['one millisecond before', NOW_MS - 1, true],
+    ['at the cutoff', NOW_MS, false],
+    ['one millisecond after', NOW_MS + 1, false],
+  ])('uses a strict valid Timestamp cutoff %s', (_name, now, expected) => {
+    expect(isEarlyBirdActive(
+      eventWithCutoff(Timestamp.fromMillis(NOW_MS)),
+      now,
+    )).toBe(expected);
+  });
+
+  test('accepts frozen current-realm records and a frozen Timestamp', () => {
+    const cutoff = Object.freeze(Timestamp.fromMillis(NOW_MS + 1));
+    const pricing = Object.freeze({
+      earlyBirdCents: 2_000,
+      earlyBirdUntil: cutoff,
+    });
+    const event = Object.freeze({ pricing });
+
+    expect(isEarlyBirdActive(event, NOW_MS)).toBe(true);
+  });
+
+  test('floors valid Timestamp nanoseconds to the stored millisecond', () => {
+    const second = Math.floor(NOW_MS / 1_000);
+
+    expect(isEarlyBirdActive(
+      eventWithCutoff(new Timestamp(second, 999_999)),
+      NOW_MS,
+    )).toBe(false);
+    expect(isEarlyBirdActive(
+      eventWithCutoff(new Timestamp(second, 1_000_000)),
+      NOW_MS,
+    )).toBe(true);
+  });
+
+  test.each([
+    ['ISO string', new Date(NOW_MS + 1_000).toISOString()],
+    ['JavaScript Date', new Date(NOW_MS + 1_000)],
+  ])('rejects a future %s instead of granting the discount', (_name, cutoff) => {
+    expect(isEarlyBirdActive(eventWithCutoff(cutoff), NOW_MS)).toBe(false);
+  });
+
+  test('does not invoke a pseudo toMillis method', () => {
+    const toMillis = jest.fn(() => NOW_MS + 1_000);
+    const active = isEarlyBirdActive(eventWithCutoff({ toMillis }), NOW_MS);
+
+    expect({ active, calls: toMillis.mock.calls.length }).toEqual({
+      active: false,
+      calls: 0,
+    });
+  });
+
+  test('returns inactive instead of allowing a pseudo method to throw', () => {
+    const toMillis = jest.fn(() => {
+      throw new Error('synthetic cutoff method must not run');
+    });
+    let outcome;
+
+    try {
+      outcome = { active: isEarlyBirdActive(eventWithCutoff({ toMillis }), NOW_MS) };
+    } catch (error) {
+      outcome = { threw: error.message };
+    }
+
+    expect(outcome).toEqual({ active: false });
+    expect(toMillis).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['NaN', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+    ['numeric string', String(NOW_MS)],
+    ['JavaScript Date', new Date(NOW_MS)],
+    ['null', null],
+    ['undefined', undefined],
+    ['boolean', true],
+    ['bigint', BigInt(NOW_MS)],
+  ])('rejects invalid clock input: %s', (_name, now) => {
+    expect(isEarlyBirdActive(
+      eventWithCutoff(Timestamp.fromMillis(NOW_MS + 1)),
+      now,
+    )).toBe(false);
+  });
+
+  test('rejects coercible clocks and short-circuits before a hostile event', () => {
+    const clockHooks = {
+      valueOf: jest.fn(() => NOW_MS),
+      toString: jest.fn(() => String(NOW_MS)),
+      [Symbol.toPrimitive]: jest.fn(() => NOW_MS),
+    };
+    const eventTrap = jest.fn(() => {
+      throw new Error('synthetic event trap must not run');
+    });
+    const hostileEvent = new Proxy({}, {
+      get: eventTrap,
+      getOwnPropertyDescriptor: eventTrap,
+      getPrototypeOf: eventTrap,
+      ownKeys: eventTrap,
+    });
+
+    expect(isEarlyBirdActive(eventWithCutoff(
+      Timestamp.fromMillis(NOW_MS + 1),
+    ), clockHooks)).toBe(false);
+    expect(isEarlyBirdActive(hostileEvent, Number.NaN)).toBe(false);
+    expect(clockHooks.valueOf).not.toHaveBeenCalled();
+    expect(clockHooks.toString).not.toHaveBeenCalled();
+    expect(clockHooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    expect(eventTrap).not.toHaveBeenCalled();
+  });
+
+  test('uses captured validation intrinsics and the captured default clock', () => {
+    const originalDateNow = Date.now;
+    const originalNumberIsFinite = Number.isFinite;
+    const originalNumberIsSafeInteger = Number.isSafeInteger;
+    const originalMathFloor = Math.floor;
+    const originalGetPrototypeOf = Object.getPrototypeOf;
+    const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    const originalHasOwn = Object.hasOwn;
+    const originalOwnKeys = Reflect.ownKeys;
+    const fail = () => {
+      throw new Error('synthetic replaced intrinsic must not run');
+    };
+    const event = eventWithCutoff(Timestamp.fromMillis(originalDateNow() + 60_000));
+    let active;
+
+    try {
+      Date.now = fail;
+      Number.isFinite = fail;
+      Number.isSafeInteger = fail;
+      Math.floor = fail;
+      Object.getPrototypeOf = fail;
+      Object.getOwnPropertyDescriptor = fail;
+      Object.hasOwn = fail;
+      Reflect.ownKeys = fail;
+      active = isEarlyBirdActive(event);
+    } finally {
+      Date.now = originalDateNow;
+      Number.isFinite = originalNumberIsFinite;
+      Number.isSafeInteger = originalNumberIsSafeInteger;
+      Math.floor = originalMathFloor;
+      Object.getPrototypeOf = originalGetPrototypeOf;
+      Object.getOwnPropertyDescriptor = originalGetOwnPropertyDescriptor;
+      Object.hasOwn = originalHasOwn;
+      Reflect.ownKeys = originalOwnKeys;
+    }
+
+    expect(active).toBe(true);
+  });
+
+  test.each([
+    ['missing', Symbol('missing')],
+    ['undefined', undefined],
+    ['null', null],
+    ['false', false],
+    ['zero', 0],
+    ['negative zero', -0],
+    ['empty string', ''],
+    ['NaN', Number.NaN],
+    ['zero bigint', BigInt(0)],
+  ])('keeps a %s early-bird amount inactive', (_name, amount) => {
+    const pricing = { earlyBirdUntil: Timestamp.fromMillis(NOW_MS + 1) };
+    if (_name !== 'missing') pricing.earlyBirdCents = amount;
+
+    expect(isEarlyBirdActive({ pricing }, NOW_MS)).toBe(false);
+  });
+
+  test('does not broaden the existing truthy amount gate or invoke amount hooks', () => {
+    const hooks = {
+      valueOf: jest.fn(() => 0),
+      toString: jest.fn(() => ''),
+      toJSON: jest.fn(() => 0),
+      [Symbol.toPrimitive]: jest.fn(() => 0),
+    };
+    const truthyValues = [-1, true, '2000', BigInt(1), Symbol('amount'), hooks];
+
+    truthyValues.forEach((amount) => {
+      expect(isEarlyBirdActive(eventWithCutoff(
+        Timestamp.fromMillis(NOW_MS + 1),
+        amount,
+      ), NOW_MS)).toBe(true);
+    });
+    expect(hooks.valueOf).not.toHaveBeenCalled();
+    expect(hooks.toString).not.toHaveBeenCalled();
+    expect(hooks.toJSON).not.toHaveBeenCalled();
+    expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+  });
+
+  test('rejects inherited, accessor-backed, and hidden amount fields', () => {
+    const cutoff = Timestamp.fromMillis(NOW_MS + 1);
+    const inherited = Object.create({ earlyBirdCents: 2_000 });
+    inherited.earlyBirdUntil = cutoff;
+
+    const getter = jest.fn(() => 2_000);
+    const accessorBacked = { earlyBirdUntil: cutoff };
+    Object.defineProperty(accessorBacked, 'earlyBirdCents', { get: getter });
+
+    const hidden = { earlyBirdUntil: cutoff };
+    Object.defineProperty(hidden, 'earlyBirdCents', { value: 2_000 });
+
+    expect(isEarlyBirdActive({ pricing: inherited }, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive({ pricing: accessorBacked }, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive({ pricing: hidden }, NOW_MS)).toBe(false);
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['null event', null],
+    ['undefined event', undefined],
+    ['numeric event', 1],
+    ['array event', []],
+    ['Date event', new Date(NOW_MS)],
+    ['null-prototype event', Object.create(null)],
+    ['custom-prototype event', Object.create({})],
+    ['null pricing', { pricing: null }],
+    ['array pricing', { pricing: [] }],
+    ['null-prototype pricing', { pricing: Object.create(null) }],
+    ['custom-prototype pricing', { pricing: Object.create({}) }],
+  ])('rejects an invalid container: %s', (_name, event) => {
+    expect(() => isEarlyBirdActive(event, NOW_MS)).not.toThrow();
+    expect(isEarlyBirdActive(event, NOW_MS)).toBe(false);
+  });
+
+  test('rejects Proxy event and pricing records without invoking traps', () => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic container trap must not run');
+    });
+    const proxyHandler = {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    };
+    const proxiedEvent = new Proxy(eventWithCutoff(
+      Timestamp.fromMillis(NOW_MS + 1),
+    ), proxyHandler);
+    const proxiedPricing = new Proxy({
+      earlyBirdCents: 2_000,
+      earlyBirdUntil: Timestamp.fromMillis(NOW_MS + 1),
+    }, proxyHandler);
+
+    expect(isEarlyBirdActive(proxiedEvent, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive({ pricing: proxiedPricing }, NOW_MS)).toBe(false);
+    expect(trap).not.toHaveBeenCalled();
+
+    const revokedEvent = Proxy.revocable({}, {});
+    const revokedPricing = Proxy.revocable({}, {});
+    revokedEvent.revoke();
+    revokedPricing.revoke();
+    expect(isEarlyBirdActive(revokedEvent.proxy, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive({ pricing: revokedPricing.proxy }, NOW_MS)).toBe(false);
+  });
+
+  test('rejects inherited, accessor-backed, and hidden pricing fields', () => {
+    const pricing = {
+      earlyBirdCents: 2_000,
+      earlyBirdUntil: Timestamp.fromMillis(NOW_MS + 1),
+    };
+    const inherited = Object.create({ pricing });
+
+    const getter = jest.fn(() => pricing);
+    const accessorBacked = {};
+    Object.defineProperty(accessorBacked, 'pricing', { get: getter });
+
+    const hidden = {};
+    Object.defineProperty(hidden, 'pricing', { value: pricing });
+
+    expect(isEarlyBirdActive(inherited, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive(accessorBacked, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive(hidden, NOW_MS)).toBe(false);
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['missing', Symbol('missing')],
+    ['undefined', undefined],
+    ['null', null],
+    ['false', false],
+    ['zero', 0],
+    ['true', true],
+    ['number', NOW_MS + 1],
+    ['ISO string', new Date(NOW_MS + 1).toISOString()],
+    ['JavaScript Date', new Date(NOW_MS + 1)],
+    ['array', []],
+    ['plain record', {}],
+    ['Map', new Map()],
+    ['Set', new Set()],
+  ])('rejects a %s cutoff representation', (_name, cutoff) => {
+    const pricing = { earlyBirdCents: 2_000 };
+    if (_name !== 'missing') pricing.earlyBirdUntil = cutoff;
+
+    expect(isEarlyBirdActive({ pricing }, NOW_MS)).toBe(false);
+  });
+
+  test('does not invoke cutoff accessors or conversion hooks', () => {
+    const cutoffGetter = jest.fn(() => Timestamp.fromMillis(NOW_MS + 1));
+    const pricing = { earlyBirdCents: 2_000 };
+    Object.defineProperty(pricing, 'earlyBirdUntil', { get: cutoffGetter });
+
+    const hooks = {
+      toMillis: jest.fn(() => NOW_MS + 1),
+      toJSON: jest.fn(() => new Date(NOW_MS + 1).toISOString()),
+      valueOf: jest.fn(() => NOW_MS + 1),
+      toString: jest.fn(() => String(NOW_MS + 1)),
+      [Symbol.iterator]: jest.fn(),
+      [Symbol.toPrimitive]: jest.fn(() => NOW_MS + 1),
+    };
+
+    expect(isEarlyBirdActive({ pricing }, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive(eventWithCutoff(hooks), NOW_MS)).toBe(false);
+    expect(cutoffGetter).not.toHaveBeenCalled();
+    Object.values(hooks).forEach((hook) => expect(hook).not.toHaveBeenCalled());
+  });
+
+  test('rejects inherited and hidden cutoff fields', () => {
+    const inherited = Object.create({
+      earlyBirdUntil: Timestamp.fromMillis(NOW_MS + 1),
+    });
+    inherited.earlyBirdCents = 2_000;
+    const hidden = { earlyBirdCents: 2_000 };
+    Object.defineProperty(hidden, 'earlyBirdUntil', {
+      value: Timestamp.fromMillis(NOW_MS + 1),
+    });
+
+    expect(isEarlyBirdActive({ pricing: inherited }, NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive({ pricing: hidden }, NOW_MS)).toBe(false);
+  });
+
+  test('rejects Proxy and modified Timestamp representations without side effects', () => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic Timestamp trap must not run');
+    });
+    const proxied = new Proxy(Timestamp.fromMillis(NOW_MS + 1), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    expect(isEarlyBirdActive(eventWithCutoff(proxied), NOW_MS)).toBe(false);
+    expect(trap).not.toHaveBeenCalled();
+
+    const revoked = Proxy.revocable(Timestamp.fromMillis(NOW_MS + 1), {});
+    revoked.revoke();
+    expect(isEarlyBirdActive(eventWithCutoff(revoked.proxy), NOW_MS)).toBe(false);
+
+    const modified = Timestamp.fromMillis(NOW_MS + 1);
+    const ownMethod = jest.fn(() => NOW_MS + 1);
+    Object.defineProperty(modified, 'toMillis', { value: ownMethod });
+    expect(isEarlyBirdActive(eventWithCutoff(modified), NOW_MS)).toBe(false);
+    expect(ownMethod).not.toHaveBeenCalled();
+
+    class TimestampSubclass extends Timestamp {}
+    expect(isEarlyBirdActive(eventWithCutoff(new TimestampSubclass(
+      Math.floor(NOW_MS / 1_000),
+      1_000_000,
+    )), NOW_MS)).toBe(false);
+
+    const extraKey = Timestamp.fromMillis(NOW_MS + 1);
+    Object.defineProperty(extraKey, Symbol('synthetic-extra'), { value: true });
+    expect(isEarlyBirdActive(eventWithCutoff(extraKey), NOW_MS)).toBe(false);
+  });
+
+  test('rejects accessor-backed and hidden Timestamp internals without reading them', () => {
+    const internalGetter = jest.fn(() => Math.floor(NOW_MS / 1_000));
+    const accessorBacked = Object.create(Timestamp.prototype);
+    Object.defineProperties(accessorBacked, {
+      _seconds: { get: internalGetter, enumerable: true },
+      _nanoseconds: { value: 0, enumerable: true },
+    });
+    const hidden = Object.create(Timestamp.prototype);
+    Object.defineProperties(hidden, {
+      _seconds: { value: Math.floor(NOW_MS / 1_000) },
+      _nanoseconds: { value: 1_000_000 },
+    });
+
+    expect(isEarlyBirdActive(eventWithCutoff(accessorBacked), NOW_MS)).toBe(false);
+    expect(isEarlyBirdActive(eventWithCutoff(hidden), NOW_MS)).toBe(false);
+    expect(internalGetter).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['seconds below range', -62_135_596_801, 0],
+    ['seconds above range', 253_402_300_800, 0],
+    ['fractional seconds', Math.floor(NOW_MS / 1_000) + 0.5, 0],
+    ['non-finite seconds', Number.POSITIVE_INFINITY, 0],
+    ['negative nanoseconds', Math.floor(NOW_MS / 1_000), -1],
+    ['nanoseconds above range', Math.floor(NOW_MS / 1_000), 1_000_000_000],
+    ['fractional nanoseconds', Math.floor(NOW_MS / 1_000), 0.5],
+    ['non-finite nanoseconds', Math.floor(NOW_MS / 1_000), Number.NaN],
+  ])('rejects Timestamp-shaped %s', (_name, seconds, nanoseconds) => {
+    const malformed = Object.create(Timestamp.prototype);
+    Object.defineProperties(malformed, {
+      _seconds: { value: seconds, enumerable: true },
+      _nanoseconds: { value: nanoseconds, enumerable: true },
+    });
+
+    expect(isEarlyBirdActive(eventWithCutoff(malformed), NOW_MS)).toBe(false);
+  });
+
+  test('does not mutate or traverse unrelated event and pricing fields', () => {
+    const unrelatedGetter = jest.fn(() => 'private synthetic detail');
+    const symbolGetter = jest.fn(() => 'private synthetic symbol detail');
+    const pricing = {
+      earlyBirdCents: 2_000,
+      earlyBirdUntil: Timestamp.fromMillis(NOW_MS + 1),
+    };
+    const event = { pricing };
+    pricing.self = pricing;
+    event.self = event;
+    Object.defineProperty(event, 'unrelated', { get: unrelatedGetter, enumerable: true });
+    Object.defineProperty(pricing, Symbol('unrelated'), {
+      get: symbolGetter,
+      enumerable: true,
+    });
+    const beforeEvent = Object.getOwnPropertyDescriptors(event);
+    const beforePricing = Object.getOwnPropertyDescriptors(pricing);
+
+    const active = isEarlyBirdActive(event, NOW_MS);
+
+    expect(active).toBe(true);
+    expect(Object.getOwnPropertyDescriptors(event)).toEqual(beforeEvent);
+    expect(Object.getOwnPropertyDescriptors(pricing)).toEqual(beforePricing);
+    expect(unrelatedGetter).not.toHaveBeenCalled();
+    expect(symbolGetter).not.toHaveBeenCalled();
+    pricing.earlyBirdCents = 0;
+    expect(active).toBe(true);
+  });
+});
 
 describe('registration-window validation', () => {
   test('keeps missing and null bounds unbounded', () => {
