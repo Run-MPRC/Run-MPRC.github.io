@@ -861,6 +861,61 @@ Officer review steps after the source merge:
 
 No system-topology diagram changes for this source slice; the state-flow diagram above records the page's failure-display change, while data movement, permissions, account ownership, and deployment topology remain unchanged.
 
+## Registration confirmation route privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep one runner's confirmation details tied to the private confirmation address that requested them. Moving to another address must hide the earlier name, email, registration ID, and confirmation result at once.
+
+**Approver:** events lead plus platform/security and privacy owners. Add the treasurer before any future live review involving a paid registration.
+
+**Prerequisites:** issue [#319](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/319) must be merged for source review. Use only made-up events, runners, registration IDs, tokens, and mocked services. Do not open, copy, request, or test a real confirmation address. A later claim that the source was published requires a protected website publication and an exact `runmprc.com` revision check. Neither check authorizes a real confirmation-address test or proves the private route works in production.
+
+```mermaid
+flowchart TD
+    A["Made-up confirmation address A"] --> B["Mocked lookup A starts"]
+    B --> C["Move to made-up address B"]
+    C --> D["Hide A details at once; clear A timer"]
+    D --> E{"Which mocked result finishes?"}
+    E -- "Old A" --> F["Ignore it; no display or analytics-wrapper call"]
+    E -- "Current B is pending" --> G["Keep waiting; show no runner details"]
+    E -- "Current B is paid or complimentary (comp)" --> H["Show B confirmation; call disabled wrapper once"]
+```
+
+Text alternative: changing from made-up confirmation address A to B immediately hides A; only B may keep waiting or show its own current paid or complimentary (`comp`) result and call the disabled analytics wrapper once, while every late A result and timer does nothing and no analytics event is sent or stored.
+
+Officer source-review steps:
+
+1. Keep the confirmation-route repair marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #319 issue, pull request, merged commit, and synthetic frontend test result.
+3. Confirm every test uses made-up runner details, made-up route values, and a mocked lookup.
+4. Confirm no test opens a real confirmation address or contacts a real Firebase, Stripe, analytics, or other outside service.
+5. Confirm moving from made-up address A to unresolved address B hides A's name, email, registration ID, and confirmed heading before B finishes.
+6. Confirm a pending B result keeps the waiting page and shows no runner details.
+7. Confirm a late A success cannot replace B or call the analytics wrapper.
+8. Confirm a late A failure is ignored without reading its private or hostile detail.
+9. Confirm A's old timer is cleared and cannot start another lookup after the move to B.
+10. Confirm a readiness, Firebase app, service, route, or page-close change makes the older work inactive and clears its timer.
+11. Confirm returning from A to B and back to A starts fresh work instead of reusing the first A result.
+12. Confirm only the current paid or comp result calls the disabled, provider-free analytics wrapper once.
+13. Confirm the wrapper sends and stores no analytics event.
+14. Confirm current pending, timeout, denied, error, not-ready, and missing-address results keep their existing plain displays.
+15. Record source, tests, merge, website publication, `runmprc.com` revision, Firebase deployment, provider configuration, production-data action, and live behavior as separate results.
+
+**Expected result:** only the current made-up address may decide what the page shows. An address or service change hides the preceding result immediately. Current pending work shows no runner details. Old results, failures, and timers do nothing. The current paid or comp result keeps the existing first name, email, and registration ID. Its source calls the disabled, provider-free analytics wrapper once. No analytics event is sent or stored. This changes reviewed source and tests only.
+
+**Stop conditions:** any real runner, event, registration, email, token, payment, confirmation address, screenshot, provider value, or production record; a request to paste a private address or detail into GitHub, email, chat, or an AI tool; a production Firebase, Stripe, analytics, or other provider action; an attempt to force a live failure or timing race; an old result appearing under a new address; a claim that the disabled wrapper sent or stored an event; or a claim that source, tests, merge, preview, or a green workflow proves the change is live.
+
+**Success proof:** for source completion, record the exact #319 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic route and timer tests, relevant full checks, and independent privacy, lifecycle, and officer reviews. The synthetic analytics mock may prove one current wrapper call, while source review proves the wrapper is disabled and provider-free; neither result is an analytics event or provider receipt. For release evidence, separately record the protected website publication and exact `runmprc.com` revision without opening a real confirmation address. Record Firebase deployment, Stripe or other provider configuration, analytics transmission or storage, real registration access, production-data action, and live route behavior as **not performed** unless a later approved non-production plan proves them safely.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision without opening a real confirmation address. Do not change or delete a registration, payment, account, database record, token, permission, Firebase setting, analytics setting, or Stripe setting.
+
+**Escalation:** events lead plus platform/security and privacy owners. Add the treasurer if a paid registration may be affected. Use the private incident path if one runner's details may have appeared under another address. Do not copy the address, token, runner details, screenshot, or provider value into an issue, message, email, or AI tool.
+
+This source slice does **not** make the current confirmation address safe. DATA-001A still owns replacing the private value in the address, storing that value safely, making it expire, preventing reuse, removing it from browser history, keeping it out of monitoring and links to other sites, verifying the Stripe Session or signed-in account, and reducing the server response. Firebase request checking (App Check) for this lookup remains deferred. The server may still return more runner data than the page needs. The current page still shows a current runner's first name, email, and registration ID. The current analytics wrapper remains disabled and provider-free; its source call sends and stores nothing. Data purpose, access, retention, deletion, and any future analytics approval remain open. Payment authority, Stripe behavior, confirmation email, Firebase and provider settings, deployment, production data, and live behavior are unchanged.
+
+No system-topology diagram changes for this source slice; the state-flow diagram above records the page's current-route display and timer boundary, while data movement, permissions, account ownership, and deployment topology remain unchanged.
+
 ## Refund amount and returned-result guards — SOURCE ONLY, NOT LIVE
 
 **Purpose:** make an invalid partial amount stop, and record a refund complete only when Stripe returns a matching final success.
