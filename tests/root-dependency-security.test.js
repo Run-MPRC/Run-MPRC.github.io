@@ -26,6 +26,16 @@ const EXPECTED_HASOWN = Object.freeze({
   resolved: 'https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz',
   integrity: 'sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==',
 });
+const EXPECTED_WEBSOCKET_DRIVER = Object.freeze({
+  version: '0.7.5',
+  resolved: 'https://registry.npmjs.org/websocket-driver/-/websocket-driver-0.7.5.tgz',
+  integrity: 'sha512-ZL2+3c7kMBdIRCMz6l8jQMHyGVxj+UL+xVk74Ombiciboca8rHa15L86B19E5oh1pL9Ii/uj54gtsIrZGMo6zA==',
+});
+const EXPECTED_WEBSOCKET_DRIVER_DEPENDENCIES = Object.freeze({
+  'http-parser-js': '>=0.5.1',
+  'safe-buffer': '>=5.1.0',
+  'websocket-extensions': '>=0.1.1',
+});
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -138,4 +148,99 @@ test('escapes synthetic multipart field names and filenames in every installed c
       );
     });
   }
+});
+
+test('pins the sole root websocket-driver resolution to the patched 0.7.5 release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.['websocket-driver'], undefined);
+  assert.equal(packageJson.devDependencies?.['websocket-driver'], undefined);
+  assert.equal(packageJson.optionalDependencies?.['websocket-driver'], undefined);
+  assert.equal(packageJson.peerDependencies?.['websocket-driver'], undefined);
+  assert.equal(packageJson.overrides?.['websocket-driver'], undefined);
+
+  // Both transitive parents keep their existing ranges, which already admit 0.7.5.
+  assert.equal(
+    lock.packages['node_modules/faye-websocket']?.dependencies?.['websocket-driver'],
+    '>=0.5.1',
+  );
+  assert.equal(
+    lock.packages['node_modules/sockjs']?.dependencies?.['websocket-driver'],
+    '^0.7.4',
+  );
+
+  // Exactly one locked copy, hoisted at the root, satisfying both parents.
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/websocket-driver'
+    || packagePath.endsWith('/node_modules/websocket-driver')
+  ));
+  assert.deepEqual(lockedPaths, ['node_modules/websocket-driver']);
+
+  const record = lock.packages['node_modules/websocket-driver'];
+  assert.deepEqual(
+    {
+      version: record.version,
+      resolved: record.resolved,
+      integrity: record.integrity,
+    },
+    EXPECTED_WEBSOCKET_DRIVER,
+    'websocket-driver must retain its reviewed public-registry identity',
+  );
+  // The finding is in the production tree; the node must not be reclassified development-only.
+  assert.notEqual(record.dev, true);
+  // The bump changes only version/resolved/integrity; declared child ranges are untouched.
+  assert.deepEqual(record.dependencies, EXPECTED_WEBSOCKET_DRIVER_DEPENDENCIES);
+
+  const installed = readJson(
+    path.join(REPOSITORY, 'node_modules/websocket-driver/package.json'),
+  );
+  assert.equal(installed.version, EXPECTED_WEBSOCKET_DRIVER.version);
+});
+
+test('fails a draft-75 length header that exceeds the configured maxLength closed', () => {
+  const websocket = require(path.join(REPOSITORY, 'node_modules/websocket-driver'));
+
+  // A hixie-75 upgrade carries none of the newer key/version headers.
+  const request = {
+    method: 'GET',
+    url: '/socket',
+    headers: {
+      host: 'example.com',
+      origin: 'http://example.com',
+      connection: 'Upgrade',
+      upgrade: 'WebSocket',
+    },
+  };
+  const driver = websocket.http(request, { maxLength: 1 });
+
+  const events = [];
+  driver.on('open', () => events.push('open'));
+  driver.on('close', () => events.push('close'));
+  driver.on('error', () => events.push('error'));
+  const handshake = [];
+  driver.io.on('data', (chunk) => handshake.push(chunk));
+
+  // Prove a successful draft-75 handshake / open state before the hostile input.
+  assert.equal(driver.version, 'hixie-75');
+  assert.equal(driver.readyState, 0);
+  driver.start();
+  assert.equal(driver.readyState, 1);
+  assert.ok(events.includes('open'));
+  assert.match(
+    Buffer.concat(handshake).toString('utf8'),
+    /HTTP\/1\.1 101 Web Socket Protocol Handshake/,
+  );
+
+  // Length-delimited binary frame: 0x80 marks a length-prefixed frame and 0x05
+  // declares a five-byte payload, five times the configured one-byte maxLength.
+  driver.parse(Buffer.from([0x80, 0x05]));
+
+  // Patched 0.7.5 fails closed at the bound; vulnerable 0.7.4 stays open and skips bytes.
+  assert.equal(
+    driver.readyState,
+    3,
+    'the driver must close when a declared length exceeds maxLength',
+  );
+  assert.ok(events.includes('close'), 'a close event must fire at the length bound');
 });
