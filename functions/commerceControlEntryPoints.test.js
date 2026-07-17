@@ -98,6 +98,7 @@ jest.mock('firebase-admin', () => {
     },
     __seed: (path, data) => store.set(path, { ...data }),
     __get: (path) => store.get(path),
+    __getAutoIdCount: () => autoId,
   };
 });
 
@@ -147,6 +148,70 @@ function registrationInput(amountCents) {
     priceTier: amountCents === 0 ? 'comp' : 'nonMember',
   };
 }
+
+function lateRegistrationCase(amountCents) {
+  return {
+    registration: registrationInput(amountCents),
+    assertUninspected: () => {},
+  };
+}
+
+const INVALID_LATE_REGISTRATION_AMOUNTS = [
+  ['missing', () => {
+    const registration = registrationInput(0);
+    delete registration.amountCents;
+    return { registration, assertUninspected: () => {} };
+  }],
+  ['undefined', () => lateRegistrationCase(undefined)],
+  ['null', () => lateRegistrationCase(null)],
+  ['false', () => lateRegistrationCase(false)],
+  ['empty string', () => lateRegistrationCase('')],
+  ['whitespace string', () => lateRegistrationCase('   ')],
+  ['nonnumeric string', () => lateRegistrationCase('fifty')],
+  ['numeric string', () => lateRegistrationCase('50')],
+  ['negative zero', () => lateRegistrationCase(-0)],
+  ['negative integer', () => lateRegistrationCase(-1)],
+  ['one cent', () => lateRegistrationCase(1)],
+  ['forty-nine cents', () => lateRegistrationCase(49)],
+  ['fraction', () => lateRegistrationCase(50.5)],
+  ['NaN', () => lateRegistrationCase(Number.NaN)],
+  ['positive infinity', () => lateRegistrationCase(Number.POSITIVE_INFINITY)],
+  ['negative infinity', () => lateRegistrationCase(Number.NEGATIVE_INFINITY)],
+  ['over the eight-digit ceiling', () => lateRegistrationCase(100_000_000)],
+  ['unsafe integer', () => lateRegistrationCase(Number.MAX_SAFE_INTEGER + 1)],
+  ['BigInt', () => lateRegistrationCase(BigInt(50))],
+  ['boxed number', () => lateRegistrationCase(Object(50))],
+  ['array', () => lateRegistrationCase([50])],
+  ['plain record', () => lateRegistrationCase({ cents: 50 })],
+  ['accessor-backed amount field', () => {
+    const amountGetter = jest.fn(() => 50);
+    const registration = registrationInput(0);
+    Object.defineProperty(registration, 'amountCents', {
+      enumerable: true,
+      get: amountGetter,
+    });
+    return {
+      registration,
+      assertUninspected: () => expect(amountGetter).not.toHaveBeenCalled(),
+    };
+  }],
+  ['coercible amount object', () => {
+    const coercionHook = jest.fn(() => 50);
+    const amount = { [Symbol.toPrimitive]: coercionHook };
+    return {
+      registration: registrationInput(amount),
+      assertUninspected: () => expect(coercionHook).not.toHaveBeenCalled(),
+    };
+  }],
+  ['proxied amount object', () => {
+    const getTrap = jest.fn((target, key, receiver) => Reflect.get(target, key, receiver));
+    const amount = new Proxy({ valueOf: () => 50 }, { get: getTrap });
+    return {
+      registration: registrationInput(amount),
+      assertUninspected: () => expect(getTrap).not.toHaveBeenCalled(),
+    };
+  }],
+];
 
 const REFUND_ENTRY_POINTS = [
   {
@@ -413,6 +478,7 @@ describe('commerce admission at admin entry points', () => {
     ['mark_comp', registrationInput(0)],
     ['add_late_registration', registrationInput(0)],
     ['add_late_registration', registrationInput(2500)],
+    ['add_late_registration', registrationInput(undefined)],
   ])('blocks admin %s before registration or Stripe work', async (action, registration) => {
     admin.__seed('systemConfig/commerce', control({ newCommerceEnabled: false }));
     admin.__seed('events/race-1', {
@@ -470,6 +536,130 @@ describe('commerce admission at admin entry points', () => {
     expect(mockProductCreate).toHaveBeenCalledTimes(expectedProviderCreates);
     expect(mockPriceCreate).toHaveBeenCalledTimes(expectedProviderCreates);
     expect(mockPaymentLinkCreate).toHaveBeenCalledTimes(expectedProviderCreates);
+  });
+
+  test.each(INVALID_LATE_REGISTRATION_AMOUNTS)(
+    'rejects %s late-registration amount before allocation, writes, or provider methods',
+    async (_caseName, buildCase) => {
+      admin.__seed('systemConfig/commerce', control());
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Race',
+        slug: 'synthetic-race',
+        stripeProductId: 'prod_synthetic',
+      });
+      const { registration, assertUninspected } = buildCase();
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn'].map((method) => (
+        jest.spyOn(console, method).mockImplementation(() => {})
+      ));
+      const randomBytesSpy = jest.spyOn(require('crypto'), 'randomBytes')
+        .mockReturnValue(Buffer.alloc(24, 1));
+
+      try {
+        let rejectedError;
+        try {
+          await adminRegistrationAction({
+            eventId: 'race-1',
+            action: 'add_late_registration',
+            payload: { registration },
+          }, adminContext());
+        } catch (error) {
+          rejectedError = error;
+        }
+
+        assertUninspected();
+        expect(rejectedError).toMatchObject({
+          code: 'invalid-argument',
+          message: 'Invalid late registration amount',
+        });
+        expect(admin.__getAutoIdCount()).toBe(0);
+        expect(randomBytesSpy).not.toHaveBeenCalled();
+        expect(mockBusinessWrite).not.toHaveBeenCalled();
+        expect(mockProductCreate).not.toHaveBeenCalled();
+        expect(mockPriceCreate).not.toHaveBeenCalled();
+        expect(mockPaymentLinkCreate).not.toHaveBeenCalled();
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      } finally {
+        randomBytesSpy.mockRestore();
+        consoleSpies.forEach((spy) => spy.mockRestore());
+      }
+    },
+  );
+
+  test.each([
+    ['free zero', 0, null],
+    ['Stripe minimum', 50, 'https://buy.stripe.test/synthetic'],
+    ['eight-digit ceiling', 99_999_999, 'https://buy.stripe.test/synthetic'],
+  ])('preserves exact valid late-registration %s amount', async (
+    _caseName,
+    amountCents,
+    expectedPaymentLink,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      stripeProductId: 'prod_synthetic',
+      waiverVersion: 'synthetic-v1',
+    });
+
+    await expect(adminRegistrationAction({
+      eventId: 'race-1',
+      action: 'add_late_registration',
+      payload: { registration: registrationInput(amountCents) },
+    }, adminContext())).resolves.toEqual({
+      ok: true,
+      registrationId: 'auto-1',
+      paymentLink: expectedPaymentLink,
+    });
+
+    expect(admin.__getAutoIdCount()).toBe(1);
+    expect(admin.__get('events/race-1/registrations/auto-1')).toMatchObject({
+      eventId: 'race-1',
+      amountCents,
+      status: amountCents === 0 ? 'paid' : 'pending',
+    });
+    expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
+    expect(mockBusinessWrite).toHaveBeenCalledWith(
+      'set',
+      'events/race-1/registrations/auto-1',
+      expect.objectContaining({
+        eventId: 'race-1',
+        amountCents,
+        priceTier: amountCents === 0 ? 'comp' : 'nonMember',
+        stripePaymentLinkId: amountCents === 0 ? null : 'plink_synthetic',
+      }),
+    );
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockPriceCreate).toHaveBeenCalledTimes(amountCents === 0 ? 0 : 1);
+    expect(mockPaymentLinkCreate).toHaveBeenCalledTimes(amountCents === 0 ? 0 : 1);
+    if (amountCents !== 0) {
+      const metadata = {
+        eventId: 'race-1',
+        registrationId: 'auto-1',
+        priceTier: 'nonMember',
+        late_add: 'true',
+      };
+      expect(mockPriceCreate).toHaveBeenCalledWith({
+        unit_amount: amountCents,
+        currency: 'usd',
+        product: 'prod_synthetic',
+        metadata,
+      });
+      expect(mockPaymentLinkCreate).toHaveBeenCalledWith({
+        line_items: [{ price: 'price_synthetic', quantity: 1 }],
+        metadata,
+        after_completion: {
+          type: 'redirect',
+          redirect: {
+            url: expect.stringMatching(
+              /^https:\/\/runmprc\.test\/register\/success\?reg=auto-1&token=[A-Za-z0-9_-]{32}$/,
+            ),
+          },
+        },
+      });
+    }
   });
 
   test.each([
