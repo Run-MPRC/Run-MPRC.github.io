@@ -566,6 +566,28 @@ This contract does not verify a person, payment, plan, evidence item, refund, di
 
 The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.0b Immutable membership term/evidence receipt ledger — SOURCE ONLY, UNUSED
+
+MEMBERS-DUES-001A [#345](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/345) defines one unused pure contract that preserves the immutable renewal/evidence history the §8.0a authority cannot hold by itself. The §8.0a reducer keeps only one replaceable current-term snapshot, so each recorded term decision overwrites the previous one. This contract records each term decision as an ordered, append-only receipt and projects any receipt back into the exact `record_term_decision` command the shipped authority already accepts, without duplicating that reducer.
+
+```mermaid
+flowchart LR
+    E["Empty ledger (receiptRevision 0)"] --> A["Append receipt: termRevision equals one-based position"]
+    A -- "Reused command/receipt id, skipped or repeated revision, reversed range" --> X["Fails closed"]
+    A -- "Exact re-append of the tail command" --> R["Read-only; returns the same ledger"]
+    A --> H["Ordered append-only history; earlier receipts never change"]
+    H --> P["Project one receipt with an expected revision"]
+    P --> C["Exact record_term_decision command accepted by the 8.0a authority"]
+```
+
+Text alternative: a ledger starts empty and grows only by appending one term/evidence receipt at a time, where each receipt's term revision equals its one-based position, command and receipt identifiers are unique across the whole history, and earlier receipts are never mutated. An exact re-append of the most recent command is read-only. A reused identifier, a skipped or repeated revision, a reversed time range, an unsupported version/state, an extra field, an accessor, a proxy, or a tampered snapshot fails through one fixed error. Any receipt projects into the exact versioned `record_term_decision` command that the §8.0a authority accepts, so the two contracts compose without a shared type.
+
+The CommonJS module creates an empty versioned ledger, creates one frozen receipt from an opaque evidence bundle (receipt id, command id, term revision/state/id, explicit half-open start/end, and opaque plan/evidence/policy references), appends receipts as an immutable ordered history with monotonic position-bound revisions and global identifier uniqueness, treats an exact tail re-append as read-only, and projects a receipt into the frozen `record_term_decision` command input. It accepts exact plain objects, bounded server-minted opaque identifiers, and safe-integer time values only.
+
+This contract does not verify a person, payment, plan, evidence item, refund, dispute, or policy decision, and it grants no entitlement by itself. It does not choose calendar-year versus anniversary terms, grace, prices, currency, plan eligibility, retention, tax, or legacy disposition; every reference is an opaque caller-supplied token and only technical bounds — a positive-duration range and a monotonic position-bound revision — are enforced. Durable persistence and replay, Firestore schema/Rules, custom claims and token refresh/revocation, cross-record uniqueness, runtime authorization and adoption, migration, and deployment are later children behind #114 and the protected release work.
+
+The module is imported by no runtime or Functions index and updates no officer procedure because it makes nothing officer-observable. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no current profile/role/claim. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.
