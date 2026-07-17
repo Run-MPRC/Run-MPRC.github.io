@@ -538,6 +538,43 @@ function renderActualStravaSection() {
   return render(<ActualStravaSection uid={USER.uid} />);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function stravaConnectionFor(label: string, athleteId: number) {
+  return {
+    ...STRAVA_CONNECTION,
+    athleteId,
+    firstName: label,
+    lastName: 'Athlete',
+    username: `${label.toLowerCase()}-athlete`,
+  };
+}
+
+function stravaStatsFor(label: string, athleteId: number) {
+  return {
+    ...STRAVA_STATS,
+    athlete: {
+      ...STRAVA_STATS.athlete,
+      id: athleteId,
+      firstName: label,
+      username: `${label.toLowerCase()}-athlete`,
+    },
+    recentActivities: [{
+      ...STRAVA_STATS.recentActivities[0],
+      id: athleteId * 10,
+      name: `${label} Morning Run`,
+    }],
+  };
+}
+
 describe('Strava activity browser failure boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -629,6 +666,514 @@ describe('Strava activity browser failure boundary', () => {
     expect(document.body).not.toHaveTextContent('message-getter-canary');
     expect(screen.queryByText('Loading recent activity...')).not.toBeInTheDocument();
     expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+});
+
+const STRAVA_CONNECTION_FAILURE = 'We could not check your Strava connection right now. Please refresh this page and try again.';
+
+describe('Strava current-account lifecycle privacy boundary', () => {
+  const userA = 'synthetic-user-a';
+  const userB = 'synthetic-user-b';
+  const connectionA = stravaConnectionFor('Alpha', 111111);
+  const connectionB = stravaConnectionFor('Bravo', 222222);
+  const statsA = stravaStatsFor('Alpha', 111111);
+  const statsB = stravaStatsFor('Bravo', 222222);
+  let appA: { name: string };
+  let appB: { name: string };
+  let firestoreA: { name: string };
+  let firestoreB: { name: string };
+  let locator: {
+    current: {
+      services: {
+        firebaseResources: {
+          app: { name: string };
+          firestore: { name: string };
+        };
+      };
+      isReady: boolean;
+    };
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    appA = { name: 'synthetic-app-a' };
+    appB = { name: 'synthetic-app-b' };
+    firestoreA = { name: 'synthetic-firestore-a' };
+    firestoreB = { name: 'synthetic-firestore-b' };
+    locator = {
+      current: {
+        services: { firebaseResources: { app: appA, firestore: firestoreA } },
+        isReady: true,
+      },
+    };
+    (useServiceLocator as jest.Mock).mockImplementation(() => locator.current);
+    (stravaDisconnect as jest.Mock).mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    ['UID', ({ rerender }: { rerender: (node: React.ReactElement) => void }) => {
+      rerender(<ActualStravaSection uid={userB} />);
+    }],
+    ['services', ({ rerender }: { rerender: (node: React.ReactElement) => void }) => {
+      locator.current = {
+        ...locator.current,
+        services: { ...locator.current.services },
+      };
+      rerender(<ActualStravaSection uid={userA} />);
+    }],
+    ['Firebase resources', ({ rerender }: { rerender: (node: React.ReactElement) => void }) => {
+      locator.current.services.firebaseResources = {
+        app: appA,
+        firestore: firestoreA,
+      };
+      rerender(<ActualStravaSection uid={userA} />);
+    }],
+    ['Firestore', ({ rerender }: { rerender: (node: React.ReactElement) => void }) => {
+      locator.current.services.firebaseResources.firestore = firestoreB;
+      rerender(<ActualStravaSection uid={userA} />);
+    }],
+    ['Firebase app', ({ rerender }: { rerender: (node: React.ReactElement) => void }) => {
+      locator.current.services.firebaseResources.app = appB;
+      rerender(<ActualStravaSection uid={userA} />);
+    }],
+    ['readiness', ({ rerender }: { rerender: (node: React.ReactElement) => void }) => {
+      locator.current.isReady = false;
+      rerender(<ActualStravaSection uid={userA} />);
+    }],
+  ])('hides prior account data in the first commit after a %s change', async (
+    _case,
+    changeContext,
+  ) => {
+    const commits: string[] = [];
+    (getStravaConnection as jest.Mock)
+      .mockResolvedValueOnce(connectionA)
+      .mockResolvedValue(connectionB);
+    (stravaFetchStats as jest.Mock)
+      .mockResolvedValueOnce(statsA)
+      .mockResolvedValue(statsB);
+    const onRender = () => {
+      commits.push(document.body.textContent || '');
+    };
+    const view = render(
+      <React.Profiler id="strava-attempt" onRender={onRender}>
+        <ActualStravaSection uid={userA} />
+      </React.Profiler>,
+    );
+    expect(await screen.findByText('Alpha Morning Run')).toBeInTheDocument();
+
+    commits.length = 0;
+    changeContext({
+      rerender: (node: React.ReactElement) => view.rerender(
+        <React.Profiler id="strava-attempt" onRender={onRender}>
+          {node}
+        </React.Profiler>,
+      ),
+    });
+
+    expect(commits[0]).not.toMatch(/Alpha Athlete|Alpha Morning Run/);
+    expect(commits[0]).not.toContain('Connect Strava');
+    if (_case !== 'readiness') {
+      expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+    }
+  });
+
+  test('keeps a rejected current connection unavailable without revealing prior account data', async () => {
+    const nextConnection = deferred<null>();
+    const messageGetter = jest.fn(() => {
+      throw new Error('connection-message-getter-canary');
+    });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+    (getStravaConnection as jest.Mock)
+      .mockResolvedValueOnce(connectionA)
+      .mockReturnValueOnce(nextConnection.promise);
+    (stravaFetchStats as jest.Mock).mockResolvedValueOnce(statsA);
+    const view = render(<ActualStravaSection uid={userA} />);
+    expect(await screen.findByText('Alpha Morning Run')).toBeInTheDocument();
+
+    view.rerender(<ActualStravaSection uid={userB} />);
+    expect(document.body).not.toHaveTextContent(/Alpha Athlete|Alpha Morning Run/);
+    await act(async () => nextConnection.reject(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    ));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CONNECTION_FAILURE);
+    expect(screen.queryByRole('button', { name: 'Connect Strava' })).not.toBeInTheDocument();
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores an obsolete connection success after a different account becomes current', async () => {
+    const firstConnection = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const firstNameGetter = jest.fn(() => {
+      throw new Error('obsolete-connection-getter-canary');
+    });
+    const hostileConnection = Object.defineProperty(
+      { ...connectionA },
+      'firstName',
+      { configurable: true, get: firstNameGetter },
+    ) as ReturnType<typeof stravaConnectionFor>;
+    (getStravaConnection as jest.Mock).mockImplementation(
+      (_firestore: unknown, uid: string) => (uid === userA
+        ? firstConnection.promise
+        : Promise.resolve(connectionB)),
+    );
+    (stravaFetchStats as jest.Mock).mockResolvedValue(statsB);
+    const view = render(<ActualStravaSection uid={userA} />);
+
+    view.rerender(<ActualStravaSection uid={userB} />);
+    expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+    await act(async () => firstConnection.resolve(hostileConnection));
+
+    expect(document.body).toHaveTextContent('Bravo Athlete');
+    expect(document.body).toHaveTextContent('Bravo Morning Run');
+    expect(document.body).not.toHaveTextContent(/Alpha Athlete|Alpha Morning Run/);
+    expect(firstNameGetter).not.toHaveBeenCalled();
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores an obsolete connection rejection while the current account is loading', async () => {
+    const firstConnection = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const currentConnection = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const messageGetter = jest.fn(() => {
+      throw new Error('obsolete-connection-rejection-canary');
+    });
+    (getStravaConnection as jest.Mock).mockImplementation(
+      (_firestore: unknown, uid: string) => (uid === userA
+        ? firstConnection.promise
+        : currentConnection.promise),
+    );
+    (stravaFetchStats as jest.Mock).mockResolvedValue(statsB);
+    const view = render(<ActualStravaSection uid={userA} />);
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledTimes(1));
+
+    view.rerender(<ActualStravaSection uid={userB} />);
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledTimes(2));
+    await act(async () => firstConnection.reject(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    ));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect Strava' })).not.toBeInTheDocument();
+    expect(messageGetter).not.toHaveBeenCalled();
+    await act(async () => currentConnection.resolve(connectionB));
+    expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+  });
+
+  test('ignores obsolete activity success and failure after a different account becomes current', async () => {
+    const firstStats = deferred<ReturnType<typeof stravaStatsFor>>();
+    const currentStats = deferred<ReturnType<typeof stravaStatsFor>>();
+    (getStravaConnection as jest.Mock).mockImplementation(
+      (_firestore: unknown, uid: string) => Promise.resolve(
+        uid === userA ? connectionA : connectionB,
+      ),
+    );
+    (stravaFetchStats as jest.Mock).mockImplementation(
+      (activeApp: unknown) => (activeApp === appA ? firstStats.promise : currentStats.promise),
+    );
+    const view = render(<ActualStravaSection uid={userA} />);
+    await waitFor(() => expect(stravaFetchStats).toHaveBeenCalledWith(appA));
+
+    locator.current = {
+      services: { firebaseResources: { app: appB, firestore: firestoreB } },
+      isReady: true,
+    };
+    view.rerender(<ActualStravaSection uid={userB} />);
+    await waitFor(() => expect(stravaFetchStats).toHaveBeenCalledWith(appB));
+    expect(screen.getByText('Loading recent activity...')).toBeInTheDocument();
+
+    await act(async () => firstStats.resolve(statsA));
+    expect(document.body).not.toHaveTextContent('Alpha Morning Run');
+    expect(screen.getByText('Loading recent activity...')).toBeInTheDocument();
+
+    await act(async () => currentStats.resolve(statsB));
+    expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('Alpha Morning Run');
+  });
+
+  test('keeps an obsolete activity rejection out of the current loading account', async () => {
+    const firstStats = deferred<ReturnType<typeof stravaStatsFor>>();
+    const currentStats = deferred<ReturnType<typeof stravaStatsFor>>();
+    const messageGetter = jest.fn(() => {
+      throw new Error('obsolete-stats-message-getter-canary');
+    });
+    (getStravaConnection as jest.Mock).mockImplementation(
+      (_firestore: unknown, uid: string) => Promise.resolve(
+        uid === userA ? connectionA : connectionB,
+      ),
+    );
+    (stravaFetchStats as jest.Mock).mockImplementation(
+      (activeApp: unknown) => (activeApp === appA ? firstStats.promise : currentStats.promise),
+    );
+    const view = render(<ActualStravaSection uid={userA} />);
+    await waitFor(() => expect(stravaFetchStats).toHaveBeenCalledWith(appA));
+
+    locator.current = {
+      services: { firebaseResources: { app: appB, firestore: firestoreB } },
+      isReady: true,
+    };
+    view.rerender(<ActualStravaSection uid={userB} />);
+    await waitFor(() => expect(stravaFetchStats).toHaveBeenCalledWith(appB));
+    await act(async () => firstStats.reject(
+      Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }),
+    ));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Loading recent activity...')).toBeInTheDocument();
+    expect(messageGetter).not.toHaveBeenCalled();
+    await act(async () => currentStats.resolve(statsB));
+    expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+  });
+
+  test('uses a new opaque generation when the account changes A to B to A', async () => {
+    const firstA = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const middleB = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const firstAGetter = jest.fn(() => {
+      throw new Error('first-a-generation-canary');
+    });
+    const middleBGetter = jest.fn(() => {
+      throw new Error('middle-b-generation-canary');
+    });
+    const currentConnection = stravaConnectionFor('Current Alpha', 333333);
+    const currentStats = stravaStatsFor('Current Alpha', 333333);
+    (getStravaConnection as jest.Mock)
+      .mockReturnValueOnce(firstA.promise)
+      .mockReturnValueOnce(middleB.promise)
+      .mockResolvedValueOnce(currentConnection);
+    (stravaFetchStats as jest.Mock).mockResolvedValue(currentStats);
+    const view = render(<ActualStravaSection uid={userA} />);
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledTimes(1));
+
+    view.rerender(<ActualStravaSection uid={userB} />);
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledTimes(2));
+    view.rerender(<ActualStravaSection uid={userA} />);
+    expect(await screen.findByText('Current Alpha Morning Run')).toBeInTheDocument();
+    expect(getStravaConnection).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      firstA.resolve(Object.defineProperty(
+        { ...connectionA },
+        'firstName',
+        { configurable: true, get: firstAGetter },
+      ) as ReturnType<typeof stravaConnectionFor>);
+      middleB.resolve(Object.defineProperty(
+        { ...connectionB },
+        'firstName',
+        { configurable: true, get: middleBGetter },
+      ) as ReturnType<typeof stravaConnectionFor>);
+    });
+
+    expect(firstAGetter).not.toHaveBeenCalled();
+    expect(middleBGetter).not.toHaveBeenCalled();
+    expect(document.body).toHaveTextContent('Current Alpha Athlete');
+    expect(document.body).toHaveTextContent('Current Alpha Morning Run');
+    expect(document.body).not.toHaveTextContent('Bravo Athlete');
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the first StrictMode effect replay inert after the current replay resolves', async () => {
+    const firstReplay = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const currentReplay = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const firstNameGetter = jest.fn(() => {
+      throw new Error('strict-replay-getter-canary');
+    });
+    (getStravaConnection as jest.Mock)
+      .mockReturnValueOnce(firstReplay.promise)
+      .mockReturnValueOnce(currentReplay.promise);
+    (stravaFetchStats as jest.Mock).mockResolvedValue(statsA);
+
+    render(
+      <React.StrictMode>
+        <ActualStravaSection uid={userA} />
+      </React.StrictMode>,
+    );
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledTimes(2));
+    await act(async () => currentReplay.resolve(connectionA));
+    expect(await screen.findByText('Alpha Morning Run')).toBeInTheDocument();
+    await act(async () => firstReplay.resolve(Object.defineProperty(
+      { ...connectionB },
+      'firstName',
+      { configurable: true, get: firstNameGetter },
+    ) as ReturnType<typeof stravaConnectionFor>));
+
+    expect(firstNameGetter).not.toHaveBeenCalled();
+    expect(document.body).toHaveTextContent('Alpha Athlete');
+    expect(document.body).not.toHaveTextContent('Bravo Athlete');
+    expect(stravaFetchStats).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not let an obsolete disconnect clear the current account', async () => {
+    const disconnect = deferred<{ ok: true }>();
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (getStravaConnection as jest.Mock).mockImplementation(
+      (_firestore: unknown, uid: string) => Promise.resolve(
+        uid === userA ? connectionA : connectionB,
+      ),
+    );
+    (stravaFetchStats as jest.Mock).mockImplementation(
+      (activeApp: unknown) => Promise.resolve(activeApp === appA ? statsA : statsB),
+    );
+    (stravaDisconnect as jest.Mock).mockReturnValueOnce(disconnect.promise);
+    const view = render(<ActualStravaSection uid={userA} />);
+    expect(await screen.findByText('Alpha Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    locator.current = {
+      services: { firebaseResources: { app: appB, firestore: firestoreB } },
+      isReady: true,
+    };
+    view.rerender(<ActualStravaSection uid={userB} />);
+    expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+    await act(async () => disconnect.resolve({ ok: true }));
+
+    expect(document.body).toHaveTextContent('Bravo Athlete');
+    expect(document.body).toHaveTextContent('Bravo Morning Run');
+    expect(screen.queryByRole('button', { name: 'Connect Strava' })).not.toBeInTheDocument();
+  });
+
+  test('does not let an obsolete disconnect rejection warn the current account', async () => {
+    const disconnect = deferred<{ ok: true }>();
+    const messageGetter = jest.fn(() => {
+      throw new Error('obsolete-disconnect-rejection-canary');
+    });
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (getStravaConnection as jest.Mock).mockImplementation(
+      (_firestore: unknown, uid: string) => Promise.resolve(
+        uid === userA ? connectionA : connectionB,
+      ),
+    );
+    (stravaFetchStats as jest.Mock).mockImplementation(
+      (activeApp: unknown) => Promise.resolve(activeApp === appA ? statsA : statsB),
+    );
+    (stravaDisconnect as jest.Mock).mockReturnValueOnce(disconnect.promise);
+    const view = render(<ActualStravaSection uid={userA} />);
+    expect(await screen.findByText('Alpha Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    locator.current = {
+      services: { firebaseResources: { app: appB, firestore: firestoreB } },
+      isReady: true,
+    };
+    view.rerender(<ActualStravaSection uid={userB} />);
+    expect(await screen.findByText('Bravo Morning Run')).toBeInTheDocument();
+    await act(async () => disconnect.reject(Object.defineProperty({}, 'message', {
+      configurable: true,
+      get: messageGetter,
+    })));
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(document.body).toHaveTextContent('Bravo Athlete');
+    expect(document.body).toHaveTextContent('Bravo Morning Run');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('invalidates pending activity before a current disconnect success settles', async () => {
+    const pendingStats = deferred<ReturnType<typeof stravaStatsFor>>();
+    const recentActivitiesGetter = jest.fn(() => {
+      throw new Error('post-disconnect-activity-getter-canary');
+    });
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (getStravaConnection as jest.Mock).mockResolvedValue(connectionA);
+    (stravaFetchStats as jest.Mock).mockReturnValue(pendingStats.promise);
+    const view = render(<ActualStravaSection uid={userA} />);
+    expect(await screen.findByText('Loading recent activity...')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    expect(await screen.findByRole('button', { name: 'Connect Strava' })).toBeInTheDocument();
+    await act(async () => pendingStats.resolve(Object.defineProperty(
+      { ...statsA },
+      'recentActivities',
+      { configurable: true, get: recentActivitiesGetter },
+    ) as ReturnType<typeof stravaStatsFor>));
+
+    expect(recentActivitiesGetter).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Connect Strava' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Alpha Athlete|Alpha Morning Run/);
+    view.unmount();
+  });
+
+  test('makes pending connection and activity work inert after unmount', async () => {
+    const pendingConnection = deferred<ReturnType<typeof stravaConnectionFor>>();
+    const connectionGetter = jest.fn(() => {
+      throw new Error('unmounted-connection-getter-canary');
+    });
+    (getStravaConnection as jest.Mock).mockReturnValueOnce(pendingConnection.promise);
+    const connectionView = render(<ActualStravaSection uid={userA} />);
+    await waitFor(() => expect(getStravaConnection).toHaveBeenCalledTimes(1));
+    connectionView.unmount();
+    await act(async () => pendingConnection.resolve(Object.defineProperty(
+      { ...connectionA },
+      'firstName',
+      { configurable: true, get: connectionGetter },
+    ) as ReturnType<typeof stravaConnectionFor>));
+    expect(connectionGetter).not.toHaveBeenCalled();
+    expect(stravaFetchStats).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    const pendingStats = deferred<ReturnType<typeof stravaStatsFor>>();
+    const statsGetter = jest.fn(() => {
+      throw new Error('unmounted-stats-getter-canary');
+    });
+    (useServiceLocator as jest.Mock).mockImplementation(() => locator.current);
+    (getStravaConnection as jest.Mock).mockResolvedValueOnce(connectionA);
+    (stravaFetchStats as jest.Mock).mockReturnValueOnce(pendingStats.promise);
+    const statsView = render(<ActualStravaSection uid={userA} />);
+    await waitFor(() => expect(stravaFetchStats).toHaveBeenCalledTimes(1));
+    statsView.unmount();
+    await act(async () => pendingStats.resolve(Object.defineProperty(
+      { ...statsA },
+      'recentActivities',
+      { configurable: true, get: statsGetter },
+    ) as ReturnType<typeof stravaStatsFor>));
+    expect(statsGetter).not.toHaveBeenCalled();
+  });
+
+  test('makes a pending disconnect rejection inert after unmount', async () => {
+    const disconnect = deferred<{ ok: true }>();
+    const messageGetter = jest.fn(() => {
+      throw new Error('unmounted-disconnect-getter-canary');
+    });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (getStravaConnection as jest.Mock).mockResolvedValue(connectionA);
+    (stravaFetchStats as jest.Mock).mockResolvedValue(statsA);
+    (stravaDisconnect as jest.Mock).mockReturnValueOnce(disconnect.promise);
+    const view = render(<ActualStravaSection uid={userA} />);
+    expect(await screen.findByText('Alpha Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    view.unmount();
+
+    await act(async () => disconnect.reject(Object.defineProperty({}, 'message', {
+      configurable: true,
+      get: messageGetter,
+    })));
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('shows Connect only after the current account lookup confirms no connection', async () => {
+    (getStravaConnection as jest.Mock).mockResolvedValue(null);
+
+    render(<ActualStravaSection uid={userA} />);
+
+    expect(await screen.findByRole('button', { name: 'Connect Strava' })).toBeInTheDocument();
+    expect(stravaFetchStats).not.toHaveBeenCalled();
   });
 });
 

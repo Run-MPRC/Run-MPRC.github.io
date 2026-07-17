@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 7
   },
-  "fingerprint": "sha256:0662d9aa158d0f3be307fc479f869da954905e214bf3f196172c93b85af7a58b",
+  "fingerprint": "sha256:f13e11e28a21ee078931352287e4074e8e5e7d5e9b39c76b3f1337df207e76ea",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -195,9 +195,9 @@
     },
     {
       "file": "src/pages/account/StravaSection.tsx",
-      "line": 187,
+      "line": 305,
       "column": 11,
-      "endLine": 187,
+      "endLine": 305,
       "endColumn": 42,
       "severity": 2,
       "ruleId": "react/jsx-no-bind",
@@ -208,9 +208,9 @@
     },
     {
       "file": "src/pages/account/StravaSection.tsx",
-      "line": 191,
+      "line": 310,
       "column": 23,
-      "endLine": 191,
+      "endLine": 310,
       "endColumn": 48,
       "severity": 2,
       "ruleId": "react/jsx-no-bind",
