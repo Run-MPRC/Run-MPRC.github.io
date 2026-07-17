@@ -535,6 +535,73 @@ describe('Checkout promotion policy', () => {
     }
   });
 
+  test('rejects an explicit early-bird request with a malformed cutoff before later work', async () => {
+    const malformedCutoff = '2999-01-01T00:00:00.000Z';
+    const eventBefore = {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      status: 'open',
+      visibility: 'public',
+      capacity: 10,
+      pricing: {
+        earlyBirdCents: 2_000,
+        earlyBirdUntil: malformedCutoff,
+      },
+      waiverVersion: 'synthetic-v1',
+    };
+    admin.__seed('events/race-1', eventBefore);
+    mockProductCreate.mockResolvedValueOnce({ id: 'prod_should_not_exist' });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+    try {
+      const outcome = await createCheckoutSession(validRaceRequest({
+        priceTier: 'earlyBird',
+      }), { auth: null, rawRequest: {} }).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+
+      expect(outcome.error).toMatchObject({
+        code: 'failed-precondition',
+        message: 'Early-bird pricing is no longer available',
+      });
+      const publicError = [
+        outcome.error.code,
+        outcome.error.message,
+        outcome.error.stack,
+      ].join('\n');
+      expect(publicError).not.toContain(malformedCutoff);
+      expect(publicError).not.toContain('earlyBirdUntil');
+
+      expect(mockFirestoreAccess).toHaveBeenCalledTimes(1);
+      expect(mockRateLimit).toHaveBeenCalledTimes(2);
+      expect(mockCountActiveRegistrations).toHaveBeenCalledTimes(1);
+      expect(mockCountActiveRegistrations).toHaveBeenCalledWith('race-1');
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(1);
+      const lastRateLimitCall = Math.max(...mockRateLimit.mock.invocationCallOrder);
+      expect(lastRateLimitCall).toBeLessThan(
+        mockCountActiveRegistrations.mock.invocationCallOrder[0],
+      );
+      expect(mockCountActiveRegistrations.mock.invocationCallOrder[0]).toBeLessThan(
+        mockResolveCallerRole.mock.invocationCallOrder[0],
+      );
+
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+      expect(mockFirestoreWrite).not.toHaveBeenCalled();
+      expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockProductCreate).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(admin.__get('events/race-1')).toEqual(eventBefore);
+    } finally {
+      consoleSpies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
   test('race checkout sends the exact disabled-adjustment payload', async () => {
     admin.__seed('events/race-1', {
       checkoutEnabled: true,

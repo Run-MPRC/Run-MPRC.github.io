@@ -126,13 +126,28 @@ function pickPriceCents(event, priceTier) {
   return priceCents;
 }
 
-function isEarlyBirdActive(event, now = Date.now()) {
-  const pricing = event.pricing || {};
-  if (!pricing.earlyBirdCents || !pricing.earlyBirdUntil) return false;
-  const untilMs = pricing.earlyBirdUntil.toMillis
-    ? pricing.earlyBirdUntil.toMillis()
-    : new Date(pricing.earlyBirdUntil).getTime();
-  return now < untilMs;
+function isEarlyBirdActive(event, now = dateNow()) {
+  if (!numberIsFinite(now) || !isPlainEventRecord(event)) return false;
+
+  const pricing = selectedOwnDataValue(event, 'pricing', true);
+  if (!isPlainEventRecord(pricing)) return false;
+
+  const earlyBirdCents = selectedOwnDataValue(
+    pricing,
+    'earlyBirdCents',
+    true,
+  );
+  if (
+    earlyBirdCents === MISSING_REGISTRATION_WINDOW_VALUE
+    || earlyBirdCents === INVALID_REGISTRATION_WINDOW_VALUE
+    || !earlyBirdCents
+  ) {
+    return false;
+  }
+
+  const cutoff = selectedOwnDataValue(pricing, 'earlyBirdUntil', true);
+  const cutoffMs = timestampToMillis(cutoff);
+  return cutoffMs !== INVALID_REGISTRATION_WINDOW_VALUE && now < cutoffMs;
 }
 
 function isProxyValue(value) {
