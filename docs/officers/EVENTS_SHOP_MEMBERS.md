@@ -494,6 +494,61 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Strava current-account privacy — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep one signed-in member from seeing a previous account's Strava name, activity, or totals when the website account or website service setup changes.
+
+**Approver:** membership lead plus platform/security and privacy owners.
+
+**Prerequisites:** issue [#323](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/323) must be merged for source review. Use only made-up accounts, made-up Strava activity, and made-up automated results from the website's data service and Strava. Calling the protection live also requires an approved website publication and an exact revision check on `runmprc.com`. This slice does not deploy Firebase, contact Strava, change provider settings, read or repair production records, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Current made-up website account and website service setup"] --> B["Start made-up connection check"]
+    B --> C{"Does the result still belong to this attempt?"}
+    C -- "No" --> D["Ignore it and show no earlier Strava data"]
+    C -- "Yes, connected" --> E["Show this account and start made-up activity check"]
+    C -- "Yes, no connection" --> F["Show Connect Strava"]
+    C -- "Yes, check failed" --> G["Show one unavailable message and no Connect button"]
+    E --> H{"Does activity still belong to this attempt?"}
+    H -- "No" --> D
+    H -- "Yes" --> I["Show only this account's activity"]
+```
+
+Text alternative: the page may show Strava identity or activity only when a made-up result still belongs to the current website account and current service check. An older result is ignored. A confirmed missing connection shows **Connect Strava**; an unknown connection shows one unavailable message instead.
+
+Officer review steps after the source merge:
+
+1. Keep this protection marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for issue #323, the reviewed pull request, the merged commit, and made-up automated website test results.
+3. Confirm every test uses made-up account names, made-up activity, and made-up service results.
+4. Confirm switching from made-up account A to B removes A's Strava name and activity in the first display for B.
+5. Confirm the same immediate clearing happens when the website service setup, data connection, or ready/not-ready state changes.
+6. Confirm a late result from A cannot replace B's name, activity, totals, loading state, or failure state.
+7. Confirm changing A to B to A starts a new A check; it must not restore the first A result.
+8. Confirm a failed current connection check shows `We could not check your Strava connection right now. Please refresh this page and try again.`
+9. Confirm that failure shows neither an earlier account nor **Connect Strava**. A failed check does not prove that no Strava connection exists.
+10. Confirm **Connect Strava** appears only after the current made-up check returns no connection.
+11. Confirm a late disconnect result from A cannot clear B or show an A warning in B.
+12. Confirm closing the page and the automated check that runs twice both leave late results unused.
+13. Confirm current made-up connection, activity, fixed activity failure, and fixed disconnect failure behavior still works.
+14. Confirm no made-up account, activity, outside-service detail, private web address, token-shaped value, or made-up private marker appears in the wrong page state or browser console.
+15. Record source, tests, merge, website publication, `runmprc.com`, Firebase, Strava/provider, production-data, and live-behavior evidence as separate results.
+
+**Expected result:** reviewed source gives each website account and website service setup a fresh Strava check. It immediately hides an earlier account, accepts only current connection, activity, and disconnect results, shows one fixed connection-unavailable alert for a failed current check, and shows **Connect Strava** only after a current check confirms no connection. Existing current-account success and fixed activity/disconnect failures remain available.
+
+**Stop conditions:** any real member or Strava account; a request for a name, activity, token, provider error, private account detail, or screenshot containing private values; a production Firebase or Strava call or change; earlier-account data in a later-account display; **Connect Strava** after an unknown check; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the protection is live.
+
+**Success proof:** for source completion, record issue #323, the exact reviewed pull request and merge, the ten intended old-source failures, green made-up account-switch tests, relevant full checks, and independent privacy and officer reviews. For live availability, separately record the approved website publication, the published revision, and a dated `runmprc.com` check that uses approved test accounts and no private Strava data. Record Firebase deployment, Strava/provider configuration, production-data access, migration, and repair as **not performed** for this website-page change.
+
+**Undo:** before publication, use one reviewed website-and-guide revert or safe replacement. After any later approved publication, use the protected website release path and verify the replacement revision on `runmprc.com`. Never undo by changing a member account, Strava connection, Firebase record, permission, or provider setting.
+
+**Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if one account's Strava identity or activity appeared for another account. Do not copy the name, activity, account detail, screenshot, token, or provider error into an issue, message, email, or AI tool.
+
+No full-system map changes are required because services, permissions, and publication paths are unchanged. The diagram above shows which account may appear and when an older result must stop.
+
 ## Public Shop catalog failure privacy — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**

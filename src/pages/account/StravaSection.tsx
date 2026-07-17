@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import {
   buildStravaAuthorizeUrl,
@@ -10,6 +10,21 @@ import {
   StravaConnection,
   StravaStatsResult,
 } from '../../services/strava/stravaService';
+
+const STRAVA_CONNECTION_FAILURE = 'We could not check your Strava connection right now. Please refresh this page and try again.';
+const STRAVA_ACTIVITY_FAILURE = 'We could not load your Strava activity right now. Please try again later.';
+const STRAVA_DISCONNECT_FAILURE = 'We could not confirm the Strava disconnect. Please refresh this page before trying again.';
+const objectIdentities = new WeakMap<object, number>();
+let nextObjectIdentity = 1;
+
+function getObjectIdentity(value: object): number {
+  const existing = objectIdentities.get(value);
+  if (existing !== undefined) return existing;
+  const identity = nextObjectIdentity;
+  nextObjectIdentity += 1;
+  objectIdentities.set(value, identity);
+  return identity;
+}
 
 function Connected({
   conn, stats, loading, error, onDisconnect, disconnecting,
@@ -122,29 +137,115 @@ function Disconnected({ onConnect }: { onConnect: () => void }) {
   );
 }
 
-function StravaSection({ uid }: { uid: string }) {
-  const { services } = useServiceLocator();
-  const [conn, setConn] = useState<StravaConnection | null>(null);
-  const [stats, setStats] = useState<StravaStatsResult | null>(null);
-  const [loadingConn, setLoadingConn] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
-  const [disconnecting, setDisconnecting] = useState(false);
-  useEffect(() => {
-    if (!services) return;
-    getStravaConnection(services.firebaseResources.firestore, uid)
-      .then((c) => { setConn(c); setLoadingConn(false); })
-      .catch(() => setLoadingConn(false));
-  }, [services, uid]);
+type StravaFirestore = Parameters<typeof getStravaConnection>[0];
+type StravaApp = Parameters<typeof stravaFetchStats>[0];
+
+type ConnectionState =
+  | { phase: 'loading' }
+  | { phase: 'unavailable' }
+  | { phase: 'disconnected' }
+  | { phase: 'connected'; connection: StravaConnection };
+
+type ActivityState =
+  | { phase: 'idle' }
+  | { phase: 'loading' }
+  | { phase: 'unavailable' }
+  | { phase: 'resolved'; stats: StravaStatsResult };
+
+type DisconnectState = 'idle' | 'pending' | 'failed';
+
+function StravaAttempt({
+  uid,
+  firestore,
+  app,
+}: {
+  uid: string;
+  firestore: StravaFirestore;
+  app: StravaApp;
+}) {
+  const [connectionState, setConnectionState] = useState<ConnectionState>({ phase: 'loading' });
+  const [activityState, setActivityState] = useState<ActivityState>({ phase: 'idle' });
+  const [disconnectState, setDisconnectState] = useState<DisconnectState>('idle');
+  const lifetimeRunRef = useRef<symbol | null>(null);
+  const connectionRunRef = useRef<symbol | null>(null);
+  const activityRunRef = useRef<symbol | null>(null);
+  const disconnectRunRef = useRef<symbol | null>(null);
 
   useEffect(() => {
-    if (!services || !conn) return;
-    setLoadingStats(true);
-    stravaFetchStats(services.firebaseResources.app)
-      .then((s) => { setStats(s); setLoadingStats(false); })
-      .catch(() => { setError('We could not load your Strava activity right now. Please try again later.'); setLoadingStats(false); });
-  }, [services, conn]);
+    const run = Symbol('strava-lifetime');
+    lifetimeRunRef.current = run;
+    return () => {
+      if (lifetimeRunRef.current === run) lifetimeRunRef.current = null;
+      connectionRunRef.current = null;
+      activityRunRef.current = null;
+      disconnectRunRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const run = Symbol('strava-connection');
+    connectionRunRef.current = run;
+
+    async function loadConnection() {
+      try {
+        const nextConnection = await getStravaConnection(firestore, uid);
+        if (!active || connectionRunRef.current !== run) return;
+        setConnectionState(nextConnection === null
+          ? { phase: 'disconnected' }
+          : { phase: 'connected', connection: nextConnection });
+      } catch {
+        if (!active || connectionRunRef.current !== run) return;
+        setConnectionState({ phase: 'unavailable' });
+      }
+    }
+
+    loadConnection().catch(() => {
+      if (!active || connectionRunRef.current !== run) return;
+      setConnectionState({ phase: 'unavailable' });
+    });
+
+    return () => {
+      active = false;
+      if (connectionRunRef.current === run) connectionRunRef.current = null;
+    };
+  }, [firestore, uid]);
+
+  useEffect(() => {
+    let active = true;
+    const run = Symbol('strava-activity');
+    activityRunRef.current = run;
+
+    if (connectionState.phase !== 'connected') {
+      setActivityState({ phase: 'idle' });
+      return () => {
+        active = false;
+        if (activityRunRef.current === run) activityRunRef.current = null;
+      };
+    }
+
+    setActivityState({ phase: 'loading' });
+    async function loadActivity() {
+      try {
+        const nextStats = await stravaFetchStats(app);
+        if (!active || activityRunRef.current !== run) return;
+        setActivityState({ phase: 'resolved', stats: nextStats });
+      } catch {
+        if (!active || activityRunRef.current !== run) return;
+        setActivityState({ phase: 'unavailable' });
+      }
+    }
+
+    loadActivity().catch(() => {
+      if (!active || activityRunRef.current !== run) return;
+      setActivityState({ phase: 'unavailable' });
+    });
+
+    return () => {
+      active = false;
+      if (activityRunRef.current === run) activityRunRef.current = null;
+    };
+  }, [app, connectionState]);
 
   function handleConnect() {
     const clientId = process.env.REACT_APP_STRAVA_CLIENT_ID;
@@ -158,39 +259,86 @@ function StravaSection({ uid }: { uid: string }) {
   }
 
   async function handleDisconnect() {
-    if (!services) return;
     // eslint-disable-next-line no-alert
     if (!window.confirm('Disconnect your Strava account?')) return;
-    setDisconnecting(true);
+    const lifetimeRun = lifetimeRunRef.current;
+    if (lifetimeRun === null) return;
+    const disconnectRun = Symbol('strava-disconnect');
+    disconnectRunRef.current = disconnectRun;
+    setDisconnectState('pending');
     try {
-      await stravaDisconnect(services.firebaseResources.app);
-      setConn(null);
-      setStats(null);
+      await stravaDisconnect(app);
+      if (
+        lifetimeRunRef.current !== lifetimeRun
+        || disconnectRunRef.current !== disconnectRun
+      ) return;
+      activityRunRef.current = null;
+      setConnectionState({ phase: 'disconnected' });
+      setActivityState({ phase: 'idle' });
+      setDisconnectState('idle');
     } catch {
-      setDisconnectError('We could not confirm the Strava disconnect. Please refresh this page before trying again.');
-    } finally {
-      setDisconnecting(false);
+      if (
+        lifetimeRunRef.current !== lifetimeRun
+        || disconnectRunRef.current !== disconnectRun
+      ) return;
+      setDisconnectState('failed');
     }
   }
 
-  if (loadingConn) return null;
+  if (connectionState.phase === 'loading') return null;
+  let connectedError: string | null = null;
+  if (disconnectState === 'failed') {
+    connectedError = STRAVA_DISCONNECT_FAILURE;
+  } else if (activityState.phase === 'unavailable') {
+    connectedError = STRAVA_ACTIVITY_FAILURE;
+  }
 
   return (
     <section className="mt-6">
       <h2 className="text-lg font-semibold mb-3">Strava</h2>
-      {conn ? (
+      {connectionState.phase === 'connected' && (
         <Connected
-          conn={conn}
-          stats={stats}
-          loading={loadingStats}
-          error={disconnectError || error}
+          conn={connectionState.connection}
+          stats={activityState.phase === 'resolved' ? activityState.stats : null}
+          loading={activityState.phase === 'loading'}
+          error={connectedError}
           onDisconnect={handleDisconnect}
-          disconnecting={disconnecting}
+          disconnecting={disconnectState === 'pending'}
         />
-      ) : (
+      )}
+      {connectionState.phase === 'disconnected' && (
         <Disconnected onConnect={handleConnect} />
       )}
+      {connectionState.phase === 'unavailable' && (
+        <p role="alert" aria-live="assertive" aria-atomic="true" className="text-sm text-red-600">
+          {STRAVA_CONNECTION_FAILURE}
+        </p>
+      )}
     </section>
+  );
+}
+
+function StravaSection({ uid }: { uid: string }) {
+  const { services, isReady } = useServiceLocator();
+  if (!isReady || !services) return null;
+
+  const { firebaseResources } = services;
+  const { firestore, app } = firebaseResources;
+  const attemptKey = JSON.stringify([
+    uid,
+    getObjectIdentity(services),
+    getObjectIdentity(firebaseResources),
+    getObjectIdentity(firestore),
+    getObjectIdentity(app),
+  ]);
+
+  return (
+    <StravaAttempt
+      key={attemptKey}
+      uid={uid}
+      firestore={firestore}
+      app={app}
+    />
   );
 }
 
