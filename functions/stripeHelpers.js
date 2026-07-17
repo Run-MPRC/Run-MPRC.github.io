@@ -24,9 +24,12 @@ const mathFloor = Math.floor;
 const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectGetPrototypeOf = Object.getPrototypeOf;
 const objectHasOwn = Object.hasOwn;
+const objectIs = Object.is;
 const objectPrototype = Object.prototype;
 const numberIsFinite = Number.isFinite;
 const numberIsSafeInteger = Number.isSafeInteger;
+const STRIPE_MINIMUM_USD_CENTS = 50;
+const STRIPE_UNIT_AMOUNT_MAX_CENTS = 99_999_999;
 const reflectOwnKeys = Reflect.ownKeys;
 const timestampPrototype = Timestamp.prototype;
 
@@ -98,12 +101,29 @@ function validateRunner(runner) {
 }
 
 function pickPriceCents(event, priceTier) {
-  const pricing = event.pricing || {};
-  if (priceTier === 'member') return pricing.memberCents;
-  if (priceTier === 'nonMember') return pricing.nonMemberCents;
-  if (priceTier === 'earlyBird') return pricing.earlyBirdCents;
   if (priceTier === 'free') return 0;
-  return null;
+
+  let selectedField;
+  if (priceTier === 'member') selectedField = 'memberCents';
+  else if (priceTier === 'nonMember') selectedField = 'nonMemberCents';
+  else if (priceTier === 'earlyBird') selectedField = 'earlyBirdCents';
+  else return null;
+
+  if (!isPlainEventRecord(event)) return null;
+  const pricing = selectedOwnDataValue(event, 'pricing', true);
+  if (!isPlainEventRecord(pricing)) return null;
+  const priceCents = selectedOwnDataValue(pricing, selectedField, true);
+  if (
+    typeof priceCents !== 'number'
+    || !numberIsSafeInteger(priceCents)
+    || objectIs(priceCents, -0)
+    || priceCents < 0
+    || (priceCents !== 0 && priceCents < STRIPE_MINIMUM_USD_CENTS)
+    || priceCents > STRIPE_UNIT_AMOUNT_MAX_CENTS
+  ) {
+    return null;
+  }
+  return priceCents;
 }
 
 function isEarlyBirdActive(event, now = Date.now()) {

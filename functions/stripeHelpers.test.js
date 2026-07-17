@@ -31,10 +31,12 @@ jest.mock('./serverConfig', () => ({
 
 const {
   isRegistrationOpen,
+  pickPriceCents,
   requireAdmin,
   resolveCallerRole,
   Timestamp,
 } = require('./stripeHelpers');
+const { MAX_CENTS } = require('./requestValidation');
 
 const NOW_MS = 1_735_689_600_000;
 
@@ -318,6 +320,219 @@ describe('registration-window validation', () => {
     expect(isRegistrationOpen(openEvent({
       registrationClosesAt: malformed,
     }), NOW_MS)).toBe(false);
+  });
+});
+
+describe('selected race-price validation', () => {
+  function eventWithPricing(pricing) {
+    return { pricing };
+  }
+
+  test('preserves fixed free zero and rejects unknown tiers without reading event data', () => {
+    const eventRead = jest.fn(() => {
+      throw new Error('synthetic event read must not run');
+    });
+    const event = new Proxy({}, { get: eventRead });
+    const tierHooks = {
+      toString: jest.fn(() => 'member'),
+      valueOf: jest.fn(() => 'member'),
+      [Symbol.toPrimitive]: jest.fn(() => 'member'),
+    };
+
+    expect(pickPriceCents(event, 'free')).toBe(0);
+    expect(pickPriceCents(event, 'unknown')).toBeNull();
+    expect(pickPriceCents(event, tierHooks)).toBeNull();
+    expect(eventRead).not.toHaveBeenCalled();
+    expect(tierHooks.toString).not.toHaveBeenCalled();
+    expect(tierHooks.valueOf).not.toHaveBeenCalled();
+    expect(tierHooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['member', 'memberCents'],
+    ['nonMember', 'nonMemberCents'],
+    ['earlyBird', 'earlyBirdCents'],
+  ])('preserves exact valid %s cent boundaries', (tier, field) => {
+    [0, 50, 99_999_999].forEach((value) => {
+      expect(pickPriceCents(eventWithPricing({ [field]: value }), tier)).toBe(value);
+    });
+  });
+
+  test.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['negative zero', -0],
+    ['negative integer', -1],
+    ['one cent, below the Stripe USD minimum', 1],
+    ['forty-nine cents, below the Stripe USD minimum', 49],
+    ['fractional cents', 1.5],
+    ['not-a-number', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+    ['the shared generic ceiling, above the Stripe eight-digit limit', MAX_CENTS],
+    ['over the shared generic ceiling', MAX_CENTS + 1],
+    ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+    ['string', '5000'],
+    ['boolean', true],
+    ['bigint', BigInt(5000)],
+    ['boxed number', Object(5000)],
+    ['array', [5000]],
+    ['record', { cents: 5000 }],
+  ])('rejects selected %s', (_case, value) => {
+    expect(pickPriceCents(eventWithPricing({ nonMemberCents: value }), 'nonMember'))
+      .toBeNull();
+  });
+
+  test('rejects a missing selected price and missing pricing record', () => {
+    expect(pickPriceCents({}, 'nonMember')).toBeNull();
+    expect(pickPriceCents(eventWithPricing({}), 'nonMember')).toBeNull();
+  });
+
+  test.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['array', []],
+    ['Date', new Date(0)],
+    ['null-prototype record', Object.create(null)],
+    ['custom-prototype record', Object.create({ inherited: true })],
+  ])('rejects %s event containers without throwing', (_case, event) => {
+    expect(() => pickPriceCents(event, 'nonMember')).not.toThrow();
+    expect(pickPriceCents(event, 'nonMember')).toBeNull();
+  });
+
+  test.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['array', []],
+    ['Date', new Date(0)],
+    ['null-prototype record', Object.create(null)],
+    ['custom-prototype record', Object.create({ inherited: true })],
+  ])('rejects %s pricing containers without throwing', (_case, pricing) => {
+    expect(() => pickPriceCents(eventWithPricing(pricing), 'nonMember')).not.toThrow();
+    expect(pickPriceCents(eventWithPricing(pricing), 'nonMember')).toBeNull();
+  });
+
+  test.each([
+    ['event', (value) => value],
+    ['pricing', (value) => eventWithPricing(value)],
+  ])('rejects a live Proxy %s without invoking traps', (_case, wrap) => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic Proxy trap must not run');
+    });
+    const value = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      has: trap,
+      ownKeys: trap,
+    });
+
+    expect(pickPriceCents(wrap(value), 'nonMember')).toBeNull();
+    expect(trap).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['event', (value) => value],
+    ['pricing', (value) => eventWithPricing(value)],
+  ])('rejects a revoked Proxy %s without throwing', (_case, wrap) => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+
+    expect(() => pickPriceCents(wrap(proxy), 'nonMember')).not.toThrow();
+    expect(pickPriceCents(wrap(proxy), 'nonMember')).toBeNull();
+  });
+
+  test('rejects selected accessors without invoking them', () => {
+    const pricingGetter = jest.fn(() => ({ nonMemberCents: 5000 }));
+    const event = {};
+    Object.defineProperty(event, 'pricing', {
+      enumerable: true,
+      get: pricingGetter,
+    });
+
+    const priceGetter = jest.fn(() => 5000);
+    const pricing = {};
+    Object.defineProperty(pricing, 'nonMemberCents', {
+      enumerable: true,
+      get: priceGetter,
+    });
+
+    expect(pickPriceCents(event, 'nonMember')).toBeNull();
+    expect(pickPriceCents(eventWithPricing(pricing), 'nonMember')).toBeNull();
+    expect(pricingGetter).not.toHaveBeenCalled();
+    expect(priceGetter).not.toHaveBeenCalled();
+  });
+
+  test('rejects inherited selected values without invoking prototype getters', () => {
+    const pricingGetter = jest.fn(() => ({ nonMemberCents: 5000 }));
+    const eventPrototype = {};
+    Object.defineProperty(eventPrototype, 'pricing', { get: pricingGetter });
+
+    const priceGetter = jest.fn(() => 5000);
+    const pricingPrototype = {};
+    Object.defineProperty(pricingPrototype, 'nonMemberCents', { get: priceGetter });
+
+    expect(pickPriceCents(Object.create(eventPrototype), 'nonMember')).toBeNull();
+    expect(pickPriceCents(eventWithPricing(Object.create(pricingPrototype)), 'nonMember'))
+      .toBeNull();
+    expect(pricingGetter).not.toHaveBeenCalled();
+    expect(priceGetter).not.toHaveBeenCalled();
+  });
+
+  test('rejects non-enumerable selected data', () => {
+    const hiddenPricingEvent = {};
+    Object.defineProperty(hiddenPricingEvent, 'pricing', {
+      value: { nonMemberCents: 5000 },
+    });
+    const hiddenPrice = {};
+    Object.defineProperty(hiddenPrice, 'nonMemberCents', { value: 5000 });
+
+    expect(pickPriceCents(hiddenPricingEvent, 'nonMember')).toBeNull();
+    expect(pickPriceCents(eventWithPricing(hiddenPrice), 'nonMember')).toBeNull();
+  });
+
+  test('does not invoke selected-value coercion or JSON hooks', () => {
+    const hooks = {
+      toJSON: jest.fn(() => 5000),
+      toString: jest.fn(() => '5000'),
+      valueOf: jest.fn(() => 5000),
+      [Symbol.toPrimitive]: jest.fn(() => 5000),
+    };
+
+    expect(pickPriceCents(eventWithPricing({ nonMemberCents: hooks }), 'nonMember'))
+      .toBeNull();
+    expect(hooks.toJSON).not.toHaveBeenCalled();
+    expect(hooks.toString).not.toHaveBeenCalled();
+    expect(hooks.valueOf).not.toHaveBeenCalled();
+    expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+  });
+
+  test('ignores hostile unselected and unknown fields without enumeration', () => {
+    const eventGetter = jest.fn(() => {
+      throw new Error('synthetic event getter must not run');
+    });
+    const unselectedGetter = jest.fn(() => {
+      throw new Error('synthetic unselected getter must not run');
+    });
+    const unknownGetter = jest.fn(() => {
+      throw new Error('synthetic unknown getter must not run');
+    });
+    const symbolGetter = jest.fn(() => {
+      throw new Error('synthetic symbol getter must not run');
+    });
+    const pricing = { nonMemberCents: 5000 };
+    pricing.self = pricing;
+    Object.defineProperty(pricing, 'memberCents', { get: unselectedGetter });
+    Object.defineProperty(pricing, 'unknown', { get: unknownGetter });
+    Object.defineProperty(pricing, Symbol('unknown'), { get: symbolGetter });
+    const event = eventWithPricing(pricing);
+    Object.defineProperty(event, 'unknown', { get: eventGetter });
+
+    expect(pickPriceCents(event, 'nonMember')).toBe(5000);
+    expect(eventGetter).not.toHaveBeenCalled();
+    expect(unselectedGetter).not.toHaveBeenCalled();
+    expect(unknownGetter).not.toHaveBeenCalled();
+    expect(symbolGetter).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,7 @@ const mockFirestoreWrite = jest.fn();
 const mockGenerateToken = jest.fn();
 const mockResolveCallerRole = jest.fn();
 const mockCountActiveRegistrations = jest.fn();
+const mockRegistrationAllocation = jest.fn();
 
 jest.mock('firebase-functions', () => {
   class HttpsError extends Error {
@@ -76,6 +77,7 @@ jest.mock('firebase-admin', () => {
     doc(id) {
       let resolvedId = id;
       if (!resolvedId && this.path.endsWith('/registrations')) {
+        mockRegistrationAllocation(this.path);
         registrationSequence += 1;
         resolvedId = `reg-new-${registrationSequence}`;
       } else if (!resolvedId && this.path === 'orders') {
@@ -110,6 +112,10 @@ jest.mock('firebase-admin', () => {
 
 jest.mock('./stripeHelpers', () => {
   const { resolveVerifiedCallerRole } = jest.requireActual('./verifiedRolePolicy');
+  const {
+    isEarlyBirdActive,
+    pickPriceCents,
+  } = jest.requireActual('./stripeHelpers');
   return {
     getStripe: mockGetStripe,
     generateToken: mockGenerateToken,
@@ -119,8 +125,8 @@ jest.mock('./stripeHelpers', () => {
     },
     requireAppCheck: () => {},
     validateRunner: () => [],
-    pickPriceCents: (event, tier) => event.pricing?.[`${tier}Cents`] ?? null,
-    isEarlyBirdActive: () => false,
+    pickPriceCents,
+    isEarlyBirdActive,
     isRegistrationOpen: () => true,
     countActiveRegistrations: mockCountActiveRegistrations,
     auditEntry: ({ action, note }) => ({ action, note }),
@@ -185,6 +191,7 @@ describe('Checkout promotion policy', () => {
     mockGenerateToken.mockReset();
     mockResolveCallerRole.mockReset();
     mockCountActiveRegistrations.mockReset();
+    mockRegistrationAllocation.mockReset();
     mockGetStripe.mockReturnValue({
       checkout: { sessions: { create: mockCheckoutCreate } },
       products: { create: mockProductCreate },
@@ -467,6 +474,62 @@ describe('Checkout promotion policy', () => {
     expect(mockRateLimit).not.toHaveBeenCalled();
     expect(mockGetStripe).not.toHaveBeenCalled();
     expect(mockCheckoutCreate).not.toHaveBeenCalled();
+  });
+
+  test('rejects a selected price accessor before token, registration allocation, or Stripe use', async () => {
+    const selectedPriceRead = jest.fn(() => Number.NaN);
+    const pricing = {};
+    Object.defineProperty(pricing, 'nonMemberCents', {
+      enumerable: true,
+      get: selectedPriceRead,
+    });
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      status: 'open',
+      visibility: 'public',
+      pricing,
+      waiverVersion: 'synthetic-v1',
+    });
+    mockProductCreate.mockResolvedValueOnce({ id: 'prod_synthetic_generated' });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+    try {
+      await expect(createCheckoutSession({
+        eventId: 'race-1',
+        runner: {
+          firstName: 'Test',
+          lastName: 'Runner',
+          email: 'runner@example.test',
+        },
+        priceTier: 'nonMember',
+        acceptedWaiver: true,
+      }, { auth: null, rawRequest: {} })).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'Selected price tier is not available for this event',
+      });
+
+      expect(mockRateLimit).toHaveBeenCalledTimes(2);
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(1);
+      const lastRateLimitCall = Math.max(...mockRateLimit.mock.invocationCallOrder);
+      expect(lastRateLimitCall).toBeLessThan(
+        mockResolveCallerRole.mock.invocationCallOrder[0],
+      );
+      expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+      expect(selectedPriceRead).not.toHaveBeenCalled();
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+      expect(mockFirestoreWrite).not.toHaveBeenCalled();
+      expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockProductCreate).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    } finally {
+      consoleSpies.forEach((spy) => spy.mockRestore());
+    }
   });
 
   test('race checkout sends the exact disabled-adjustment payload', async () => {

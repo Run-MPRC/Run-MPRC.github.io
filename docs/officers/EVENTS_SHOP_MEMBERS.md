@@ -196,6 +196,45 @@ Officer source-review steps:
 
 **Live-release gate: NOT AVAILABLE YET.** PAY-001B2 must first add immutable field, price, and waiver snapshots and prove compatibility without opening real registrations. A separate protected race-checkout release plan must explicitly name `createCheckoutSession`, the exact commit, an isolated staging project, Stripe test mode, owner approval, provider and Firebase readback, paid/free/volunteer checks, and rollback. No current release issue or workflow supplies that plan. Source review does not authorize deployment.
 
+## Race price format guard — SOURCE ONLY, NOT LIVE
+
+**Purpose:** stop an invalid selected race price before the server creates a registration identifier, a Stripe Product, or a Stripe Checkout Session.
+
+**Approver:** event lead plus treasurer and platform/security owner.
+
+**Prerequisites for source review:** issue [#327](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/327) is merged; the exact reviewed commit is named; and tests use made-up events and people. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before any deployment, data repair, or live approval. This technical format guard is not an approved business price policy.
+
+```mermaid
+flowchart LR
+    A["Made-up event passes earlier checks"] --> B["Earlier request, rate, role, and capacity checks"]
+    B --> C["Select one price tier"]
+    C --> D{"Stored price is free or at least 50 cents, with at most eight digits?"}
+    D -- "No or unknown" --> E["Fixed unavailable message; no later registration or Stripe work"]
+    D -- "Yes" --> F["Later checkout safety checks may continue"]
+```
+
+In words: some earlier safety checks may already run, but an invalid selected price must stop before the server allocates a registration identifier or starts Stripe work.
+
+Officer source-review steps:
+
+1. Keep live race checkout unavailable.
+2. Ask the specialist for the exact pull request and synthetic test report.
+3. Confirm the report uses invented events and people only.
+4. Confirm missing, paid prices below 50 cents, negative, fractional, oversized, or otherwise malformed selected prices get one plain unavailable message.
+5. Confirm the denial creates no confirmation token, registration identifier, registration write, Stripe Product, or Checkout Session.
+6. Confirm the report states that earlier rate, role, membership, or capacity checks may already have run.
+7. Record the result as source proof only.
+
+**Expected result:** the helper admits free `0`, or a stored whole-number USD value from 50 cents through Stripe's eight-digit technical limit. These technical limits are not approval to charge any amount. An invalid selected value is unavailable and no raw value appears in a result or log.
+
+**Stop conditions:** real runner data, a real payment, a production test, a request to repair Firestore or Stripe by hand, a missing exact commit, a claim that the source is live, or evidence that a denial allocated a registration identifier or reached Stripe.
+
+**Success proof:** exact pull request and merge commit, green synthetic tests, independent review, and a written statement that the website, Firebase, Stripe, production data, and live behavior were not changed or verified. A future live release needs separate Firebase deployment, Stripe test-mode, and readback proof.
+
+**Undo:** use one reviewed source revert or safe roll-forward. Do not edit an event, registration, Product, Session, or payment record by hand.
+
+**Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if any submitted person or event detail appears in output.
+
 ## Profile permission error
 
 **Status: AUTOMATIC REPAIR NOT LIVE YET**
