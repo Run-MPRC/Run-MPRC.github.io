@@ -877,6 +877,13 @@ function unsuccessfulSessionTransition({ event, session, target, record, reason 
     if (adjustmentReviewReason) {
       return reviewTransition({ target, event, reason: adjustmentReviewReason });
     }
+    if (record.status === 'fulfilled' && record.paymentStatus !== 'paid') {
+      return reviewTransition({
+        target,
+        event,
+        reason: 'fulfilled_without_verified_payment',
+      });
+    }
     return { outcome: `${reason}_ignored:${record.status}`, patch: null };
   }
   const paymentIntentId = objectId(session.payment_intent);

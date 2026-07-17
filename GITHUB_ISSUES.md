@@ -12,6 +12,7 @@ Published foundation mapping:
 - SAFETY-001 → [#99](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/99)
 - SEC-001 → [#100](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/100)
 - PAY-003A → [#101](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/101)
+- PAY-003A1 → [#337](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/337)
 - PROMO-001 → [#102](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/102)
 - CI-001A → [#103](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/103)
 - CI-001B1 → [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124)
@@ -65,7 +66,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 11 | PAY-001 | Add strict request schemas and immutable monetary snapshots | P0 | L | partial: PAY-001A complete in [#157](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/157); race request/event-field adoption tracked in PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219); snapshots and remaining B/C/D work open | ABUSE-001 interface agreed |
 | 12 | PROMO-001 | Disable unmodeled Stripe promotions until discounts are authoritative | P0 | S | source/tests complete under open GitHub issue #102; provider inventory and deployment remain owner action | PAY-001 for any future discount contract |
 | 13 | PAY-002 | Implement idempotent payment commands and explicit state machines | P0 | L | partial: PAY-002A1 pure state source/tests tracked in [#161](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/161); PAY-002B1 pure command identity tracked in [#163](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/163); registered-only journal pair tracked in PAY-002B2A [#165](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/165); PAY-002B2B lease/fence source/tests tracked in [#169](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/169); PAY-002B2C1 immutable initial plan tracked in [#173](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/173); PAY-002B2C2 pre-send evidence/cutoff tracked in [#182](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/182); PAY-002B2C3A pure closed reconciliation decision tracked in [#184](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/184); PAY-002B2C3B immutable candidate persistence tracked in [#206](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/206); PAY-002B2C3C fresh-lease later-attempt authorization tracked in [#226](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/226); PAY-002B2C4A immutable authorized attempt-2 plan tracked in [#232](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/232); PAY-002B2C4B attempt-2 pre-send evidence tracked in [#238](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/238); PAY-002B2C4C1 pure unbound result-evidence policy tracked in [#246](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/246); PAY-002B2C4C2A test-only Stripe SDK response observations tracked in [#275](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/275); PAY-002B2C4C2B1 unused server-only allowlist projection tracked in [#280](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/280); PAY-002B2C4C2B2A unused transport-consistency classifier tracked in [#285](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/285); remaining C4C2B2 controller/URL/business/time/persistence binding, result reconciliation/runtime/migration/sagas open | CONFIG-001, PAY-001 |
-| 14 | PAY-003 | Build idempotent, async-aware Stripe webhook ingestion | P0 | L | PAY-003A source merged in #101; PAY-003B/C remain open; not deployed | CONFIG-001, PAY-001/PAY-002 target contract |
+| 14 | PAY-003 | Build idempotent, async-aware Stripe webhook ingestion | P0 | L | PAY-003A source merged in #101; fulfilled-without-verified-payment containment tracked in #337; PAY-003B/C remain open; not deployed | CONFIG-001, PAY-001/PAY-002 target contract |
 | 15 | RACE-001 | Add transactional race-capacity reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 16 | MERCH-001 | Add SKU variants and transactional inventory reservations | P0 | L | proposed | PAY-002, PAY-003 event contract |
 | 17 | PAY-004 | Make cancellation authoritative and replace reusable late Payment Links | P0 | L | proposed | PAY-002, PAY-003, RACE-001 |
@@ -739,7 +740,7 @@ This is a shared domain foundation, not a UI task. Split state model/migration a
 ## PAY-003 — Build idempotent, async-aware Stripe webhook ingestion
 
 **Labels:** `priority:P0`, `type:security`, `type:reliability`, `area:stripe`, `area:firebase`, `size:L`
-**Status:** `partial_implemented_locally`; a backward-compatible safety slice and unit evidence exist, while the PAY-001/PAY-002 migration and provider/emulator rehearsal remain open
+**Status:** `partial_implemented_locally`; a backward-compatible safety slice and unit evidence exist, and PAY-003A1 [#337](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/337) tracks the fulfilled-without-verified-payment conflict; the PAY-001/PAY-002 migration and provider/emulator rehearsal remain open
 **Depends on:** CONFIG-001 and PAY-001/PAY-002 target model; initial patch must remain compatible
 
 ### Problem
