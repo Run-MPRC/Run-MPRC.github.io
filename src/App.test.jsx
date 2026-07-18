@@ -8172,3 +8172,830 @@ describe('Admin website-role change unknown-result boundary', () => {
     expect(track).not.toHaveBeenCalled();
   });
 });
+
+describe('Admin registration action unknown-result boundary', () => {
+  const ACTION_UNKNOWN = 'We could not confirm that registration action. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.';
+  const primaryRegistration = {
+    id: 'synthetic-primary-registration',
+    status: 'paid',
+    amountCents: 2500,
+    signupType: 'participant',
+    priceTier: 'member',
+    runner: {
+      firstName: 'Synthetic',
+      lastName: 'Primary',
+      email: 'synthetic-primary@example.test',
+      shirtSize: 'M',
+    },
+  };
+  const secondaryRegistration = {
+    id: 'synthetic-secondary-registration',
+    status: 'paid',
+    amountCents: 3000,
+    signupType: 'participant',
+    priceTier: 'nonMember',
+    runner: {
+      firstName: 'Synthetic',
+      lastName: 'Secondary',
+      email: 'synthetic-secondary@example.test',
+      shirtSize: 'L',
+    },
+  };
+
+  function createDeferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, reject, resolve };
+  }
+
+  function syntheticActionEvent({
+    title = 'Synthetic Action Run',
+    slug = 'synthetic-event',
+  } = {}) {
+    return {
+      id: slug,
+      slug,
+      title,
+      startAt: { toDate: () => new Date(2030, 0, 12, 9, 30) },
+      location: 'Synthetic Action Park',
+      capacity: 40,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 2500, nonMemberCents: 3000 },
+    };
+  }
+
+  function setRegistrationActionContext({
+    app = firebaseApp,
+    db = firestore,
+    uid = 'synthetic-admin',
+  } = {}) {
+    useAuth.mockReturnValue({
+      user: { uid },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app, firestore: db } },
+      isReady: true,
+    });
+  }
+
+  function spyOnBrowserConsole() {
+    return ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  }
+
+  function rowFor(email) {
+    const row = screen.getByText(email).closest('tr');
+    expect(row).not.toBeNull();
+    return row;
+  }
+
+  function fillRunnerDraft() {
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Replacement' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Runner' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'replacement@example.test' },
+    });
+  }
+
+  function startRegistrationAction(kind, registration = primaryRegistration) {
+    const row = rowFor(registration.runner.email);
+    if (kind === 'refund_full') {
+      fireEvent.click(within(row).getByRole('button', { name: 'Refund' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Issue full refund' }));
+      return;
+    }
+    if (kind === 'refund_partial') {
+      fireEvent.click(within(row).getByRole('button', { name: 'Partial' }));
+      fireEvent.change(screen.getByRole('spinbutton'), {
+        target: { value: '5.25' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Issue partial refund' }));
+      return;
+    }
+    if (kind === 'cancel') {
+      fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+      fireEvent.change(screen.getByLabelText('Note (optional)'), {
+        target: { value: 'Synthetic cancellation note' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel registration' }));
+      return;
+    }
+    if (kind === 'substitute') {
+      fireEvent.click(within(row).getByRole('button', { name: 'Sub' }));
+      fillRunnerDraft();
+      fireEvent.click(screen.getByRole('button', { name: 'Substitute' }));
+      return;
+    }
+    if (kind === 'add_note') {
+      fireEvent.click(within(row).getByRole('button', { name: 'Note' }));
+      fireEvent.change(screen.getByPlaceholderText('Note...'), {
+        target: { value: 'Synthetic registration note' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
+      return;
+    }
+    fireEvent.click(screen.getByRole('button', { name: '+ Comp registration' }));
+    fillRunnerDraft();
+    fireEvent.click(screen.getByRole('button', { name: 'Create comp' }));
+  }
+
+  function expectUnknownRegistrationShell(...privateText) {
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(ACTION_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.getByRole('link', { name: /All events/ }))
+      .toHaveAttribute('href', '/admin/events');
+    expect(document.body).not.toHaveTextContent(
+      /Synthetic Action Run|Synthetic Action Park|synthetic-primary@example\.test|synthetic-secondary@example\.test/i,
+    );
+    privateText.forEach((text) => expect(document.body).not.toHaveTextContent(text));
+    expect(screen.queryByText('Paid registrations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunds')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gross revenue')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunded amount')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search by name or email...'))
+      .not.toBeInTheDocument();
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Late registration — $0 only' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Comp registration' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {
+      name: /^(Refund|Partial|Sub|Cancel|Note|Issue full refund|Issue partial refund|Cancel registration|Substitute|Add note|Create comp)$/,
+    })).not.toBeInTheDocument();
+  }
+
+  beforeEach(() => {
+    setRegistrationActionContext();
+    getEventBySlug.mockResolvedValue(syntheticActionEvent());
+    listRegistrationsForEvent.mockResolvedValue([
+      primaryRegistration,
+      secondaryRegistration,
+    ]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    [
+      'refund_full',
+      primaryRegistration.id,
+      {},
+      'refund_full',
+      /Refund full — synthetic-primary@example\.test/,
+      'Issue full refund',
+    ],
+    [
+      'refund_partial',
+      primaryRegistration.id,
+      { amountCents: 525 },
+      'refund_partial',
+      /Partial refund — synthetic-primary@example\.test/,
+      'Issue partial refund',
+    ],
+    [
+      'cancel',
+      primaryRegistration.id,
+      { note: 'Synthetic cancellation note' },
+      'cancel',
+      /Cancel — synthetic-primary@example\.test/,
+      'Cancel registration',
+    ],
+    ['substitute', primaryRegistration.id, {
+      newRunner: {
+        firstName: 'Replacement',
+        lastName: 'Runner',
+        email: 'replacement@example.test',
+      },
+    }, 'substitute', /Substitute runner — was synthetic-primary@example\.test/, 'Substitute'],
+    ['add_note', primaryRegistration.id, {
+      note: 'Synthetic registration note',
+    }, 'add_note', 'Add note', 'Add note'],
+    ['mark_comp', undefined, {
+      registration: {
+        runner: {
+          firstName: 'Replacement',
+          lastName: 'Runner',
+          email: 'replacement@example.test',
+        },
+      },
+    }, 'mark_comp', 'Comp registration', 'Create comp'],
+  ])('preserves the exact %s request and performs one current reload', async (
+    kind,
+    registrationId,
+    payload,
+    action,
+    modalHeading,
+    submitLabel,
+  ) => {
+    adminRegistrationAction.mockResolvedValueOnce({ ok: true });
+    renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction(kind);
+
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledWith(
+      firebaseApp,
+      {
+        eventId: 'synthetic-event',
+        registrationId,
+        action,
+        payload,
+      },
+    ));
+    await waitFor(() => expect(listRegistrationsForEvent).toHaveBeenCalledTimes(2));
+    expect(getEventBySlug).toHaveBeenCalledTimes(2);
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Working...' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: modalHeading })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: submitLabel })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Late registration — $0 only' }))
+      .toBeEnabled();
+    expect(screen.getByRole('button', { name: '+ Comp registration' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
+    ['Refund', 'Partial', 'Sub', 'Cancel', 'Note'].forEach((name) => {
+      expect(within(rowFor(primaryRegistration.runner.email))
+        .getByRole('button', { name })).toBeEnabled();
+    });
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('returns to idle and allows one later deliberate action after the reload', async () => {
+    adminRegistrationAction
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: true });
+    renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction('add_note');
+    await waitFor(() => expect(listRegistrationsForEvent).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(within(rowFor(primaryRegistration.runner.email))
+      .getByRole('button', { name: 'Cancel' })).toBeEnabled();
+
+    startRegistrationAction('cancel');
+
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(listRegistrationsForEvent).toHaveBeenCalledTimes(3));
+    expect(adminRegistrationAction).toHaveBeenNthCalledWith(
+      1,
+      firebaseApp,
+      {
+        eventId: 'synthetic-event',
+        registrationId: primaryRegistration.id,
+        action: 'add_note',
+        payload: { note: 'Synthetic registration note' },
+      },
+    );
+    expect(adminRegistrationAction).toHaveBeenNthCalledWith(
+      2,
+      firebaseApp,
+      {
+        eventId: 'synthetic-event',
+        registrationId: primaryRegistration.id,
+        action: 'cancel',
+        payload: { note: 'Synthetic cancellation note' },
+      },
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('blocks every mutation and export entry point while one request is pending', async () => {
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn();
+    const view = renderAdminEventRegistrations();
+    try {
+      expect(await screen.findByText(primaryRegistration.runner.email))
+        .toBeInTheDocument();
+
+      fireEvent.click(within(rowFor(primaryRegistration.runner.email))
+        .getByRole('button', { name: 'Refund' }));
+      const submit = screen.getByRole('button', { name: 'Issue full refund' });
+      const differentRowNote = within(rowFor(secondaryRegistration.runner.email))
+        .getByRole('button', { name: 'Note' });
+      const lateRegistration = screen.getByRole('button', {
+        name: '+ Late registration — $0 only',
+      });
+      const compRegistration = screen.getByRole('button', {
+        name: '+ Comp registration',
+      });
+      const exportCsv = screen.getByRole('button', { name: 'Export CSV' });
+      act(() => {
+        submit.click();
+        submit.click();
+        differentRowNote.click();
+        lateRegistration.click();
+        compRegistration.click();
+        exportCsv.click();
+      });
+      await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Registration action in progress. Do not start another action.',
+      );
+      expect(screen.getByRole('button', { name: 'Working...' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '+ Late registration — $0 only' }))
+        .toBeDisabled();
+      expect(screen.getByRole('button', { name: '+ Comp registration' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled();
+      [primaryRegistration, secondaryRegistration].forEach((registration) => {
+        const row = rowFor(registration.runner.email);
+        ['Refund', 'Partial', 'Sub', 'Cancel', 'Note'].forEach((name) => {
+          expect(within(row).getByRole('button', { name })).toBeDisabled();
+        });
+      });
+
+      expect(screen.getByRole('heading', {
+        name: /Refund full — synthetic-primary@example\.test/,
+      })).toBeInTheDocument();
+      expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+      expect(global.fetch).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      pending.resolve({ ok: true });
+      await pending.promise;
+      if (originalFetch === undefined) delete global.fetch;
+      else global.fetch = originalFetch;
+    }
+  });
+
+  test('turns an ordinary rejection into one terminal private unknown outcome', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    adminRegistrationAction.mockRejectedValueOnce(Object.assign(
+      new Error('registration-action-private@example.test'),
+      {
+        code: 'functions/registration-action-private-canary',
+        endpoint: 'https://provider.example.test/?token=registration-action-secret',
+      },
+    ));
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction('refund_full');
+
+    await screen.findByRole('alert');
+    expectUnknownRegistrationShell(
+      'registration-action-private@example.test',
+      'functions/registration-action-private-canary',
+      'provider.example.test',
+      'registration-action-secret',
+    );
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+
+    view.rerender(<App />);
+    await act(async () => Promise.resolve());
+    expectUnknownRegistrationShell();
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not inspect, coerce, enumerate, log, or display a hostile rejection', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const rejectionTraps = {
+      get: jest.fn(() => {
+        throw new Error('registration-action-get-trap-canary');
+      }),
+      getOwnPropertyDescriptor: jest.fn(() => {
+        throw new Error('registration-action-descriptor-trap-canary');
+      }),
+      getPrototypeOf: jest.fn(() => {
+        throw new Error('registration-action-prototype-trap-canary');
+      }),
+      has: jest.fn(() => {
+        throw new Error('registration-action-has-trap-canary');
+      }),
+      ownKeys: jest.fn(() => {
+        throw new Error('registration-action-keys-trap-canary');
+      }),
+    };
+    adminRegistrationAction.mockRejectedValueOnce(new Proxy({}, rejectionTraps));
+    renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction('add_note');
+
+    await screen.findByRole('alert');
+    expectUnknownRegistrationShell(
+      'registration-action-get-trap-canary',
+      'registration-action-descriptor-trap-canary',
+      'registration-action-prototype-trap-canary',
+      'registration-action-has-trap-canary',
+      'registration-action-keys-trap-canary',
+    );
+    Object.values(rejectionTraps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect accessor-backed or coercible rejection values', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const messageGetter = jest.fn(() => {
+      throw new Error('registration-action-accessor-canary');
+    });
+    const toString = jest.fn(() => 'registration-action-string-canary');
+    const valueOf = jest.fn(() => 41);
+    const toPrimitive = jest.fn(() => 'registration-action-primitive-canary');
+    const rejection = Object.defineProperties({}, {
+      message: {
+        configurable: true,
+        get: messageGetter,
+      },
+      toString: {
+        configurable: true,
+        value: toString,
+      },
+      valueOf: {
+        configurable: true,
+        value: valueOf,
+      },
+      [Symbol.toPrimitive]: {
+        configurable: true,
+        value: toPrimitive,
+      },
+    });
+    adminRegistrationAction.mockRejectedValueOnce(rejection);
+    renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction('substitute');
+
+    await screen.findByRole('alert');
+    expectUnknownRegistrationShell(
+      'registration-action-accessor-canary',
+      'registration-action-string-canary',
+      'registration-action-primitive-canary',
+    );
+    [messageGetter, toString, valueOf, toPrimitive]
+      .forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test.each([
+    undefined,
+    null,
+    false,
+    17,
+    'registration-action-primitive-private-canary',
+  ])('maps primitive rejection %# to the same fixed unknown outcome', async (rejection) => {
+    adminRegistrationAction.mockRejectedValueOnce(rejection);
+    renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction('cancel');
+
+    await screen.findByRole('alert');
+    expectUnknownRegistrationShell('registration-action-primitive-private-canary');
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores an older rejection after an A to B to A database cycle', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('refund_full');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    const otherFirestore = { name: 'synthetic-other-action-firestore' };
+    getEventBySlug.mockResolvedValueOnce(syntheticActionEvent({
+      title: 'Synthetic Other Action Run',
+    }));
+    listRegistrationsForEvent.mockResolvedValueOnce([secondaryRegistration]);
+    setRegistrationActionContext({ db: otherFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      name: 'Synthetic Other Action Run',
+    })).toBeInTheDocument();
+
+    getEventBySlug.mockResolvedValueOnce(syntheticActionEvent({
+      title: 'Synthetic Current Action Run',
+    }));
+    listRegistrationsForEvent.mockResolvedValueOnce([primaryRegistration]);
+    setRegistrationActionContext();
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      name: 'Synthetic Current Action Run',
+    })).toBeInTheDocument();
+
+    const messageGetter = jest.fn(() => {
+      throw new Error('obsolete-registration-action-message-canary');
+    });
+    await act(async () => {
+      pending.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await pending.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText(primaryRegistration.runner.email)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      'obsolete-registration-action-message-canary',
+    );
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores an older resolution after an A to B to A database cycle', async () => {
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('refund_full');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    const otherFirestore = { name: 'synthetic-resolution-other-firestore' };
+    getEventBySlug
+      .mockResolvedValueOnce(syntheticActionEvent({
+        title: 'Synthetic Resolution Other Run',
+      }))
+      .mockResolvedValueOnce(syntheticActionEvent({
+        title: 'Synthetic Resolution Current Run',
+      }));
+    listRegistrationsForEvent
+      .mockResolvedValueOnce([secondaryRegistration])
+      .mockResolvedValueOnce([primaryRegistration]);
+    setRegistrationActionContext({ db: otherFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      name: 'Synthetic Resolution Other Run',
+    })).toBeInTheDocument();
+
+    setRegistrationActionContext();
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      name: 'Synthetic Resolution Current Run',
+    })).toBeInTheDocument();
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      pending.resolve({ ok: true });
+      await pending.promise;
+      await Promise.resolve();
+    });
+
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('heading', {
+      name: 'Synthetic Resolution Current Run',
+    })).toBeInTheDocument();
+    expect(screen.getByText(primaryRegistration.runner.email)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('ignores an older resolution after the Firebase app changes', async () => {
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('refund_full');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    const currentApp = { name: 'synthetic-current-action-app' };
+    getEventBySlug.mockResolvedValueOnce(syntheticActionEvent({
+      title: 'Synthetic Current App Run',
+    }));
+    listRegistrationsForEvent.mockResolvedValueOnce([secondaryRegistration]);
+    setRegistrationActionContext({ app: currentApp });
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      name: 'Synthetic Current App Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      pending.resolve({ ok: true });
+      await pending.promise;
+      await Promise.resolve();
+    });
+
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(secondaryRegistration.runner.email)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('ignores an older resolution after the event route changes', async () => {
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('refund_full');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    getEventBySlug.mockResolvedValueOnce(syntheticActionEvent({
+      slug: 'synthetic-current-action-event',
+      title: 'Synthetic Current Route Action Run',
+    }));
+    listRegistrationsForEvent.mockResolvedValueOnce([secondaryRegistration]);
+    window.history.pushState(
+      {},
+      '',
+      '/admin/events/synthetic-current-action-event/registrations',
+    );
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      name: 'Synthetic Current Route Action Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      pending.resolve({ ok: true });
+      await pending.promise;
+      await Promise.resolve();
+    });
+
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(2);
+    expect(listRegistrationsForEvent).toHaveBeenNthCalledWith(
+      2,
+      firestore,
+      'synthetic-current-action-event',
+    );
+    expect(screen.getByText(secondaryRegistration.runner.email)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('keeps a newer pending action locked when an older action resolves', async () => {
+    const olderAction = createDeferred();
+    const newerAction = createDeferred();
+    adminRegistrationAction
+      .mockReturnValueOnce(olderAction.promise)
+      .mockReturnValueOnce(newerAction.promise);
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('refund_full');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    const otherFirestore = { name: 'synthetic-newer-action-firestore' };
+    setRegistrationActionContext({ db: otherFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    setRegistrationActionContext();
+    view.rerender(<App />);
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    startRegistrationAction('add_note');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Registration action in progress. Do not start another action.',
+    );
+
+    await act(async () => {
+      olderAction.resolve({ ok: true });
+      await olderAction.promise;
+      await Promise.resolve();
+    });
+
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Registration action in progress. Do not start another action.',
+    );
+    expect(screen.getByRole('button', { name: 'Working...' })).toBeDisabled();
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(2);
+
+    view.unmount();
+    newerAction.resolve({ ok: true });
+    await newerAction.promise;
+  });
+
+  test('ignores an older attempt after a context cycle and a later successful action', async () => {
+    const olderAction = createDeferred();
+    adminRegistrationAction
+      .mockReturnValueOnce(olderAction.promise)
+      .mockResolvedValueOnce({ ok: true });
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('refund_full');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    const otherFirestore = { name: 'synthetic-action-attempt-firestore' };
+    setRegistrationActionContext({ db: otherFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+
+    setRegistrationActionContext();
+    view.rerender(<App />);
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('add_note');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(listRegistrationsForEvent).toHaveBeenCalledTimes(4));
+
+    const messageGetter = jest.fn(() => {
+      throw new Error('obsolete-registration-attempt-message-canary');
+    });
+    await act(async () => {
+      olderAction.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await olderAction.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText(primaryRegistration.runner.email)).toBeInTheDocument();
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(2);
+  });
+
+  test('ignores a hostile rejection after the page unmounts', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('substitute');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const messageGetter = jest.fn(() => {
+      throw new Error('unmounted-registration-action-message-canary');
+    });
+    await act(async () => {
+      pending.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await pending.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores an older successful resolution after the page unmounts', async () => {
+    const pending = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(pending.promise);
+    const view = renderAdminEventRegistrations();
+    expect(await screen.findByText(primaryRegistration.runner.email))
+      .toBeInTheDocument();
+    startRegistrationAction('cancel');
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    await act(async () => {
+      pending.resolve({ ok: true });
+      await pending.promise;
+      await Promise.resolve();
+    });
+
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+  });
+});

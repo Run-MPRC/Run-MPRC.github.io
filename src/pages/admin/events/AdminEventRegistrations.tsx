@@ -1,5 +1,5 @@
 import React, {
-  useEffect, useMemo, useRef, useState,
+  useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import SEO from '../../../components/SEO';
@@ -147,8 +147,17 @@ interface RegistrationsLoadOutcome {
   registrations: Registration[];
 }
 
+interface RegistrationActionOutcome {
+  app: unknown;
+  firestore: unknown;
+  slug: string;
+  actionId: number;
+  status: 'pending' | 'unknown';
+}
+
 const LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
 const LATE_REGISTRATION_OUTCOME_UNKNOWN = 'We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.';
+const REGISTRATION_ACTION_OUTCOME_UNKNOWN = 'We could not confirm that registration action. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.';
 
 function Inner({
   routeSlug,
@@ -169,6 +178,9 @@ function Inner({
   const [loadOutcome, setLoadOutcome] = useState<RegistrationsLoadOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lateRegistrationOutcomeUnknown, setLateRegistrationOutcomeUnknown] = useState(false);
+  const [registrationActionOutcome, setRegistrationActionOutcome] = useState<
+    RegistrationActionOutcome | null
+  >(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<string>('');
@@ -183,6 +195,8 @@ function Inner({
     firstName: '', lastName: '', email: '',
   });
   const requestSequence = useRef(0);
+  const registrationActionSequence = useRef(0);
+  const registrationActionRequestBlocked = useRef(false);
   const lateRegistrationRequestBlocked = useRef(false);
   const mounted = useRef(true);
   const currentFirebaseApp = useRef(firebaseApp);
@@ -192,6 +206,14 @@ function Inner({
   currentFirestore.current = firestore;
   currentSlug.current = slug;
 
+  const currentRegistrationActionOutcome = registrationActionOutcome?.app === firebaseApp
+    && registrationActionOutcome.firestore === firestore
+    && registrationActionOutcome.slug === slug
+    && registrationActionOutcome.actionId === registrationActionSequence.current
+    ? registrationActionOutcome
+    : null;
+  const registrationActionPending = currentRegistrationActionOutcome?.status === 'pending';
+  const registrationActionOutcomeUnknown = currentRegistrationActionOutcome?.status === 'unknown';
   const currentOutcome = loadOutcome?.app === firebaseApp
     && loadOutcome.firestore === firestore
     && loadOutcome.slug === slug
@@ -199,7 +221,8 @@ function Inner({
     : null;
   const currentLoadStatus = currentOutcome?.status || 'loading';
   const canShowResolved = currentLoadStatus === 'resolved'
-    && !lateRegistrationOutcomeUnknown;
+    && !lateRegistrationOutcomeUnknown
+    && !registrationActionOutcomeUnknown;
   const event = canShowResolved ? currentOutcome?.event || null : null;
   const regs = canShowResolved
     ? currentOutcome?.registrations || []
@@ -242,7 +265,10 @@ function Inner({
     });
     setError(null);
     if (resetContext) {
+      registrationActionSequence.current += 1;
+      registrationActionRequestBlocked.current = false;
       lateRegistrationRequestBlocked.current = false;
+      setRegistrationActionOutcome(null);
       setLateRegistrationOutcomeUnknown(false);
       setModal(null);
       setSubmitting(false);
@@ -296,6 +322,16 @@ function Inner({
     };
   }, []);
 
+  useLayoutEffect(() => {
+    registrationActionSequence.current += 1;
+    registrationActionRequestBlocked.current = false;
+    setRegistrationActionOutcome(null);
+    return () => {
+      registrationActionSequence.current += 1;
+      registrationActionRequestBlocked.current = false;
+    };
+  }, [firebaseApp, firestore, slug]);
+
   useEffect(() => {
     if (!firestore || !slug) return () => undefined;
     reload(true);
@@ -304,7 +340,7 @@ function Inner({
   }, [firebaseApp, firestore, slug]);
 
   async function downloadCsv() {
-    if (!services || !slug) return;
+    if (!services || !slug || registrationActionRequestBlocked.current) return;
     setExporting(true);
     try {
       const token = await services.firebaseResources.auth.currentUser?.getIdToken();
@@ -363,6 +399,7 @@ function Inner({
       || currentFirebaseApp.current !== firebaseApp
       || currentFirestore.current !== firestore
       || currentSlug.current !== slug
+      || registrationActionRequestBlocked.current
       || lateRegistrationRequestBlocked.current
     ) {
       return;
@@ -371,11 +408,38 @@ function Inner({
     const actionFirestore = firestore;
     const actionSlug = slug;
     const isLateRegistration = action === 'add_late_registration';
+    let actionId: number | null = null;
     if (isLateRegistration) {
       lateRegistrationRequestBlocked.current = true;
+    } else {
+      registrationActionSequence.current += 1;
+      actionId = registrationActionSequence.current;
+      registrationActionRequestBlocked.current = true;
+      setRegistrationActionOutcome({
+        app: actionApp,
+        firestore: actionFirestore,
+        slug: actionSlug,
+        actionId,
+        status: 'pending',
+      });
     }
     setSubmitting(true);
     setError(null);
+
+    function isCurrentAction() {
+      return mounted.current
+        && currentFirebaseApp.current === actionApp
+        && currentFirestore.current === actionFirestore
+        && currentSlug.current === actionSlug
+        && (
+          isLateRegistration
+          || (
+            actionId !== null
+            && registrationActionSequence.current === actionId
+          )
+        );
+    }
+
     try {
       await adminRegistrationAction(actionApp, {
         eventId: slug,
@@ -383,48 +447,48 @@ function Inner({
         action,
         payload,
       });
-      if (
-        !mounted.current
-        || currentFirebaseApp.current !== actionApp
-        || currentFirestore.current !== actionFirestore
-        || currentSlug.current !== actionSlug
-      ) {
-        return;
-      }
+      if (!isCurrentAction()) return;
       setModal(null);
       const reloadSucceeded = await reload();
+      if (!isCurrentAction()) return;
       if (isLateRegistration && reloadSucceeded) {
         lateRegistrationRequestBlocked.current = false;
+      } else if (!isLateRegistration) {
+        registrationActionRequestBlocked.current = false;
+        setRegistrationActionOutcome(null);
       }
-    } catch (caught: any) {
-      if (
-        !mounted.current
-        || currentFirebaseApp.current !== actionApp
-        || currentFirestore.current !== actionFirestore
-        || currentSlug.current !== actionSlug
-      ) {
-        return;
-      }
+    } catch {
+      if (!isCurrentAction()) return;
       if (isLateRegistration) {
         setModal(null);
         setError(null);
         setLateRegistrationOutcomeUnknown(true);
         return;
       }
-      setError(caught?.message || 'Action failed');
+      if (actionId === null) return;
+      setModal(null);
+      setError(null);
+      setRegistrationActionOutcome({
+        app: actionApp,
+        firestore: actionFirestore,
+        slug: actionSlug,
+        actionId,
+        status: 'unknown',
+      });
     } finally {
-      if (
-        mounted.current
-        && currentFirebaseApp.current === actionApp
-        && currentFirestore.current === actionFirestore
-        && currentSlug.current === actionSlug
-      ) {
+      if (isCurrentAction()) {
         setSubmitting(false);
       }
     }
   }
 
   function openModal(m: ModalKind) {
+    if (
+      registrationActionRequestBlocked.current
+      || lateRegistrationRequestBlocked.current
+    ) {
+      return;
+    }
     setModal(m);
     setRefundAmount('');
     setNoteText('');
@@ -501,21 +565,23 @@ function Inner({
               <button
                 type="button"
                 onClick={() => openModal({ kind: 'late_add' })}
-                className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
+                disabled={registrationActionPending}
+                className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 text-sm"
               >
                 + Late registration — $0 only
               </button>
               <button
                 type="button"
                 onClick={() => openModal({ kind: 'mark_comp' })}
-                className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-sm"
+                disabled={registrationActionPending}
+                className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 disabled:bg-gray-400 text-sm"
               >
                 + Comp registration
               </button>
               <button
                 type="button"
                 onClick={downloadCsv}
-                disabled={exporting}
+                disabled={exporting || registrationActionPending}
                 className="border px-3 py-2 rounded hover:bg-gray-50 disabled:opacity-50 text-sm"
               >
                 {exporting ? 'Exporting...' : 'Export CSV'}
@@ -536,6 +602,26 @@ function Inner({
           </p>
         )}
         {currentLoadStatus === 'missing' && <p>Event not found</p>}
+        {registrationActionPending && (
+          <p
+            className="text-sm mt-4"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Registration action in progress. Do not start another action.
+          </p>
+        )}
+        {registrationActionOutcomeUnknown && (
+          <p
+            className="text-red-500 text-sm mt-4"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {REGISTRATION_ACTION_OUTCOME_UNKNOWN}
+          </p>
+        )}
         {lateRegistrationOutcomeUnknown && (
           <p
             className="text-red-500 text-sm mt-4"
@@ -594,6 +680,7 @@ function Inner({
                           <button
                             type="button"
                             onClick={() => openModal({ kind: 'refund_full', reg: r })}
+                            disabled={registrationActionPending}
                             className="text-red-600 hover:underline mr-2 text-xs"
                           >
                             Refund
@@ -601,6 +688,7 @@ function Inner({
                           <button
                             type="button"
                             onClick={() => openModal({ kind: 'refund_partial', reg: r })}
+                            disabled={registrationActionPending}
                             className="text-red-600 hover:underline mr-2 text-xs"
                           >
                             Partial
@@ -610,6 +698,7 @@ function Inner({
                       <button
                         type="button"
                         onClick={() => openModal({ kind: 'substitute', reg: r })}
+                        disabled={registrationActionPending}
                         className="text-blue-600 hover:underline mr-2 text-xs"
                       >
                         Sub
@@ -618,6 +707,7 @@ function Inner({
                         <button
                           type="button"
                           onClick={() => openModal({ kind: 'cancel', reg: r })}
+                          disabled={registrationActionPending}
                           className="text-amber-700 hover:underline mr-2 text-xs"
                         >
                           Cancel
@@ -626,6 +716,7 @@ function Inner({
                       <button
                         type="button"
                         onClick={() => openModal({ kind: 'add_note', reg: r })}
+                        disabled={registrationActionPending}
                         className="text-gray-600 hover:underline text-xs"
                       >
                         Note
