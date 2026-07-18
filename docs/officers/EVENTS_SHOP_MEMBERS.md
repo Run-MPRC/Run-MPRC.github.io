@@ -2304,6 +2304,64 @@ The existing CSV request and file contents, late-add, comp, refund, substitute, 
 
 No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the current two-stage load result and display boundary.
 
+### Admin registration action unknown result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** tell an officer to stop after a refund or registration action has an unknown result. The page must not show a private error, runner or money details, or another action that could repeat a change.
+
+**Approver:** event lead, treasurer, platform/security owner, and privacy owner. All four roles must approve any future live review. This source slice does not provide that approval.
+
+**Prerequisites:** issues [#315](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/315), [#331](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/331), [#359](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/359), and [#363](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/363) must be merged for source review. Use only a made-up admin identity, mocked database references, a made-up event, made-up registrations, and a mocked action request. Do not open the Admin screen, export a file, contact Firebase or Stripe, or test an action on the production website. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply.
+
+```mermaid
+flowchart LR
+    A["Made-up complete registration list"] --> B["One mocked registration action"]
+    B -- "Pending" --> C["All registration actions and export are blocked"]
+    B -- "Resolved" --> D["One existing mocked list reload"]
+    B -- "Rejected" --> E["Fixed unknown-result alert"]
+    E --> F["Runner, registration, money, actions, and export hidden"]
+    F --> G["Stop; contact event lead, treasurer, and platform owner"]
+    H["Complete rejected value"] -. "Discarded" .-> I["No page, analytics, or console detail"]
+    J["Older page-context result"] -. "Ignored" .-> K["No display change"]
+```
+
+Text alternative: one mocked action blocks every other registration action and export while it is pending. A resolved request keeps one existing list reload. A rejected request discards the complete rejected value, hides the registration and money result, shows one fixed stop instruction, and cannot be repeated on that open page. An older result changes nothing.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Event registrations page marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #363 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the review used only a made-up admin identity, made-up event and registrations, mocked database references, and a mocked action request.
+4. Confirm no test contacts Firebase, Stripe, a provider, a real registration, or a real payment.
+5. Confirm the made-up cases cover full refund, partial refund, cancel, substitute runner, add note, and create comp with their existing request shapes.
+6. Confirm one pending mocked request disables every row action, **+ Late registration — $0 only**, **+ Comp registration**, and **Export CSV**.
+7. Confirm a rapid or different-row click cannot start a second mocked request.
+8. Confirm one current resolved request closes its action window and performs exactly one existing list reload.
+9. Confirm every current mocked rejection shows exactly `We could not confirm that registration action. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.`
+10. Confirm assistive technology receives the whole sentence immediately as one alert.
+11. Confirm the complete rejected value is not inspected, coerced, logged, stored, sent to analytics, or displayed.
+12. Confirm a mocked rejection starts no automatic retry or list reload.
+13. Confirm the unknown-result page keeps only the generic Admin registrations shell and fixed alert. Runner names, email addresses, registration details, totals, amounts, filters, table, action windows, action buttons, and export must be absent.
+14. Confirm a same-page rerender cannot restore those details or start another request.
+15. Confirm an older result after the app, database connection, event route, action attempt, or page lifecycle changes is ignored.
+16. Confirm the separate exact-zero late-registration containment remains unchanged. Paid late registration remains **NOT AVAILABLE YET**.
+17. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Stripe, permissions, event or registration records, export or action activity, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** a pending mocked non-late action blocks every registration mutation and export entry point. A current resolved request keeps the existing one-time list reload. A current rejected request shows one fixed accessible instruction, no rejected detail, no runner or money result, and no action or export control. It cannot be repeated on that open page. Older results are inert. The alert says the result is unknown; it does not claim that Firebase or Stripe made no change.
+
+Refreshing, closing, or reopening the page can recreate the controls. That does not prove what happened and never makes a repeat safe. Stop and contact the named owners instead. A browser guard does not provide server idempotency, reconciliation, durable audit, Stripe readback, authorization, backup, rollback, deployment, or live proof.
+
+**Stop conditions:** any real officer, runner, name, email address, phone, emergency contact, event, registration, price, payment, refund, Firebase, Stripe, provider, endpoint, credential, export, or production record used; an attempt to force a production failure; a raw detail in the page, analytics, console, screenshot, issue, email, message, or AI tool; an automatic retry or reload after rejection; runner, registration, money, action, or export content after the alert; a repeated action; a manual Firebase or Stripe repair; or a claim that a browser lock, source change, test, merge, preview, or green workflow proves financial safety or live behavior.
+
+**Success proof:** for source completion, record the exact #363 issue, reviewed pull request and merge commit, recorded old-source failures, green focused and compatibility tests, relevant full checks, and independent privacy/security, lifecycle, and officer-continuity reviews. The safe officer review stops at those records. A later live process still needs authorization, server repeat safety, reconciliation, durable audit, provider readback, backup, rollback, protected deployment, and dated exact-revision evidence. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, Stripe configuration, event or registration changes, exports, payments, refunds, production-data actions, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by refreshing the page, repeating an action, exporting private data, or changing or deleting an event, registration, payment, refund, officer account, permission, database record, or provider setting.
+
+**Escalation:** stop and contact the event lead, treasurer, and platform/security owner. Add the privacy owner. Use the private incident path if an action might have completed, any personal, payment, provider, endpoint, token-shaped, or technical detail appeared, or another request was attempted. Do not copy private details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because this source slice changes no server authority, data movement, permissions, account ownership, or deployment topology. The diagram above records only the current page's action-result display and repeat-click guard.
+
 ## Stop conditions
 
 Stop if staging is not isolated, the owner/policy is missing, a test uses real people or money, Firebase deployment skipped, rollback is untested, or the requested action directly edits payment/member state.
