@@ -13,7 +13,7 @@ This document defines how MPRC should configure Stripe and how race-registration
 - Checkout creation lacks validated fail-closed environment configuration, command idempotency, a persistence-first saga, and the canonical versioned state/schema contract.
 - The webhook still needs canonical reducer/reservation/outbox integration, explicit metadata schema allowlisting/migration, retry/dead-letter operations, TTL/alerts, emulator integration, and Stripe test-mode delivery rehearsal.
 - A webhook can arrive before the registration/order record is written.
-- Late-registration Payment Links cannot be reliably mapped back to their registration and are reusable.
+- PAY-004C1 [#359](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/359) changes repository source to deny new positive paid-late-registration requests and remove reusable-link controls. Firebase and website deployment are unproven, and existing reusable Payment Links still require private inventory, deactivation, and reconciliation.
 - Race capacity is checked with a non-atomic count; merchandise has no SKU inventory reservation.
 - Cancelling locally does not expire an open Stripe Session, so a later payment can reopen the record.
 - Promotion entry and automatic tax are disabled in both current Session creators. Exact creator/webhook tests quarantine any nonzero discount, tax, or shipping charge. Outstanding pre-change Session/provider inventory, deployment, and live verification remain open under PROMO-001.
@@ -771,7 +771,20 @@ The #161 classifier uses only synthetic fixtures. It can split known legacy mean
 
 ### Late registration
 
-Do not create a reusable Payment Link per registrant. Prefer a one-off Checkout Session created through the same idempotent registration service, then communicate that URL through an authorized channel. If Payment Links are retained, restrict them, define quantity/expiry behavior, map every generated Session through trusted metadata, and prevent multiple paid Sessions from confirming or charging one registration. The simpler first-release decision is to replace the current late-registration Payment Link flow.
+Current repository source fails closed rather than creating a new paid late-registration link:
+
+```mermaid
+flowchart LR
+    A["Admin late-registration request passes existing access and commerce checks"] --> B{"Exact validated cents"}
+    B -- "Zero" --> C["Legacy local record marked paid; no Stripe call"]
+    B -- "Positive" --> D["Fixed stop; no identifier, token, write, Stripe client, or link"]
+    C -. "Not payment, free, comp, or membership proof" .-> E["Paid late registration remains NOT AVAILABLE YET"]
+    D -. "Future replacement" .-> F["PAY-004C one-off Checkout and legacy-link cleanup"]
+```
+
+Text alternative: exact zero keeps the legacy local no-Stripe record, while every positive admitted amount stops before registration allocation or Stripe. Neither branch makes paid late registration available. PAY-004C still owns a one-off payment path and cleanup of earlier reusable links.
+
+Do not create a reusable Payment Link per registrant. The full replacement must use a one-off Checkout Session created through the same persistence-first, idempotent registration service, then communicate that URL through an authorized channel. Inventory, deactivate, and reconcile earlier Payment Links before launch. Prevent multiple active or paid Sessions from confirming or charging one logical registration.
 
 ## 14. Promotion, tax, shipping, and receipts
 

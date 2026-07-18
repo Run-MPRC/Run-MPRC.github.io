@@ -139,6 +139,7 @@ type ModalKind =
   | { kind: 'late_add' };
 
 interface RegistrationsLoadOutcome {
+  app: unknown;
   firestore: unknown;
   slug: string;
   status: 'loading' | 'resolved' | 'missing' | 'unavailable';
@@ -147,6 +148,7 @@ interface RegistrationsLoadOutcome {
 }
 
 const LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
+const LATE_REGISTRATION_OUTCOME_UNKNOWN = 'We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.';
 
 function Inner({
   routeSlug,
@@ -161,8 +163,12 @@ function Inner({
   const firestore = isReady && services
     ? services.firebaseResources.firestore
     : null;
+  const firebaseApp = isReady && services
+    ? services.firebaseResources.app
+    : null;
   const [loadOutcome, setLoadOutcome] = useState<RegistrationsLoadOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lateRegistrationOutcomeUnknown, setLateRegistrationOutcomeUnknown] = useState(false);
   const [modal, setModal] = useState<ModalKind>(null);
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<string>('');
@@ -176,44 +182,58 @@ function Inner({
   const [runnerDraft, setRunnerDraft] = useState<RunnerDraft>({
     firstName: '', lastName: '', email: '',
   });
-  const [priceDraft, setPriceDraft] = useState({
-    priceTier: 'nonMember' as 'member' | 'nonMember' | 'earlyBird',
-    amountDollars: '',
-  });
   const requestSequence = useRef(0);
+  const lateRegistrationRequestBlocked = useRef(false);
   const mounted = useRef(true);
+  const currentFirebaseApp = useRef(firebaseApp);
   const currentFirestore = useRef(firestore);
   const currentSlug = useRef(slug);
+  currentFirebaseApp.current = firebaseApp;
   currentFirestore.current = firestore;
   currentSlug.current = slug;
 
-  const currentOutcome = loadOutcome?.firestore === firestore
+  const currentOutcome = loadOutcome?.app === firebaseApp
+    && loadOutcome.firestore === firestore
     && loadOutcome.slug === slug
     ? loadOutcome
     : null;
   const currentLoadStatus = currentOutcome?.status || 'loading';
-  const event = currentLoadStatus === 'resolved' ? currentOutcome?.event || null : null;
-  const regs = currentLoadStatus === 'resolved'
+  const canShowResolved = currentLoadStatus === 'resolved'
+    && !lateRegistrationOutcomeUnknown;
+  const event = canShowResolved ? currentOutcome?.event || null : null;
+  const regs = canShowResolved
     ? currentOutcome?.registrations || []
     : [];
 
-  function isCurrentRequest(requestId: number, db: unknown, eventSlug: string) {
+  function isCurrentRequest(
+    requestId: number,
+    app: unknown,
+    db: unknown,
+    eventSlug: string,
+  ) {
     return mounted.current
       && requestSequence.current === requestId
+      && currentFirebaseApp.current === app
       && currentFirestore.current === db
       && currentSlug.current === eventSlug;
   }
 
   async function reload(resetContext = false) {
+    const app = firebaseApp;
     const db = firestore;
-    if (!db || !slug) return;
-    if (!mounted.current || currentFirestore.current !== db || currentSlug.current !== slug) {
-      return;
+    if (!db || !slug) return false;
+    if (
+      !mounted.current
+      || currentFirebaseApp.current !== app
+      || currentFirestore.current !== db
+      || currentSlug.current !== slug
+    ) {
+      return false;
     }
 
     const requestId = requestSequence.current + 1;
     requestSequence.current = requestId;
-    const outcomeKey = { firestore: db, slug };
+    const outcomeKey = { app, firestore: db, slug };
     setLoadOutcome({
       ...outcomeKey,
       status: 'loading',
@@ -222,19 +242,21 @@ function Inner({
     });
     setError(null);
     if (resetContext) {
+      lateRegistrationRequestBlocked.current = false;
+      setLateRegistrationOutcomeUnknown(false);
       setModal(null);
+      setSubmitting(false);
       setFilter('');
       setStatusFilter('all');
       setTypeFilter('all');
       setRefundAmount('');
       setNoteText('');
       setRunnerDraft({ firstName: '', lastName: '', email: '' });
-      setPriceDraft({ priceTier: 'nonMember', amountDollars: '' });
     }
 
     try {
       const nextEvent = await getEventBySlug(db, slug);
-      if (!isCurrentRequest(requestId, db, slug)) return;
+      if (!isCurrentRequest(requestId, app, db, slug)) return false;
       if (!nextEvent) {
         setLoadOutcome({
           ...outcomeKey,
@@ -242,25 +264,27 @@ function Inner({
           event: null,
           registrations: [],
         });
-        return;
+        return false;
       }
 
       const nextRegistrations = await listRegistrationsForEvent(db, slug);
-      if (!isCurrentRequest(requestId, db, slug)) return;
+      if (!isCurrentRequest(requestId, app, db, slug)) return false;
       setLoadOutcome({
         ...outcomeKey,
         status: 'resolved',
         event: nextEvent,
         registrations: nextRegistrations,
       });
+      return true;
     } catch {
-      if (!isCurrentRequest(requestId, db, slug)) return;
+      if (!isCurrentRequest(requestId, app, db, slug)) return false;
       setLoadOutcome({
         ...outcomeKey,
         status: 'unavailable',
         event: null,
         registrations: [],
       });
+      return false;
     }
   }
 
@@ -277,7 +301,7 @@ function Inner({
     reload(true);
     return () => { requestSequence.current += 1; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, slug]);
+  }, [firebaseApp, firestore, slug]);
 
   async function downloadCsv() {
     if (!services || !slug) return;
@@ -331,29 +355,72 @@ function Inner({
   }, [regs]);
 
   async function runAction(action: AdminAction, payload: Record<string, unknown>, registrationId?: string) {
-    if (!services || !slug) return;
+    if (
+      !firebaseApp
+      || !firestore
+      || !slug
+      || !mounted.current
+      || currentFirebaseApp.current !== firebaseApp
+      || currentFirestore.current !== firestore
+      || currentSlug.current !== slug
+      || lateRegistrationRequestBlocked.current
+    ) {
+      return;
+    }
+    const actionApp = firebaseApp;
+    const actionFirestore = firestore;
+    const actionSlug = slug;
+    const isLateRegistration = action === 'add_late_registration';
+    if (isLateRegistration) {
+      lateRegistrationRequestBlocked.current = true;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const result = await adminRegistrationAction(services.firebaseResources.app, {
+      await adminRegistrationAction(actionApp, {
         eventId: slug,
         registrationId,
         action,
         payload,
       });
-      if (result.paymentLink) {
-        // Show late-add payment link to admin for copying/emailing
-        window.prompt(
-          'Payment link generated. Copy and send to the registrant:',
-          result.paymentLink,
-        );
+      if (
+        !mounted.current
+        || currentFirebaseApp.current !== actionApp
+        || currentFirestore.current !== actionFirestore
+        || currentSlug.current !== actionSlug
+      ) {
+        return;
       }
       setModal(null);
-      await reload();
-    } catch (err: any) {
-      setError(err?.message || 'Action failed');
+      const reloadSucceeded = await reload();
+      if (isLateRegistration && reloadSucceeded) {
+        lateRegistrationRequestBlocked.current = false;
+      }
+    } catch (caught: any) {
+      if (
+        !mounted.current
+        || currentFirebaseApp.current !== actionApp
+        || currentFirestore.current !== actionFirestore
+        || currentSlug.current !== actionSlug
+      ) {
+        return;
+      }
+      if (isLateRegistration) {
+        setModal(null);
+        setError(null);
+        setLateRegistrationOutcomeUnknown(true);
+        return;
+      }
+      setError(caught?.message || 'Action failed');
     } finally {
-      setSubmitting(false);
+      if (
+        mounted.current
+        && currentFirebaseApp.current === actionApp
+        && currentFirestore.current === actionFirestore
+        && currentSlug.current === actionSlug
+      ) {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -362,7 +429,6 @@ function Inner({
     setRefundAmount('');
     setNoteText('');
     setRunnerDraft({ firstName: '', lastName: '', email: '' });
-    setPriceDraft({ priceTier: 'nonMember', amountDollars: '' });
   }
 
   return (
@@ -372,7 +438,7 @@ function Inner({
         <Link to="/admin/events" className="text-sm text-blue-600 hover:underline">
           ← All events
         </Link>
-        {event && (
+        {canShowResolved && event && (
           <div className="mt-2">
             <h1 className="text-2xl font-bold">{event.title}</h1>
             <p className="text-sm text-gray-600">
@@ -382,7 +448,7 @@ function Inner({
           </div>
         )}
 
-        {currentLoadStatus === 'resolved' && (
+        {canShowResolved && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
               <div className="border rounded p-3 bg-green-50">
@@ -437,7 +503,7 @@ function Inner({
                 onClick={() => openModal({ kind: 'late_add' })}
                 className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
               >
-                + Late add
+                + Late registration — $0 only
               </button>
               <button
                 type="button"
@@ -470,11 +536,21 @@ function Inner({
           </p>
         )}
         {currentLoadStatus === 'missing' && <p>Event not found</p>}
-        {currentLoadStatus === 'resolved' && error && (
+        {lateRegistrationOutcomeUnknown && (
+          <p
+            className="text-red-500 text-sm mt-4"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {LATE_REGISTRATION_OUTCOME_UNKNOWN}
+          </p>
+        )}
+        {canShowResolved && error && (
           <p className="text-red-500 text-sm">{error}</p>
         )}
 
-        {currentLoadStatus === 'resolved' && (
+        {canShowResolved && (
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
@@ -563,7 +639,7 @@ function Inner({
         )}
       </div>
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'refund_full' && (
+      {canShowResolved && modal?.kind === 'refund_full' && (
         <ActionModal
           title={`Refund full — ${modal.reg.runner?.email}`}
           submitLabel="Issue full refund"
@@ -581,7 +657,7 @@ function Inner({
         </ActionModal>
       )}
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'refund_partial' && (
+      {canShowResolved && modal?.kind === 'refund_partial' && (
         <ActionModal
           title={`Partial refund — ${modal.reg.runner?.email}`}
           submitLabel="Issue partial refund"
@@ -616,7 +692,7 @@ function Inner({
         </ActionModal>
       )}
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'cancel' && (
+      {canShowResolved && modal?.kind === 'cancel' && (
         <ActionModal
           title={`Cancel — ${modal.reg.runner?.email}`}
           submitLabel="Cancel registration"
@@ -638,7 +714,7 @@ function Inner({
         </ActionModal>
       )}
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'substitute' && (
+      {canShowResolved && modal?.kind === 'substitute' && (
         <ActionModal
           title={`Substitute runner — was ${modal.reg.runner?.email}`}
           submitLabel="Substitute"
@@ -650,7 +726,7 @@ function Inner({
         </ActionModal>
       )}
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'add_note' && (
+      {canShowResolved && modal?.kind === 'add_note' && (
         <ActionModal
           title="Add note"
           submitLabel="Add note"
@@ -667,7 +743,7 @@ function Inner({
         </ActionModal>
       )}
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'mark_comp' && (
+      {canShowResolved && modal?.kind === 'mark_comp' && (
         <ActionModal
           title="Comp registration"
           submitLabel="Create comp"
@@ -682,56 +758,27 @@ function Inner({
         </ActionModal>
       )}
 
-      {currentLoadStatus === 'resolved' && modal?.kind === 'late_add' && (
+      {canShowResolved && modal?.kind === 'late_add' && (
         <ActionModal
-          title="Late add (with Stripe Payment Link)"
-          submitLabel="Create late registration"
+          title="Late registration — $0 only"
+          submitLabel="Create $0 registration"
           submitting={submitting}
           onClose={() => setModal(null)}
-          onSubmit={() => {
-            const amt = parseFloat(priceDraft.amountDollars || '0');
-            runAction('add_late_registration', {
-              registration: {
-                runner: runnerDraft,
-                priceTier: priceDraft.priceTier,
-                amountCents: Math.round(amt * 100),
-              },
-            });
-          }}
+          onSubmit={() => runAction('add_late_registration', {
+            registration: {
+              runner: runnerDraft,
+              priceTier: 'nonMember',
+              amountCents: 0,
+            },
+          })}
         >
           <p className="text-sm text-gray-600">
-            Creates a pending registration and a Stripe Payment Link you can send to the runner.
+            Creates a $0 local registration. Paid late registration is NOT AVAILABLE YET.
+            The legacy system labels this record paid, but it does not prove payment or make
+            the entry free, comp, or member-authorized. Do not create or send a Stripe Payment
+            Link as a workaround.
           </p>
           <RunnerFields value={runnerDraft} onChange={setRunnerDraft} />
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className="text-sm">Tier</span>
-              <select
-                className="border rounded px-2 py-1 w-full text-sm"
-                value={priceDraft.priceTier}
-                onChange={(e) => setPriceDraft({
-                  ...priceDraft, priceTier: e.target.value as any,
-                })}
-              >
-                <option value="member">member</option>
-                <option value="nonMember">nonMember</option>
-                <option value="earlyBird">earlyBird</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-sm">Amount (USD)</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                className="border rounded px-2 py-1 w-full text-sm"
-                value={priceDraft.amountDollars}
-                onChange={(e) => setPriceDraft({
-                  ...priceDraft, amountDollars: e.target.value,
-                })}
-              />
-            </label>
-          </div>
         </ActionModal>
       )}
     </>

@@ -252,6 +252,7 @@ const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right 
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const ADMIN_EVENT_EDITOR_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const ADMIN_EVENT_REGISTRATIONS_LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
+const ADMIN_LATE_REGISTRATION_OUTCOME_UNKNOWN = 'We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.';
 const ADMIN_DASHBOARD_LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
 const ADMIN_ORDERS_LOAD_FAILURE = 'We could not load orders right now. Stop and contact the treasurer and platform owner before taking any order action.';
 const ADMIN_MEMBERS_LOAD_FAILURE = 'We could not load website accounts right now. Stop and contact the membership lead and platform owner before changing website access.';
@@ -5369,7 +5370,8 @@ describe('Admin Event registrations load-failure privacy boundary', () => {
     expect(screen.queryByPlaceholderText('Search by name or email...'))
       .not.toBeInTheDocument();
     expect(screen.queryAllByRole('combobox')).toHaveLength(0);
-    expect(screen.queryByRole('button', { name: '+ Late add' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Late registration — $0 only' }))
+      .not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '+ Comp registration' }))
       .not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
@@ -5379,7 +5381,7 @@ describe('Admin Event registrations load-failure privacy boundary', () => {
       name: /^(Refund|Partial|Sub|Cancel|Note|Issue full refund)$/,
     })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', {
-      name: /^(Refund full|Partial refund|Cancel|Substitute runner|Add note|Comp registration|Late add)/,
+      name: /^(Refund full|Partial refund|Cancel|Substitute runner|Add note|Comp registration|Late registration — \$0 only)/,
     })).not.toBeInTheDocument();
   }
 
@@ -5570,7 +5572,8 @@ describe('Admin Event registrations load-failure privacy boundary', () => {
       .toHaveTextContent(/^\$0\.00$/);
     expect(screen.getByPlaceholderText('Search by name or email...')).toBeInTheDocument();
     expect(screen.getAllByRole('combobox')).toHaveLength(2);
-    expect(screen.getByRole('button', { name: '+ Late add' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Late registration — $0 only' }))
+      .toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Comp registration' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveTextContent('No registrations');
@@ -6103,6 +6106,352 @@ describe('Admin Event registrations load-failure privacy boundary', () => {
       recoveredFirestore,
       'synthetic-event',
     );
+  });
+});
+
+describe('Admin late-registration Payment Link containment', () => {
+  function deferred() {
+    let reject;
+    let resolve;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      reject = rejectPromise;
+      resolve = resolvePromise;
+    });
+    return { promise, reject, resolve };
+  }
+
+  function syntheticExistingRegistration() {
+    return {
+      id: 'synthetic-existing-registration',
+      status: 'paid',
+      amountCents: 2500,
+      signupType: 'participant',
+      priceTier: 'member',
+      runner: {
+        firstName: 'Existing',
+        lastName: 'Runner',
+        email: 'existing-runner@example.test',
+        shirtSize: 'M',
+      },
+    };
+  }
+
+  function setAdminRegistrationContext() {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValue({
+      id: 'synthetic-event',
+      slug: 'synthetic-event',
+      title: 'Synthetic Registration Run',
+      startAt: { toDate: () => new Date(2030, 0, 12, 9, 30) },
+      location: 'Synthetic Registration Park',
+      capacity: 40,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 2500, nonMemberCents: 3000 },
+    });
+    listRegistrationsForEvent.mockResolvedValue([]);
+  }
+
+  function submitLateRegistration() {
+    fireEvent.click(screen.getByRole('button', {
+      name: '+ Late registration — $0 only',
+    }));
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Runner' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'runner@example.test' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create $0 registration' }));
+  }
+
+  function expectLateRegistrationUnknownState(...privateText) {
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_LATE_REGISTRATION_OUTCOME_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.getByRole('link', { name: /All events/ }))
+      .toHaveAttribute('href', '/admin/events');
+    expect(document.body).not.toHaveTextContent(
+      /Synthetic Registration Run|Synthetic Registration Park|Existing Runner|existing-runner@example\.test/i,
+    );
+    privateText.forEach((text) => expect(document.body).not.toHaveTextContent(text));
+    expect(screen.queryByText('Paid registrations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunds')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gross revenue')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunded amount')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search by name or email...'))
+      .not.toBeInTheDocument();
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('No registrations')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Late registration — $0 only' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Comp registration' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create $0 registration' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Late registration — $0 only' }))
+      .not.toBeInTheDocument();
+  }
+
+  beforeEach(() => {
+    setAdminRegistrationContext();
+    jest.spyOn(window, 'prompt').mockImplementation(() => null);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('offers only a plainly labeled $0-only late-registration form', async () => {
+    renderAdminEventRegistrations();
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: '+ Late registration — $0 only',
+    }));
+
+    const modal = screen.getByRole('heading', { name: 'Late registration — $0 only' })
+      .parentElement;
+    expect(modal).not.toBeNull();
+    expect(within(modal).getByText(/Paid late registration is NOT AVAILABLE YET/))
+      .toBeInTheDocument();
+    expect(within(modal).getByText(/legacy system labels this record paid/))
+      .toBeInTheDocument();
+    expect(within(modal).getByText(
+      /does not prove payment or make the entry free, comp, or member-authorized/,
+    ))
+      .toBeInTheDocument();
+    expect(within(modal).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(modal).queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(within(modal).queryByText(/Payment Link generated|Amount \(USD\)|Tier/))
+      .not.toBeInTheDocument();
+    expect(window.prompt).not.toHaveBeenCalled();
+  });
+
+  test('sends exact zero and never exposes an obsolete reusable link result', async () => {
+    adminRegistrationAction.mockResolvedValueOnce({
+      ok: true,
+      registrationId: 'synthetic-zero-registration',
+      paymentLink: 'https://obsolete-payment-link.example.test/synthetic',
+    });
+    renderAdminEventRegistrations();
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: '+ Late registration — $0 only',
+    }));
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Runner' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'runner@example.test' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create $0 registration' }));
+
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledWith(
+      firebaseApp,
+      {
+        eventId: 'synthetic-event',
+        registrationId: undefined,
+        action: 'add_late_registration',
+        payload: {
+          registration: {
+            runner: {
+              firstName: 'Synthetic',
+              lastName: 'Runner',
+              email: 'runner@example.test',
+            },
+            priceTier: 'nonMember',
+            amountCents: 0,
+          },
+        },
+      },
+    ));
+    await waitFor(() => expect(screen.queryByRole('heading', {
+      name: 'Late registration — $0 only',
+    })).not.toBeInTheDocument());
+    expect(window.prompt).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('obsolete-payment-link.example.test');
+    expect(getEventBySlug).toHaveBeenCalledTimes(2);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(2);
+  });
+
+  test('turns a rejected $0 request into one terminal accessible unknown outcome', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    listRegistrationsForEvent.mockResolvedValueOnce([syntheticExistingRegistration()]);
+    adminRegistrationAction.mockRejectedValueOnce(Object.assign(
+      new Error('late-registration-private@example.test'),
+      {
+        code: 'functions/late-registration-private-canary',
+        endpoint: 'https://provider.example.test/?token=private-canary',
+      },
+    ));
+    const view = renderAdminEventRegistrations();
+
+    await screen.findByRole('button', { name: '+ Late registration — $0 only' });
+    submitLateRegistration();
+
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+    await screen.findByRole('alert');
+    expectLateRegistrationUnknownState(
+      'late-registration-private@example.test',
+      'functions/late-registration-private-canary',
+      'provider.example.test',
+      'private-canary',
+    );
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /late-registration-private|provider\.example\.test|private-canary/i,
+    );
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+
+    view.rerender(<App />);
+    await act(async () => Promise.resolve());
+
+    expectLateRegistrationUnknownState();
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not inspect, enumerate, coerce, log, or display a hostile rejection', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const rejectionTraps = {
+      get: jest.fn(() => {
+        throw new Error('late-registration-get-trap-canary');
+      }),
+      getOwnPropertyDescriptor: jest.fn(() => {
+        throw new Error('late-registration-descriptor-trap-canary');
+      }),
+      getPrototypeOf: jest.fn(() => {
+        throw new Error('late-registration-prototype-trap-canary');
+      }),
+      has: jest.fn(() => {
+        throw new Error('late-registration-has-trap-canary');
+      }),
+      ownKeys: jest.fn(() => {
+        throw new Error('late-registration-keys-trap-canary');
+      }),
+    };
+    const hostileRejection = new Proxy({}, rejectionTraps);
+    listRegistrationsForEvent.mockResolvedValueOnce([syntheticExistingRegistration()]);
+    adminRegistrationAction.mockRejectedValueOnce(hostileRejection);
+    renderAdminEventRegistrations();
+
+    await screen.findByRole('button', { name: '+ Late registration — $0 only' });
+    submitLateRegistration();
+
+    await screen.findByRole('alert');
+    expectLateRegistrationUnknownState(
+      'late-registration-get-trap-canary',
+      'late-registration-descriptor-trap-canary',
+      'late-registration-prototype-trap-canary',
+      'late-registration-has-trap-canary',
+      'late-registration-keys-trap-canary',
+    );
+    Object.values(rejectionTraps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(getEventBySlug).toHaveBeenCalledTimes(1);
+    expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores an older hostile rejection after a changed database fully resolves', async () => {
+    const actionRequest = deferred();
+    const messageGetter = jest.fn(() => {
+      throw new Error('obsolete-late-registration-message-canary');
+    });
+    adminRegistrationAction.mockReturnValueOnce(actionRequest.promise);
+    const view = renderAdminEventRegistrations();
+
+    await screen.findByRole('button', { name: '+ Late registration — $0 only' });
+    submitLateRegistration();
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-current-registration-firestore' };
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore: currentFirestore } },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValueOnce({
+      id: 'synthetic-current-event',
+      slug: 'synthetic-event',
+      title: 'Current Registration Run',
+      startAt: { toDate: () => new Date(2031, 0, 12, 9, 30) },
+      location: 'Current Registration Park',
+      capacity: 50,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 2600, nonMemberCents: 3100 },
+    });
+    listRegistrationsForEvent.mockResolvedValueOnce([]);
+    view.rerender(<App />);
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Current Registration Run',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Late registration — $0 only' }))
+      .toBeEnabled();
+
+    await act(async () => {
+      actionRequest.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await actionRequest.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Current Registration Run',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Late registration — $0 only' }))
+      .toBeEnabled();
+    expect(document.body).not.toHaveTextContent(
+      'obsolete-late-registration-message-canary',
+    );
+    expect(getEventBySlug).toHaveBeenNthCalledWith(
+      2,
+      currentFirestore,
+      'synthetic-event',
+    );
+    expect(listRegistrationsForEvent).toHaveBeenNthCalledWith(
+      2,
+      currentFirestore,
+      'synthetic-event',
+    );
+    expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
   });
 });
 

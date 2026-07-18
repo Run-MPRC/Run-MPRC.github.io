@@ -213,7 +213,7 @@ async function markComp({ eventId, registration, actor }) {
 }
 
 async function addLateRegistration({
-  stripe, eventId, registration, actor, siteOrigin, eventSnap,
+  eventId, registration, actor, eventSnap,
 }) {
   if (!registration || !isValidEmail(registration.runner?.email)) {
     throw new functions.https.HttpsError('invalid-argument', 'registration.runner.email required');
@@ -223,6 +223,12 @@ async function addLateRegistration({
     throw new functions.https.HttpsError(
       'invalid-argument',
       'Invalid late registration amount',
+    );
+  }
+  if (amountCents !== 0) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Paid late registration is not available',
     );
   }
   const priceTier = registration.priceTier || 'nonMember';
@@ -252,7 +258,7 @@ async function addLateRegistration({
     amountCents,
     currency: 'usd',
     promoCode: null,
-    status: amountCents === 0 ? 'paid' : 'pending',
+    status: 'paid',
     stripeSessionId: null,
     stripePaymentIntentId: null,
     stripeChargeId: null,
@@ -263,7 +269,7 @@ async function addLateRegistration({
     confirmationToken,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
-    paidAt: amountCents === 0 ? Timestamp.now() : null,
+    paidAt: Timestamp.now(),
     refundedAt: null,
     cancelledAt: null,
     auditLog: [auditEntry({
@@ -274,45 +280,8 @@ async function addLateRegistration({
     })],
   };
 
-  if (amountCents === 0) {
-    await newRef.set(base);
-    return { ok: true, registrationId: newRef.id, paymentLink: null };
-  }
-
-  // Create a Stripe Payment Link so the registrant can pay out-of-band
-  if (!event.stripeProductId) {
-    const product = await stripe.products.create({
-      name: event.title,
-      metadata: { eventId, slug: event.slug || '' },
-    });
-    await eventSnap.ref.update({
-      stripeProductId: product.id,
-      updatedAt: Timestamp.now(),
-    });
-    event.stripeProductId = product.id;
-  }
-
-  const price = await stripe.prices.create({
-    unit_amount: amountCents,
-    currency: 'usd',
-    product: event.stripeProductId,
-    metadata: { eventId, registrationId: newRef.id, priceTier, late_add: 'true' },
-  });
-
-  const link = await stripe.paymentLinks.create({
-    line_items: [{ price: price.id, quantity: 1 }],
-    metadata: { eventId, registrationId: newRef.id, priceTier, late_add: 'true' },
-    after_completion: {
-      type: 'redirect',
-      redirect: {
-        url: `${siteOrigin}/register/success?reg=${newRef.id}&token=${confirmationToken}`,
-      },
-    },
-  });
-
-  await newRef.set({ ...base, stripePaymentLinkId: link.id });
-
-  return { ok: true, registrationId: newRef.id, paymentLink: link.url };
+  await newRef.set(base);
+  return { ok: true, registrationId: newRef.id, paymentLink: null };
 }
 
 exports.adminRegistrationAction = functions
@@ -360,13 +329,10 @@ exports.adminRegistrationAction = functions
         deploymentEnabled: serverConfig.commerceEnabled,
         targetRef: eventRef,
       });
-      const stripe = getStripe();
       return addLateRegistration({
-        stripe,
         eventId,
         registration: payload.registration,
         actor,
-        siteOrigin: serverConfig.siteOrigin,
         eventSnap,
       });
     }
