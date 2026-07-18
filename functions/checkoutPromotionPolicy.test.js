@@ -184,6 +184,9 @@ jest.mock('./stripeProductBinding', () => {
 const admin = require('firebase-admin');
 const { createCheckoutSession } = require('./createCheckoutSession');
 const { createMerchCheckout } = require('./createMerchCheckout');
+const {
+  LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+} = require('./legacyCheckoutSessionResult');
 
 function validRaceRequest(overrides = {}) {
   return {
@@ -213,6 +216,40 @@ function validCreatedProduct(overrides = {}, responseOverrides = {}) {
     writable: false,
   });
   return product;
+}
+
+function validCheckoutSessionForPayload(
+  payload,
+  overrides = {},
+  responseOverrides = {},
+) {
+  const isMerchandise = payload.metadata.type === 'merch';
+  const id = isMerchandise
+    ? 'cs_test_orderpolicy'
+    : 'cs_test_registrationpolicy';
+  const session = {
+    id,
+    object: 'checkout.session',
+    livemode: false,
+    mode: 'payment',
+    status: 'open',
+    payment_status: 'unpaid',
+    amount_total: payload.line_items[0].price_data.unit_amount,
+    currency: 'usd',
+    customer_email: payload.customer_email,
+    metadata: { ...payload.metadata },
+    success_url: payload.success_url,
+    cancel_url: payload.cancel_url,
+    url: `https://checkout.stripe.com/c/pay/${id}#synthetic-test-only`,
+    ...overrides,
+  };
+  Object.defineProperty(session, 'lastResponse', {
+    configurable: false,
+    enumerable: false,
+    value: { statusCode: 200, ...responseOverrides },
+    writable: false,
+  });
+  return session;
 }
 
 function seedProductBindingTarget(domain) {
@@ -266,6 +303,30 @@ function productBindingBusinessPath(domain) {
   return domain === 'race'
     ? 'events/race-1/registrations/reg-new-1'
     : 'orders/order-new-1';
+}
+
+function seedPaidCheckoutTarget(domain) {
+  if (domain === 'race') {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      status: 'open',
+      visibility: 'public',
+      pricing: { nonMemberCents: 5_000 },
+      stripeProductId: 'custom_race_product_test_only',
+      waiverVersion: 'synthetic-v1',
+    });
+    return;
+  }
+  admin.__seed('products/hat', {
+    checkoutEnabled: true,
+    title: 'Synthetic Hat',
+    slug: 'hat',
+    status: 'active',
+    priceCents: 2_000,
+    stripeProductId: 'custom_shop_product_test_only',
+  });
 }
 
 function installStoredBindingCase(target, caseName, canary) {
@@ -375,10 +436,9 @@ describe('Checkout promotion policy', () => {
     mockRateLimit.mockResolvedValue(undefined);
     mockGenerateToken.mockReturnValue('synthetic-confirmation-token');
     mockCountActiveRegistrations.mockResolvedValue(0);
-    mockCheckoutCreate.mockImplementation(async (payload) => ({
-      id: payload.metadata.type === 'merch' ? 'cs_order_policy' : 'cs_registration_policy',
-      url: 'https://checkout.stripe.test/synthetic-session',
-    }));
+    mockCheckoutCreate.mockImplementation(
+      async (payload) => validCheckoutSessionForPayload(payload),
+    );
     process.env.ENVIRONMENT_NAME = 'test';
     process.env.SITE_ORIGIN = 'https://runmprc.test';
     process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
@@ -898,7 +958,7 @@ describe('Checkout promotion policy', () => {
         auth: null,
         rawRequest: {},
       })).resolves.toMatchObject({
-        sessionId: 'cs_registration_policy',
+        sessionId: 'cs_test_registrationpolicy',
         registrationId: 'reg-new-1',
       });
 
@@ -926,7 +986,7 @@ describe('Checkout promotion policy', () => {
         auth: null,
         rawRequest: {},
       })).resolves.toMatchObject({
-        sessionId: 'cs_registration_policy',
+        sessionId: 'cs_test_registrationpolicy',
       });
 
       expect(mockCountActiveRegistrations).toHaveBeenCalledTimes(1);
@@ -1176,7 +1236,7 @@ describe('Checkout promotion policy', () => {
         auth,
         rawRequest: {},
       })).resolves.toMatchObject({
-        sessionId: 'cs_registration_policy',
+        sessionId: 'cs_test_registrationpolicy',
         registrationId: 'reg-new-1',
       });
 
@@ -1322,15 +1382,21 @@ describe('Checkout promotion policy', () => {
       payment_intent_data: { metadata: expectedMetadata },
     });
     expect(result).toMatchObject({
-      sessionId: 'cs_registration_policy',
+      sessionId: 'cs_test_registrationpolicy',
       registrationId: 'reg-new-1',
     });
-    expect(admin.__get('events/race-1/registrations/reg-new-1')).toMatchObject({
+    const storedRegistration = admin.__get(
+      'events/race-1/registrations/reg-new-1',
+    );
+    expect(storedRegistration).toMatchObject({
       amountCents: 5000,
       currency: 'usd',
       promoCode: null,
-      stripeSessionId: 'cs_registration_policy',
+      stripeSessionId: 'cs_test_registrationpolicy',
     });
+    expect(Object.hasOwn(storedRegistration, 'url')).toBe(false);
+    expect(Object.values(storedRegistration))
+      .not.toContain(result.url);
     expect(mockProductCreate).not.toHaveBeenCalled();
   });
 
@@ -1364,7 +1430,7 @@ describe('Checkout promotion policy', () => {
     expect(payload.success_url).not.toContain(`event=${eventId}`);
     expect(admin.__get(`events/${eventId}/registrations/reg-new-1`)).toMatchObject({
       eventId,
-      stripeSessionId: 'cs_registration_policy',
+      stripeSessionId: 'cs_test_registrationpolicy',
     });
   });
 
@@ -1471,7 +1537,7 @@ describe('Checkout promotion policy', () => {
       },
       rawRequest: {},
     })).resolves.toMatchObject({
-      sessionId: 'cs_registration_policy',
+      sessionId: 'cs_test_registrationpolicy',
       registrationId: 'reg-new-1',
     });
 
@@ -1642,14 +1708,17 @@ describe('Checkout promotion policy', () => {
       payment_intent_data: { metadata: expectedMetadata },
     });
     expect(result).toMatchObject({
-      sessionId: 'cs_order_policy',
+      sessionId: 'cs_test_orderpolicy',
       orderId: 'order-new-1',
     });
-    expect(admin.__get('orders/order-new-1')).toMatchObject({
+    const storedOrder = admin.__get('orders/order-new-1');
+    expect(storedOrder).toMatchObject({
       amountCents: 2000,
       currency: 'usd',
-      stripeSessionId: 'cs_order_policy',
+      stripeSessionId: 'cs_test_orderpolicy',
     });
+    expect(Object.hasOwn(storedOrder, 'url')).toBe(false);
+    expect(Object.values(storedOrder)).not.toContain(result.url);
     expect(mockProductCreate).not.toHaveBeenCalled();
   });
 
@@ -2199,5 +2268,127 @@ describe('Checkout promotion policy', () => {
     expect(mockCheckoutCreate).not.toHaveBeenCalled();
     expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
     expect(admin.__get('orders/order-new-1')).toBeUndefined();
+  });
+
+  test.each(['race', 'shop'])(
+    'maps a hostile %s Session-create rejection to one fixed unknown outcome',
+    async (domain) => {
+      const canary = `${domain}_checkout_rejection_private_canary`;
+      const messageGetter = jest.fn(() => {
+        throw new Error(canary);
+      });
+      const rejection = Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      });
+      seedPaidCheckoutTarget(domain);
+      mockCheckoutCreate.mockRejectedValueOnce(rejection);
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+      try {
+        const outcome = await runProductBindingCheckout(domain).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+
+        expect(outcome.error).toMatchObject({
+          code: 'failed-precondition',
+          message: LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+        });
+        expect(outcome.value).toBeUndefined();
+        expect(messageGetter).not.toHaveBeenCalled();
+        expect(mockCheckoutCreate).toHaveBeenCalledTimes(1);
+        expect(mockProductCreate).not.toHaveBeenCalled();
+        expect(mockFirestoreWrite).not.toHaveBeenCalled();
+        expect(admin.__get(productBindingBusinessPath(domain))).toBeUndefined();
+        expect([
+          outcome.error.code,
+          outcome.error.message,
+          outcome.error.stack,
+        ].join('\n')).not.toContain(canary);
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      } finally {
+        consoleSpies.forEach((spy) => spy.mockRestore());
+      }
+    },
+  );
+
+  test.each(['race', 'shop'])(
+    'rejects a mismatched resolved %s Session before its business record',
+    async (domain) => {
+      const canary = `${domain}_resolved_session_private_canary`;
+      seedPaidCheckoutTarget(domain);
+      mockCheckoutCreate.mockImplementationOnce(async (payload) => {
+        if (domain === 'race') {
+          return validCheckoutSessionForPayload(payload, {
+            amount_total: payload.line_items[0].price_data.unit_amount + 1,
+            future_private_field: canary,
+          });
+        }
+        return validCheckoutSessionForPayload(payload, {
+          url: `https://attacker.example.test/${canary}`,
+          future_private_field: canary,
+        });
+      });
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+      try {
+        const outcome = await runProductBindingCheckout(domain).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+
+        expect(outcome.error).toMatchObject({
+          code: 'failed-precondition',
+          message: LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+        });
+        expect(outcome.value).toBeUndefined();
+        expect(mockCheckoutCreate).toHaveBeenCalledTimes(1);
+        expect(mockProductCreate).not.toHaveBeenCalled();
+        expect(mockFirestoreWrite).not.toHaveBeenCalled();
+        expect(admin.__get(productBindingBusinessPath(domain))).toBeUndefined();
+        expect([
+          outcome.error.code,
+          outcome.error.message,
+          outcome.error.stack,
+        ].join('\n')).not.toContain(canary);
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      } finally {
+        consoleSpies.forEach((spy) => spy.mockRestore());
+      }
+    },
+  );
+
+  test('encodes one opaque Shop slug path segment in the cancel callback', async () => {
+    const productSlug = 'hat?color=blue#fragment%25';
+    admin.__seed(`products/${productSlug}`, {
+      checkoutEnabled: true,
+      title: 'Synthetic Opaque-Slug Hat',
+      slug: productSlug,
+      status: 'active',
+      priceCents: 2_000,
+      stripeProductId: 'custom_opaque_shop_product_test_only',
+    });
+
+    const outcome = await createMerchCheckout({
+      productSlug,
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} });
+
+    const expectedCancelUrl = 'https://runmprc.test/shop/'
+      + `${encodeURIComponent(productSlug)}?cancelled=1`;
+    expect(mockCheckoutCreate.mock.calls[0][0].cancel_url)
+      .toBe(expectedCancelUrl);
+    expect(outcome.url).toMatch(/^https:\/\/checkout\.stripe\.com\//u);
+    expect(admin.__get('orders/order-new-1')).toMatchObject({
+      productSlug,
+      stripeSessionId: 'cs_test_orderpolicy',
+    });
   });
 });
