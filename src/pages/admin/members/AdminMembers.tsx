@@ -1,5 +1,5 @@
 import React, {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
@@ -20,7 +20,16 @@ interface MembersLoadOutcome {
   members: Member[];
 }
 
+interface RoleActionOutcome {
+  app: unknown;
+  firestore: unknown;
+  adminUid: string | null;
+  status: 'pending' | 'unknown';
+  targetEmail: string;
+}
+
 const LOAD_FAILURE = 'We could not load website accounts right now. Stop and contact the membership lead and platform owner before changing website access.';
+const ROLE_CHANGE_UNKNOWN = 'We could not confirm that website access change. Do not repeat it. Stop and contact the membership lead and platform owner.';
 
 function RolePill({ role }: { role: string }) {
   const style: Record<string, string> = {
@@ -44,21 +53,38 @@ function fmtDate(ts: any) {
 function Inner() {
   const { services, isReady } = useServiceLocator();
   const { user } = useAuth();
+  const app = isReady && services
+    ? services.firebaseResources.app
+    : null;
   const firestore = isReady && services
     ? services.firebaseResources.firestore
     : null;
+  const adminUid = user?.uid ?? null;
   const currentFirestoreRef = useRef(firestore);
   currentFirestoreRef.current = firestore;
+  const currentActionContextRef = useRef({ app, firestore, adminUid });
+  currentActionContextRef.current = { app, firestore, adminUid };
   const requestSequence = useRef(0);
+  const roleActionSequence = useRef(0);
+  const roleActionInFlight = useRef(false);
   const [loadOutcome, setLoadOutcome] = useState<MembersLoadOutcome | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState<string | null>(null);
+  const [roleActionOutcome, setRoleActionOutcome] = useState<RoleActionOutcome | null>(
+    null,
+  );
   const [filter, setFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | MemberRole>('all');
 
   const currentOutcome = loadOutcome?.firestore === firestore ? loadOutcome : null;
   const currentStatus = currentOutcome?.status ?? 'loading';
   const members = currentOutcome?.status === 'resolved' ? currentOutcome.members : [];
+  const currentRoleAction = roleActionOutcome?.app === app
+    && roleActionOutcome.firestore === firestore
+    && roleActionOutcome.adminUid === adminUid
+    ? roleActionOutcome
+    : null;
+  const roleActionPending = currentRoleAction?.status === 'pending';
+  const roleActionUnknown = currentRoleAction?.status === 'unknown';
+  const showAccountResults = currentStatus === 'resolved' && !roleActionUnknown;
 
   const reload = useCallback(async () => {
     if (!firestore || currentFirestoreRef.current !== firestore) return;
@@ -87,17 +113,56 @@ function Inner() {
     return () => { requestSequence.current += 1; };
   }, [firestore, reload]);
 
+  useLayoutEffect(() => {
+    roleActionSequence.current += 1;
+    roleActionInFlight.current = false;
+    setRoleActionOutcome(null);
+    return () => {
+      roleActionSequence.current += 1;
+      roleActionInFlight.current = false;
+    };
+  }, [app, firestore, adminUid]);
+
   async function changeRole(email: string, role: MemberRole) {
-    if (!services) return;
-    setUpdating(email);
-    setError(null);
+    if (
+      !app
+      || !firestore
+      || !adminUid
+      || currentStatus !== 'resolved'
+      || currentRoleAction
+      || roleActionInFlight.current
+    ) return;
+
+    roleActionSequence.current += 1;
+    const actionId = roleActionSequence.current;
+    const actionContext = { app, firestore, adminUid };
+    const isCurrentAction = () => actionId === roleActionSequence.current
+      && currentActionContextRef.current.app === actionContext.app
+      && currentActionContextRef.current.firestore === actionContext.firestore
+      && currentActionContextRef.current.adminUid === actionContext.adminUid;
+
+    roleActionInFlight.current = true;
+    setRoleActionOutcome({
+      ...actionContext,
+      status: 'pending',
+      targetEmail: email,
+    });
+
     try {
-      await setMemberRole(services.firebaseResources.app, email, role);
+      await setMemberRole(app, email, role);
+      if (!isCurrentAction()) return;
       await reload();
-    } catch (err: any) {
-      setError(err?.message || 'Role update failed');
+      if (!isCurrentAction()) return;
+      setRoleActionOutcome(null);
+    } catch {
+      if (!isCurrentAction()) return;
+      setRoleActionOutcome({
+        ...actionContext,
+        status: 'unknown',
+        targetEmail: email,
+      });
     } finally {
-      setUpdating(null);
+      if (isCurrentAction()) roleActionInFlight.current = false;
     }
   }
 
@@ -127,7 +192,7 @@ function Inner() {
         </Link>
         <h1 className="text-2xl font-bold mt-2">Website accounts</h1>
 
-        {currentStatus === 'resolved' && (
+        {showAccountResults && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
               <div className="border rounded p-3 bg-purple-50">
@@ -169,7 +234,7 @@ function Inner() {
           </>
         )}
 
-        {currentStatus === 'loading' && <p>Loading...</p>}
+        {currentStatus === 'loading' && !roleActionPending && <p>Loading...</p>}
         {currentStatus === 'unavailable' && (
           <p
             className="text-red-500 text-sm"
@@ -180,11 +245,28 @@ function Inner() {
             {LOAD_FAILURE}
           </p>
         )}
-        {currentStatus === 'resolved' && error && (
-          <p className="text-red-500 text-sm">{error}</p>
+        {roleActionPending && (
+          <p
+            className="text-gray-600 text-sm"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Updating website access...
+          </p>
+        )}
+        {roleActionUnknown && (
+          <p
+            className="text-red-500 text-sm"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {ROLE_CHANGE_UNKNOWN}
+          </p>
         )}
 
-        {currentStatus === 'resolved' && (
+        {showAccountResults && (
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
@@ -206,7 +288,8 @@ function Inner() {
               )}
               {filtered.map((m) => {
                 const isSelf = user?.uid === m.uid;
-                const busy = updating === m.email;
+                const busy = roleActionPending
+                  && currentRoleAction.targetEmail === m.email;
                 return (
                   <tr key={m.uid} className="border-b hover:bg-gray-50">
                     <td className="p-2">
@@ -226,7 +309,7 @@ function Inner() {
                           key={r}
                           type="button"
                           onClick={() => changeRole(m.email, r)}
-                          disabled={busy || (isSelf && r !== 'admin')}
+                          disabled={roleActionPending || (isSelf && r !== 'admin')}
                           className="text-blue-600 hover:underline mr-2 text-xs disabled:text-gray-400 disabled:no-underline"
                           title={isSelf && r !== 'admin' ? "Can't demote yourself" : ''}
                         >
