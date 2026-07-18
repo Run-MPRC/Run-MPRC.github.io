@@ -291,7 +291,7 @@ Officer source-review steps:
 flowchart TD
     A["Made-up race checkout passes earlier checks"] --> B{"Cutoff uses the exact Firebase date-and-time format?"}
     B -- "No" --> C["Treat early bird as inactive"]
-    B -- "Yes" --> D{"Is the test clock before the cutoff?"}
+    B -- "Yes" --> D{"Is the test clock before the cutoff's stored millisecond?"}
     D -- "No" --> C
     D -- "Yes" --> E["Continue to the separate price check"]
     C --> F{"Did the request explicitly choose early bird?"}
@@ -299,7 +299,7 @@ flowchart TD
     F -- "No" --> H["Use the existing member or nonmember fallback"]
 ```
 
-Text alternative: after earlier checkout checks, a missing, malformed, or reached cutoff makes early bird inactive. An explicit early-bird choice receives one fixed unavailable result and stops before later registration or Stripe work. Automatic price selection uses the existing member or nonmember fallback. Only the exact Firebase date-and-time format later than the test clock may continue to the separate price check.
+Text alternative: after earlier checkout checks, a missing, malformed, or reached cutoff makes early bird inactive. An explicit early-bird choice receives one fixed unavailable result and stops before later registration or Stripe work. Automatic price selection uses the existing member or nonmember fallback. Only the exact Firebase date-and-time format whose stored millisecond is later than the test clock may continue to the separate price check.
 
 Officer source-review steps:
 
@@ -309,8 +309,8 @@ Officer source-review steps:
 4. Ask for the made-up test report from that same commit.
 5. Confirm the report uses only a made-up event and runner.
 6. Confirm missing, null, text, ordinary JavaScript date, altered, or distinguishably fake cutoff values are inactive.
-7. Confirm one valid cutoff is active before its exact time.
-8. Confirm that cutoff is inactive at its exact time or later.
+7. Confirm one valid cutoff is active before its stored millisecond.
+8. Confirm that cutoff is inactive at its stored millisecond or later.
 9. Confirm malformed values cannot run a method stored inside them.
 10. Confirm malformed values cannot expose their stored value in the new fixed result or guard logs.
 11. Confirm an explicit early-bird request receives exactly `Early-bird pricing is no longer available`.
@@ -322,7 +322,7 @@ Officer source-review steps:
 17. Confirm automatic price selection uses the existing member or nonmember fallback when early bird is inactive.
 18. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe state, production data, migration, and live behavior as separate results.
 
-**Expected result:** only the exact current Firebase date-and-time format can make early bird active, and only while the clock is strictly before it. Missing or malformed cutoffs are inactive without running stored code or exposing the value. An explicit early-bird choice stops with the fixed unavailable result before later registration or Stripe work. Automatic selection keeps its existing fallback. The separate race price guard still checks the selected amount. This cutoff check does not approve that amount or prove that the complete checkout is safe.
+**Expected result:** only the exact current Firebase date-and-time format can make early bird active, and only while the clock is before the cutoff's stored millisecond. Missing or malformed cutoffs are inactive without running stored code or exposing the value. An explicit early-bird choice stops with the fixed unavailable result before later registration or Stripe work. Automatic selection keeps its existing fallback. The separate race price guard still checks the selected amount. This cutoff check does not approve that amount or prove that the complete checkout is safe.
 
 **Stop conditions:** any real runner, event, registration, payment, Firebase record, Stripe object, Stripe call, or production test; a request to repair Firebase or Stripe by hand; a missing exact commit; private or raw cutoff details in shared evidence; a rejection that allocates a registration identifier, writes a registration, or reaches Stripe; deployment before the #113 inventory; or a claim that source, tests, merge, preview, or a green workflow approves the business cutoff or proves live checkout behavior.
 
