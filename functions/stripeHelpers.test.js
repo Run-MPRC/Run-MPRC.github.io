@@ -33,6 +33,7 @@ const {
   isEarlyBirdActive,
   isRegistrationOpen,
   pickPriceCents,
+  projectParticipantCapacityLimit,
   requireAdmin,
   resolveCallerRole,
   Timestamp,
@@ -44,6 +45,223 @@ const NOW_MS = 1_735_689_600_000;
 function openEvent(overrides = {}) {
   return { status: 'open', ...overrides };
 }
+
+describe('participant capacity validation', () => {
+  test('keeps missing and null capacity unlimited', () => {
+    expect(projectParticipantCapacityLimit({})).toBeNull();
+    expect(projectParticipantCapacityLimit({ capacity: null })).toBeNull();
+  });
+
+  test.each([1, Number.MAX_SAFE_INTEGER])(
+    'preserves the valid positive safe-integer boundary %s',
+    (capacity) => {
+      expect(projectParticipantCapacityLimit({ capacity })).toBe(capacity);
+    },
+  );
+
+  test.each([
+    ['undefined', undefined],
+    ['zero', 0],
+    ['negative zero', -0],
+    ['negative integer', -1],
+    ['fractional number', 1.5],
+    ['NaN', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+    ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+    ['numeric string', '10'],
+    ['empty string', ''],
+    ['true', true],
+    ['false', false],
+    ['bigint', BigInt(10)],
+    ['symbol', Symbol('capacity')],
+    ['boxed number', Object(10)],
+    ['array', [10]],
+    ['Date', new Date(NOW_MS)],
+    ['Map', new Map([['capacity', 10]])],
+    ['Set', new Set([10])],
+    ['plain record', { limit: 10 }],
+  ])('rejects a present %s capacity', (_name, capacity) => {
+    expect(projectParticipantCapacityLimit({ capacity })).toBeUndefined();
+  });
+
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['number', 1],
+    ['string', 'event'],
+    ['array', []],
+    ['Date', new Date(NOW_MS)],
+    ['null-prototype record', Object.create(null)],
+    ['custom-prototype record', Object.create({})],
+  ])('rejects a %s event root without throwing', (_name, event) => {
+    expect(() => projectParticipantCapacityLimit(event)).not.toThrow();
+    expect(projectParticipantCapacityLimit(event)).toBeUndefined();
+  });
+
+  test('rejects live and revoked Proxy event roots without invoking traps', () => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic event trap must not run');
+    });
+    const proxiedEvent = new Proxy({ capacity: 10 }, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+
+    expect(projectParticipantCapacityLimit(proxiedEvent)).toBeUndefined();
+    expect(trap).not.toHaveBeenCalled();
+
+    const revoked = Proxy.revocable({ capacity: 10 }, {});
+    revoked.revoke();
+    expect(() => projectParticipantCapacityLimit(revoked.proxy)).not.toThrow();
+    expect(projectParticipantCapacityLimit(revoked.proxy)).toBeUndefined();
+  });
+
+  test('rejects capacity accessors and hidden data without reading them', () => {
+    const getter = jest.fn(() => 10);
+    const accessorEvent = {};
+    Object.defineProperty(accessorEvent, 'capacity', {
+      enumerable: true,
+      get: getter,
+    });
+    const hiddenEvent = {};
+    Object.defineProperty(hiddenEvent, 'capacity', { value: 10 });
+
+    expect(projectParticipantCapacityLimit(accessorEvent)).toBeUndefined();
+    expect(projectParticipantCapacityLimit(hiddenEvent)).toBeUndefined();
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test('rejects inherited capacity without invoking a prototype getter', () => {
+    const getter = jest.fn(() => 10);
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'capacity',
+    );
+    let projected;
+
+    try {
+      Object.defineProperty(Object.prototype, 'capacity', {
+        configurable: true,
+        get: getter,
+      });
+      projected = projectParticipantCapacityLimit({});
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(
+          Object.prototype,
+          'capacity',
+          originalDescriptor,
+        );
+      } else {
+        delete Object.prototype.capacity;
+      }
+    }
+
+    expect(projected).toBeUndefined();
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test('rejects live and revoked Proxy capacity values without invoking traps', () => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic capacity trap must not run');
+    });
+    const proxiedCapacity = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+
+    expect(projectParticipantCapacityLimit({
+      capacity: proxiedCapacity,
+    })).toBeUndefined();
+    expect(trap).not.toHaveBeenCalled();
+
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(() => projectParticipantCapacityLimit({
+      capacity: revoked.proxy,
+    })).not.toThrow();
+    expect(projectParticipantCapacityLimit({
+      capacity: revoked.proxy,
+    })).toBeUndefined();
+  });
+
+  test('does not invoke capacity conversion, iteration, or serialization hooks', () => {
+    const capacity = {
+      valueOf: jest.fn(() => 10),
+      toString: jest.fn(() => '10'),
+      toJSON: jest.fn(() => 10),
+      [Symbol.iterator]: jest.fn(),
+      [Symbol.toPrimitive]: jest.fn(() => 10),
+    };
+
+    expect(projectParticipantCapacityLimit({ capacity })).toBeUndefined();
+    [
+      capacity.valueOf,
+      capacity.toString,
+      capacity.toJSON,
+      capacity[Symbol.iterator],
+      capacity[Symbol.toPrimitive],
+    ].forEach((hook) => {
+      expect(hook).not.toHaveBeenCalled();
+    });
+  });
+
+  test('uses captured validation intrinsics', () => {
+    const originalNumberIsSafeInteger = Number.isSafeInteger;
+    const originalGetPrototypeOf = Object.getPrototypeOf;
+    const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    const originalHasOwn = Object.hasOwn;
+    const fail = () => {
+      throw new Error('synthetic replaced intrinsic must not run');
+    };
+    let projected;
+
+    try {
+      Number.isSafeInteger = fail;
+      Object.getPrototypeOf = fail;
+      Object.getOwnPropertyDescriptor = fail;
+      Object.hasOwn = fail;
+      projected = projectParticipantCapacityLimit({ capacity: 10 });
+    } finally {
+      Number.isSafeInteger = originalNumberIsSafeInteger;
+      Object.getPrototypeOf = originalGetPrototypeOf;
+      Object.getOwnPropertyDescriptor = originalGetOwnPropertyDescriptor;
+      Object.hasOwn = originalHasOwn;
+    }
+
+    expect(projected).toBe(10);
+  });
+
+  test('does not mutate or traverse unrelated fields', () => {
+    const unrelatedGetter = jest.fn(() => 'private synthetic detail');
+    const symbolGetter = jest.fn(() => 'private synthetic symbol detail');
+    const event = { capacity: 10 };
+    event.self = event;
+    Object.defineProperty(event, 'unrelated', {
+      enumerable: true,
+      get: unrelatedGetter,
+    });
+    Object.defineProperty(event, Symbol('unrelated'), {
+      enumerable: true,
+      get: symbolGetter,
+    });
+    const before = Object.getOwnPropertyDescriptors(event);
+
+    const projected = projectParticipantCapacityLimit(event);
+
+    expect(projected).toBe(10);
+    expect(Object.getOwnPropertyDescriptors(event)).toEqual(before);
+    expect(unrelatedGetter).not.toHaveBeenCalled();
+    expect(symbolGetter).not.toHaveBeenCalled();
+    event.capacity = 20;
+    expect(projected).toBe(10);
+  });
+});
 
 describe('early-bird cutoff validation', () => {
   function eventWithCutoff(earlyBirdUntil, earlyBirdCents = 2_000) {

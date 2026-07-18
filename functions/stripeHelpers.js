@@ -126,6 +126,30 @@ function pickPriceCents(event, priceTier) {
   return priceCents;
 }
 
+function projectParticipantCapacityLimit(event) {
+  if (!isPlainEventRecord(event)) return undefined;
+
+  const capacity = selectedOwnDataValue(event, 'capacity', true);
+  if (capacity === MISSING_REGISTRATION_WINDOW_VALUE) {
+    // A legacy record may omit capacity. Do not let a polluted shared
+    // prototype silently supply the value for that compatibility case.
+    if (objectGetOwnPropertyDescriptor(objectPrototype, 'capacity')) {
+      return undefined;
+    }
+    return null;
+  }
+  if (capacity === INVALID_REGISTRATION_WINDOW_VALUE) return undefined;
+  if (capacity === null) return null;
+  if (
+    typeof capacity !== 'number'
+    || !numberIsSafeInteger(capacity)
+    || capacity <= 0
+  ) {
+    return undefined;
+  }
+  return capacity;
+}
+
 function isEarlyBirdActive(event, now = dateNow()) {
   if (!numberIsFinite(now) || !isPlainEventRecord(event)) return false;
 
@@ -286,6 +310,7 @@ module.exports = {
   isValidEmail,
   validateRunner,
   pickPriceCents,
+  projectParticipantCapacityLimit,
   isEarlyBirdActive,
   isRegistrationOpen,
   countActiveRegistrations,

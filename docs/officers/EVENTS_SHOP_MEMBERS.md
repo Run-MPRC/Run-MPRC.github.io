@@ -334,6 +334,69 @@ Officer source-review steps:
 
 No main system map needs to change because this source change adds one failure stop without changing ownership, permissions, storage locations, the Stripe boundary, or website publishing. The small diagram above records the new failure path and the unchanged fallback paths.
 
+## Race capacity format guard — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop participant checkout when the stored race capacity is malformed instead of silently treating that value as unlimited or changing it through automatic conversion.
+
+**Approver:** event lead plus platform/security owner.
+
+**Prerequisites for source review:** issue [#349](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/349) must be merged. The exact pull request and merge commit must be named. Tests must use only a made-up event, a made-up runner, and replacements that cannot contact Firebase or Stripe. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before deployment or data repair. This check does not approve a capacity number. It also does not reserve a seat or prevent two people from taking the last seat at the same time.
+
+```mermaid
+flowchart TD
+    A["Made-up participant request"] --> A1["Earlier request counters may write; a members-only access check may resolve the website role"]
+    A1 --> B{"Capacity is missing or exactly null?"}
+    B -- "Yes" --> C["Keep the existing unlimited compatibility path"]
+    B -- "No" --> D{"Capacity is one positive safe whole number?"}
+    D -- "No" --> E["Fixed unavailable result; no count or later checkout work"]
+    D -- "Yes" --> F["Count active participant registrations"]
+    F --> G{"Active count has reached the limit?"}
+    G -- "Yes" --> H["Existing event-full result"]
+    G -- "No" --> I["Later role, price, registration, and payment checks may continue"]
+    J["Made-up volunteer request"] --> K["Keep the separate volunteer path"]
+```
+
+Text alternative: request counters and a members-only website-role check may happen first. A participant event with missing or null capacity then keeps the existing unlimited compatibility path. A positive safe whole number uses the existing active-registration count. Any other stored capacity stops before that count and later participant price work. Volunteer signup keeps its separate path.
+
+Officer source-review steps:
+
+1. Keep live race checkout unavailable.
+2. Ask the platform owner for the exact #349 pull request.
+3. Ask the platform owner for the exact merge commit.
+4. Ask for the made-up test report from that same commit.
+5. Confirm the report uses only a made-up event and runner.
+6. Confirm missing or exactly null capacity keeps the existing unlimited compatibility path.
+7. Confirm one positive safe whole-number capacity is copied without conversion.
+8. Confirm zero, negative, decimal, text, false, a computer value that is not a usable number, infinite, or oversized values are invalid.
+9. Confirm objects, hidden or inherited values, and values that try to run code when inspected are invalid.
+10. Confirm invalid values cannot run a stored method or automatic conversion.
+11. Confirm invalid values expose no raw capacity or technical detail in the result or new guard logs.
+12. Confirm a malformed public-event capacity receives exactly `Registration is unavailable for this event`.
+13. Confirm the two earlier request-count safety checks may already have written counters.
+14. Confirm a members-only access check may already have resolved the website role, and that work is not rolled back.
+15. Confirm a malformed capacity starts no active-registration count.
+16. Confirm a malformed capacity starts no later participant price-role or price work.
+17. Confirm a malformed capacity creates no confirmation token, registration identifier, registration write, Stripe Product, or Checkout Session.
+18. Confirm a valid configured limit counts once before later participant role and price work.
+19. Confirm an active count equal to the limit keeps the existing event-full result.
+20. Confirm malformed participant capacity does not change the separate volunteer path.
+21. Confirm the report says this check does not prevent simultaneous final-seat oversell.
+22. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe state, production data, migration, and live behavior as separate results.
+
+**Expected result:** missing or null capacity keeps the existing unlimited compatibility path. A configured participant limit must be one positive safe whole number. Every malformed value stops with one fixed result before the active-registration count and later participant checkout work. Valid configured limits keep the existing count and event-full behavior. Volunteer signup remains separate. This source check neither approves the number nor reserves a seat.
+
+**Stop conditions:** any real runner, event, capacity, registration, payment, Firebase record, Stripe object, Stripe call, or production test; a request to repair Firebase or Stripe by hand; a missing exact commit; a raw capacity or technical detail in shared evidence; a malformed value that starts a count or later checkout work; deployment before the #113 inventory; or a claim that source, tests, merge, preview, or a green workflow prevents concurrent oversell or proves live checkout behavior.
+
+**Success proof:** exact #349 pull request and merge commit; recorded old-source failures using made-up values; green capacity, caller, full server, database-permission, isolated test-database commerce, website, safety, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, production data, migration, and live behavior were not changed or verified. A future live release also needs the private #113 inventory, an approved capacity value, transactional seat reservations and release, concurrent final-seat proof, isolated Stripe test-mode proof, exact Firebase Function deployment and readback, and rollback evidence.
+
+**Undo:** before Firebase deployment, use one reviewed pull request that reverses the change or corrects it safely. After any approved backend deployment, use the protected backend release process and confirm the exact published Function revision. Never undo by changing an event, capacity, registration, Product, Session, or payment record by hand.
+
+**Escalation:** event lead plus platform/security owner. Add the privacy owner if runner or event details appeared. Add the treasurer if a registration or payment may have continued. Use the private incident path if malformed capacity may have reached registration or Stripe work. Do not copy private details, capacity values, or provider identifiers into an issue, screenshot, email, message, or AI tool.
+
+No main system map needs to change because this source change adds one format stop without changing ownership, permissions, storage locations, the Stripe boundary, or website publishing. The small diagram above records the invalid-capacity stop, the existing count path, and the separate volunteer path.
+
 ## Merchandise price format guard — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**

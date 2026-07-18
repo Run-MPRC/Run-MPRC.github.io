@@ -7,6 +7,8 @@ const mockFirestoreWrite = jest.fn();
 const mockGenerateToken = jest.fn();
 const mockResolveCallerRole = jest.fn();
 const mockCountActiveRegistrations = jest.fn();
+const mockPickPriceCents = jest.fn();
+const mockIsEarlyBirdActive = jest.fn();
 const mockRegistrationAllocation = jest.fn();
 const mockOrderAllocation = jest.fn();
 
@@ -117,6 +119,7 @@ jest.mock('./stripeHelpers', () => {
   const {
     isEarlyBirdActive,
     pickPriceCents,
+    projectParticipantCapacityLimit,
   } = jest.requireActual('./stripeHelpers');
   return {
     getStripe: mockGetStripe,
@@ -127,8 +130,15 @@ jest.mock('./stripeHelpers', () => {
     },
     requireAppCheck: () => {},
     validateRunner: () => [],
-    pickPriceCents,
-    isEarlyBirdActive,
+    pickPriceCents: (...args) => {
+      mockPickPriceCents(...args);
+      return pickPriceCents(...args);
+    },
+    projectParticipantCapacityLimit,
+    isEarlyBirdActive: (...args) => {
+      mockIsEarlyBirdActive(...args);
+      return isEarlyBirdActive(...args);
+    },
     isRegistrationOpen: () => true,
     countActiveRegistrations: mockCountActiveRegistrations,
     auditEntry: ({ action, note }) => ({ action, note }),
@@ -193,6 +203,8 @@ describe('Checkout promotion policy', () => {
     mockGenerateToken.mockReset();
     mockResolveCallerRole.mockReset();
     mockCountActiveRegistrations.mockReset();
+    mockPickPriceCents.mockReset();
+    mockIsEarlyBirdActive.mockReset();
     mockRegistrationAllocation.mockReset();
     mockOrderAllocation.mockReset();
     mockGetStripe.mockReturnValue({
@@ -600,6 +612,231 @@ describe('Checkout promotion policy', () => {
     } finally {
       consoleSpies.forEach((spy) => spy.mockRestore());
     }
+  });
+
+  describe('participant capacity format guard', () => {
+    async function expectMalformedCapacityRejected({
+      capacity,
+      activeRegistrations = 0,
+      configureStoredEvent,
+      hooks = [],
+    }) {
+      const eventBefore = {
+        checkoutEnabled: true,
+        title: 'Synthetic Capacity Race',
+        slug: 'synthetic-capacity-race',
+        status: 'open',
+        visibility: 'public',
+        pricing: { nonMemberCents: 5_000 },
+        stripeProductId: 'prod_capacity_policy',
+        waiverVersion: 'synthetic-v1',
+      };
+      if (capacity !== undefined) eventBefore.capacity = capacity;
+      admin.__seed('events/race-1', eventBefore);
+      const storedEvent = admin.__get('events/race-1');
+      configureStoredEvent?.(storedEvent);
+      const storedDescriptors = Object.getOwnPropertyDescriptors(storedEvent);
+      mockCountActiveRegistrations.mockResolvedValue(activeRegistrations);
+      mockProductCreate.mockResolvedValueOnce({ id: 'prod_should_not_exist' });
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+      try {
+        const outcome = await createCheckoutSession(validRaceRequest(), {
+          auth: null,
+          rawRequest: {},
+        }).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+
+        expect(outcome.error).toMatchObject({
+          code: 'failed-precondition',
+          message: 'Registration is unavailable for this event',
+        });
+        expect(mockFirestoreAccess).toHaveBeenCalledTimes(1);
+        expect(mockRateLimit).toHaveBeenCalledTimes(2);
+        expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+        expect(mockResolveCallerRole).not.toHaveBeenCalled();
+        expect(mockIsEarlyBirdActive).not.toHaveBeenCalled();
+        expect(mockPickPriceCents).not.toHaveBeenCalled();
+        expect(mockGenerateToken).not.toHaveBeenCalled();
+        expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+        expect(mockFirestoreWrite).not.toHaveBeenCalled();
+        expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+        expect(mockGetStripe).not.toHaveBeenCalled();
+        expect(mockProductCreate).not.toHaveBeenCalled();
+        expect(mockCheckoutCreate).not.toHaveBeenCalled();
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+        hooks.forEach((hook) => expect(hook).not.toHaveBeenCalled());
+        expect(Object.getOwnPropertyDescriptors(storedEvent))
+          .toEqual(storedDescriptors);
+      } finally {
+        consoleSpies.forEach((spy) => spy.mockRestore());
+      }
+    }
+
+    test.each([
+      ['zero', () => ({ capacity: 0 })],
+      ['NaN', () => ({ capacity: Number.NaN })],
+      ['fractional', () => ({ capacity: 1.5, activeRegistrations: 1 })],
+      ['infinite', () => ({
+        capacity: Number.POSITIVE_INFINITY,
+        activeRegistrations: 1,
+      })],
+      ['coercible', () => {
+        const valueOf = jest.fn(() => 10);
+        return {
+          capacity: { valueOf },
+          activeRegistrations: 1,
+          hooks: [valueOf],
+        };
+      }],
+    ])('rejects a %s stored capacity before later work', async (
+      _name,
+      makeFixture,
+    ) => {
+      await expectMalformedCapacityRejected(makeFixture());
+    });
+
+    test('does not invoke an accessor-backed stored capacity', async () => {
+      const getter = jest.fn(() => 10);
+
+      await expectMalformedCapacityRejected({
+        configureStoredEvent: (event) => {
+          Object.defineProperty(event, 'capacity', {
+            enumerable: true,
+            get: getter,
+          });
+        },
+        hooks: [getter],
+      });
+    });
+
+    test.each([
+      ['missing', false],
+      ['null', true],
+    ])('keeps %s capacity unlimited without counting', async (
+      _name,
+      includeNull,
+    ) => {
+      const event = {
+        checkoutEnabled: true,
+        title: 'Synthetic Unlimited Race',
+        slug: 'synthetic-unlimited-race',
+        status: 'open',
+        visibility: 'public',
+        pricing: { nonMemberCents: 5_000 },
+        stripeProductId: 'prod_unlimited_policy',
+        waiverVersion: 'synthetic-v1',
+      };
+      if (includeNull) event.capacity = null;
+      admin.__seed('events/race-1', event);
+
+      await expect(createCheckoutSession(validRaceRequest(), {
+        auth: null,
+        rawRequest: {},
+      })).resolves.toMatchObject({
+        sessionId: 'cs_registration_policy',
+        registrationId: 'reg-new-1',
+      });
+
+      expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(1);
+      expect(mockRegistrationAllocation).toHaveBeenCalledTimes(1);
+      expect(mockCheckoutCreate).toHaveBeenCalledTimes(1);
+    });
+
+    test('counts a valid limit before resolving the participant price role', async () => {
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Limited Race',
+        slug: 'synthetic-limited-race',
+        status: 'open',
+        visibility: 'public',
+        capacity: 1,
+        pricing: { nonMemberCents: 5_000 },
+        stripeProductId: 'prod_limited_policy',
+        waiverVersion: 'synthetic-v1',
+      });
+      mockCountActiveRegistrations.mockResolvedValue(0);
+
+      await expect(createCheckoutSession(validRaceRequest(), {
+        auth: null,
+        rawRequest: {},
+      })).resolves.toMatchObject({
+        sessionId: 'cs_registration_policy',
+      });
+
+      expect(mockCountActiveRegistrations).toHaveBeenCalledTimes(1);
+      expect(mockCountActiveRegistrations).toHaveBeenCalledWith('race-1');
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(1);
+      expect(mockCountActiveRegistrations.mock.invocationCallOrder[0]).toBeLessThan(
+        mockResolveCallerRole.mock.invocationCallOrder[0],
+      );
+    });
+
+    test('keeps equality full for a valid configured limit', async () => {
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Full Race',
+        slug: 'synthetic-full-race',
+        status: 'open',
+        visibility: 'public',
+        capacity: 1,
+        pricing: { nonMemberCents: 5_000 },
+        waiverVersion: 'synthetic-v1',
+      });
+      mockCountActiveRegistrations.mockResolvedValue(1);
+
+      await expect(createCheckoutSession(validRaceRequest(), {
+        auth: null,
+        rawRequest: {},
+      })).rejects.toMatchObject({
+        code: 'resource-exhausted',
+        message: 'This event is full',
+      });
+
+      expect(mockCountActiveRegistrations).toHaveBeenCalledTimes(1);
+      expect(mockResolveCallerRole).not.toHaveBeenCalled();
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+      expect(mockFirestoreWrite).not.toHaveBeenCalled();
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+    });
+
+    test('keeps malformed participant capacity outside the volunteer path', async () => {
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Volunteer Race',
+        slug: 'synthetic-volunteer-race',
+        status: 'open',
+        visibility: 'public',
+        capacity: 0,
+        volunteerEnabled: true,
+        waiverVersion: 'synthetic-v1',
+      });
+
+      await expect(createCheckoutSession({
+        eventId: 'race-1',
+        runner: {
+          firstName: 'Test',
+          lastName: 'Volunteer',
+          email: 'volunteer@example.test',
+        },
+        acceptedWaiver: true,
+        signupType: 'volunteer',
+      }, { auth: null, rawRequest: {} })).resolves.toMatchObject({
+        free: true,
+        registrationId: 'reg-new-1',
+      });
+
+      expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+      expect(mockResolveCallerRole).not.toHaveBeenCalled();
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+    });
   });
 
   test('race checkout sends the exact disabled-adjustment payload', async () => {
