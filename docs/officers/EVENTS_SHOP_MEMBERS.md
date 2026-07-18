@@ -790,55 +790,55 @@ Safe officer steps:
 
 **Approver:** membership lead plus identity/platform owner. Add the privacy owner if account details appeared when they should have been hidden.
 
-**Prerequisites:** issue [#368](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/368), its exact reviewed pull request and merge commit, and synthetic test evidence. Calling this behavior live also requires a later protected website publication and an exact `runmprc.com` revision check. The source review must not use a real account or session. It does not change Firebase settings, provider settings, production data, or sessions on another device.
+**Prerequisites:** issue [#368](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/368), its exact reviewed pull request and merge commit, and tests that use only made-up accounts and results. Before calling this source published, the club must also complete a protected website publication and an exact `runmprc.com` revision check. Those two checks prove only that the source was published. They do not prove a real sign-out, removal of an active sign-in, or sign-out on another device. The source review must not use a real account or active sign-in. It does not change Firebase settings, provider settings, production data, or sign-ins on another device.
 
 ```mermaid
 flowchart TD
     A["Member chooses Sign out once"] --> B["Hide private My Account details immediately"]
     B --> C["Show Signing out; disable the control"]
-    C --> D{"Current command result"}
-    D -- "Fulfilled" --> E["Stay private and pending"]
-    E --> F{"Existing Auth state removes My Account"}
+    C --> D{"Current sign-out request"}
+    D -- "Finishes without an error" --> E["Stay private and pending"]
+    E --> F{"Existing website sign-in state removes My Account"}
     F -- "Not yet" --> E
     F -- "Yes" --> G["Existing route leaves My Account"]
-    D -- "First rejection" --> H["Say result is unconfirmed; allow one retry"]
+    D -- "First request cannot confirm sign-out" --> H["Say result is unconfirmed; allow one retry"]
     H --> I["Member chooses retry once"]
     I --> J["Hide details; disable the control"]
-    J --> K{"Current command result"}
-    K -- "Fulfilled" --> E
-    K -- "Second rejection" --> L["Assume still signed in"]
+    J --> K{"Current sign-out request"}
+    K -- "Finishes without an error" --> E
+    K -- "Second request cannot confirm sign-out" --> L["Assume still signed in"]
     L --> M["Close browser; stop device use; get help"]
 ```
 
-Text alternative: the first choice immediately hides private details and blocks repeats. A fulfilled command alone does not prove sign-out. Only the existing account-state change removes My Account. One rejected attempt allows one retry. A second rejection requires closing the browser, stopping use of that device, and getting help.
+Text alternative: the first choice immediately hides private details and blocks repeats. A request that finishes without an error does not prove sign-out. Only the existing website sign-in state can remove My Account. If the first request cannot confirm sign-out, the page allows one retry. If the second request cannot confirm sign-out, the member must close the browser, stop use of that device, and get help.
 
 Backup-officer source-review steps:
 
 1. Keep this procedure marked **NOT AVAILABLE YET**.
-2. Obtain the exact #368 issue, reviewed pull request, merge commit, and synthetic test evidence.
-3. Confirm the tests use only made-up accounts and a mocked sign-out command.
+2. Obtain the exact #368 issue, reviewed pull request, merge commit, and made-up test evidence.
+3. Confirm the tests use only made-up accounts and a made-up sign-out result that does not contact Firebase.
 4. Confirm the first choice immediately hides every private My Account surface.
 5. Confirm the pending result says `Signing out. Keep this page open.`
 6. Confirm the pending result disables the control.
-7. Confirm command fulfillment alone stays private and pending.
-8. Confirm the first rejection says `We could not confirm sign-out. You may still be signed in. Try sign out once more.`
+7. Confirm a request that finishes without an error stays private and pending.
+8. Confirm the first request that cannot confirm sign-out says `We could not confirm sign-out. You may still be signed in. Try sign out once more.`
 9. Confirm the retry locks immediately.
-10. Confirm the second rejection says `We still could not confirm sign-out. You may still be signed in. Close the browser and do not let anyone else use this device until the membership lead or platform owner helps.`
+10. Confirm the second request that cannot confirm sign-out says `We still could not confirm sign-out. You may still be signed in. Close the browser and do not let anyone else use this device until the membership lead or platform owner helps.`
 11. Confirm a third request is not possible.
-12. Confirm rejected details do not reach the page, console, analytics, or storage.
+12. Confirm failed-request details do not reach the page, browser developer logs, tracking tools, or browser storage.
 13. Record source, tests, merge, website publication, `runmprc.com`, Firebase, provider, production data, and live behavior as separate results.
 
-**Expected result:** the first sign-out choice creates an immediate private boundary. Only one retry is possible. A fulfilled command is not shown as local success; the existing Firebase Auth state remains the authority for leaving My Account.
+**Expected result:** the first sign-out choice hides all private details immediately. Only one retry is possible. A request that finishes without an error is not shown as success. Only the existing website sign-in state decides when My Account closes.
 
-**Stop conditions:** a real account or session; a production sign-out test; a raw error detail; private details that remain visible; more than one retry; a claim that closing the browser proves sign-out or revokes another session; or a claim that source, tests, merge, preview, or green CI proves live behavior.
+**Stop conditions:** a real account or active sign-in; a production sign-out test; a raw error detail; private details that remain visible; more than one retry; a claim that closing the browser proves sign-out or removes another active sign-in; or a claim that source, tests, merge, preview, or green CI proves live behavior.
 
-**Success proof:** exact #368 issue, pull request, merge commit, RED evidence, green synthetic tests, relevant full checks, and independent security and backup-officer reviews. Record website publication and exact `runmprc.com` proof separately. Record Firebase, provider, production-data, and live actions as not performed unless each has separate evidence.
+**Success proof:** exact #368 issue, pull request, merge commit, recorded tests that failed against the old source, green tests with made-up data, relevant full checks, and independent security and backup-officer reviews. Record website publication and exact `runmprc.com` proof separately. Record Firebase, provider, production-data, and live actions as not performed unless each has separate evidence.
 
-**Undo:** before publication, use one reviewed revert or safe roll-forward. After a future publication, use the protected website rollback path and verify the exact revision. Never edit Auth accounts, sessions, profiles, or provider settings as an undo.
+**Undo:** before publication, use one reviewed revert or safe roll-forward. After a future publication, use the protected website rollback path and verify the exact revision. Never edit sign-in accounts, active sign-ins, profiles, or provider settings as an undo.
 
 **Escalation:** membership lead plus identity/platform security owner. Add the privacy owner and use the private incident path if any account detail appeared.
 
-This local state diagram records a changed My Account display boundary. Account ownership, permissions, data movement, data stores, and deployment topology do not change, so the system maps do not change.
+This local state diagram records the changed My Account display. The change does not alter who owns accounts, what permissions exist, where data moves or is kept, or how the website is published. The system maps therefore stay unchanged.
 
 ## My Account phone collection pause — SOURCE ONLY, NOT LIVE
 
