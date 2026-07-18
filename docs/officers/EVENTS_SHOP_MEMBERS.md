@@ -790,7 +790,7 @@ Safe officer steps:
 
 **Approver:** membership lead plus identity/platform owner. Add the privacy owner if account details appeared when they should have been hidden.
 
-**Prerequisites:** issue [#368](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/368), its exact reviewed pull request and merge commit, and tests that use only made-up accounts and results. Before calling this source published, the club must also complete a protected website publication and an exact `runmprc.com` revision check. Those two checks prove only that the source was published. They do not prove a real sign-out, removal of an active sign-in, or sign-out on another device. The source review must not use a real account or active sign-in. It does not change Firebase settings, provider settings, production data, or sign-ins on another device.
+**Prerequisites:** issue [#368](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/368), its exact reviewed pull request and merge commit, and tests that use only made-up accounts and results. Calling this behavior published on the website also requires a protected website publication and a separate exact `runmprc.com` revision check. Those checks prove only that the reviewed website version is present. They do not prove a real sign-out, removal of an active sign-in, or sign-out on another device. The source review must not use a real account or active sign-in. It does not change Firebase settings, provider settings, production data, or sign-ins on another device.
 
 ```mermaid
 flowchart TD
@@ -798,9 +798,9 @@ flowchart TD
     B --> C["Show Signing out; disable the control"]
     C --> D{"Current sign-out request"}
     D -- "Finishes without an error" --> E["Stay private and pending"]
-    E --> F{"Existing website sign-in state removes My Account"}
+    E --> F{"Website sign-in state changes to signed out?"}
     F -- "Not yet" --> E
-    F -- "Yes" --> G["Existing route leaves My Account"]
+    F -- "Yes" --> G["Automatic redirect leaves My Account"]
     D -- "First request cannot confirm sign-out" --> H["Say result is unconfirmed; allow one retry"]
     H --> I["Member chooses retry once"]
     I --> J["Hide details; disable the control"]
@@ -810,7 +810,7 @@ flowchart TD
     L --> M["Close browser; stop device use; get help"]
 ```
 
-Text alternative: the first choice immediately hides private details and blocks repeats. A request that finishes without an error does not prove sign-out. Only the existing website sign-in state can remove My Account. If the first request cannot confirm sign-out, the page allows one retry. If the second request cannot confirm sign-out, the member must close the browser, stop use of that device, and get help.
+Text alternative: the first choice immediately hides private details and blocks repeats. A request that finishes without an error does not prove sign-out. Only the current website sign-in state changing to signed out confirms sign-out to My Account and causes its automatic redirect. Simply leaving the page does not prove sign-out. If the first request cannot confirm sign-out, the page allows one retry. If the second request cannot confirm sign-out, the member must close the browser, stop use of that device, and get help.
 
 Backup-officer source-review steps:
 
@@ -828,7 +828,7 @@ Backup-officer source-review steps:
 12. Confirm failed-request details do not reach the page, browser developer logs, tracking tools, or browser storage.
 13. Record source, tests, merge, website publication, `runmprc.com`, Firebase, provider, production data, and live behavior as separate results.
 
-**Expected result:** the first sign-out choice hides all private details immediately. Only one retry is possible. A request that finishes without an error is not shown as success. Only the existing website sign-in state decides when My Account closes.
+**Expected result:** the first sign-out choice hides all private details immediately. Only one retry is possible. A request that finishes without an error is not shown as success. Only the current website sign-in state changing to signed out confirms sign-out to My Account and triggers its existing redirect. Leaving the page alone does not confirm sign-out.
 
 **Stop conditions:** a real account or active sign-in; a production sign-out test; a raw error detail; private details that remain visible; more than one retry; a claim that closing the browser proves sign-out or removes another active sign-in; or a claim that source, tests, merge, preview, or green CI proves live behavior.
 
