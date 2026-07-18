@@ -7,6 +7,8 @@ const mockFirestoreWrite = jest.fn();
 const mockGenerateToken = jest.fn();
 const mockResolveCallerRole = jest.fn();
 const mockCountActiveRegistrations = jest.fn();
+const mockProjectEventCheckoutAudience = jest.fn();
+const mockProjectParticipantCapacityLimit = jest.fn();
 const mockPickPriceCents = jest.fn();
 const mockIsEarlyBirdActive = jest.fn();
 const mockRegistrationAllocation = jest.fn();
@@ -119,6 +121,7 @@ jest.mock('./stripeHelpers', () => {
   const {
     isEarlyBirdActive,
     pickPriceCents,
+    projectEventCheckoutAudience,
     projectParticipantCapacityLimit,
   } = jest.requireActual('./stripeHelpers');
   return {
@@ -134,7 +137,14 @@ jest.mock('./stripeHelpers', () => {
       mockPickPriceCents(...args);
       return pickPriceCents(...args);
     },
-    projectParticipantCapacityLimit,
+    projectEventCheckoutAudience: (...args) => {
+      mockProjectEventCheckoutAudience(...args);
+      return projectEventCheckoutAudience(...args);
+    },
+    projectParticipantCapacityLimit: (...args) => {
+      mockProjectParticipantCapacityLimit(...args);
+      return projectParticipantCapacityLimit(...args);
+    },
     isEarlyBirdActive: (...args) => {
       mockIsEarlyBirdActive(...args);
       return isEarlyBirdActive(...args);
@@ -203,6 +213,8 @@ describe('Checkout promotion policy', () => {
     mockGenerateToken.mockReset();
     mockResolveCallerRole.mockReset();
     mockCountActiveRegistrations.mockReset();
+    mockProjectEventCheckoutAudience.mockReset();
+    mockProjectParticipantCapacityLimit.mockReset();
     mockPickPriceCents.mockReset();
     mockIsEarlyBirdActive.mockReset();
     mockRegistrationAllocation.mockReset();
@@ -839,6 +851,278 @@ describe('Checkout promotion policy', () => {
     });
   });
 
+  describe('event audience format guard', () => {
+    async function expectMalformedAudienceRejected({
+      audience = {},
+      configureStoredEvent,
+      canary = 'synthetic_audience_canary',
+      hooks = [],
+      request = validRaceRequest(),
+    }) {
+      const eventBefore = {
+        checkoutEnabled: true,
+        title: 'Synthetic Audience Race',
+        slug: 'synthetic-audience-race',
+        status: 'open',
+        capacity: null,
+        pricing: { nonMemberCents: 5_000 },
+        stripeProductId: 'prod_audience_policy',
+        waiverVersion: 'synthetic-v1',
+        ...audience,
+      };
+      admin.__seed('events/race-1', eventBefore);
+      const storedEvent = admin.__get('events/race-1');
+      configureStoredEvent?.(storedEvent);
+      const storedDescriptors = Object.getOwnPropertyDescriptors(storedEvent);
+      mockProductCreate.mockResolvedValueOnce({ id: 'prod_should_not_exist' });
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+      try {
+        const outcome = await createCheckoutSession(request, {
+          auth: null,
+          rawRequest: {},
+        }).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+
+        expect(outcome.error).toMatchObject({
+          code: 'failed-precondition',
+          message: 'Registration is unavailable for this event',
+        });
+        const publicError = JSON.stringify({
+          code: outcome.error?.code,
+          message: outcome.error?.message,
+          stack: outcome.error?.stack,
+        });
+        expect(publicError).not.toContain(canary);
+        expect(publicError).not.toContain('visibility');
+        expect(publicError).not.toContain('member_only');
+        expect(mockFirestoreAccess).toHaveBeenCalledTimes(1);
+        expect(mockRateLimit).toHaveBeenCalledTimes(2);
+        expect(mockProjectEventCheckoutAudience).toHaveBeenCalledTimes(1);
+        expect(mockProjectEventCheckoutAudience).toHaveBeenCalledWith(storedEvent);
+        expect(mockRateLimit.mock.invocationCallOrder[1]).toBeLessThan(
+          mockProjectEventCheckoutAudience.mock.invocationCallOrder[0],
+        );
+        expect(mockResolveCallerRole).not.toHaveBeenCalled();
+        expect(mockProjectParticipantCapacityLimit).not.toHaveBeenCalled();
+        expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+        expect(mockIsEarlyBirdActive).not.toHaveBeenCalled();
+        expect(mockPickPriceCents).not.toHaveBeenCalled();
+        expect(mockGenerateToken).not.toHaveBeenCalled();
+        expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+        expect(mockFirestoreWrite).not.toHaveBeenCalled();
+        expect(admin.__get('events/race-1/registrations/reg-new-1')).toBeUndefined();
+        expect(mockGetStripe).not.toHaveBeenCalled();
+        expect(mockProductCreate).not.toHaveBeenCalled();
+        expect(mockCheckoutCreate).not.toHaveBeenCalled();
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+        hooks.forEach((hook) => expect(hook).not.toHaveBeenCalled());
+        expect(Object.getOwnPropertyDescriptors(storedEvent))
+          .toEqual(storedDescriptors);
+      } finally {
+        consoleSpies.forEach((spy) => spy.mockRestore());
+      }
+    }
+
+    test.each([
+      ['draft', { visibility: 'draft' }],
+      ['unknown', { visibility: 'synthetic_audience_canary' }],
+      ['both markers missing', {}],
+      ['malformed legacy marker', { member_only: 'true' }],
+      ['mixed modern and legacy markers', {
+        visibility: 'public',
+        member_only: false,
+      }],
+    ])('rejects a %s audience before later checkout work', async (
+      _name,
+      audience,
+    ) => {
+      await expectMalformedAudienceRejected({ audience });
+    });
+
+    test('does not invoke an accessor-backed audience marker', async () => {
+      const getter = jest.fn(() => 'public');
+
+      await expectMalformedAudienceRejected({
+        configureStoredEvent: (event) => {
+          Object.defineProperty(event, 'visibility', {
+            configurable: true,
+            enumerable: true,
+            get: getter,
+          });
+        },
+        hooks: [getter],
+      });
+    });
+
+    test('does not accept a hidden audience marker', async () => {
+      await expectMalformedAudienceRejected({
+        configureStoredEvent: (event) => {
+          Object.defineProperty(event, 'visibility', {
+            configurable: true,
+            value: 'public',
+          });
+        },
+      });
+    });
+
+    test('rejects malformed audience before the volunteer branch', async () => {
+      await expectMalformedAudienceRejected({
+        audience: {
+          visibility: 'draft',
+          volunteerEnabled: true,
+        },
+        request: {
+          eventId: 'race-1',
+          runner: {
+            firstName: 'Test',
+            lastName: 'Volunteer',
+            email: 'volunteer@example.test',
+          },
+          acceptedWaiver: true,
+          signupType: 'volunteer',
+        },
+      });
+    });
+
+    test.each([
+      ['modern public', { visibility: 'public' }, null, 1],
+      ['modern members-only', { visibility: 'members_only' }, {
+        uid: 'synthetic-member',
+        token: {
+          email_verified: true,
+          role: 'member',
+        },
+      }, 2],
+      ['legacy public', { member_only: false }, null, 1],
+      ['legacy members-only', { member_only: true }, {
+        uid: 'synthetic-member',
+        token: {
+          email_verified: true,
+          role: 'member',
+        },
+      }, 2],
+    ])('preserves the %s checkout path', async (
+      _name,
+      audience,
+      auth,
+      expectedRoleCalls,
+    ) => {
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Recognized Audience Race',
+        slug: 'synthetic-recognized-audience-race',
+        status: 'open',
+        capacity: null,
+        pricing: { nonMemberCents: 5_000 },
+        stripeProductId: 'prod_recognized_audience_policy',
+        waiverVersion: 'synthetic-v1',
+        ...audience,
+      });
+
+      await expect(createCheckoutSession(validRaceRequest(), {
+        auth,
+        rawRequest: {},
+      })).resolves.toMatchObject({
+        sessionId: 'cs_registration_policy',
+        registrationId: 'reg-new-1',
+      });
+
+      expect(mockProjectEventCheckoutAudience).toHaveBeenCalledTimes(1);
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(expectedRoleCalls);
+      expect(mockProjectParticipantCapacityLimit).toHaveBeenCalledTimes(1);
+      expect(mockCountActiveRegistrations).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).toHaveBeenCalledTimes(1);
+      expect(mockProjectEventCheckoutAudience.mock.invocationCallOrder[0])
+        .toBeLessThan(mockResolveCallerRole.mock.invocationCallOrder[0]);
+    });
+
+    test('keeps the existing denial for legacy members-only access', async () => {
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Legacy Members Race',
+        slug: 'synthetic-legacy-members-race',
+        status: 'open',
+        member_only: true,
+        pricing: { memberCents: 3_000, nonMemberCents: 5_000 },
+        stripeProductId: 'prod_legacy_members_policy',
+        waiverVersion: 'synthetic-v1',
+      });
+
+      await expect(createCheckoutSession(validRaceRequest({
+        priceTier: 'member',
+      }), {
+        auth: {
+          uid: 'synthetic-user',
+          token: { role: 'member' },
+        },
+        rawRequest: {},
+      })).rejects.toMatchObject({
+        code: 'permission-denied',
+        message: 'This event is open to club members only',
+      });
+
+      expect(mockProjectEventCheckoutAudience).toHaveBeenCalledTimes(1);
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(1);
+      expect(mockProjectParticipantCapacityLimit).not.toHaveBeenCalled();
+      expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+      expect(mockFirestoreWrite).not.toHaveBeenCalled();
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['modern', { visibility: 'members_only' }],
+      ['legacy', { member_only: true }],
+    ])('preserves the %s members-only volunteer path', async (
+      _name,
+      audience,
+    ) => {
+      admin.__seed('events/race-1', {
+        checkoutEnabled: true,
+        title: 'Synthetic Members Volunteer Race',
+        slug: 'synthetic-members-volunteer-race',
+        status: 'open',
+        volunteerEnabled: true,
+        waiverVersion: 'synthetic-v1',
+        ...audience,
+      });
+
+      await expect(createCheckoutSession({
+        eventId: 'race-1',
+        runner: {
+          firstName: 'Test',
+          lastName: 'Volunteer',
+          email: 'volunteer@example.test',
+        },
+        acceptedWaiver: true,
+        signupType: 'volunteer',
+      }, {
+        auth: {
+          uid: 'synthetic-member',
+          token: {
+            email_verified: true,
+            role: 'member',
+          },
+        },
+        rawRequest: {},
+      })).resolves.toMatchObject({
+        free: true,
+        registrationId: 'reg-new-1',
+      });
+
+      expect(mockProjectEventCheckoutAudience).toHaveBeenCalledTimes(1);
+      expect(mockResolveCallerRole).toHaveBeenCalledTimes(1);
+      expect(mockProjectParticipantCapacityLimit).not.toHaveBeenCalled();
+      expect(mockRegistrationAllocation).toHaveBeenCalledTimes(1);
+      expect(mockGetStripe).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+    });
+  });
+
   test('race checkout sends the exact disabled-adjustment payload', async () => {
     admin.__seed('events/race-1', {
       checkoutEnabled: true,
@@ -1065,6 +1349,7 @@ describe('Checkout promotion policy', () => {
       title: 'Synthetic Race',
       slug: 'synthetic-race',
       status: 'open',
+      visibility: 'public',
       volunteerEnabled: true,
       waiverVersion: 'synthetic-v1',
     });
@@ -1100,6 +1385,7 @@ describe('Checkout promotion policy', () => {
       title: 'Synthetic Free Race',
       slug: 'synthetic-free-race',
       status: 'open',
+      visibility: 'public',
       pricing: { nonMemberCents: 0 },
       waiverVersion: 'synthetic-v1',
     });

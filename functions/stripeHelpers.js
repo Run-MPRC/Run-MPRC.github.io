@@ -126,6 +126,43 @@ function pickPriceCents(event, priceTier) {
   return priceCents;
 }
 
+function projectEventCheckoutAudience(event) {
+  if (!isPlainEventRecord(event)) return undefined;
+
+  const visibility = selectedOwnDataValue(event, 'visibility', true);
+  const memberOnly = selectedOwnDataValue(event, 'member_only', true);
+  if (
+    visibility === INVALID_REGISTRATION_WINDOW_VALUE
+    || memberOnly === INVALID_REGISTRATION_WINDOW_VALUE
+  ) {
+    return undefined;
+  }
+  if (
+    visibility === MISSING_REGISTRATION_WINDOW_VALUE
+    && objectGetOwnPropertyDescriptor(objectPrototype, 'visibility')
+  ) {
+    return undefined;
+  }
+  if (
+    memberOnly === MISSING_REGISTRATION_WINDOW_VALUE
+    && objectGetOwnPropertyDescriptor(objectPrototype, 'member_only')
+  ) {
+    return undefined;
+  }
+
+  const hasVisibility = visibility !== MISSING_REGISTRATION_WINDOW_VALUE;
+  const hasMemberOnly = memberOnly !== MISSING_REGISTRATION_WINDOW_VALUE;
+  if (hasVisibility === hasMemberOnly) return undefined;
+
+  if (hasVisibility) {
+    return visibility === 'public' || visibility === 'members_only'
+      ? visibility
+      : undefined;
+  }
+  if (typeof memberOnly !== 'boolean') return undefined;
+  return memberOnly ? 'members_only' : 'public';
+}
+
 function projectParticipantCapacityLimit(event) {
   if (!isPlainEventRecord(event)) return undefined;
 
@@ -310,6 +347,7 @@ module.exports = {
   isValidEmail,
   validateRunner,
   pickPriceCents,
+  projectEventCheckoutAudience,
   projectParticipantCapacityLimit,
   isEarlyBirdActive,
   isRegistrationOpen,

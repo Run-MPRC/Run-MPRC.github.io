@@ -7,6 +7,7 @@ const {
   resolveCallerRole,
   requireAppCheck,
   pickPriceCents,
+  projectEventCheckoutAudience,
   projectParticipantCapacityLimit,
   isEarlyBirdActive,
   isRegistrationOpen,
@@ -163,7 +164,14 @@ exports.createCheckoutSession = functions
       );
     }
 
-    if (event.visibility === 'members_only' || event.member_only === true) {
+    const audience = projectEventCheckoutAudience(event);
+    if (audience === undefined) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Registration is unavailable for this event',
+      );
+    }
+    if (audience === 'members_only') {
       const role = await resolveCallerRole(context);
       if (role !== 'member' && role !== 'admin') {
         throw new functions.https.HttpsError(

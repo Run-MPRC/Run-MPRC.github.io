@@ -33,6 +33,7 @@ const {
   isEarlyBirdActive,
   isRegistrationOpen,
   pickPriceCents,
+  projectEventCheckoutAudience,
   projectParticipantCapacityLimit,
   requireAdmin,
   resolveCallerRole,
@@ -45,6 +46,274 @@ const NOW_MS = 1_735_689_600_000;
 function openEvent(overrides = {}) {
   return { status: 'open', ...overrides };
 }
+
+describe('event checkout audience validation', () => {
+  test.each([
+    ['modern public', { visibility: 'public' }, 'public'],
+    ['modern members-only', { visibility: 'members_only' }, 'members_only'],
+    ['legacy public', { member_only: false }, 'public'],
+    ['legacy members-only', { member_only: true }, 'members_only'],
+  ])('projects the %s format to %s', (_name, event, expected) => {
+    Object.freeze(event);
+    expect(projectEventCheckoutAudience(event)).toBe(expected);
+  });
+
+  test('rejects missing, mixed, and draft audience formats', () => {
+    expect(projectEventCheckoutAudience({})).toBeUndefined();
+    expect(projectEventCheckoutAudience({
+      visibility: 'public',
+      member_only: false,
+    })).toBeUndefined();
+    expect(projectEventCheckoutAudience({
+      visibility: 'members_only',
+      member_only: true,
+    })).toBeUndefined();
+    expect(projectEventCheckoutAudience({
+      visibility: 'draft',
+    })).toBeUndefined();
+  });
+
+  test.each([
+    ['present undefined', undefined],
+    ['null', null],
+    ['false', false],
+    ['true', true],
+    ['zero', 0],
+    ['number', 1],
+    ['empty string', ''],
+    ['draft', 'draft'],
+    ['unknown string', 'synthetic_audience_canary'],
+    ['case-changed string', 'Public'],
+    ['hyphenated string', 'members-only'],
+    ['bigint', BigInt(1)],
+    ['symbol', Symbol('visibility')],
+    ['boxed string', Object('public')],
+    ['plain record', { value: 'public' }],
+    ['array', ['public']],
+    ['Date', new Date(NOW_MS)],
+    ['Map', new Map([['visibility', 'public']])],
+    ['Set', new Set(['public'])],
+  ])('rejects a %s visibility value', (_name, visibility) => {
+    expect(projectEventCheckoutAudience({ visibility })).toBeUndefined();
+  });
+
+  test.each([
+    ['present undefined', undefined],
+    ['null', null],
+    ['zero', 0],
+    ['one', 1],
+    ['empty string', ''],
+    ['false text', 'false'],
+    ['true text', 'true'],
+    ['bigint', BigInt(1)],
+    ['symbol', Symbol('member-only')],
+    ['boxed boolean', Object(true)],
+    ['plain record', { value: true }],
+    ['array', [true]],
+    ['Date', new Date(NOW_MS)],
+    ['Map', new Map([['member_only', true]])],
+    ['Set', new Set([true])],
+  ])('rejects a %s legacy member-only value', (_name, memberOnly) => {
+    expect(projectEventCheckoutAudience({
+      member_only: memberOnly,
+    })).toBeUndefined();
+  });
+
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['number', 1],
+    ['string', 'event'],
+    ['array', []],
+    ['Date', new Date(NOW_MS)],
+    ['null-prototype record', Object.create(null)],
+    ['custom-prototype record', Object.create({})],
+  ])('rejects a %s event root without throwing', (_name, event) => {
+    expect(() => projectEventCheckoutAudience(event)).not.toThrow();
+    expect(projectEventCheckoutAudience(event)).toBeUndefined();
+  });
+
+  test('rejects live and revoked Proxy event roots without invoking traps', () => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic event trap must not run');
+    });
+    const proxiedEvent = new Proxy({ visibility: 'public' }, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+
+    expect(projectEventCheckoutAudience(proxiedEvent)).toBeUndefined();
+    expect(trap).not.toHaveBeenCalled();
+
+    const revoked = Proxy.revocable({ visibility: 'public' }, {});
+    revoked.revoke();
+    expect(() => projectEventCheckoutAudience(revoked.proxy)).not.toThrow();
+    expect(projectEventCheckoutAudience(revoked.proxy)).toBeUndefined();
+  });
+
+  test.each([
+    ['visibility', 'public'],
+    ['member_only', false],
+  ])('rejects an accessor-backed or hidden %s field', (field, value) => {
+    const getter = jest.fn(() => value);
+    const accessorEvent = {};
+    Object.defineProperty(accessorEvent, field, {
+      enumerable: true,
+      get: getter,
+    });
+    const hiddenEvent = {};
+    Object.defineProperty(hiddenEvent, field, { value });
+
+    expect(projectEventCheckoutAudience(accessorEvent)).toBeUndefined();
+    expect(projectEventCheckoutAudience(hiddenEvent)).toBeUndefined();
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['visibility', { member_only: false }, 'public'],
+    ['member_only', { visibility: 'public' }, true],
+  ])('rejects shared-prototype %s pollution without reading it', (
+    field,
+    event,
+    value,
+  ) => {
+    const getter = jest.fn(() => value);
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      field,
+    );
+    let projected;
+
+    try {
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        get: getter,
+      });
+      projected = projectEventCheckoutAudience(event);
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(Object.prototype, field, originalDescriptor);
+      } else {
+        delete Object.prototype[field];
+      }
+    }
+
+    expect(projected).toBeUndefined();
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'visibility',
+    'member_only',
+  ])('rejects live and revoked Proxy %s values without invoking traps', (
+    field,
+  ) => {
+    const trap = jest.fn(() => {
+      throw new Error('synthetic audience trap must not run');
+    });
+    const proxiedValue = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+
+    expect(projectEventCheckoutAudience({
+      [field]: proxiedValue,
+    })).toBeUndefined();
+    expect(trap).not.toHaveBeenCalled();
+
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(() => projectEventCheckoutAudience({
+      [field]: revoked.proxy,
+    })).not.toThrow();
+    expect(projectEventCheckoutAudience({
+      [field]: revoked.proxy,
+    })).toBeUndefined();
+  });
+
+  test.each([
+    'visibility',
+    'member_only',
+  ])('does not invoke %s conversion or traversal hooks', (field) => {
+    const value = {
+      valueOf: jest.fn(() => field === 'visibility' ? 'public' : false),
+      toString: jest.fn(() => field === 'visibility' ? 'public' : 'false'),
+      toJSON: jest.fn(() => field === 'visibility' ? 'public' : false),
+      [Symbol.iterator]: jest.fn(),
+      [Symbol.toPrimitive]: jest.fn(
+        () => field === 'visibility' ? 'public' : false,
+      ),
+    };
+
+    expect(projectEventCheckoutAudience({
+      [field]: value,
+    })).toBeUndefined();
+    [
+      value.valueOf,
+      value.toString,
+      value.toJSON,
+      value[Symbol.iterator],
+      value[Symbol.toPrimitive],
+    ].forEach((hook) => {
+      expect(hook).not.toHaveBeenCalled();
+    });
+  });
+
+  test('uses captured validation intrinsics', () => {
+    const originalGetPrototypeOf = Object.getPrototypeOf;
+    const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    const originalHasOwn = Object.hasOwn;
+    const fail = () => {
+      throw new Error('synthetic replaced intrinsic must not run');
+    };
+    let modern;
+    let legacy;
+
+    try {
+      Object.getPrototypeOf = fail;
+      Object.getOwnPropertyDescriptor = fail;
+      Object.hasOwn = fail;
+      modern = projectEventCheckoutAudience({ visibility: 'public' });
+      legacy = projectEventCheckoutAudience({ member_only: true });
+    } finally {
+      Object.getPrototypeOf = originalGetPrototypeOf;
+      Object.getOwnPropertyDescriptor = originalGetOwnPropertyDescriptor;
+      Object.hasOwn = originalHasOwn;
+    }
+
+    expect(modern).toBe('public');
+    expect(legacy).toBe('members_only');
+  });
+
+  test('does not mutate or traverse unrelated fields', () => {
+    const unrelatedGetter = jest.fn(() => 'private synthetic detail');
+    const symbolGetter = jest.fn(() => 'private synthetic symbol detail');
+    const event = { visibility: 'public' };
+    event.self = event;
+    Object.defineProperty(event, 'unrelated', {
+      enumerable: true,
+      get: unrelatedGetter,
+    });
+    Object.defineProperty(event, Symbol('unrelated'), {
+      enumerable: true,
+      get: symbolGetter,
+    });
+    const before = Object.getOwnPropertyDescriptors(event);
+
+    const projected = projectEventCheckoutAudience(event);
+
+    expect(projected).toBe('public');
+    expect(Object.getOwnPropertyDescriptors(event)).toEqual(before);
+    expect(unrelatedGetter).not.toHaveBeenCalled();
+    expect(symbolGetter).not.toHaveBeenCalled();
+    event.visibility = 'members_only';
+    expect(projected).toBe('public');
+  });
+});
 
 describe('participant capacity validation', () => {
   test('keeps missing and null capacity unlimited', () => {
