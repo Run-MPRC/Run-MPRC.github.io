@@ -70,6 +70,7 @@ function createSessionFixture(overrides = {}) {
     payment_status: 'unpaid',
     amount_total: 2500,
     currency: 'usd',
+    customer_email: 'sdk-observation-buyer@example.test',
     created: 1800000000,
     expires_at: 1800001800,
     success_url: 'https://club.example.test/checkout/success',
@@ -423,14 +424,29 @@ describe('Stripe 14.25.0 Checkout Session SDK observations', () => {
       ['payment_status', 'unpaid'],
       ['amount_total', 2500],
       ['currency', 'usd'],
+      ['customer_email', 'sdk-observation-buyer@example.test'],
       ['created', 1800000000],
       ['expires_at', 1800001800],
+      ['success_url', 'https://club.example.test/checkout/success'],
+      ['cancel_url', 'https://club.example.test/checkout/cancel'],
       ['url', STANDARD_CHECKOUT_URL],
     ].forEach(([key, value]) => {
       const descriptor = expectOwnDataProperty(session, key, value);
       expect(descriptor.enumerable).toBe(true);
       expect(descriptor.writable).toBe(true);
       expect(descriptor.configurable).toBe(true);
+    });
+
+    const metadataDescriptor = expectOwnDataProperty(
+      session,
+      'metadata',
+      session.metadata,
+    );
+    expect(metadataDescriptor.enumerable).toBe(true);
+    expect(metadataDescriptor.writable).toBe(true);
+    expect(metadataDescriptor.configurable).toBe(true);
+    expect(session.metadata).toEqual({
+      fixture: 'synthetic_test_only',
     });
 
     const rawResponse = response.getRawResponse();

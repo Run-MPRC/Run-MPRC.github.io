@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
@@ -15,7 +20,7 @@ import buildRaceCheckoutRequest, {
   customValuesAfterSignupTypeChange,
 } from './raceCheckoutRequest';
 
-const SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
+const SUBMIT_FAILURE = 'We could not confirm your registration. Do not try again. Contact MPRC for help.';
 type PriceTier = 'member' | 'nonMember' | 'earlyBird';
 interface RunnerFormState {
   firstName: string;
@@ -104,6 +109,8 @@ function EventRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const outcomeUnknownRef = useRef(false);
 
   const [runner, setRunner] = useState<RunnerFormState>({
     ...EMPTY_RUNNER,
@@ -165,6 +172,7 @@ function EventRegister() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (outcomeUnknownRef.current) return;
     setError(null);
 
     if (!event) return;
@@ -203,7 +211,7 @@ function EventRegister() {
         }),
       );
 
-      if (result.free) {
+      if (result.free === true) {
         track(analyticsEvents.registrationCheckoutFree, {
           slug: event.slug, tier: effectiveTier,
         });
@@ -212,15 +220,20 @@ function EventRegister() {
         );
         return;
       }
-      if (result.url) {
+      const checkoutUrl = result.url;
+      if (typeof checkoutUrl === 'string' && checkoutUrl.trim() !== '') {
         track(analyticsEvents.registrationCheckoutInitiated, {
           slug: event.slug, tier: effectiveTier, amount_cents: displayPrice,
         });
-        window.location.href = result.url;
+        window.location.href = checkoutUrl;
         return;
       }
-      setError('Unexpected response from checkout service.');
+      outcomeUnknownRef.current = true;
+      setOutcomeUnknown(true);
+      setError(SUBMIT_FAILURE);
     } catch {
+      outcomeUnknownRef.current = true;
+      setOutcomeUnknown(true);
       track(analyticsEvents.registrationError, {
         slug: event.slug,
       });
@@ -459,7 +472,7 @@ function EventRegister() {
 
           <button
             type="submit"
-            disabled={submitting || !waiverAccepted}
+            disabled={submitting || outcomeUnknown || !waiverAccepted}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded w-full"
           >
             {submitting

@@ -241,12 +241,12 @@ test('renders the Auth action route and removes its query and fragment before us
 
 const SHOP_LOAD_FAILURE = 'We could not load the shop right now. Please try again later.';
 const PRODUCT_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
-const SHOP_CHECKOUT_FAILURE = 'We could not confirm checkout. Please wait before trying again.';
+const SHOP_CHECKOUT_FAILURE = 'We could not confirm checkout. Do not try again. Contact MPRC for help.';
 const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please try again later.';
 const EVENTS_CALENDAR_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const EVENT_DETAIL_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
 const EVENT_REGISTER_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
-const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. Please wait before trying again.';
+const EVENT_REGISTER_SUBMIT_FAILURE = 'We could not confirm your registration. Do not try again. Contact MPRC for help.';
 const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Please try again later.';
 const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
@@ -1261,7 +1261,15 @@ describe('public Event-registration submit failure boundary', () => {
     expect(screen.getByRole('textbox', { name: 'Last name *' })).toHaveValue('Runner');
     expect(screen.getByRole('textbox', { name: 'Email *' })).toHaveValue('runner@example.test');
     expect(screen.getByRole('checkbox', { name: /accept the waiver/i })).toBeChecked();
-    expect(screen.getByRole('button', { name: 'Continue to payment — $15.00' })).toBeEnabled();
+    const submitButton = screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    });
+    expect(submitButton).toBeDisabled();
+    const form = submitButton.closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.click(submitButton);
+    fireEvent.submit(form);
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
     expect(window.location.pathname).toBe('/events/synthetic-event/register');
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
@@ -1301,9 +1309,60 @@ describe('public Event-registration submit failure boundary', () => {
     })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Email *' })).toHaveValue('runner@example.test');
     expect(screen.getByRole('checkbox', { name: /accept the waiver/i })).toBeChecked();
-    expect(screen.getByRole('button', { name: 'Continue to payment — $15.00' })).toBeEnabled();
+    expect(screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    })).toBeDisabled();
     expect(window.location.pathname).toBe('/events/synthetic-event/register');
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('locks the page after a paid result has no usable URL', async () => {
+    const unexpectedGetter = jest.fn(() => {
+      throw new Error('registration-result-getter-canary');
+    });
+    createCheckoutSession.mockResolvedValueOnce(Object.defineProperty(
+      {
+        registrationId: 'synthetic-registration',
+        free: false,
+      },
+      'unexpected',
+      {
+        configurable: true,
+        get: unexpectedGetter,
+      },
+    ));
+
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRequiredRegistrationFields();
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    }));
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(EVENT_REGISTER_SUBMIT_FAILURE);
+    expect(unexpectedGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('registration-result-getter-canary');
+    expect(screen.getByRole('textbox', { name: 'First name *' })).toHaveValue('Synthetic');
+    expect(screen.getByRole('textbox', { name: 'Last name *' })).toHaveValue('Runner');
+    expect(screen.getByRole('textbox', { name: 'Email *' })).toHaveValue('runner@example.test');
+    expect(screen.getByRole('checkbox', { name: /accept the waiver/i })).toBeChecked();
+
+    const submitButton = screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    });
+    expect(submitButton).toBeDisabled();
+    const form = submitButton.closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.click(submitButton);
+    fireEvent.submit(form);
+
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(track.mock.calls)).not.toContain('registration-result-getter-canary');
+    expect(window.location.pathname).toBe('/events/synthetic-event/register');
   });
 });
 
@@ -3311,7 +3370,13 @@ describe('public Shop product-load failure boundary', () => {
     expect(screen.getByPlaceholderText('Last name')).toHaveValue('Buyer');
     expect(screen.getByPlaceholderText('Email')).toHaveValue('buyer@example.test');
     expect(screen.getByPlaceholderText('Phone (optional)')).toHaveValue('+1 555 010 2720');
-    expect(screen.getByRole('button', { name: 'Buy — $30.00' })).toBeEnabled();
+    const buyButton = screen.getByRole('button', { name: 'Buy — $30.00' });
+    expect(buyButton).toBeDisabled();
+    const form = buyButton.closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.click(buyButton);
+    fireEvent.submit(form);
+    expect(createMerchCheckout).toHaveBeenCalledTimes(1);
     expect(window.location.pathname).toBe('/shop/synthetic-product');
     expect(track).not.toHaveBeenCalled();
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
@@ -3361,9 +3426,69 @@ describe('public Shop product-load failure boundary', () => {
     expect(createMerchCheckout).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { level: 1, name: 'Synthetic Product' }))
       .toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buy — $30.00' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Buy — $30.00' })).toBeDisabled();
     expect(track).not.toHaveBeenCalled();
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('locks the page after a checkout result has no usable URL', async () => {
+    const unexpectedGetter = jest.fn(() => {
+      throw new Error('checkout-result-getter-canary');
+    });
+    getProductBySlug.mockResolvedValueOnce({
+      id: 'synthetic-product',
+      slug: 'synthetic-product',
+      title: 'Synthetic Product',
+      description: 'A made-up product used only for this test.',
+      imageUrl: '',
+      priceCents: 3000,
+      status: 'active',
+      sizes: [],
+      colors: [],
+    });
+    createMerchCheckout.mockResolvedValueOnce(Object.defineProperty(
+      {
+        sessionId: 'synthetic-session',
+        orderId: 'synthetic-order',
+      },
+      'unexpected',
+      {
+        configurable: true,
+        get: unexpectedGetter,
+      },
+    ));
+
+    renderPublicProduct();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Synthetic Product' }))
+      .toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Buyer' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'buyer@example.test' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Buy — $30.00' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(SHOP_CHECKOUT_FAILURE);
+    expect(unexpectedGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('checkout-result-getter-canary');
+    expect(screen.getByPlaceholderText('First name')).toHaveValue('Synthetic');
+    expect(screen.getByPlaceholderText('Last name')).toHaveValue('Buyer');
+    expect(screen.getByPlaceholderText('Email')).toHaveValue('buyer@example.test');
+
+    const buyButton = screen.getByRole('button', { name: 'Buy — $30.00' });
+    expect(buyButton).toBeDisabled();
+    const form = buyButton.closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.click(buyButton);
+    fireEvent.submit(form);
+
+    expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/shop/synthetic-product');
   });
 });
 

@@ -572,6 +572,66 @@ A future live release also needs the completed private #113 inventory and an own
 
 No main system map needs to change because this source slice adds one failure stop and changes no owner, permission, storage location, provider boundary, or publishing path. The small diagram records the new stop, the possible orphan after a rejected created result, and the unresolved anonymous lazy-create branch.
 
+## Current paid Checkout Session result containment — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop the current paid race and Shop handlers from saving or returning a malformed or mismatched Stripe Checkout Session result. Prevent a visitor from retrying on the same page when the result is unknown.
+
+**Approver:** event lead and shop lead, plus treasurer and platform/security owner.
+
+**Prerequisites:** issue [#357](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/357) must be merged, and its exact reviewed commit and synthetic test report must be named. Use made-up events, items, runners, and buyers with mocked Stripe responses. Do not call Stripe or Firebase. The private provider and catalog inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113), the persistence-first PAY-002C/D work, and protected release evidence remain separate requirements.
+
+```mermaid
+flowchart TD
+    A["Made-up paid request passes earlier checks"] --> B["A token or ID is allocated; a lazy Product link may already be written"]
+    B --> C["Attempt one mocked Stripe Checkout Session create"]
+    C --> D{"Exact result check passes?"}
+    D -- "No or request rejected" --> E["No registration/order write and no Session ID or URL returned"]
+    E --> F["A Stripe Session may still exist and be payable"]
+    F --> G["Page shows do not retry and disables the button for this page visit"]
+    G --> H["Treasurer and platform owner reconcile privately"]
+    D -- "Yes" --> I["Copy only Session ID and checkout URL"]
+    I --> J["Save pending record with Session ID only"]
+    J --> K["Return current checkout link; payment is still unproven"]
+```
+
+Text alternative: after earlier checks, the current handler may already allocate a token or local identifier and may write a lazily created Product link. It then attempts one mocked Checkout Session. A rejected or mismatched result creates no registration/order record and returns no Session ID or URL, but Stripe may still have created a payable Session. The page therefore says not to retry and disables the button for that page visit. A valid result is copied, the pending record stores only the Session ID, and the URL is returned without being stored or logged. This does not prove payment.
+
+Officer source-review steps:
+
+1. Keep live paid race registration and Shop checkout unavailable.
+2. Ask the platform owner for the exact #357 pull request, merge commit, and made-up test report.
+3. Confirm both current paid handlers use the same narrow result check immediately after the mocked Stripe call.
+4. Confirm the check accepts only the expected test/live setting, amount, USD currency, buyer email, exact closed race or Shop labels, success address, cancel address, open status, unpaid status, and payment mode.
+5. Confirm the returned Session ID matches the expected test/live form.
+6. Confirm the checkout link is a canonical HTTPS address on exactly `https://checkout.stripe.com`.
+7. Treat that address as a temporary source-code safety policy. A Stripe custom checkout domain remains blocked until #113 records the approved private provider setting and a separate reviewed configuration change.
+8. Confirm the installed Stripe software attached a successful 200 result marker.
+9. Confirm unknown response fields, response identifiers, request keys, account values, headers, bodies, and raw Stripe objects are not copied, opened, logged, stored, or returned.
+10. Confirm a malformed result or rejected mocked request returns one fixed private-reconciliation message and creates no registration or order record.
+11. Confirm an invalid result may follow earlier request-count counter writes, token or identifier allocation, and a lazily created Product mapping. Those earlier effects are not rolled back.
+12. Confirm a Stripe Session may exist even when the result is rejected. Do not retry. Escalate for private reconciliation.
+13. Confirm an accepted result stores only the copied Session ID in the pending registration or order. Confirm the checkout URL is never stored or logged.
+14. Confirm payment remains unproven until the verified Stripe-event path confirms it.
+15. Confirm a Shop product slug is encoded as one opaque cancel-address segment.
+16. Confirm free participant and volunteer registration still uses no Stripe Session and is unchanged.
+17. Confirm a rejected browser request or a resolved paid result without a usable URL shows the fixed do-not-retry message, keeps the made-up form, ends the busy state, and disables another same-page submit.
+18. Confirm a direct repeated handler call on that page makes no second service call.
+19. Record source change, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider configuration, production data, checkout, payment, and live behavior as separate results.
+
+**Expected result:** malformed or mismatched mocked Session results stop before a registration/order write or browser redirect. Valid results copy only the Session ID and URL; only the ID is stored. A rejected or ambiguous page result becomes terminal for that page visit. This is immediate containment, not complete repeat safety, provider proof, account proof, durable result persistence, or payment proof.
+
+**Stop conditions:** any real event, item, runner, buyer, registration, order, email, phone, address, Stripe object, Session ID, checkout URL, payment, provider call, production record, or live test; a request to inspect a raw provider result; a result error that exposes supplied or technical detail; a rejected result that writes a registration/order or returns an ID/URL; a checkout URL stored or logged; an automatic retry; or a claim that source, tests, merge, preview, or green CI makes checkout safe or live. Reloading, another tab, another device, or a scripted caller can bypass the page-only lock and must not be used as a retry method.
+
+**Success proof:** exact #357 pull request and merge commit; old-source failures followed by green pure result, current-handler, installed-SDK observation, frontend, full server, database-permission, isolated test-database commerce, safety, lint, type, and build checks; independent security, compatibility, accessibility, and backup-officer reviews; and an explicit statement that website publication, `runmprc.com`, Firebase, Stripe/provider settings or calls, production data, checkout, payment, and live behavior were not changed or verified.
+
+**Undo:** before publication, use one reviewed revert or safe roll-forward. After any future approved website or backend publication, use the matching protected release path and verify each affected revision separately. Never undo by changing a registration, order, Product link, Session, payment, Firebase record, or Stripe setting by hand.
+
+**Escalation:** event lead and shop lead, plus treasurer and platform/security owner. Use the private incident path if a live request might have reached Stripe, if an unconfirmed Session might exist, or if a visitor retried. Add the privacy owner if contact, URL, token-shaped, provider, or technical detail appeared. Do not copy any such detail into an issue, screenshot, email, message, or AI tool.
+
+The diagram above records the new current-handler result and page states. Account ownership, permissions, provider topology, data stores, and publishing topology do not change. The full persistence-first, deterministic-key, lost-reply, reconciliation, and approved custom-domain design remains PAY-002C/D and later C4 work.
+
 ## Late-registration amount format guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** stop a missing, malformed, or out-of-range late-registration amount before the server allocates a registration identifier, writes a paid record, or asks Stripe to create a Product, Price, or Payment Link.
@@ -1150,30 +1210,32 @@ No system diagram changes for this source slice because page structure, data mov
 ```mermaid
 flowchart LR
     A["Made-up Shop form"] --> B["Mocked checkout-start request"]
-    B -- "Rejected" --> C["Fixed inline alert; product and form remain"]
-    B -- "Resolved" --> D["Existing redirect behavior"]
+    B -- "Rejected or paid result has no usable URL" --> C["Fixed do-not-retry alert; product and form remain; button stays disabled"]
+    B -- "Paid result has a usable URL" --> D["Existing redirect behavior"]
 ```
 
-In words: a mocked rejection keeps the made-up product and form on the page and shows one fixed inline alert; the successful redirect path is unchanged.
+In words: a mocked rejection or ambiguous paid result keeps the made-up product and form on the page, shows one fixed do-not-retry alert, and disables another same-page request. A valid paid result keeps the existing redirect path.
 
 Officer review steps after the source merge:
 
 1. Keep the checkout-start failure sentence marked **NOT AVAILABLE YET**.
 2. Ask the platform owner for the exact #272 issue, pull request, merged commit, and synthetic frontend test result.
 3. Confirm the test uses only a made-up active product, made-up buyer fields, and a mocked checkout Function rejection.
-4. Confirm the rejection shows exactly `We could not confirm checkout. Please wait before trying again.`
+4. Confirm a rejected request or resolved result without a usable URL shows exactly `We could not confirm checkout. Do not try again. Contact MPRC for help.`
 5. Confirm the complete sentence is announced as one urgent screen-reader alert.
-6. Confirm the made-up product and form values remain visible, no redirect occurs, and the existing busy state ends.
+6. Confirm the made-up product and form values remain visible, no redirect occurs, the existing busy state ends, and the checkout button remains disabled for the rest of that page visit.
 7. Confirm no contact value supplied only by the rejection, database, Firebase, Stripe, provider, endpoint, token-shaped, or technical detail appears on the page, in five browser console methods, or in analytics. The made-up buyer values remain only in their existing form inputs.
 8. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
 9. Confirm the mocked request still receives the same made-up product slug, buyer fields, optional size/color values, and Firebase app exactly once.
-10. Record website publication, `runmprc.com/shop`, Firebase, Stripe/provider, checkout, production-data, and live-behavior evidence as separate results.
+10. Confirm a second direct click or handler call on the same page makes no second service call.
+11. Confirm a usable paid checkout URL still redirects once, while a resolved missing or malformed URL becomes the same terminal unknown outcome.
+12. Record website publication, `runmprc.com/shop`, Firebase, Stripe/provider, checkout, production-data, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source discards the complete rejected value and uses one fixed inline instruction that does not claim checkout definitely failed. The product and entered values remain visible, the existing busy state ends, and the successful redirect path is unchanged. The button becomes available again as it did before, but this source slice does not prove a repeat is safe; follow the displayed wait instruction until PAY-002/PAY-003 provide durable idempotency, result persistence, and reconciliation.
+**Expected result:** the reviewed source discards the complete rejected value and uses one fixed terminal instruction that does not claim checkout definitely failed. The product and entered values remain visible, the busy state ends, and the button stays disabled for that page visit. A resolved paid result without a usable URL is handled the same way. A valid redirect remains unchanged. #357 supersedes #272's earlier retry-enabled display, but it still does not make a reload, another tab/device, or a scripted retry safe.
 
-**Stop conditions:** any real member, customer, order, product, name, email, phone, address, payment, Session, or provider data; a real form submission or checkout attempt; a request for a raw error, private endpoint, token, provider ID, or screenshot containing private values; an attempt to force a production failure; a Firebase, Stripe, or provider change; an unapproved retry; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live or a repeat is safe.
+**Stop conditions:** any real member, customer, order, product, name, email, phone, address, payment, Session, or provider data; a real form submission or checkout attempt; a request for a raw error, private endpoint, token, provider ID, or screenshot containing private values; an attempt to force a production failure; a Firebase, Stripe, or provider change; any repeat service call after the terminal outcome; a reload/tab/device/script retry; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live or a repeat is safe.
 
-**Success proof:** for source completion, record the exact #272 issue, reviewed pull request, merged commit, two intended old-source failures, green synthetic route tests, relevant full checks, and independent privacy/accessibility review. For live availability, separately record the approved website publication, published revision, and a dated read-only `runmprc.com/shop` revision check without submitting a form or forcing an error. Record Firebase deployment, Stripe/provider configuration or calls, production-data actions, orders, payments, and checkout attempts as **not performed** for this frontend-only change. The failure path remains synthetic-test evidence unless an approved isolated staging plan later proves it with test-mode providers and reconciliation.
+**Success proof:** preserve the #272 source evidence, then add the exact #357 issue, reviewed pull request, merge commit, terminal repeat/missing-URL synthetic tests, relevant full checks, and independent privacy/accessibility review. For live availability, separately record the approved website publication, published revision, and a dated read-only `runmprc.com/shop` revision check without submitting a form or forcing an error. Record Firebase deployment, Stripe/provider configuration or calls, production-data actions, orders, payments, and checkout attempts as **not performed** unless separately approved and proven.
 
 **Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com/shop`. Do not undo by changing a product, order, member account, database record, payment, permission, Firebase setting, or Stripe/provider setting.
 
@@ -1403,31 +1465,33 @@ No system diagram changes for this source slice because page structure, data mov
 ```mermaid
 flowchart LR
     A["Made-up registration form"] --> B["Mocked submission request"]
-    B -- "Rejected" --> C["Fixed inline alert; event and form remain"]
-    B -- "Resolved" --> D["Existing free or paid success path"]
+    B -- "Rejected or paid result has no usable URL" --> C["Fixed do-not-retry alert; event and form remain; button stays disabled"]
+    B -- "Resolved free or paid result is usable" --> D["Existing success path"]
 ```
 
-In words: a mocked rejection keeps the made-up event, form, answers, and waiver selection on the page and shows one fixed inline alert; the existing successful free-registration and paid-checkout paths are unchanged.
+In words: a mocked rejection or ambiguous paid result keeps the made-up event, form, answers, and waiver selection on the page, shows one fixed do-not-retry alert, and disables another same-page submission. Successful free registration and a valid paid checkout link keep their existing paths.
 
 Officer review steps after the source merge:
 
 1. Keep the submission-failure sentence marked **NOT AVAILABLE YET**.
 2. Ask the platform owner for the exact #274 issue, pull request, merged commit, and synthetic frontend test result.
 3. Confirm the tests use only a made-up public event, made-up runner and emergency-contact fields, a made-up waiver, and a mocked checkout Function rejection.
-4. Confirm the rejection shows exactly `We could not confirm your registration. Please wait before trying again.`
+4. Confirm a rejected submission or resolved paid result without a usable URL shows exactly `We could not confirm your registration. Do not try again. Contact MPRC for help.`
 5. Confirm the complete sentence is announced as one urgent screen-reader alert.
-6. Confirm the made-up event, route, form values, and waiver selection remain visible, no navigation or redirect occurs, and the existing busy state ends.
+6. Confirm the made-up event, route, form values, and waiver selection remain visible, no navigation or redirect occurs, the busy state ends, and the submit button remains disabled for that page visit.
 7. Confirm no contact value supplied only by the rejection, Firebase, Stripe, provider, endpoint, token-shaped, or technical detail appears on the page, in five browser console methods, or in analytics. The made-up runner and contact values remain only in their existing form inputs and mocked request.
 8. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
 9. Confirm the mocked request still receives the same Firebase app and made-up event, runner, custom-field, signup-type, waiver, and price-tier projection exactly once.
 10. Confirm the existing submit-attempt analytics marker remains and the registration-error marker contains only the made-up public event slug, with no rejected value or property.
-11. Record source change, tests, merge, preview, website publication, the exact `runmprc.com` registration page, Firebase, Stripe/provider, registration/checkout, production-data, and live-behavior evidence as separate results.
+11. Confirm a second direct submit or handler call on the same page makes no second service call.
+12. Confirm free registration still navigates once, a usable paid URL still redirects once, and a resolved missing or malformed paid URL becomes the same terminal unknown outcome.
+13. Record source change, tests, merge, preview, website publication, the exact `runmprc.com` registration page, Firebase, Stripe/provider, registration/checkout, production-data, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source discards the complete rejected value and uses one fixed inline instruction that does not claim registration definitely failed. The event and entered values remain visible, the existing busy state ends, and successful free-registration navigation and paid-checkout redirect stay unchanged. The button becomes available again as it did before, but this source slice does not prove a repeat is safe; follow the displayed wait instruction until PAY-002/PAY-003 provide durable idempotency, result persistence, and reconciliation.
+**Expected result:** the reviewed source discards the complete rejected value and uses one fixed terminal instruction that does not claim registration definitely failed. The event and entered values remain visible, the busy state ends, and the button stays disabled for that page visit. A resolved paid result without a usable URL is handled the same way. Successful free navigation and a valid paid redirect remain unchanged. #357 supersedes #274's earlier retry-enabled display, but it does not make a reload, another tab/device, or a scripted retry safe.
 
-**Stop conditions:** any real member, runner, registration, private event record, name, email, phone, birth date, emergency contact, waiver, payment, Session, or provider data used to exercise the synthetic failure review; entry or submission of a real form; acceptance of a real waiver; a real registration or checkout attempt; a request for a raw error, private endpoint, token, provider ID, or screenshot containing private values; an attempt to force a production failure; a Firebase, Stripe, provider, event-record, or analytics change; an unapproved retry; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live or a repeat is safe. A later approved revision check may open the already-public event page read-only but must not enter data, accept a waiver, submit, start checkout, or force a failure.
+**Stop conditions:** any real member, runner, registration, private event record, name, email, phone, birth date, emergency contact, waiver, payment, Session, or provider data used to exercise the synthetic failure review; entry or submission of a real form; acceptance of a real waiver; a real registration or checkout attempt; a request for a raw error, private endpoint, token, provider ID, or screenshot containing private values; an attempt to force a production failure; a Firebase, Stripe, provider, event-record, or analytics change; any repeat service call after the terminal outcome; a reload/tab/device/script retry; or a claim that source, tests, merge, preview, or a green workflow proves the sentence is live or a repeat is safe. A later approved revision check may open the already-public event page read-only but must not enter data, accept a waiver, submit, start checkout, or force a failure.
 
-**Success proof:** for source completion, record the exact #274 issue, reviewed pull request, merged commit, eight preserved old-source tests plus two intended old-source failures, ten green synthetic registration route tests, relevant full checks, and independent privacy/accessibility review. For live availability, separately record the approved website publication, published revision, and a dated read-only `runmprc.com` registration-page revision check without entering data, accepting a waiver, submitting, or forcing an error. Record Firebase deployment, Stripe/provider configuration or calls, event-record and production-data actions, registrations, payments, and checkout attempts as **not performed** for this frontend-only change. The failure path remains synthetic-test evidence unless an approved isolated staging plan later proves it with test-mode providers and reconciliation.
+**Success proof:** preserve the #274 source evidence, then add the exact #357 issue, reviewed pull request, merge commit, terminal repeat/missing-URL synthetic tests, relevant full checks, and independent privacy/accessibility review. For live availability, separately record the approved website publication, published revision, and a dated read-only `runmprc.com` registration-page revision check without entering data, accepting a waiver, submitting, or forcing an error. Record Firebase deployment, Stripe/provider configuration or calls, event-record and production-data actions, registrations, payments, and checkout attempts as **not performed** unless separately approved and proven.
 
 **Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on the affected `runmprc.com` registration page. Do not undo by changing an event, registration, member account, database record, payment, waiver, permission, Firebase setting, analytics setting, or Stripe/provider setting.
 

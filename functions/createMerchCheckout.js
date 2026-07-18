@@ -22,6 +22,11 @@ const {
   projectCreatedStripeProductId,
   projectStoredStripeProductId,
 } = require('./stripeProductBinding');
+const {
+  LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+  buildLegacyCheckoutSessionExpectation,
+  projectLegacyCheckoutSessionResult,
+} = require('./legacyCheckoutSessionResult');
 
 const HOUR_MS = 60 * 60 * 1000;
 const MERCH_PER_IP_PER_HOUR = 20;
@@ -178,6 +183,31 @@ exports.createMerchCheckout = functions
       })],
     };
 
+    const origin = serverConfig.siteOrigin;
+    const successUrl = `${origin}/shop/purchase/success?session_id={CHECKOUT_SESSION_ID}&order=${orderRef.id}&token=${confirmationToken}`;
+    const cancelUrl = `${origin}/shop/${encodeURIComponent(productSlug)}?cancelled=1`;
+    const sessionMetadata = Object.freeze({
+      schemaVersion: '1',
+      type: 'merch',
+      productSlug,
+      orderId: orderRef.id,
+      size: size || '',
+      color: color || '',
+    });
+    const resultExpectation = buildLegacyCheckoutSessionExpectation({
+      livemode: serverConfig.stripeLivemodeExpected,
+      amountCents: priceCents,
+      customerEmail: normalizedEmail,
+      successUrl,
+      cancelUrl,
+      metadata: sessionMetadata,
+    });
+    if (resultExpectation === null) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+      );
+    }
     const stripe = getStripe();
     const stripeProductId = await ensureStripeProduct({
       expectedLivemode: serverConfig.stripeLivemodeExpected,
@@ -187,57 +217,60 @@ exports.createMerchCheckout = functions
       storedStripeProductId,
       stripe,
     });
-    const origin = serverConfig.siteOrigin;
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      customer_email: normalizedEmail,
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          unit_amount: priceCents,
-          product: stripeProductId,
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        customer_email: normalizedEmail,
+        line_items: [{
+          price_data: {
+            currency: 'usd',
+            unit_amount: priceCents,
+            product: stripeProductId,
+          },
+          quantity: 1,
+        }],
+        // Discounts remain disabled until a server-approved discount snapshot
+        // and reconciliation contract is implemented (PROMO-001).
+        allow_promotion_codes: false,
+        automatic_tax: { enabled: false },
+        shipping_address_collection: {
+          allowed_countries: ['US', 'CA'],
         },
-        quantity: 1,
-      }],
-      // Discounts remain disabled until a server-approved discount snapshot
-      // and reconciliation contract is implemented (PROMO-001).
-      allow_promotion_codes: false,
-      automatic_tax: { enabled: false },
-      shipping_address_collection: {
-        allowed_countries: ['US', 'CA'],
-      },
-      phone_number_collection: { enabled: true },
-      success_url: `${origin}/shop/purchase/success?session_id={CHECKOUT_SESSION_ID}&order=${orderRef.id}&token=${confirmationToken}`,
-      cancel_url: `${origin}/shop/${productSlug}?cancelled=1`,
-      metadata: {
-        schemaVersion: '1',
-        type: 'merch',
-        productSlug,
-        orderId: orderRef.id,
-        size: size || '',
-        color: color || '',
-      },
-      payment_intent_data: {
-        metadata: {
-          schemaVersion: '1',
-          type: 'merch',
-          productSlug,
-          orderId: orderRef.id,
-          size: size || '',
-          color: color || '',
+        phone_number_collection: { enabled: true },
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: sessionMetadata,
+        payment_intent_data: {
+          metadata: sessionMetadata,
         },
-      },
-    });
+      });
+    } catch {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+      );
+    }
+    const checkoutResult = projectLegacyCheckoutSessionResult(
+      session,
+      resultExpectation,
+    );
+    if (checkoutResult === null) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        LEGACY_CHECKOUT_RESULT_FAILURE_MESSAGE,
+      );
+    }
 
     await orderRef.set({
       ...orderBase,
-      stripeSessionId: session.id,
+      stripeSessionId: checkoutResult.sessionId,
     });
 
     return {
-      sessionId: session.id,
-      url: session.url,
+      sessionId: checkoutResult.sessionId,
+      url: checkoutResult.url,
       orderId: orderRef.id,
     };
   });

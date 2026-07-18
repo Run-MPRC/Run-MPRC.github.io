@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import SEO from '../../components/SEO';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
@@ -9,6 +9,8 @@ import {
   formatPrice,
   getProductBySlug,
 } from '../../services/shop/shopService';
+
+const CHECKOUT_FAILURE = 'We could not confirm checkout. Do not try again. Contact MPRC for help.';
 
 function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -21,6 +23,8 @@ function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const outcomeUnknownRef = useRef(false);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -67,6 +71,7 @@ function ProductDetail() {
 
   async function handleBuy(e: React.FormEvent) {
     e.preventDefault();
+    if (outcomeUnknownRef.current) return;
     setError(null);
     if (!product) return;
     setSubmitting(true);
@@ -80,9 +85,19 @@ function ProductDetail() {
           color: color || undefined,
         },
       );
-      window.location.href = result.url;
+      const checkoutUrl = result.url;
+      if (typeof checkoutUrl === 'string' && checkoutUrl.trim() !== '') {
+        window.location.href = checkoutUrl;
+        return;
+      }
+      outcomeUnknownRef.current = true;
+      setOutcomeUnknown(true);
+      setError(CHECKOUT_FAILURE);
+      setSubmitting(false);
     } catch {
-      setError('We could not confirm checkout. Please wait before trying again.');
+      outcomeUnknownRef.current = true;
+      setOutcomeUnknown(true);
+      setError(CHECKOUT_FAILURE);
       setSubmitting(false);
     }
   }
@@ -183,7 +198,7 @@ function ProductDetail() {
               {error && <p role="alert" aria-live="assertive" aria-atomic="true" className="text-red-600 text-sm">{error}</p>}
               <button
                 type="submit"
-                disabled={!canBuy || submitting}
+                disabled={!canBuy || submitting || outcomeUnknown}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded w-full"
               >
                 {submitting
