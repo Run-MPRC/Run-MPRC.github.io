@@ -397,6 +397,71 @@ Officer source-review steps:
 
 No main system map needs to change because this source change adds one format stop without changing ownership, permissions, storage locations, the Stripe boundary, or website publishing. The small diagram above records the invalid-capacity stop, the existing count path, and the separate volunteer path.
 
+## Race audience format guard — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop race and volunteer checkout when an event's stored public or members-only setting is draft, missing, mixed, or malformed.
+
+**Approver:** event lead plus membership lead and platform/security owner.
+
+**Prerequisites for source review:** issue [#351](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/351) must be merged. The exact pull request and merge commit must be named. Tests must use only a made-up event, runner, and website role with replacements that cannot contact Firebase or Stripe. New records use one `visibility` field. Older records without that field use one true-or-false `member_only` field. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) must identify any real older or mixed record before deployment or repair. This check does not choose an event audience. For this guard, a website role proves only that the stored audience gate passed. The unchanged later price-role check remains separate. Neither check proves current or paid club membership.
+
+```mermaid
+flowchart TD
+    A["Made-up request passes earlier counters and registration-window check"] --> B{"Exactly one allowed checkout audience?"}
+    B -- "No, or value is draft, mixed, missing, or malformed" --> C["Fixed unavailable result; no audience-role or later checkout work"]
+    B -- "Yes, public" --> D["Continue without the audience-role check"]
+    B -- "Yes, members-only" --> E{"Exact verified website member or admin role?"}
+    E -- "No" --> F["Existing members-only denial"]
+    E -- "Yes" --> G["Continue to the unchanged volunteer or participant path"]
+    E -. "Access check only" .-> H["Website role is not membership or payment proof"]
+```
+
+Text alternative: after earlier request counters and the registration-window check, exactly one audience that is allowed for checkout is required. A new public setting or an older false member-only flag continues without the audience-role check. A new members-only setting or an older true flag uses the existing verified website-role check. Draft is a known stored catalog value, but it is unavailable for checkout. Mixed, missing, or malformed formats also stop with one unavailable result. Passing the website-role check does not prove current or paid club membership.
+
+Officer source-review steps:
+
+1. Keep live race and volunteer checkout unavailable.
+2. Ask the platform owner for the exact #351 pull request.
+3. Ask the platform owner for the exact merge commit.
+4. Ask for the made-up test report from that same commit.
+5. Confirm the report uses only a made-up event, runner, and website role.
+6. Confirm a new-format event that may continue checkout uses only `public` or `members_only`.
+7. Confirm an older-format event has no new field and uses one exact true-or-false member-only flag.
+8. Confirm a draft audience stops checkout.
+9. Confirm both audience fields present stops checkout.
+10. Confirm both audience fields missing stops checkout.
+11. Confirm unknown, wrong-kind, hidden, inherited, or code-running audience values stop checkout.
+12. Confirm rejected values cannot run a stored method or automatic conversion.
+13. Confirm rejected values receive exactly `Registration is unavailable for this event`.
+14. Confirm the result and new guard logs expose no stored audience value or technical detail.
+15. Confirm the two request-count safety checks may already have written counters.
+16. Confirm the registration-window check may already have run.
+17. Confirm a malformed audience starts no website-role check.
+18. Confirm a malformed audience starts no volunteer, capacity, later participant role, price, token, registration write, Stripe Product, or Checkout Session work.
+19. Confirm a recognized members-only event keeps the existing website-role check and denial.
+20. Confirm a recognized public event starts no audience-role check.
+21. Confirm a later participant price-role check remains separate from the audience-role check.
+22. Confirm passing the audience-role check proves only the stored audience gate.
+23. Confirm the separate later role check keeps the existing member-price behavior without newly approving it.
+24. Confirm neither role check proves paid dues, current annual membership, or eligibility beyond its existing narrow result.
+25. Confirm valid made-up public and members-only participant paths keep their existing results.
+26. Confirm valid made-up public and members-only volunteer paths keep their existing results.
+27. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe state, production data, migration, and live behavior as separate results.
+
+**Expected result:** exactly one audience that is allowed for checkout is required. New public and members-only settings and their older true-or-false equivalents keep their current access paths. Draft, mixed, missing, or malformed formats stop with one plain result before the audience-role check or later checkout work. The existing verified website-role check proves only the stored audience gate. The separate later role check keeps its existing member-price result. This source guard changes neither narrow result and proves no paid dues, current annual membership, or broader eligibility.
+
+**Stop conditions:** any real runner, volunteer, event, audience, account, role, membership, registration, payment, Firebase record, Stripe object, Stripe call, or production test; a request to choose or repair an audience in Firebase by hand; a missing exact commit; a stored audience value or technical detail in shared evidence; a malformed audience that starts role or later checkout work; deployment before the private #113 inventory and an owner-approved audience; or a claim that source, tests, merge, preview, or a green workflow proves membership or live checkout behavior.
+
+**Success proof:** exact #351 pull request and merge commit; recorded old-source failures using made-up values; green audience, caller, full server, database-permission, isolated test-database commerce, website, safety, and build checks; independent security, compatibility, identity, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, production data, migration, and live behavior were not changed or verified. A future live release also needs the private #113 inventory, an owner-approved audience for each real event, the broader RACE/PAY staging proof, isolated Stripe test mode, exact Firebase Function deployment and readback, made-up staged account-role proof, and rollback evidence.
+
+**Undo:** before Firebase deployment, use one reviewed pull request that reverses the change or corrects it safely. After any approved backend deployment, use the protected backend release process and confirm the exact published Function revision. Never undo by changing an event, audience, role, membership, registration, Product, Session, or payment record by hand.
+
+**Escalation:** event lead plus membership lead and platform/security owner. Add the privacy owner if runner or account details appeared. Add the treasurer if membership or payment was inferred. Use the private incident path if a malformed audience may have reached role, registration, or Stripe work. Do not copy private details, stored audience values, provider identifiers, or role evidence into an issue, screenshot, email, message, or AI tool.
+
+No main system map needs to change because this source guard changes no audience owner, role policy, permission, storage location, data movement, Stripe boundary, or website publishing path. The small diagram above records the new failure stop and the current new-format and older-format access paths.
+
 ## Merchandise price format guard — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**
