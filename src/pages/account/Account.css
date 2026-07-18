@@ -84,6 +84,91 @@
   cursor: not-allowed;
 }
 
+.account-sign-out {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.account-sign-out__panel {
+  display: flex;
+  max-width: 42rem;
+  padding: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  color: #111827;
+  background: #f9fafb;
+  border: 2px solid #9ca3af;
+  border-radius: 0.5rem;
+}
+
+.account-sign-out__heading,
+.account-sign-out__result {
+  margin: 0;
+}
+
+.account-sign-out__heading {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.account-sign-out__result {
+  padding: 0.75rem;
+  border: 2px solid;
+  border-radius: 0.375rem;
+  line-height: 1.5;
+}
+
+.account-sign-out__result--pending {
+  color: #1e3a8a;
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.account-sign-out__result--retry {
+  color: #713f12;
+  background: #fefce8;
+  border-color: #facc15;
+}
+
+.account-sign-out__result--terminal {
+  color: #7f1d1d;
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.account-sign-out__button {
+  min-height: 3rem;
+  padding: 0.7rem 1rem;
+  color: #fff;
+  background: #005bd8;
+  border: 2px solid #005bd8;
+  border-radius: 0.375rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-sign-out__button:hover:not(:disabled) {
+  color: #111827;
+  background: #facc15;
+  border-color: #111827;
+}
+
+.account-sign-out__button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px #111827;
+}
+
+.account-sign-out__button:disabled {
+  color: #374151;
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  cursor: not-allowed;
+}
+
 @media (min-width: 640px) {
   .account-verification-notice {
     align-items: flex-start;
