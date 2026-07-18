@@ -36,8 +36,8 @@ const CLEAN_COMMANDS = Object.freeze([
 ]);
 const LINT_SCRIPT = 'node .github/scripts/check-frontend-lint.cjs';
 const EXPECTED_LINT_FILES = 108;
-const EXPECTED_LINT_ERRORS = 123;
-const EXPECTED_LINT_WARNINGS = 7;
+const EXPECTED_LINT_ERRORS = 121;
+const EXPECTED_LINT_WARNINGS = 6;
 const YAML_TO_JSON = [
   'require "yaml"',
   'require "json"',

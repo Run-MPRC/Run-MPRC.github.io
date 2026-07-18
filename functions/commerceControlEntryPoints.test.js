@@ -503,10 +503,111 @@ describe('commerce admission at admin entry points', () => {
     expect(mockPaymentLinkCreate).not.toHaveBeenCalled();
   });
 
+  // Keep this before every admitted late-registration invocation. stripeHelpers
+  // caches its client, so the first case must prove the handler never constructs it.
+  test.each([
+    ['Stripe minimum', 50],
+    ['ordinary positive amount', 2500],
+    ['eight-digit ceiling', 99_999_999],
+  ])('denies paid late-registration %s before allocation or provider work', async (
+    _caseName,
+    amountCents,
+  ) => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      stripeProductId: 'prod_synthetic',
+      waiverVersion: 'synthetic-v1',
+    });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn'].map((method) => (
+      jest.spyOn(console, method).mockImplementation(() => {})
+    ));
+    const randomBytesSpy = jest.spyOn(require('crypto'), 'randomBytes')
+      .mockReturnValue(Buffer.alloc(24, 1));
+
+    try {
+      await expect(adminRegistrationAction({
+        eventId: 'race-1',
+        action: 'add_late_registration',
+        payload: { registration: registrationInput(amountCents) },
+      }, adminContext())).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'Paid late registration is not available',
+      });
+
+      expect(admin.__getAutoIdCount()).toBe(0);
+      expect(randomBytesSpy).not.toHaveBeenCalled();
+      expect(mockStripeConstructor).not.toHaveBeenCalled();
+      expect(mockBusinessWrite).not.toHaveBeenCalled();
+      expect(mockProductCreate).not.toHaveBeenCalled();
+      expect(mockPriceCreate).not.toHaveBeenCalled();
+      expect(mockPaymentLinkCreate).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    } finally {
+      randomBytesSpy.mockRestore();
+      consoleSpies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
+  test('preserves the exact zero late-registration compatibility result', async () => {
+    admin.__seed('systemConfig/commerce', control());
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      stripeProductId: 'prod_synthetic',
+      waiverVersion: 'synthetic-v1',
+    });
+
+    await expect(adminRegistrationAction({
+      eventId: 'race-1',
+      action: 'add_late_registration',
+      payload: { registration: registrationInput(0) },
+    }, adminContext())).resolves.toEqual({
+      ok: true,
+      registrationId: 'auto-1',
+      paymentLink: null,
+    });
+
+    expect(admin.__getAutoIdCount()).toBe(1);
+    expect(admin.__get('events/race-1/registrations/auto-1')).toMatchObject({
+      eventId: 'race-1',
+      amountCents: 0,
+      status: 'paid',
+      stripeSessionId: null,
+      stripePaymentIntentId: null,
+      stripeChargeId: null,
+      stripeRefundIds: [],
+      stripePaymentLinkId: null,
+      paidAt: { _milliseconds: 1_800_000_000_000 },
+    });
+    expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
+    expect(mockBusinessWrite).toHaveBeenCalledWith(
+      'set',
+      'events/race-1/registrations/auto-1',
+      expect.objectContaining({
+        eventId: 'race-1',
+        amountCents: 0,
+        priceTier: 'comp',
+        status: 'paid',
+        stripeSessionId: null,
+        stripePaymentIntentId: null,
+        stripeChargeId: null,
+        stripeRefundIds: [],
+        stripePaymentLinkId: null,
+        paidAt: { _milliseconds: 1_800_000_000_000 },
+      }),
+    );
+    expect(mockStripeConstructor).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
+    expect(mockPriceCreate).not.toHaveBeenCalled();
+    expect(mockPaymentLinkCreate).not.toHaveBeenCalled();
+  });
+
   test.each([
     ['mark_comp', registrationInput(0), 0],
-    ['add_late_registration', registrationInput(0), 0],
-    ['add_late_registration', registrationInput(2500), 1],
   ])('keeps admitted admin %s behavior available', async (
     action,
     registration,
@@ -585,82 +686,6 @@ describe('commerce admission at admin entry points', () => {
       }
     },
   );
-
-  test.each([
-    ['free zero', 0, null],
-    ['Stripe minimum', 50, 'https://buy.stripe.test/synthetic'],
-    ['eight-digit ceiling', 99_999_999, 'https://buy.stripe.test/synthetic'],
-  ])('preserves exact valid late-registration %s amount', async (
-    _caseName,
-    amountCents,
-    expectedPaymentLink,
-  ) => {
-    admin.__seed('systemConfig/commerce', control());
-    admin.__seed('events/race-1', {
-      checkoutEnabled: true,
-      title: 'Synthetic Race',
-      slug: 'synthetic-race',
-      stripeProductId: 'prod_synthetic',
-      waiverVersion: 'synthetic-v1',
-    });
-
-    await expect(adminRegistrationAction({
-      eventId: 'race-1',
-      action: 'add_late_registration',
-      payload: { registration: registrationInput(amountCents) },
-    }, adminContext())).resolves.toEqual({
-      ok: true,
-      registrationId: 'auto-1',
-      paymentLink: expectedPaymentLink,
-    });
-
-    expect(admin.__getAutoIdCount()).toBe(1);
-    expect(admin.__get('events/race-1/registrations/auto-1')).toMatchObject({
-      eventId: 'race-1',
-      amountCents,
-      status: amountCents === 0 ? 'paid' : 'pending',
-    });
-    expect(mockBusinessWrite).toHaveBeenCalledTimes(1);
-    expect(mockBusinessWrite).toHaveBeenCalledWith(
-      'set',
-      'events/race-1/registrations/auto-1',
-      expect.objectContaining({
-        eventId: 'race-1',
-        amountCents,
-        priceTier: amountCents === 0 ? 'comp' : 'nonMember',
-        stripePaymentLinkId: amountCents === 0 ? null : 'plink_synthetic',
-      }),
-    );
-    expect(mockProductCreate).not.toHaveBeenCalled();
-    expect(mockPriceCreate).toHaveBeenCalledTimes(amountCents === 0 ? 0 : 1);
-    expect(mockPaymentLinkCreate).toHaveBeenCalledTimes(amountCents === 0 ? 0 : 1);
-    if (amountCents !== 0) {
-      const metadata = {
-        eventId: 'race-1',
-        registrationId: 'auto-1',
-        priceTier: 'nonMember',
-        late_add: 'true',
-      };
-      expect(mockPriceCreate).toHaveBeenCalledWith({
-        unit_amount: amountCents,
-        currency: 'usd',
-        product: 'prod_synthetic',
-        metadata,
-      });
-      expect(mockPaymentLinkCreate).toHaveBeenCalledWith({
-        line_items: [{ price: 'price_synthetic', quantity: 1 }],
-        metadata,
-        after_completion: {
-          type: 'redirect',
-          redirect: {
-            url: expect.stringMatching(
-              /^https:\/\/runmprc\.test\/register\/success\?reg=auto-1&token=[A-Za-z0-9_-]{32}$/,
-            ),
-          },
-        },
-      });
-    }
-  });
 
   test.each([
     ['registration', adminRegistrationAction, {

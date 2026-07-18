@@ -555,7 +555,7 @@ Officer source-review steps:
 16. Confirm the report records no automatic retry. One Product attempt may already have succeeded and left an orphan that later needs private reconciliation.
 17. Confirm one valid made-up created Product keeps this order: Product-link write, then Checkout Session, then registration or order write.
 18. Confirm free participant and volunteer paths do not inspect Product links or access Stripe.
-19. Confirm the separate late-registration Product, Price, and Payment Link path is unchanged and remains **NOT AVAILABLE YET**.
+19. Confirm #359 separately disables the late-registration Product, Price, and Payment Link path in source and keeps paid late registration **NOT AVAILABLE YET**.
 20. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, catalog data, migration, and live behavior as separate results.
 
 **Expected result:** a malformed present Product link stops before a new token, registration/order identifier, Product-link or registration/order write, or Stripe call. Earlier access and request-count checks may already have run, and their safety-counter writes are not rolled back. An accepted ID is copied without conversion or re-reading. A malformed created result stops after at most one mocked Product attempt but before any local mapping, Checkout Session, or business-record write. These checks do not prove Stripe origin, account ownership, intended catalog item, metadata binding, active status, approved price, provider delivery, or reconciliation. Missing mappings still enter anonymous lazy Product creation, which remains unsafe because public concurrent requests can create duplicate or orphaned Products.
@@ -638,7 +638,7 @@ The diagram above records the new current-handler result and page states. Accoun
 
 **Approver:** event lead plus treasurer and platform/security owner.
 
-**Prerequisites for source review:** issue [#331](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/331) is merged; the exact reviewed commit is named; and tests use only an invented event, invented runner, and mocked Stripe methods. The complete Admin screens remain **NOT AVAILABLE YET**. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before any deployment or data repair. PAY-001D still owns the complete admin request schema, and PAY-004C still owns replacement of reusable late-registration Payment Links. This format guard does not approve a price or make that flow safe.
+**Prerequisites for source review:** issues [#331](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/331) and [#359](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/359) are merged; the exact reviewed commits are named; and tests use only an invented event, invented runner, and mocked Stripe methods. Paid late registration and the complete Admin action system remain **NOT AVAILABLE YET**. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before any deployment or data repair. PAY-001D still owns the complete admin request schema, and full PAY-004C still owns one-off paid Checkout plus cleanup of legacy Payment Links. These guards do not approve a price or make that flow safe.
 
 ```mermaid
 flowchart LR
@@ -646,35 +646,90 @@ flowchart LR
     B --> C{"Exact whole-number cents?"}
     C -- "No, below 50 unless zero, or over eight digits" --> D["Fixed stop result; no identifier, registration write, or Stripe method"]
     C -- "Exact zero" --> E["Existing path creates a local record marked paid without Stripe"]
-    C -- "50 through 99,999,999" --> F["Existing unfinished paid path may continue"]
-    E -. "Not payment, free, or comp authority; not live" .-> G["PAY-001D and PAY-004 remain open"]
-    F -. "Reusable Payment Link remains unsafe" .-> G
+    C -- "50 through 99,999,999" --> F["Fixed paid-unavailable result; no identifier, write, Stripe client, or link"]
+    E -. "Not payment, free, comp, or membership authority; not live" .-> G["PAY-001D and full PAY-004C remain open"]
+    F -. "One-off paid Checkout and legacy-link cleanup still required" .-> G
 ```
 
-Text alternative: after earlier access and availability checks, the server accepts only exact whole-number cents: zero, or 50 through 99,999,999. Anything else stops before an identifier, registration write, or Stripe method. Exact zero still creates a local record marked paid without Stripe; that is not proof of payment or authority to call the registration free or comp. Both accepted branches are unfinished and unavailable for officer use.
+Text alternative: after earlier access and availability checks, malformed amounts stop with the format result. Exact zero still creates a local record marked paid without Stripe; that is not proof of payment or authority to call the registration free or comp. Every valid positive amount now stops with the paid-unavailable result before identifier allocation, writes, Stripe construction, or a link. Paid late registration is unavailable for officer use.
 
 Officer source-review steps:
 
 1. Keep late registration and every Admin registration action marked **NOT AVAILABLE YET**.
-2. Ask the platform owner for the exact #331 pull request, merge commit, and synthetic test result.
+2. Ask the platform owner for the exact #331 and #359 pull requests, merge commits, and synthetic test results.
 3. Confirm the test uses only an invented event and runner plus mocked Stripe methods.
 4. Confirm missing values, text or objects that only look like numbers, values from 1 through 49 cents, fractions, negative values, and values over eight digits receive exactly `Invalid late registration amount`.
 5. Confirm a rejected amount is not opened, transformed, printed, or copied into the result. Ask the specialist to keep the detailed object-safety proof in the synthetic test report.
 6. Confirm a rejection allocates no registration identifier, writes no event or registration record, and calls no Stripe Product, Price, or Payment Link method.
-7. Confirm exact zero, 50 cents, and 99,999,999 cents keep their current source behavior. Exact zero still creates a local record marked paid without Stripe. Do not treat that record as payment evidence, call it free or comp without approved authority, or treat any technical boundary as an approved price.
-8. Record source change, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, production data, and live behavior as separate results.
+7. Confirm exact zero still creates the legacy local record marked paid without Stripe. Do not treat that record as payment evidence, call it free or comp without approved authority, or treat any technical boundary as an approved price.
+8. Confirm 50 cents, an ordinary positive amount, and 99,999,999 cents now receive exactly `Paid late registration is not available`.
+9. Confirm every positive amount stops before registration identifier or token allocation, Firestore writes, Stripe construction, Product/Price/Payment Link calls, URL return, prompts, or logs.
+10. Record source change, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, production data, and live behavior as separate results.
 
-**Expected result:** malformed late-registration amounts fail closed with one plain result and no registration or provider side effect. Exact zero and exact whole-number values from 50 through 99,999,999 retain the current source behavior. The zero-amount path still creates a local record marked paid without Stripe and is not payment, free, or comp authority. This guard neither proves an approved business price nor fixes reusable Payment Links, capacity, idempotency, reconciliation, authorization, or deployment.
+**Expected result:** malformed late-registration amounts fail closed with one plain format result and no registration or provider side effect. Every valid positive amount fails closed with the fixed paid-unavailable result and no identifier, token, write, provider method, URL, prompt, or log. Exact zero retains the legacy local record marked paid without Stripe and is not payment, free, comp, or membership authority. These guards neither approve a business price nor supply one-off Checkout, legacy-link cleanup, capacity, idempotency, reconciliation, authorization, or deployment.
 
 **Stop conditions:** any real runner, event, price, payment, Firebase record, Stripe object, provider call, or production test; a request to enter or repair a value directly in Firestore or Stripe; a missing exact commit; an amount derived from an unapproved browser choice; a rejection that allocates or writes anything; or a claim that source, tests, merge, preview, or a green workflow proves late registration is safe or live.
 
-**Success proof:** exact #331 pull request and merge commit; the recorded old-source failures; green synthetic boundary, Functions, Rules, commerce-emulator, frontend, safety, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, provider configuration, production data, and live behavior were not changed or verified. Any future live release needs separate approved price authority, one-off payment design, Firebase deployment/readback, Stripe test-mode proof, reconciliation, and rollback evidence.
+**Success proof:** exact #331 and #359 pull requests and merge commits; their recorded old-source failures; green synthetic boundary, Functions, Rules, commerce-emulator, frontend, safety, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, provider configuration, production data, and live behavior were not changed or verified. Any future live release needs separate approved price authority, one-off payment design, Firebase deployment/readback, Stripe test-mode proof, reconciliation, and rollback evidence.
 
 **Undo:** before any Firebase deployment, use one reviewed source-and-guide revert or safe roll-forward. After any Firebase Function deployment, use the protected backend release path or a reviewed safe roll-forward, then verify the exact Function revision, provider readback boundary, and made-up test-mode behavior. Record website publication, `runmprc.com`, Stripe/provider state, and production-data state separately. Never undo by changing an event, registration, paid status, Product, Price, Payment Link, or payment record by hand.
 
 **Escalation:** event lead plus treasurer and platform/security owner. Add the privacy owner if runner or event details appeared. Use the private incident path if a malformed request might have created a registration or provider object. Do not copy private details or provider identifiers into an issue, screenshot, email, message, or AI tool.
 
-No system-topology map changes are required because this source slice adds one validation stop and changes no account, permission, data-store, provider, or deployment topology. The small diagram above records the new stop boundary and the two still-unfinished accepted branches.
+No system-topology map changes are required because these source slices add stop boundaries and change no account, permission, data-store, provider, or deployment topology. The small diagram above records the current zero and positive branches.
+
+## Paid late-registration containment — SOURCE ONLY, NOT LIVE
+
+**Purpose:** keep officers from creating or sharing a reusable paid late-registration link while the one-off Checkout design is unfinished.
+
+**Approver:** event lead plus treasurer and platform/security owner.
+
+**Prerequisites:** issue [#359](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/359) is merged; the exact reviewed commit and synthetic test report are named; and no website, Firebase, Stripe, or production-data action is mixed into the source review. The private legacy-link inventory remains owner work under [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) and full PAY-004C.
+
+```mermaid
+flowchart LR
+    A["Reviewer opens the made-up source-only screen"] --> B["Only a $0 legacy local form is shown"]
+    B --> C["Synthetic website test sends exact zero; no amount or tier choice"]
+    C --> Q{"Response confirmed?"}
+    Q -- "Yes" --> D["Server writes the legacy local record without Stripe"]
+    Q -- "Rejected or unavailable" --> U["Fixed outcome-unknown stop; hide the roster and every action; no same-page retry"]
+    X["Any positive scripted request"] --> Y["Fixed paid-unavailable stop before allocation, write, or Stripe"]
+    D -. "Not payment, free, comp, or membership proof" .-> Z["Paid late registration remains NOT AVAILABLE YET"]
+    U -. "The record may or may not exist; stop and escalate" .-> Z
+    Y -. "Do not create a manual link" .-> Z
+```
+
+Text alternative: in source review with made-up data, the screen can request only the exact-zero legacy local record. A confirmed response reloads the roster. A rejected or unavailable response does not prove whether the record exists, so the screen shows one fixed stop, hides the roster and every action, and prevents a same-page retry. Any positive scripted request stops before registration allocation or Stripe. This is not a live officer procedure. Officers must not create a manual Stripe link; paid late registration remains unavailable.
+
+Officer source-review steps:
+
+1. Keep paid late registration marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #359 pull request, merge commit, red proof, and green synthetic test report.
+3. Confirm the source-only Admin screen says `Late registration — $0 only`.
+4. Confirm the form has runner fields only.
+5. Confirm there is no amount field, price-tier choice, Payment Link instruction, or copy prompt.
+6. Confirm the website request contains exact zero and the compatibility `nonMember` label only.
+7. Confirm the server gives every admitted positive amount exactly `Paid late registration is not available`.
+8. Confirm that positive stop occurs before identifier/token allocation, Firestore writes, Stripe construction, Product/Price/Payment Link calls, URL return, or logs.
+9. Confirm exact zero performs no Stripe call and returns no payment link.
+10. Make the made-up exact-zero request reject with an ordinary synthetic detail. Confirm the screen shows only `We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.`
+11. Confirm the rejection detail is not inspected, shown, logged, or sent to analytics.
+12. Confirm the modal, event and runner details, totals, filters, table, export, and every registration action disappear.
+13. Confirm an equivalent same-page rerender does not restore a control, repeat the request, or reload the roster.
+14. Treat that rejected result as unknown. The local record may or may not exist. Do not repeat the request, edit Firestore, or call it a confirmed failure.
+15. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, legacy-link inventory, production data, and live behavior as separate results.
+
+**Expected result:** new source cannot create or reveal a paid reusable late-registration link. The visible screen is $0-only, and positive scripted input fails closed. A rejected exact-zero request becomes one accessible outcome-unknown stop with no rejected detail, stale roster, action control, automatic reload, or same-page retry. The exact-zero record remains a legacy local compatibility result and proves neither payment nor an approved free/comp or membership decision.
+
+**Stop conditions:** any real runner, event, payment, registration, Firebase record, Stripe object, provider call, production test, manual Dashboard link, old link click, or request to paste a link or identifier; any positive request that allocates, writes, calls Stripe, returns a URL, prompts, or logs; a rejected exact-zero request that shows technical detail, keeps stale roster or action controls, reloads automatically, or can be repeated on the same page; a request to check or repair the unknown result directly in Firestore; or any claim that source, tests, merge, preview, or green CI proves the containment is live.
+
+**Success proof:** exact #359 pull request and merge commit; recorded 3-failure server red proof plus the old frontend rejection-detail failure, followed by green positive/zero/malformed server tests and actual-route $0-only, no-prompt, fixed-alert, hostile-rejection, hidden-state, and no-repeat tests; relevant full Functions, frontend, Rules, isolated commerce, safety, lint, type, and build checks; independent security, compatibility, accessibility, and backup-officer reviews; and explicit separate results for website, `runmprc.com`, Firebase, Stripe/provider, legacy links, production data, and live behavior.
+
+**Undo:** before any publication, use one reviewed revert or safe roll-forward. After a future approved website or Firebase publication, use the matching protected release path and verify each exact revision separately. Never undo by creating, enabling, sending, paying, editing, or deleting a Payment Link, registration, payment record, or Firestore document by hand.
+
+**Escalation:** event lead plus treasurer and platform/security owner. Use the private incident path if a reusable link may still be active, was shared, or may have been paid more than once. Add the privacy owner if runner or link details appeared. Do not place any link, runner detail, provider identifier, or payment detail in an issue, screenshot, email, message, or AI tool.
+
+The small diagram records the changed late-registration screen and source data path. Account ownership, permissions, data stores, hosting, and provider topology do not change. Full PAY-004C still owns one-off paid Checkout, legacy-link inventory/deactivation/reconciliation, and protected release.
 
 ## Profile permission error
 
