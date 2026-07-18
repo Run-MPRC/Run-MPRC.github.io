@@ -5,6 +5,7 @@ const https = require('https');
 const net = require('net');
 const Stripe = require('stripe');
 const tls = require('tls');
+const { types: { isProxy } } = require('node:util');
 
 // Stripe labels the injected HttpClient API experimental. This suite therefore
 // observes only the exact lockfile version and must be reviewed on any upgrade.
@@ -77,7 +78,10 @@ function createSessionFixture(overrides = {}) {
     cancel_url: 'https://club.example.test/checkout/cancel',
     url: STANDARD_CHECKOUT_URL,
     metadata: {
-      fixture: 'synthetic_test_only',
+      schemaVersion: '1',
+      eventId: 'sdk_observation_event',
+      registrationId: 'sdk_observation_registration',
+      priceTier: 'nonMember',
     },
     ...overrides,
   };
@@ -415,6 +419,8 @@ describe('Stripe 14.25.0 Checkout Session SDK observations', () => {
     const session = await captureFixedResolution(() => createCheckoutSession(stripe));
 
     expect(requestFactsMatch(httpClient)).toBe(true);
+    expect(Object.getPrototypeOf(session)).toBe(Object.prototype);
+    expect(isProxy(session)).toBe(false);
     [
       ['id', 'inert_session_observation_0001'],
       ['object', 'checkout.session'],
@@ -445,11 +451,28 @@ describe('Stripe 14.25.0 Checkout Session SDK observations', () => {
     expect(metadataDescriptor.enumerable).toBe(true);
     expect(metadataDescriptor.writable).toBe(true);
     expect(metadataDescriptor.configurable).toBe(true);
+    expect(Object.getPrototypeOf(session.metadata)).toBe(Object.prototype);
+    expect(isProxy(session.metadata)).toBe(false);
     expect(session.metadata).toEqual({
-      fixture: 'synthetic_test_only',
+      schemaVersion: '1',
+      eventId: 'sdk_observation_event',
+      registrationId: 'sdk_observation_registration',
+      priceTier: 'nonMember',
+    });
+    [
+      ['schemaVersion', '1'],
+      ['eventId', 'sdk_observation_event'],
+      ['registrationId', 'sdk_observation_registration'],
+      ['priceTier', 'nonMember'],
+    ].forEach(([key, value]) => {
+      const descriptor = expectOwnDataProperty(session.metadata, key, value);
+      expect(descriptor.enumerable).toBe(true);
+      expect(descriptor.writable).toBe(true);
+      expect(descriptor.configurable).toBe(true);
     });
 
     const rawResponse = response.getRawResponse();
+    expect(isProxy(rawResponse)).toBe(false);
     const lastResponseDescriptor = expectOwnDataProperty(
       session,
       'lastResponse',
