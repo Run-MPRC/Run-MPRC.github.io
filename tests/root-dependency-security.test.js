@@ -36,6 +36,11 @@ const EXPECTED_WEBSOCKET_DRIVER_DEPENDENCIES = Object.freeze({
   'safe-buffer': '>=5.1.0',
   'websocket-extensions': '>=0.1.1',
 });
+const EXPECTED_SHELL_QUOTE = Object.freeze({
+  version: '1.8.4',
+  resolved: 'https://registry.npmjs.org/shell-quote/-/shell-quote-1.8.4.tgz',
+  integrity: 'sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==',
+});
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -243,4 +248,66 @@ test('fails a draft-75 length header that exceeds the configured maxLength close
     'the driver must close when a declared length exceeds maxLength',
   );
   assert.ok(events.includes('close'), 'a close event must fire at the length bound');
+});
+
+test('pins the sole root shell-quote resolution to the patched 1.8.4 release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.['shell-quote'], undefined);
+  assert.equal(packageJson.devDependencies?.['shell-quote'], undefined);
+  assert.equal(packageJson.optionalDependencies?.['shell-quote'], undefined);
+  assert.equal(packageJson.peerDependencies?.['shell-quote'], undefined);
+  assert.equal(packageJson.resolutions?.['shell-quote'], undefined);
+  assert.equal(packageJson.overrides?.['shell-quote'], undefined);
+
+  // Both existing development-tool parents already admit the patched release.
+  assert.equal(
+    lock.packages['node_modules/launch-editor']?.dependencies?.['shell-quote'],
+    '^1.8.1',
+  );
+  assert.equal(
+    lock.packages['node_modules/react-dev-utils']?.dependencies?.['shell-quote'],
+    '^1.7.3',
+  );
+
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/shell-quote'
+    || packagePath.endsWith('/node_modules/shell-quote')
+  ));
+  assert.deepEqual(lockedPaths, ['node_modules/shell-quote']);
+
+  const record = lock.packages['node_modules/shell-quote'];
+  assert.deepEqual(
+    {
+      version: record.version,
+      resolved: record.resolved,
+      integrity: record.integrity,
+    },
+    EXPECTED_SHELL_QUOTE,
+    'shell-quote must retain its reviewed public-registry identity',
+  );
+  assert.equal(record.dev, true);
+  assert.equal(record.license, 'MIT');
+  assert.deepEqual(record.engines, { node: '>= 0.4' });
+  assert.equal(record.dependencies, undefined);
+
+  const installed = readJson(
+    path.join(REPOSITORY, 'node_modules/shell-quote/package.json'),
+  );
+  assert.equal(installed.version, EXPECTED_SHELL_QUOTE.version);
+});
+
+test('rejects line-terminator shell operator objects without executing a shell', () => {
+  const { quote } = require(path.join(REPOSITORY, 'node_modules/shell-quote'));
+
+  for (const terminator of ['\n', '\r', '\u2028', '\u2029']) {
+    assert.throws(
+      () => quote([{ op: `;${terminator}id` }]),
+      TypeError,
+      'object operators outside the parser allowlist must fail closed',
+    );
+  }
+  assert.equal(quote([{ op: ';' }]), '\\;');
+  assert.equal(quote(['safe value']), "'safe value'");
 });
