@@ -566,6 +566,35 @@ This contract does not verify a person, payment, plan, evidence item, refund, di
 
 The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.0c Provider-neutral versioned consent state — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001D [#370](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/370) defines one unused pure contract that derives the current effective consent state for a single (provider, subject, scope) track under the policy version now in force. It sits beside the §8.0a membership authority and the external-account link contract (`membershipProviderLink.js`, [#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367)), which consumes a consent value that it itself defers. Consent is provider-neutral: email/password, Google, WhatsApp, and Strava share one identical rule, and no consent state is membership authority.
+
+```mermaid
+flowchart LR
+    V["Consent evidence: provider, subject, scope, latest decision, its policy version, policy version in force"] --> G{"Well-formed and coherent?"}
+    G -- "No" --> R["One fixed error, input never echoed"]
+    G -- "Yes" --> D{"Latest recorded decision?"}
+    D -- "None" --> NC["not_consented"]
+    D -- "Withdrawn" --> W["withdrawn"]
+    D -- "Granted" --> P{"Granting version equals the version in force?"}
+    P -- "Equal" --> AC["active"]
+    P -- "Differs" --> RA["reaffirmation_required"]
+    NC --> Z(["grantsAuthority: false"])
+    W --> Z
+    AC --> Z
+    RA --> Z
+    X["Any consent decision"] -. "Never grants membership, price, or role" .-> Z
+```
+
+Text alternative: given the latest recorded consent decision for a track and the policy version now in force, the contract returns one of four fixed dispositions. No recorded decision yields not_consented; a withdrawn decision yields withdrawn regardless of any version; a granted decision yields active only when its policy version equals the version in force, and reaffirmation_required otherwise. Every result carries grantsAuthority false. Malformed or incoherent evidence fails closed through one fixed error that never echoes the input.
+
+The CommonJS module publishes a revision-1 schema, a frozen provider-neutral enum set, and one fixed error, and classifies an exact seven-field evidence object — schema version, provider, opaque subject and scope references, latest decision, its policy version, and the policy version in force. A recorded decision must carry an opaque policy version and a `none` decision must carry exactly null, so an incoherent decision/version pairing, an unknown enum, a non-opaque or PII-shaped reference, a wrong version, an extra field, a missing field, an accessor, or a proxy all fail through the one error. Policy versions are compared for equality only.
+
+This contract invents no policy. It sets no prices, plans, or terms, writes no policy text, and defines no retention duration, deletion window, or access-revocation SLA — those remain with #110 and the owner. It assumes no version ordering, recency, or precedence: a differing policy version is simply superseded and routed to reaffirmation, and which version is current is the caller-supplied requiredPolicyVersion. `grantsAuthority` is hard-coded false on every result, so consenting to link WhatsApp or share Strava never confers membership, price, payment state, or role. It derives the current state only — the append-only capture of consent events and their versioned history, withdrawal side effects such as link teardown and claim revocation, the retention/minimization/deletion matrix (#110), and provider-specific WhatsApp consent wiring (#87) are later work, gated on the remaining AUTH-001 Functions/Admin authorization protections.
+
+The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, versioned WhatsApp consent, or any officer membership tool available. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.
