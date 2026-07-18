@@ -7,6 +7,7 @@ const {
   resolveCallerRole,
   requireAppCheck,
   pickPriceCents,
+  projectParticipantCapacityLimit,
   isEarlyBirdActive,
   isRegistrationOpen,
   countActiveRegistrations,
@@ -186,9 +187,16 @@ exports.createCheckoutSession = functions
       amountCents = 0;
     } else {
       // Capacity applies to participants only; volunteers don't count.
-      if (event.capacity) {
+      const capacityLimit = projectParticipantCapacityLimit(event);
+      if (capacityLimit === undefined) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Registration is unavailable for this event',
+        );
+      }
+      if (capacityLimit !== null) {
         const active = await countActiveRegistrations(eventId);
-        if (active >= event.capacity) {
+        if (active >= capacityLimit) {
           throw new functions.https.HttpsError(
             'resource-exhausted',
             'This event is full',
