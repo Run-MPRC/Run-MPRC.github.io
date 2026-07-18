@@ -28,6 +28,9 @@ import {
 import { AccountContent } from './Account';
 import StravaCallback from './StravaCallback';
 
+const mockCaptureException = jest.fn();
+const mockTrack = jest.fn();
+
 jest.mock('../../services/ServiceLocatorContext', () => ({
   useServiceLocator: jest.fn(),
 }));
@@ -62,6 +65,15 @@ jest.mock('../../services/account/accountService', () => {
 jest.mock('../../components/SEO', () => function SEO() {
   return null;
 });
+
+jest.mock('../../services/monitoring/sentry', () => ({
+  captureException: mockCaptureException,
+}));
+
+jest.mock('../../services/analytics/analytics', () => ({
+  events: {},
+  track: mockTrack,
+}));
 
 jest.mock('./StravaSection', () => function StravaSection() {
   return <div data-testid="strava-section" />;
@@ -147,6 +159,29 @@ function accountView(user = USER) {
 
 function renderAccount(user = USER) {
   return render(accountView(user));
+}
+
+function AccountCommitProbe({
+  onCommit,
+  user = USER,
+}: {
+  onCommit: (text: string) => void;
+  user?: typeof USER;
+}) {
+  React.useLayoutEffect(() => {
+    onCommit(document.body.textContent || '');
+  });
+  return accountView(user);
+}
+
+function accountDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }
 
 describe('Account profile recovery', () => {
@@ -562,6 +597,552 @@ describe('Account profile recovery', () => {
     const css = readFileSync(join(__dirname, 'Account.css'), 'utf8');
     expect(css).toMatch(/\.verification-resend__button\s*\{[\s\S]*min-height:\s*3rem;/);
     expect(css).toMatch(/\.verification-resend__button:focus-visible\s*\{[\s\S]*outline:/);
+  });
+
+  describe('My Account sign-out result boundary', () => {
+    const SIGN_OUT_PENDING = 'Signing out. Keep this page open.';
+    const SIGN_OUT_RETRY = 'We could not confirm sign-out. You may still be signed in. Try sign out once more.';
+    const SIGN_OUT_TERMINAL = 'We still could not confirm sign-out. You may still be signed in. Close the browser and do not let anyone else use this device until the membership lead or platform owner helps.';
+
+    test('blocks rapid repeats and hides private account content immediately', async () => {
+      const request = accountDeferred<void>();
+      const futureStart = {
+        toDate: () => new Date('2099-01-01T12:00:00Z'),
+        toMillis: () => new Date('2099-01-01T12:00:00Z').getTime(),
+      };
+      signOut.mockReturnValueOnce(request.promise);
+      (listMyRegistrations as jest.Mock).mockResolvedValue({
+        registrations: [{
+          amountCents: 1234,
+          cancelledAt: null,
+          createdAt: null,
+          currency: 'usd',
+          eventId: 'private-event',
+          id: 'private-registration',
+          paidAt: null,
+          priceTier: 'synthetic-tier',
+          refundedAt: null,
+          runner: {
+            email: 'private-runner@example.test',
+            firstName: 'Private',
+            lastName: 'Runner',
+            shirtSize: null,
+          },
+          status: 'paid',
+        }],
+        events: {
+          'private-event': {
+            id: 'private-event',
+            location: 'Private Location',
+            slug: 'private-event',
+            startAt: futureStart,
+            title: 'Private Synthetic Race',
+          },
+        },
+      });
+      renderAccount();
+
+      expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+      expect(await screen.findByText('Private Synthetic Race')).toBeInTheDocument();
+      expect(screen.getByText('$12.34')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      expect(screen.getByLabelText('Full name')).toBeInTheDocument();
+      const button = screen.getByRole('button', { name: 'Sign out' });
+      act(() => {
+        fireEvent.click(button);
+        fireEvent.click(button);
+      });
+
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+      expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+      expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
+      expect(screen.getByRole('button', { name: 'Sign out' }))
+        .toHaveAccessibleDescription(SIGN_OUT_PENDING);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
+      expect(screen.queryByText('Synthetic Member')).not.toBeInTheDocument();
+      expect(screen.queryByText(USER.email)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Full name')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', {
+        name: 'Request another verification email',
+      })).not.toBeInTheDocument();
+      expect(screen.queryByText(/current paid membership and dues status/i))
+        .not.toBeInTheDocument();
+      expect(screen.queryByText('Private Synthetic Race')).not.toBeInTheDocument();
+      expect(screen.queryByText('$12.34')).not.toBeInTheDocument();
+      expect(screen.queryByText('private-registration')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
+    });
+
+    test('keeps the private pending boundary after the command resolves', async () => {
+      const request = accountDeferred<void>();
+      signOut.mockReturnValueOnce(request.promise);
+      renderAccount();
+
+      const button = await screen.findByRole('button', { name: 'Sign out' });
+      fireEvent.click(button);
+      await act(async () => request.resolve());
+
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(USER.email)).not.toBeInTheDocument();
+    });
+
+    test('keeps a fulfilled retry private and pending without claiming success', async () => {
+      const retryRequest = accountDeferred<void>();
+      signOut
+        .mockRejectedValueOnce(new Error('synthetic-first-sign-out-failure'))
+        .mockReturnValueOnce(retryRequest.promise);
+      renderAccount();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+      fireEvent.click(await screen.findByRole('button', {
+        name: 'Try sign out once more',
+      }), { detail: 0 });
+      await act(async () => retryRequest.resolve());
+
+      expect(signOut).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
+      expect(document.body).not.toHaveTextContent(/\bsigned out\b|\bsuccess\b/i);
+      expect(screen.queryByText(USER.email)).not.toBeInTheDocument();
+    });
+
+    test('uses the same synchronous repeat lock during StrictMode replay', async () => {
+      const request = accountDeferred<void>();
+      signOut.mockReturnValueOnce(request.promise);
+      render(
+        <React.StrictMode>
+          {accountView()}
+        </React.StrictMode>,
+      );
+
+      const button = await screen.findByRole('button', { name: 'Sign out' });
+      act(() => {
+        fireEvent.click(button, { detail: 0 });
+        fireEvent.click(button, { detail: 0 });
+      });
+
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+      expect(screen.queryByText(USER.email)).not.toBeInTheDocument();
+    });
+
+    test('accepts keyboard activation once on each allowed attempt', async () => {
+      signOut
+        .mockRejectedValueOnce(new Error('synthetic-first-keyboard-failure'))
+        .mockRejectedValueOnce(new Error('synthetic-second-keyboard-failure'));
+      renderAccount();
+
+      const initial = await screen.findByRole('button', { name: 'Sign out' });
+      initial.focus();
+      expect(initial).toHaveFocus();
+      act(() => {
+        fireEvent.click(initial, { detail: 0 });
+        fireEvent.click(initial, { detail: 0 });
+      });
+      const retry = await screen.findByRole('button', {
+        name: 'Try sign out once more',
+      });
+      retry.focus();
+      expect(retry).toHaveFocus();
+      act(() => {
+        fireEvent.click(retry, { detail: 0 });
+        fireEvent.click(retry, { detail: 0 });
+      });
+
+      expect(signOut).toHaveBeenCalledTimes(2);
+      expect(await screen.findByRole('alert')).toHaveTextContent(SIGN_OUT_TERMINAL);
+      expect(screen.getByRole('button', { name: 'Sign out unavailable' }))
+        .toBeDisabled();
+    });
+
+    test('allows one deliberate retry, then shows a fixed terminal result', async () => {
+      signOut
+        .mockRejectedValueOnce(new Error('synthetic-provider-canary@example.test'))
+        .mockRejectedValueOnce(new Error('second-synthetic-provider-canary@example.test'));
+      renderAccount();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+      const firstResult = await screen.findByRole('alert');
+      expect(firstResult).toHaveTextContent(SIGN_OUT_RETRY);
+      expect(firstResult).toHaveAttribute('aria-live', 'assertive');
+      expect(firstResult).toHaveAttribute('aria-atomic', 'true');
+      expect(document.body).not.toHaveTextContent(/synthetic-provider-canary/i);
+      const retry = screen.getByRole('button', { name: 'Try sign out once more' });
+      expect(retry).toBeEnabled();
+      expect(retry).toHaveAccessibleDescription(SIGN_OUT_RETRY);
+      act(() => {
+        fireEvent.click(retry);
+        fireEvent.click(retry);
+      });
+
+      const terminalResult = await screen.findByRole('alert');
+      expect(terminalResult).toHaveTextContent(SIGN_OUT_TERMINAL);
+      expect(terminalResult).toHaveAttribute('aria-live', 'assertive');
+      expect(terminalResult).toHaveAttribute('aria-atomic', 'true');
+      const terminalButton = screen.getByRole('button', {
+        name: 'Sign out unavailable',
+      });
+      expect(terminalButton).toBeDisabled();
+      expect(terminalButton).toHaveAccessibleDescription(SIGN_OUT_TERMINAL);
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out unavailable' }));
+      expect(signOut).toHaveBeenCalledTimes(2);
+      expect(document.body).not.toHaveTextContent(/synthetic-provider-canary/i);
+    });
+
+    test.each([
+      ['Error', () => ({
+        reads: () => 0,
+        reason: new Error('hostile-sign-out-canary@example.test'),
+      })],
+      ['primitive', () => ({
+        reads: () => 0,
+        reason: 409,
+      })],
+      ['accessor-backed object', () => {
+        let reads = 0;
+        const reason = {};
+        Object.defineProperty(reason, 'message', {
+          get() {
+            reads += 1;
+            throw new Error('accessor-sign-out-canary@example.test');
+          },
+        });
+        return { reads: () => reads, reason };
+      }],
+      ['Proxy', () => {
+        let reads = 0;
+        const reason = new Proxy({}, {
+          get() {
+            reads += 1;
+            throw new Error('proxy-sign-out-canary@example.test');
+          },
+        });
+        return { reads: () => reads, reason };
+      }],
+      ['coercible object', () => {
+        let reads = 0;
+        const reason = {
+          [Symbol.toPrimitive]() {
+            reads += 1;
+            throw new Error('coercion-sign-out-canary@example.test');
+          },
+          toString() {
+            reads += 1;
+            throw new Error('coercion-sign-out-canary@example.test');
+          },
+        };
+        return { reads: () => reads, reason };
+      }],
+      ['thenable-style object', () => {
+        let reads = 0;
+        const reason = {};
+        Object.defineProperty(reason, 'then', {
+          get() {
+            reads += 1;
+            throw new Error('thenable-sign-out-canary@example.test');
+          },
+        });
+        return { reads: () => reads, reason };
+      }],
+    ])(
+      'does not inspect or send a %s rejection on either attempt',
+      async (_label, createReason) => {
+        const firstReason = createReason();
+        const secondReason = createReason();
+        const storageSpies = [
+          jest.spyOn(Storage.prototype, 'clear'),
+          jest.spyOn(Storage.prototype, 'getItem'),
+          jest.spyOn(Storage.prototype, 'removeItem'),
+          jest.spyOn(Storage.prototype, 'setItem'),
+        ];
+      const consoleSpies = [
+        jest.spyOn(console, 'log').mockImplementation(() => undefined),
+        jest.spyOn(console, 'warn').mockImplementation(() => undefined),
+        jest.spyOn(console, 'error').mockImplementation(() => undefined),
+      ];
+        signOut
+          .mockRejectedValueOnce(firstReason.reason)
+          .mockRejectedValueOnce(secondReason.reason);
+        renderAccount();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+        fireEvent.click(await screen.findByRole('button', {
+          name: 'Try sign out once more',
+        }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(SIGN_OUT_TERMINAL);
+        expect(firstReason.reads()).toBe(0);
+        expect(secondReason.reads()).toBe(0);
+        expect(consoleSpies.every((spy) => spy.mock.calls.length === 0)).toBe(true);
+        expect(storageSpies.every((spy) => spy.mock.calls.length === 0)).toBe(true);
+        expect(mockCaptureException).not.toHaveBeenCalled();
+        expect(mockTrack).not.toHaveBeenCalled();
+        expect(document.body).not.toHaveTextContent(/sign-out-canary/i);
+      },
+    );
+
+    test('keeps a pending result across a new wrapper with the same identity and app', async () => {
+      const request = accountDeferred<void>();
+      const stableIdentityService = { signOut, resendVerificationEmail };
+      signOut.mockReturnValueOnce(request.promise);
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: {
+          firebaseResources: { app, firestore },
+          identityService: stableIdentityService,
+        },
+        isReady: true,
+      });
+      const view = renderAccount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: {
+          firebaseResources: { app, firestore },
+          identityService: stableIdentityService,
+        },
+        isReady: true,
+      });
+      await act(async () => {
+        view.rerender(accountView());
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(USER.email)).not.toBeInTheDocument();
+    });
+
+    test('keeps a newer attempt current after an A to B to A service change', async () => {
+      const obsoleteRequest = accountDeferred<void>();
+      const currentRequest = accountDeferred<void>();
+      const identityServiceA = {
+        resendVerificationEmail,
+        signOut: jest.fn()
+          .mockReturnValueOnce(obsoleteRequest.promise)
+          .mockReturnValueOnce(currentRequest.promise),
+      };
+      const identityServiceB = {
+        resendVerificationEmail,
+        signOut: jest.fn(),
+      };
+      const view = renderAccount();
+      expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: {
+          firebaseResources: { app, firestore },
+          identityService: identityServiceA,
+        },
+        isReady: true,
+      });
+      await act(async () => {
+        view.rerender(accountView());
+        await Promise.resolve();
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: {
+          firebaseResources: { app, firestore },
+          identityService: identityServiceB,
+        },
+        isReady: true,
+      });
+      await act(async () => {
+        view.rerender(accountView());
+        await Promise.resolve();
+      });
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: {
+          firebaseResources: { app, firestore },
+          identityService: identityServiceA,
+        },
+        isReady: true,
+      });
+      await act(async () => {
+        view.rerender(accountView());
+        await Promise.resolve();
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+
+      await act(async () => obsoleteRequest.reject(
+        new Error('obsolete-sign-out-canary@example.test'),
+      ));
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+      await act(async () => currentRequest.reject(
+        new Error('current-sign-out-canary@example.test'),
+      ));
+
+      expect(screen.getByRole('alert')).toHaveTextContent(SIGN_OUT_RETRY);
+      expect(screen.getByRole('button', { name: 'Try sign out once more' }))
+        .toBeEnabled();
+      expect(identityServiceA.signOut).toHaveBeenCalledTimes(2);
+      expect(identityServiceB.signOut).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent(/obsolete-sign-out-canary/i);
+    });
+
+    test.each([
+      'UID',
+      'identity service',
+      'Firebase app',
+    ])(
+      'never commits prior profile or registration data after a %s-only change',
+      async (transition) => {
+        const request = accountDeferred<void>();
+        const replacementProfile = accountDeferred<typeof PROFILE>();
+        const stableIdentityService = {
+          resendVerificationEmail,
+          signOut: jest.fn().mockReturnValueOnce(request.promise),
+        };
+        const replacementIdentityService = transition === 'identity service'
+          ? { resendVerificationEmail, signOut: jest.fn() }
+          : stableIdentityService;
+        const replacementApp = transition === 'Firebase app'
+          ? { name: 'replacement-synthetic-app' }
+          : app;
+        const replacementUser = transition === 'UID'
+          ? {
+            uid: 'replacement-sign-out-user',
+            email: 'replacement-sign-out-user@example.test',
+            role: 'unverified' as const,
+          }
+          : USER;
+        const oldStart = {
+          toDate: () => new Date('2099-01-01T12:00:00Z'),
+          toMillis: () => new Date('2099-01-01T12:00:00Z').getTime(),
+        };
+        (useServiceLocator as jest.Mock).mockReturnValue({
+          services: {
+            firebaseResources: { app, firestore },
+            identityService: stableIdentityService,
+          },
+          isReady: true,
+        });
+        (getMyProfile as jest.Mock)
+          .mockResolvedValueOnce(PROFILE)
+          .mockReturnValueOnce(replacementProfile.promise);
+        (listMyRegistrations as jest.Mock).mockResolvedValueOnce({
+          registrations: [{
+            amountCents: 4321,
+            cancelledAt: null,
+            createdAt: null,
+            currency: 'usd',
+            eventId: 'old-private-event',
+            id: 'old-private-registration',
+            paidAt: null,
+            priceTier: 'synthetic-tier',
+            refundedAt: null,
+            runner: {
+              email: 'old-runner@example.test',
+              firstName: 'Old',
+              lastName: 'Runner',
+              shirtSize: null,
+            },
+            status: 'paid',
+          }],
+          events: {
+            'old-private-event': {
+              id: 'old-private-event',
+              location: 'Old Private Location',
+              slug: 'old-private-event',
+              startAt: oldStart,
+              title: 'Old Private Race',
+            },
+          },
+        });
+        const commits: string[] = [];
+        const onCommit = (text: string) => commits.push(text);
+        const view = render(<AccountCommitProbe onCommit={onCommit} />);
+
+        expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+        expect(await screen.findByText('Old Private Race')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        commits.length = 0;
+        (useServiceLocator as jest.Mock).mockReturnValue({
+          services: {
+            firebaseResources: { app: replacementApp, firestore },
+            identityService: replacementIdentityService,
+          },
+          isReady: true,
+        });
+        await act(async () => {
+          view.rerender(
+            <AccountCommitProbe onCommit={onCommit} user={replacementUser} />,
+          );
+        });
+
+        expect(commits.length).toBeGreaterThan(0);
+        expect(commits.join(' ')).toContain('Loading profile...');
+        expect(commits.join(' ')).not.toMatch(
+          /Synthetic Member|member@example\.com|Old Private Race|\$43\.21|old-private-registration/,
+        );
+        expect(document.body).not.toHaveTextContent(/Synthetic Member|Old Private Race/);
+        expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+        await act(async () => request.reject(
+          new Error('obsolete-account-canary@example.test'),
+        ));
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(stableIdentityService.signOut).toHaveBeenCalledTimes(1);
+        expect(document.body).not.toHaveTextContent(/obsolete-account-canary/i);
+      },
+    );
+
+    test('makes a pending rejection inert after unmount', async () => {
+      const request = accountDeferred<void>();
+      signOut.mockReturnValueOnce(request.promise);
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const view = renderAccount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+      view.unmount();
+      await act(async () => request.reject(new Error('unmounted-sign-out-canary@example.test')));
+
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(consoleError.mock.calls))
+        .not.toMatch(/unmounted-sign-out-canary|state update on an unmounted/i);
+    });
+
+    test('makes a pending fulfillment inert after unmount', async () => {
+      const request = accountDeferred<void>();
+      signOut.mockReturnValueOnce(request.promise);
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const view = renderAccount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+      view.unmount();
+      await act(async () => request.resolve());
+
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(consoleError.mock.calls))
+        .not.toMatch(/state update on an unmounted/i);
+    });
+
+    test('uses a native 48px sign-out button with a visible focus target', async () => {
+      const view = render(
+        <main id="main-content">
+          {accountView()}
+        </main>,
+      );
+      const button = await screen.findByRole('button', { name: 'Sign out' });
+
+      expect(button).toHaveAttribute('type', 'button');
+      button.focus();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+      expect(view.container.querySelectorAll('main')).toHaveLength(1);
+      expect(screen.getByRole('status')).toHaveTextContent(SIGN_OUT_PENDING);
+
+      const css = readFileSync(join(__dirname, 'Account.css'), 'utf8');
+      expect(css).toMatch(/\.account-sign-out__button\s*\{[\s\S]*min-height:\s*3rem;/);
+      expect(css).toMatch(/\.account-sign-out__button:focus-visible\s*\{[\s\S]*outline:/);
+    });
   });
 });
 

@@ -762,11 +762,15 @@ Safe officer steps:
 1. Ask the member to stop retrying Save.
 2. Record the time and the public `/account` page address.
 3. Do not record their name, email, phone, login code, or screenshot of profile details.
-4. Ask them to sign out.
-5. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
-6. Use #118 only as engineering context. Do not add member incidents or private details to it.
-7. Wait for the platform owner to test with a made-up account.
-8. Tell the member to retry only after the website, server Function, database permissions, and live behavior are each proven.
+4. Ask them to choose **Sign out** once.
+5. If the page does not clearly leave My Account, assume they are still signed in.
+6. Ask them to close the browser.
+7. Ask them not to let anyone else use that device until the membership lead or platform owner helps.
+8. Keep the safer source behavior below marked [NOT LIVE](#my-account-sign-out-result--source-only-not-live) until exact website proof exists.
+9. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md).
+10. Use #118 only as engineering context. Do not add member incidents or private details to it.
+11. Wait for the platform owner to test with a made-up account.
+12. Tell the member to retry only after the website, server Function, database permissions, and live behavior are each proven.
 
 **Expected result:** after all release proof is complete, the member sees a profile or a plain temporary-unavailable message. A missing profile is displayed as pending or unverified. The repair does not grant, remove, or change actual access. If displayed profile status and actual access disagree, stop and escalate.
 
@@ -777,6 +781,64 @@ Safe officer steps:
 **Undo:** ask the platform owner to prepare, approve, publish, and verify a reviewed revert or safe roll-forward. Never undo by deleting a member profile or login account.
 
 **Escalation:** membership lead plus identity/security owner. Add the privacy owner if private information appeared. Email landing in spam is a separate delivery problem; do not treat it as proof of this permission failure.
+
+## My Account sign-out result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** hide account details immediately and give one truthful retry when the website cannot confirm sign-out.
+
+**Approver:** membership lead plus identity/platform owner. Add the privacy owner if account details appeared when they should have been hidden.
+
+**Prerequisites:** issue [#368](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/368), its exact reviewed pull request and merge commit, and tests that use only made-up accounts and results. Calling this behavior published on the website also requires a protected website publication and a separate exact `runmprc.com` revision check. Those checks prove only that the reviewed website version is present. They do not prove a real sign-out, removal of an active sign-in, or sign-out on another device. The source review must not use a real account or active sign-in. It does not change Firebase settings, provider settings, production data, or sign-ins on another device.
+
+```mermaid
+flowchart TD
+    A["Member chooses Sign out once"] --> B["Hide private My Account details immediately"]
+    B --> C["Show Signing out; disable the control"]
+    C --> D{"Current sign-out request"}
+    D -- "Finishes without an error" --> E["Stay private and pending"]
+    E --> F{"Website sign-in state changes to signed out?"}
+    F -- "Not yet" --> E
+    F -- "Yes" --> G["Automatic redirect leaves My Account"]
+    D -- "First request cannot confirm sign-out" --> H["Say result is unconfirmed; allow one retry"]
+    H --> I["Member chooses retry once"]
+    I --> J["Hide details; disable the control"]
+    J --> K{"Current sign-out request"}
+    K -- "Finishes without an error" --> E
+    K -- "Second request cannot confirm sign-out" --> L["Assume still signed in"]
+    L --> M["Close browser; stop device use; get help"]
+```
+
+Text alternative: the first choice immediately hides private details and blocks repeats. A request that finishes without an error does not prove sign-out. Only the current website sign-in state changing to signed out confirms sign-out to My Account and causes its automatic redirect. Simply leaving the page does not prove sign-out. If the first request cannot confirm sign-out, the page allows one retry. If the second request cannot confirm sign-out, the member must close the browser, stop use of that device, and get help.
+
+Backup-officer source-review steps:
+
+1. Keep this procedure marked **NOT AVAILABLE YET**.
+2. Obtain the exact #368 issue, reviewed pull request, merge commit, and made-up test evidence.
+3. Confirm the tests use only made-up accounts and a made-up sign-out result that does not contact Firebase.
+4. Confirm the first choice immediately hides every private My Account surface.
+5. Confirm the pending result says `Signing out. Keep this page open.`
+6. Confirm the pending result disables the control.
+7. Confirm a request that finishes without an error stays private and pending.
+8. Confirm the first request that cannot confirm sign-out says `We could not confirm sign-out. You may still be signed in. Try sign out once more.`
+9. Confirm the retry locks immediately.
+10. Confirm the second request that cannot confirm sign-out says `We still could not confirm sign-out. You may still be signed in. Close the browser and do not let anyone else use this device until the membership lead or platform owner helps.`
+11. Confirm a third request is not possible.
+12. Confirm failed-request details do not reach the page, browser developer logs, tracking tools, or browser storage.
+13. Record source, tests, merge, website publication, `runmprc.com`, Firebase, provider, production data, and live behavior as separate results.
+
+**Expected result:** the first sign-out choice hides all private details immediately. Only one retry is possible. A request that finishes without an error is not shown as success. Only the current website sign-in state changing to signed out confirms sign-out to My Account and triggers its existing redirect. Leaving the page alone does not confirm sign-out.
+
+**Stop conditions:** a real account or active sign-in; a production sign-out test; a raw error detail; private details that remain visible; more than one retry; a claim that closing the browser proves sign-out or removes another active sign-in; or a claim that source, tests, merge, preview, or green CI proves live behavior.
+
+**Success proof:** exact #368 issue, pull request, merge commit, recorded tests that failed against the old source, green tests with made-up data, relevant full checks, and independent security and backup-officer reviews. Record website publication and exact `runmprc.com` proof separately. Record Firebase, provider, production-data, and live actions as not performed unless each has separate evidence.
+
+**Undo:** before publication, use one reviewed revert or safe roll-forward. After a future publication, use the protected website rollback path and verify the exact revision. Never edit sign-in accounts, active sign-ins, profiles, or provider settings as an undo.
+
+**Escalation:** membership lead plus identity/platform security owner. Add the privacy owner and use the private incident path if any account detail appeared.
+
+This local state diagram records the changed My Account display. The change does not alter who owns accounts, what permissions exist, where data moves or is kept, or how the website is published. The system maps therefore stay unchanged.
 
 ## My Account phone collection pause — SOURCE ONLY, NOT LIVE
 
