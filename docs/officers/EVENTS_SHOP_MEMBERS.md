@@ -2110,7 +2110,7 @@ Officer review steps after the source merge:
 
 **Expected result:** only a current successful mocked lookup shows website-account roles. Loading and rejection show one private fail-closed state with no false zero, stale account information, or role button. Successful results describe website access and account creation only. They do not display or infer annual membership, dues, eligibility, member pricing, discounts, or roster status. This does not authorize an officer to open the screen or change a role live.
 
-The existing role-change request, raw action-error text, authorization, audit, replay protection, and account-recovery behavior remain separate unfinished work. This slice does not make the Admin website-account screen or its role actions safe. Issue #116 remains responsible for the future server-authoritative membership roster and export.
+Issue [#361](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/361) contains only the source-level browser guard for an unknown role-change result. Server authority, command identity and repeat safety, reconciliation, durable audit, token revocation and propagation, account recovery, approved deployment, and live proof remain unfinished. This slice does not make the Admin website-account screen or its role actions safe. Issue #116 remains responsible for the future server-authoritative membership roster and export.
 
 **Stop conditions:** any real account, member, name, email address, payment, dues record, membership record, provider record, credential, or production data; an attempted role change; a request to infer membership from a role, account date, or email verification; a Firebase, permission, provider, account, or membership-record change; or a claim that source, tests, merge, preview, or a green workflow proves the screen or roster is live.
 
@@ -2121,6 +2121,71 @@ The existing role-change request, raw action-error text, authorization, audit, r
 **Escalation:** membership lead plus identity/platform security owner. Add the privacy owner if account details appeared. Add the treasurer if anyone inferred paid membership, dues, pricing, or discount eligibility. Use the private incident path if an access change might have completed without a current readback. Do not copy personal details into an issue, screenshot, email, message, or AI tool.
 
 No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the website-account list display and the boundary separating website roles from the future authoritative membership roster.
+
+### Admin website-role change unknown result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** tell an officer to stop when a website-role change has an unknown result. The page must not show a private error, account details, or another role-change action after the request rejects.
+
+**Approver:** membership lead plus identity/platform owner. Add the privacy owner if any account detail appeared. This source slice does not provide approval for live use.
+
+**Prerequisites:** issues [#307](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/307) and [#361](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/361) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up website accounts, and a mocked role-change request. Keep the Admin website-account screen marked **NOT AVAILABLE YET**. Do not open the production Admin screen, change a real role, use production data, or test Firebase.
+
+```mermaid
+flowchart LR
+    A["Current made-up website-account list"] --> B["One mocked role-change request"]
+    B --> C["Pending; every role button disabled"]
+    C -- "Resolved" --> D["One existing mocked list reload"]
+    C -- "Rejected" --> E["Fixed unknown-result alert"]
+    E --> F["Account details and role controls hidden"]
+    F --> G["Stop; contact membership lead and platform owner"]
+    H["Complete rejected value"] -. "Discarded" .-> I["No page, analytics, console, or stored detail"]
+    J["Account context changes or page closes"] -. "Old result ignored" .-> K["No display or request change"]
+```
+
+Text alternative: one mocked role request may start from a current made-up account list. Every role button is disabled while it is pending. A current success keeps the existing single list reload. A rejection discards the complete rejected value, shows one fixed stop message, hides account details and controls, and permits no repeat action on that page. Results from an older account context or a closed page do nothing.
+
+Officer review steps after the source merge:
+
+1. Keep the Admin website-account screen marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #361 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the merged commit.
+5. Ask the platform owner for the synthetic frontend test result.
+6. Confirm the review used only a made-up admin identity.
+7. Confirm the review used only mocked database references.
+8. Confirm the review used only made-up website accounts.
+9. Confirm the review used only a mocked role-change request.
+10. Confirm one click starts exactly one mocked request with the existing made-up payload.
+11. Confirm every role button is disabled while that request is pending.
+12. Confirm a rapid click on the same row starts no second request.
+13. Confirm a click on another row starts no second request.
+14. Confirm a mocked success performs exactly one existing list reload.
+15. Confirm a mocked rejection shows exactly `We could not confirm that website access change. Do not repeat it. Stop and contact the membership lead and platform owner.`
+16. Confirm assistive technology receives the whole sentence immediately as one alert.
+17. Confirm the rejected value is not inspected, logged, measured, stored, sent to analytics, or displayed.
+18. Confirm the rejection starts no retry or list reload.
+19. Confirm the page keeps only its generic Admin heading, home link, and fixed alert after rejection.
+20. Confirm no role counts, filters, names, email addresses, dates, verification state, rows, or role buttons remain after rejection.
+21. Confirm another role request cannot start on that open page.
+22. Confirm an old success or failure cannot change the page after the Firebase app, database reference, admin account, or page changes.
+23. Confirm no test describes a website role as annual paid membership.
+24. Record source change, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, permissions, account records, role changes, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** a rejected mocked role request shows one fixed accessible instruction and no rejected detail. The page hides every account-derived value and role control. It sends no automatic retry or list reload. A successful mocked request keeps its existing payload and exactly one list reload. The fixed alert says the result is unknown; it does not claim that the role stayed the same.
+
+Reloading, closing, or reopening the page may make the controls appear again. It does not prove what happened and never makes a repeat safe. Stop and escalate instead.
+
+**Stop conditions:** any real officer, account, member, name, email address, role, payment, dues record, membership record, provider record, credential, or production data; an attempted production role change; a request to force a production failure; a private or technical detail on the page, in analytics, in the console, or in a review record; an automatic retry or list reload after rejection; a visible account detail or role button after the unknown-result alert; a repeated action; a Firebase, permission, account, or membership-record change; or a claim that source, tests, merge, preview, or a green workflow proves the role result or live safety.
+
+**Success proof:** for source completion, record the exact #361 issue, reviewed pull request, merged commit, old-source failure evidence, green synthetic tests, relevant full checks, and independent privacy/security, lifecycle/compatibility, and officer-continuity reviews. The safe officer review stops at those records. A future live process still needs server authority, repeat safety, reconciliation, durable audit, token revocation and propagation, recovery, backup, rollback, approved deployment, exact-revision verification, and live readback. Record website publication, `runmprc.com`, Firebase deployment, permission or role changes, provider configuration, account or membership changes, production-data actions, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by refreshing the page, repeating a role action, or changing an account, role, membership, permission, database record, or provider setting.
+
+**Escalation:** stop and contact the membership lead plus identity/platform security owner. Add the privacy owner if any account detail appeared. Use the private incident path if a role change might have completed, a private or technical detail appeared, or another request was attempted. Do not copy account details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because this source slice changes no server authority, data movement, permissions, account ownership, or deployment topology. The diagram above records only the current page's role-request display and repeat-click guard.
 
 ### Admin Event editor load failure privacy — SOURCE ONLY, NOT LIVE
 

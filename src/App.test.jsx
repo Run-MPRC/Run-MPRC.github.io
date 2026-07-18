@@ -7633,3 +7633,542 @@ describe('Admin website-account role-list load failure boundary', () => {
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
+
+describe('Admin website-role change unknown-result boundary', () => {
+  const ROLE_CHANGE_UNKNOWN = 'We could not confirm that website access change. Do not repeat it. Stop and contact the membership lead and platform owner.';
+
+  function syntheticTimestamp(value) {
+    const date = new Date(value);
+    return { toDate: () => date };
+  }
+
+  function syntheticWebsiteAccount({
+    uid = 'synthetic-target-account',
+    email = `${uid}@example.test`,
+    fullName = 'Synthetic Target Account',
+    role = 'member',
+    emailVerified = true,
+    createdAt = '2030-05-16T20:00:00Z',
+  } = {}) {
+    return {
+      uid,
+      email,
+      fullName,
+      role,
+      emailVerified,
+      createdAt: syntheticTimestamp(createdAt),
+    };
+  }
+
+  function createDeferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+  }
+
+  function setAdminMembersContext({
+    app = firebaseApp,
+    database = firestore,
+    uid = 'synthetic-current-admin',
+  } = {}) {
+    useAuth.mockReturnValue({
+      user: { uid },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app, firestore: database } },
+      isReady: true,
+    });
+  }
+
+  function getAccountRow(email) {
+    const emailCell = screen.getByText(email);
+    const row = emailCell.closest('tr');
+    expect(row).not.toBeNull();
+    return row;
+  }
+
+  function getRoleButton(email, role) {
+    return within(getAccountRow(email)).getByRole('button', { name: role });
+  }
+
+  function expectGenericAdminMembersShell() {
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Website accounts',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Admin home/ }))
+      .toHaveAttribute('href', '/admin');
+    expect(window.location.pathname).toBe('/admin/members');
+  }
+
+  function expectAccountResultsToBeHidden(accounts) {
+    accounts.forEach((account) => {
+      expect(screen.queryByText(account.fullName)).not.toBeInTheDocument();
+      expect(screen.queryByText(account.email)).not.toBeInTheDocument();
+    });
+    [
+      'Admin website access',
+      'Member website access',
+      'Pending website verification',
+      'Total website accounts',
+    ].forEach((label) => {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByPlaceholderText('Search by name or email...'))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('No website accounts matched')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', {
+      name: /^(admin|member|unverified)$/i,
+    })).toHaveLength(0);
+  }
+
+  function spyOnBrowserConsole() {
+    return ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  }
+
+  const targetAccount = syntheticWebsiteAccount();
+  const otherAccount = syntheticWebsiteAccount({
+    uid: 'synthetic-other-account',
+    fullName: 'Synthetic Other Account',
+    role: 'unverified',
+    createdAt: '2030-06-17T20:00:00Z',
+  });
+  const initialAccounts = [targetAccount, otherAccount];
+
+  beforeEach(() => {
+    setAdminMembersContext();
+    listAllMembers.mockResolvedValue(initialAccounts);
+    setMemberRole.mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('replaces an ordinary rejected role request with one fixed private terminal result', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    setMemberRole.mockRejectedValueOnce(Object.assign(
+      new Error('role-change-private-canary officer@example.test'),
+      {
+        code: 'functions/role-change-private-canary',
+        endpoint: 'https://provider.example.test/?token=role-change-secret-canary',
+      },
+    ));
+
+    renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ROLE_CHANGE_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expectGenericAdminMembersShell();
+    expectAccountResultsToBeHidden(initialAccounts);
+    expect(document.body).not.toHaveTextContent(
+      /role-change-private-canary|officer@example\.test|provider\.example|role-change-secret-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /role-change-private-canary|officer@example\.test|provider\.example|role-change-secret-canary/i,
+    );
+    expect(track).not.toHaveBeenCalled();
+    expect(setMemberRole).toHaveBeenCalledWith(
+      firebaseApp,
+      targetAccount.email,
+      'admin',
+    );
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test.each([
+    [
+      'primitive',
+      () => ({
+        rejection: 'primitive-role-change-private-canary',
+        probes: [],
+      }),
+    ],
+    [
+      'accessor-backed',
+      () => {
+        const messageGetter = jest.fn(() => 'accessor-role-change-private-canary');
+        return {
+          rejection: Object.defineProperty({}, 'message', {
+            configurable: true,
+            get: messageGetter,
+          }),
+          probes: [messageGetter],
+        };
+      },
+    ],
+    [
+      'Proxy',
+      () => {
+        const getTrap = jest.fn((_target, property) => (
+          property === 'message' ? 'proxy-role-change-private-canary' : undefined
+        ));
+        return {
+          rejection: new Proxy({}, { get: getTrap }),
+          probes: [getTrap],
+        };
+      },
+    ],
+    [
+      'coercible',
+      () => {
+        const toString = jest.fn(() => 'coercible-role-change-private-canary');
+        const valueOf = jest.fn(() => 'coercible-role-change-value-canary');
+        return {
+          rejection: { toString, valueOf },
+          probes: [toString, valueOf],
+        };
+      },
+    ],
+  ])('does not inspect, log, measure, or render a %s rejected value', async (
+    _label,
+    createRejection,
+  ) => {
+    const consoleSpies = spyOnBrowserConsole();
+    const { rejection, probes } = createRejection();
+    setMemberRole.mockRejectedValueOnce(rejection);
+
+    renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ROLE_CHANGE_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+    expectAccountResultsToBeHidden(initialAccounts);
+    expect(document.body).not.toHaveTextContent(
+      /primitive-role-change|accessor-role-change|proxy-role-change|coercible-role-change/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /primitive-role-change|accessor-role-change|proxy-role-change|coercible-role-change/i,
+    );
+    expect(track).not.toHaveBeenCalled();
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('disables every role-action button while one request is pending', async () => {
+    const pending = createDeferred();
+    setMemberRole.mockReturnValue(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+    const roleButtons = screen.getAllByRole('button', {
+      name: /^(\.\.\.|admin|member|unverified)$/i,
+    });
+    expect(roleButtons.length).toBeGreaterThan(2);
+    roleButtons.forEach((button) => expect(button).toBeDisabled());
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  test('blocks rapid repeats on the target row and every other row', async () => {
+    const pending = createDeferred();
+    setMemberRole.mockReturnValue(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+
+    const targetButton = getRoleButton(targetAccount.email, 'admin');
+    const otherMemberButton = getRoleButton(otherAccount.email, 'member');
+    const otherAdminButton = getRoleButton(otherAccount.email, 'admin');
+    fireEvent.click(targetButton);
+    fireEvent.click(targetButton);
+    fireEvent.click(otherMemberButton);
+    fireEvent.click(otherAdminButton);
+
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+    expect(setMemberRole).toHaveBeenCalledWith(
+      firebaseApp,
+      targetAccount.email,
+      'admin',
+    );
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  test('does not expose a same-page retry or reload after the role outcome becomes unknown', async () => {
+    const pending = createDeferred();
+    setMemberRole
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue({ ok: true });
+    renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      pending.reject(new Error('repeat-role-change-private-canary'));
+      await Promise.resolve();
+    });
+
+    const samePageRetries = screen.queryAllByRole('button', { name: 'admin' });
+    if (samePageRetries[0]) fireEvent.click(samePageRetries[0]);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(ROLE_CHANGE_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expectAccountResultsToBeHidden(initialAccounts);
+    expect(document.body).not.toHaveTextContent('repeat-role-change-private-canary');
+  });
+
+  test.each([
+    [
+      'Firebase app',
+      {
+        app: { name: 'synthetic-current-app' },
+        database: firestore,
+        uid: 'synthetic-current-admin',
+        expectedListCalls: 1,
+      },
+    ],
+    [
+      'Firestore object',
+      {
+        app: firebaseApp,
+        database: { name: 'synthetic-current-firestore' },
+        uid: 'synthetic-current-admin',
+        expectedListCalls: 2,
+      },
+    ],
+    [
+      'admin UID',
+      {
+        app: firebaseApp,
+        database: firestore,
+        uid: 'synthetic-current-admin-two',
+        expectedListCalls: 1,
+      },
+    ],
+  ])('ignores an obsolete hostile rejection after the %s changes', async (
+    _label,
+    nextContext,
+  ) => {
+    const consoleSpies = spyOnBrowserConsole();
+    const pending = createDeferred();
+    setMemberRole.mockReturnValueOnce(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+
+    setAdminMembersContext(nextContext);
+    view.rerender(<App />);
+    await waitFor(() => {
+      expect(listAllMembers).toHaveBeenCalledTimes(nextContext.expectedListCalls);
+    });
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+
+    const messageGetter = jest.fn(() => 'obsolete-role-change-private-canary');
+    await act(async () => {
+      pending.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByText(targetAccount.fullName)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-role-change-private-canary');
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(nextContext.expectedListCalls);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test.each([
+    [
+      'Firebase app',
+      {
+        app: { name: 'synthetic-current-success-app' },
+        database: firestore,
+        uid: 'synthetic-current-admin',
+        expectedListCalls: 1,
+      },
+    ],
+    [
+      'admin UID',
+      {
+        app: firebaseApp,
+        database: firestore,
+        uid: 'synthetic-current-success-admin',
+        expectedListCalls: 1,
+      },
+    ],
+  ])('does not reload for an obsolete resolution after the %s changes', async (
+    _label,
+    nextContext,
+  ) => {
+    const pending = createDeferred();
+    setMemberRole.mockReturnValueOnce(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+
+    setAdminMembersContext(nextContext);
+    view.rerender(<App />);
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+
+    await act(async () => {
+      pending.resolve({ ok: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(nextContext.expectedListCalls);
+    expect(screen.getByText(targetAccount.fullName)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('does not revive an old pending result after the app context changes away and back', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const pending = createDeferred();
+    const otherApp = { name: 'synthetic-round-trip-app' };
+    setMemberRole.mockReturnValueOnce(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+
+    setAdminMembersContext({ app: otherApp });
+    view.rerender(<App />);
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(targetAccount.fullName)).toBeInTheDocument();
+
+    setAdminMembersContext({ app: firebaseApp });
+    view.rerender(<App />);
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(targetAccount.fullName)).toBeInTheDocument();
+    expect(getRoleButton(targetAccount.email, 'admin')).toBeEnabled();
+
+    const messageGetter = jest.fn(() => 'round-trip-role-change-private-canary');
+    await act(async () => {
+      pending.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByText(targetAccount.fullName)).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('round-trip-role-change-private-canary');
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('ignores a hostile role rejection after the page unmounts', async () => {
+    const consoleSpies = spyOnBrowserConsole();
+    const pending = createDeferred();
+    setMemberRole.mockReturnValueOnce(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const messageGetter = jest.fn(() => 'unmounted-role-change-private-canary');
+    await act(async () => {
+      pending.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not reload after a role request resolves on an unmounted page', async () => {
+    const pending = createDeferred();
+    setMemberRole.mockReturnValueOnce(pending.promise);
+    const view = renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+    await waitFor(() => expect(setMemberRole).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    await act(async () => {
+      pending.resolve({ ok: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves one successful exact role request and exactly one list reload', async () => {
+    const refreshedAccount = syntheticWebsiteAccount({
+      role: 'admin',
+      fullName: 'Synthetic Refreshed Account',
+    });
+    listAllMembers
+      .mockResolvedValueOnce(initialAccounts)
+      .mockResolvedValueOnce([refreshedAccount, otherAccount]);
+    setMemberRole.mockResolvedValueOnce({ ok: true });
+    renderAdminMembers();
+    expect(await screen.findByText(targetAccount.fullName)).toBeInTheDocument();
+
+    fireEvent.click(getRoleButton(targetAccount.email, 'admin'));
+
+    expect(await screen.findByText(refreshedAccount.fullName)).toBeInTheDocument();
+    expect(screen.queryByText(targetAccount.fullName)).not.toBeInTheDocument();
+    expect(screen.getByText(refreshedAccount.email)).toBeInTheDocument();
+    expect(setMemberRole).toHaveBeenCalledWith(
+      firebaseApp,
+      targetAccount.email,
+      'admin',
+    );
+    expect(setMemberRole).toHaveBeenCalledTimes(1);
+    expect(listAllMembers).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllMembers).toHaveBeenNthCalledWith(2, firestore);
+    expect(listAllMembers).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
+  });
+});
