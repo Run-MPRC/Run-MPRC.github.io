@@ -13,6 +13,8 @@ const mockPickPriceCents = jest.fn();
 const mockIsEarlyBirdActive = jest.fn();
 const mockRegistrationAllocation = jest.fn();
 const mockOrderAllocation = jest.fn();
+const mockProjectStoredStripeProductId = jest.fn();
+const mockProjectCreatedStripeProductId = jest.fn();
 
 jest.mock('firebase-functions', () => {
   class HttpsError extends Error {
@@ -162,6 +164,23 @@ jest.mock('./rateLimit', () => ({
   extractIp: () => 'synthetic-test-ip',
 }));
 
+jest.mock('./stripeProductBinding', () => {
+  const {
+    projectCreatedStripeProductId,
+    projectStoredStripeProductId,
+  } = jest.requireActual('./stripeProductBinding');
+  return {
+    projectCreatedStripeProductId: (...args) => {
+      mockProjectCreatedStripeProductId(...args);
+      return projectCreatedStripeProductId(...args);
+    },
+    projectStoredStripeProductId: (...args) => {
+      mockProjectStoredStripeProductId(...args);
+      return projectStoredStripeProductId(...args);
+    },
+  };
+});
+
 const admin = require('firebase-admin');
 const { createCheckoutSession } = require('./createCheckoutSession');
 const { createMerchCheckout } = require('./createMerchCheckout');
@@ -177,6 +196,134 @@ function validRaceRequest(overrides = {}) {
     priceTier: 'nonMember',
     acceptedWaiver: true,
     ...overrides,
+  };
+}
+
+function validCreatedProduct(overrides = {}, responseOverrides = {}) {
+  const product = {
+    id: 'custom_product_created_test_only',
+    object: 'product',
+    livemode: false,
+    ...overrides,
+  };
+  Object.defineProperty(product, 'lastResponse', {
+    configurable: false,
+    enumerable: false,
+    value: { statusCode: 200, ...responseOverrides },
+    writable: false,
+  });
+  return product;
+}
+
+function seedProductBindingTarget(domain) {
+  if (domain === 'race') {
+    admin.__seed('events/race-1', {
+      checkoutEnabled: true,
+      title: 'Synthetic Race',
+      slug: 'synthetic-race',
+      status: 'open',
+      visibility: 'public',
+      pricing: { nonMemberCents: 5_000 },
+      waiverVersion: 'synthetic-v1',
+    });
+    return admin.__get('events/race-1');
+  }
+
+  admin.__seed('products/hat', {
+    checkoutEnabled: true,
+    title: 'Synthetic Hat',
+    slug: 'hat',
+    status: 'active',
+    priceCents: 2_000,
+  });
+  return admin.__get('products/hat');
+}
+
+function runProductBindingCheckout(domain) {
+  if (domain === 'race') {
+    return createCheckoutSession(
+      validRaceRequest(),
+      { auth: null, rawRequest: {} },
+    );
+  }
+  return createMerchCheckout({
+    productSlug: 'hat',
+    buyer: {
+      firstName: 'Test',
+      lastName: 'Buyer',
+      email: 'buyer@example.test',
+    },
+  }, { auth: null, rawRequest: {} });
+}
+
+function productBindingFailureMessage(domain) {
+  return domain === 'race'
+    ? 'Registration is unavailable for this event'
+    : 'This item is unavailable';
+}
+
+function productBindingBusinessPath(domain) {
+  return domain === 'race'
+    ? 'events/race-1/registrations/reg-new-1'
+    : 'orders/order-new-1';
+}
+
+function installStoredBindingCase(target, caseName, canary) {
+  let hookCalls = 0;
+  const values = {
+    'present undefined': undefined,
+    'present null': null,
+    'present empty string': '',
+    'present false': false,
+    'structured value': { canary },
+  };
+  if (caseName === 'accessor-backed value') {
+    Object.defineProperty(target, 'stripeProductId', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        hookCalls += 1;
+        throw new Error(canary);
+      },
+    });
+  } else {
+    Object.defineProperty(target, 'stripeProductId', {
+      configurable: true,
+      enumerable: true,
+      value: values[caseName],
+      writable: true,
+    });
+  }
+  return () => hookCalls;
+}
+
+function malformedCreatedProduct(caseName, canary) {
+  let hookCalls = 0;
+  let product;
+  if (caseName === 'missing ID') {
+    product = validCreatedProduct();
+    delete product.id;
+  } else if (caseName === 'wrong object kind') {
+    product = validCreatedProduct({ object: 'price' });
+  } else if (caseName === 'mode mismatch') {
+    product = validCreatedProduct({ livemode: true });
+  } else if (caseName === 'non-2xx response') {
+    product = validCreatedProduct({}, { statusCode: 502 });
+  } else {
+    product = validCreatedProduct();
+    Object.defineProperty(product, 'id', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        hookCalls += 1;
+        throw new Error(canary);
+      },
+    });
+  }
+  product.private_canary = canary;
+  return {
+    product,
+    readHookCalls: () => hookCalls,
   };
 }
 
@@ -219,6 +366,8 @@ describe('Checkout promotion policy', () => {
     mockIsEarlyBirdActive.mockReset();
     mockRegistrationAllocation.mockReset();
     mockOrderAllocation.mockReset();
+    mockProjectStoredStripeProductId.mockReset();
+    mockProjectCreatedStripeProductId.mockReset();
     mockGetStripe.mockReturnValue({
       checkout: { sessions: { create: mockCheckoutCreate } },
       products: { create: mockProductCreate },
@@ -1353,6 +1502,15 @@ describe('Checkout promotion policy', () => {
       volunteerEnabled: true,
       waiverVersion: 'synthetic-v1',
     });
+    let bindingGetterCalls = 0;
+    Object.defineProperty(admin.__get('events/race-1'), 'stripeProductId', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        bindingGetterCalls += 1;
+        throw new Error('free volunteer Product binding getter executed');
+      },
+    });
 
     const result = await createCheckoutSession({
       eventId: 'race-1',
@@ -1374,6 +1532,9 @@ describe('Checkout promotion policy', () => {
       status: 'paid',
       amountCents: 0,
     });
+    expect(bindingGetterCalls).toBe(0);
+    expect(mockProjectStoredStripeProductId).not.toHaveBeenCalled();
+    expect(mockProjectCreatedStripeProductId).not.toHaveBeenCalled();
     expect(mockGetStripe).not.toHaveBeenCalled();
     expect(mockProductCreate).not.toHaveBeenCalled();
     expect(mockCheckoutCreate).not.toHaveBeenCalled();
@@ -1388,6 +1549,15 @@ describe('Checkout promotion policy', () => {
       visibility: 'public',
       pricing: { nonMemberCents: 0 },
       waiverVersion: 'synthetic-v1',
+    });
+    let bindingGetterCalls = 0;
+    Object.defineProperty(admin.__get('events/race-1'), 'stripeProductId', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        bindingGetterCalls += 1;
+        throw new Error('free participant Product binding getter executed');
+      },
     });
 
     const result = await createCheckoutSession({
@@ -1410,7 +1580,11 @@ describe('Checkout promotion policy', () => {
       status: 'paid',
       amountCents: 0,
     });
+    expect(bindingGetterCalls).toBe(0);
+    expect(mockProjectStoredStripeProductId).not.toHaveBeenCalled();
+    expect(mockProjectCreatedStripeProductId).not.toHaveBeenCalled();
     expect(mockGetStripe).not.toHaveBeenCalled();
+    expect(mockProductCreate).not.toHaveBeenCalled();
     expect(mockCheckoutCreate).not.toHaveBeenCalled();
   });
 
@@ -1718,31 +1892,227 @@ describe('Checkout promotion policy', () => {
     expect(mockGetStripe).not.toHaveBeenCalled();
   });
 
-  test('keeps valid missing-Product mapping and checkout behavior', async () => {
-    admin.__seed('products/hat', {
-      checkoutEnabled: true,
-      title: 'Synthetic Hat',
-      slug: 'hat',
-      status: 'active',
-      priceCents: 2_000,
-    });
-    mockProductCreate.mockResolvedValue({ id: 'prod_hat_created' });
+  test.each(['race', 'shop'])(
+    'keeps valid missing-Product mapping, Session, and %s record order',
+    async (domain) => {
+      const target = seedProductBindingTarget(domain);
+      const createdId = `custom_${domain}_product_created_test_only`;
+      const createdProduct = validCreatedProduct({ id: createdId });
+      mockProductCreate.mockResolvedValue(createdProduct);
 
-    await createMerchCheckout({
-      productSlug: 'hat',
-      buyer: {
-        firstName: 'Test',
-        lastName: 'Buyer',
-        email: 'buyer@example.test',
-      },
-    }, { auth: null, rawRequest: {} });
+      await runProductBindingCheckout(domain);
 
-    expect(mockProductCreate).toHaveBeenCalledTimes(1);
-    expect(admin.__get('products/hat').stripeProductId).toBe('prod_hat_created');
-    expect(admin.__get('orders/order-new-1').amountCents).toBe(2_000);
-    expect(mockCheckoutCreate.mock.calls[0][0]
-      .line_items[0].price_data.unit_amount).toBe(2_000);
-  });
+      const targetPath = domain === 'race' ? 'events/race-1' : 'products/hat';
+      const businessPath = productBindingBusinessPath(domain);
+      expect(mockProjectStoredStripeProductId).toHaveBeenCalledTimes(1);
+      expect(mockProjectStoredStripeProductId.mock.calls[0][0]).toBe(target);
+      expect(mockProjectCreatedStripeProductId)
+        .toHaveBeenCalledWith(createdProduct, false);
+      expect(mockProductCreate).toHaveBeenCalledTimes(1);
+      expect(admin.__get(targetPath).stripeProductId).toBe(createdId);
+      expect(admin.__get(businessPath)).toBeDefined();
+      expect(mockCheckoutCreate.mock.calls[0][0]
+        .line_items[0].price_data.product).toBe(createdId);
+      expect(mockFirestoreWrite.mock.calls.map(([path]) => path)).toEqual([
+        targetPath,
+        businessPath,
+      ]);
+      expect(mockProductCreate.mock.invocationCallOrder[0]).toBeLessThan(
+        mockProjectCreatedStripeProductId.mock.invocationCallOrder[0],
+      );
+      expect(mockProjectCreatedStripeProductId.mock.invocationCallOrder[0])
+        .toBeLessThan(mockFirestoreWrite.mock.invocationCallOrder[0]);
+      expect(mockFirestoreWrite.mock.invocationCallOrder[0]).toBeLessThan(
+        mockCheckoutCreate.mock.invocationCallOrder[0],
+      );
+      expect(mockCheckoutCreate.mock.invocationCallOrder[0]).toBeLessThan(
+        mockFirestoreWrite.mock.invocationCallOrder[1],
+      );
+    },
+  );
+
+  test.each(
+    ['race', 'shop'].flatMap((domain) => [
+      'present undefined',
+      'present null',
+      'present empty string',
+      'present false',
+      'structured value',
+      'accessor-backed value',
+      'shared prototype value',
+    ].map((caseName) => [domain, caseName])),
+  )(
+    'PAY-PRODUCT-001A RED: %s rejects a %s before later work',
+    async (domain, caseName) => {
+      const canary = `synthetic_${domain}_stored_product_private_canary`;
+      const target = seedProductBindingTarget(domain);
+      const originalSharedDescriptor = Object.getOwnPropertyDescriptor(
+        Object.prototype,
+        'stripeProductId',
+      );
+      let readHookCalls = () => 0;
+      if (caseName === 'shared prototype value') {
+        let hookCalls = 0;
+        Object.defineProperty(Object.prototype, 'stripeProductId', {
+          configurable: true,
+          enumerable: false,
+          get() {
+            hookCalls += 1;
+            throw new Error(canary);
+          },
+        });
+        readHookCalls = () => hookCalls;
+      } else {
+        readHookCalls = installStoredBindingCase(target, caseName, canary);
+      }
+      const descriptorsBefore = Object.getOwnPropertyDescriptors(target);
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+      try {
+        const outcome = await runProductBindingCheckout(domain).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+
+        expect(outcome.error).toMatchObject({
+          code: 'failed-precondition',
+          message: productBindingFailureMessage(domain),
+        });
+        expect([
+          outcome.error.code,
+          outcome.error.message,
+          outcome.error.stack,
+        ].join('\n')).not.toContain(canary);
+        expect(readHookCalls()).toBe(0);
+        expect(Object.getOwnPropertyDescriptors(target)).toEqual(
+          descriptorsBefore,
+        );
+        expect(mockRateLimit).toHaveBeenCalledTimes(2);
+        expect(mockProjectStoredStripeProductId).toHaveBeenCalledTimes(1);
+        expect(mockProjectStoredStripeProductId.mock.calls[0][0]).toBe(target);
+        expect(Math.max(...mockRateLimit.mock.invocationCallOrder))
+          .toBeLessThan(
+            mockProjectStoredStripeProductId.mock.invocationCallOrder[0],
+          );
+        expect(mockProjectCreatedStripeProductId).not.toHaveBeenCalled();
+        expect(mockGenerateToken).not.toHaveBeenCalled();
+        expect(mockRegistrationAllocation).not.toHaveBeenCalled();
+        expect(mockOrderAllocation).not.toHaveBeenCalled();
+        expect(mockFirestoreWrite).not.toHaveBeenCalled();
+        expect(mockGetStripe).not.toHaveBeenCalled();
+        expect(mockProductCreate).not.toHaveBeenCalled();
+        expect(mockCheckoutCreate).not.toHaveBeenCalled();
+        expect(admin.__get(productBindingBusinessPath(domain))).toBeUndefined();
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      } finally {
+        consoleSpies.forEach((spy) => spy.mockRestore());
+        if (caseName === 'shared prototype value') {
+          if (originalSharedDescriptor === undefined) {
+            delete Object.prototype.stripeProductId;
+          } else {
+            Object.defineProperty(
+              Object.prototype,
+              'stripeProductId',
+              originalSharedDescriptor,
+            );
+          }
+        }
+      }
+    },
+  );
+
+  test.each(
+    ['race', 'shop'].flatMap((domain) => [
+      'missing ID',
+      'wrong object kind',
+      'mode mismatch',
+      'non-2xx response',
+      'accessor-backed ID',
+    ].map((caseName) => [domain, caseName])),
+  )(
+    'PAY-PRODUCT-001A RED: %s rejects a created Product with %s',
+    async (domain, caseName) => {
+      const canary = `synthetic_${domain}_created_product_private_canary`;
+      const target = seedProductBindingTarget(domain);
+      const { product, readHookCalls } = malformedCreatedProduct(
+        caseName,
+        canary,
+      );
+      mockProductCreate.mockResolvedValue(product);
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method).mockImplementation(() => {}));
+
+      try {
+        const outcome = await runProductBindingCheckout(domain).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+
+        expect(outcome.error).toMatchObject({
+          code: 'failed-precondition',
+          message: productBindingFailureMessage(domain),
+        });
+        expect([
+          outcome.error.code,
+          outcome.error.message,
+          outcome.error.stack,
+        ].join('\n')).not.toContain(canary);
+        expect(readHookCalls()).toBe(0);
+        expect(mockProjectStoredStripeProductId).toHaveBeenCalledTimes(1);
+        expect(mockProjectStoredStripeProductId.mock.calls[0][0]).toBe(target);
+        expect(mockGenerateToken).toHaveBeenCalledTimes(1);
+        expect(mockRegistrationAllocation)
+          .toHaveBeenCalledTimes(domain === 'race' ? 1 : 0);
+        expect(mockOrderAllocation)
+          .toHaveBeenCalledTimes(domain === 'shop' ? 1 : 0);
+        expect(mockGetStripe).toHaveBeenCalledTimes(1);
+        expect(mockProductCreate).toHaveBeenCalledTimes(1);
+        expect(JSON.stringify(mockProductCreate.mock.calls))
+          .not.toContain(canary);
+        expect(mockProjectCreatedStripeProductId)
+          .toHaveBeenCalledWith(product, false);
+        expect(mockCheckoutCreate).not.toHaveBeenCalled();
+        expect(mockFirestoreWrite).not.toHaveBeenCalled();
+        expect(admin.__get(productBindingBusinessPath(domain))).toBeUndefined();
+        expect(mockProjectStoredStripeProductId.mock.invocationCallOrder[0])
+          .toBeLessThan(mockGenerateToken.mock.invocationCallOrder[0]);
+        expect(mockGenerateToken.mock.invocationCallOrder[0]).toBeLessThan(
+          (domain === 'race'
+            ? mockRegistrationAllocation
+            : mockOrderAllocation).mock.invocationCallOrder[0],
+        );
+        expect(mockProductCreate.mock.invocationCallOrder[0]).toBeLessThan(
+          mockProjectCreatedStripeProductId.mock.invocationCallOrder[0],
+        );
+        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      } finally {
+        consoleSpies.forEach((spy) => spy.mockRestore());
+      }
+    },
+  );
+
+  test.each(['race', 'shop'])(
+    '%s copies one valid custom stored Product ID before later mutation',
+    async (domain) => {
+      const target = seedProductBindingTarget(domain);
+      const originalId = `custom ${domain}/product ID test only`;
+      target.stripeProductId = originalId;
+      mockGenerateToken.mockImplementation(() => {
+        target.stripeProductId = 'changed-after-stored-projection';
+        return 'synthetic-confirmation-token';
+      });
+
+      await runProductBindingCheckout(domain);
+
+      expect(target.stripeProductId).toBe('changed-after-stored-projection');
+      expect(mockProjectStoredStripeProductId).toHaveBeenCalledTimes(1);
+      expect(mockProjectCreatedStripeProductId).not.toHaveBeenCalled();
+      expect(mockProductCreate).not.toHaveBeenCalled();
+      expect(mockCheckoutCreate.mock.calls[0][0]
+        .line_items[0].price_data.product).toBe(originalId);
+    },
+  );
 
   test.each([
     ['paid race while the global switch is off', createCheckoutSession, {

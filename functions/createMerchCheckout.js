@@ -18,23 +18,44 @@ const {
 const {
   projectMerchandisePriceCents,
 } = require('./merchCheckoutValidation');
+const {
+  projectCreatedStripeProductId,
+  projectStoredStripeProductId,
+} = require('./stripeProductBinding');
 
 const HOUR_MS = 60 * 60 * 1000;
 const MERCH_PER_IP_PER_HOUR = 20;
 const MERCH_PER_EMAIL_PER_HOUR = 10;
 
-async function ensureStripeProduct(stripe, productRef, product) {
-  if (product.stripeProductId) return product.stripeProductId;
+async function ensureStripeProduct({
+  expectedLivemode,
+  product,
+  productRef,
+  productSlug,
+  storedStripeProductId,
+  stripe,
+}) {
+  if (storedStripeProductId !== undefined) return storedStripeProductId;
   const created = await stripe.products.create({
     name: product.title,
     description: product.description?.slice(0, 500) || undefined,
-    metadata: { productId: productRef.id, slug: product.slug || '' },
+    metadata: { productId: productRef.id, slug: productSlug },
   });
+  const createdStripeProductId = projectCreatedStripeProductId(
+    created,
+    expectedLivemode,
+  );
+  if (createdStripeProductId === null) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'This item is unavailable',
+    );
+  }
   await productRef.update({
-    stripeProductId: created.id,
+    stripeProductId: createdStripeProductId,
     updatedAt: Timestamp.now(),
   });
-  return created.id;
+  return createdStripeProductId;
 }
 
 exports.createMerchCheckout = functions
@@ -111,6 +132,14 @@ exports.createMerchCheckout = functions
       );
     }
 
+    const storedStripeProductId = projectStoredStripeProductId(product);
+    if (storedStripeProductId === null) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'This item is unavailable',
+      );
+    }
+
     const confirmationToken = generateToken();
     const orderRef = db.collection('orders').doc();
 
@@ -150,9 +179,13 @@ exports.createMerchCheckout = functions
     };
 
     const stripe = getStripe();
-    const stripeProductId = await ensureStripeProduct(stripe, productRef, {
-      ...product,
-      slug: productSlug,
+    const stripeProductId = await ensureStripeProduct({
+      expectedLivemode: serverConfig.stripeLivemodeExpected,
+      product,
+      productRef,
+      productSlug,
+      storedStripeProductId,
+      stripe,
     });
     const origin = serverConfig.siteOrigin;
 

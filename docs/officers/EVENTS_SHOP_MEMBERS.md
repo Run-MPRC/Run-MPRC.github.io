@@ -508,6 +508,70 @@ Officer source-review steps:
 
 No main system map needs to change because this source change adds one price stop without changing who owns an account, who has permission, where records are stored, which Stripe boundary is used, or how the website is published. The small diagram above records the new failure path and the unchanged valid-price continuation.
 
+## Stored Stripe Product binding containment — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop a malformed stored Stripe Product link before a paid race or Shop checkout creates a confirmation token, allocates a registration or order identifier, writes the Product link or registration/order record, or calls Stripe. A Product link is the stored text used to point a later Checkout request at one Stripe Product. Earlier access and request-count checks may already have run, and their safety-counter writes are not rolled back.
+
+**Approver:** event lead and shop lead, plus treasurer and platform/security owner.
+
+**Prerequisites:** issue [#353](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/353) must be merged, and the exact reviewed commit must be named. Use only made-up events, items, runners, and buyers with test replacements that make no Firebase or Stripe provider call. Test-only issue [#275](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/275) records the installed Stripe software shape; it is not provider proof. The private inventory in [#113](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/113) is required before deployment, migration, or Product-link repair. Anonymous lazy Product creation remains concurrency-prone, **NOT SAFE**, and **NOT LIVE**.
+
+```mermaid
+flowchart TD
+    A["Made-up paid race or Shop request passes earlier checks"] --> B["Inspect the stored Product link once without conversion"]
+    B --> C{"Genuinely missing?"}
+    C -- "No" --> D{"Primitive, non-empty custom ID of 1–255 text-count units?"}
+    D -- "No" --> E["Fixed unavailable result before token, ID, mapping/business write, or Stripe"]
+    D -- "Yes" --> F["Copy the same ID into the later mocked Checkout request"]
+    C -- "Yes" --> G["Existing anonymous lazy Product-create path"]
+    G --> H{"Bounded ID, Product kind, expected mode, and 2xx software status?"}
+    H -- "No" --> I["Fixed unavailable result; no mapping, Session, or business write"]
+    I --> J["Product may be orphaned: do not retry; reconcile"]
+    H -- "Yes" --> K["Existing mapping-before-Session path continues"]
+    G -. "Still concurrency-prone" .-> L["NOT SAFE / NOT LIVE; replace with authenticated repeat-safe catalog sync"]
+```
+
+Text alternative: a malformed present Product link stops before a new token, registration/order identifier, Product-link or registration/order write, or Stripe call. Earlier request-count safety-counter writes may already have happened and are not rolled back. Only a genuinely missing field enters the existing anonymous Product-create path. A malformed created result stops after one Product attempt but before the local mapping, Checkout Session, or registration/order write; the Product may be orphaned and must not be retried blindly. Valid custom IDs are copied without prefix assumptions. Anonymous lazy creation remains unsafe and unavailable for live use.
+
+Officer source-review steps:
+
+1. Keep live race registration and Shop checkout unavailable.
+2. Ask the platform owner for the exact #353 pull request and merge commit.
+3. Ask for the made-up test report from that same commit.
+4. Confirm both the paid race and Shop paths use the same narrow Product-link check.
+5. Confirm a present link must be a primitive, non-empty string from 1 through 255 JavaScript code units. A code unit is the program's unit for counting text.
+6. Confirm the check does not require `prod_`, restrict characters, trim text, or convert another value into text.
+7. Confirm missing is different from present `undefined`, `null`, empty, false, zero, boxed, structured, inherited, hidden, accessor-backed, or Proxy values.
+8. Confirm every malformed present link returns only the endpoint's plain unavailable result.
+9. Confirm a rejected stored link creates no token, registration or order identifier, Product-link write, registration/order write, Stripe access, Product, or Checkout Session.
+10. Confirm earlier access and request-count checks may already have run. Their safety-counter writes are not rolled back.
+11. Confirm one-character, ordinary custom, and 255-unit made-up IDs are copied once and unchanged into the mocked Checkout request.
+12. Confirm a later change to the source record cannot change that copied ID.
+13. Confirm only a genuinely missing field reaches the old mocked Product-create path.
+14. Confirm a created result is accepted only when it has a bounded custom ID, exact Product kind, the expected test/live setting, and a 200-through-299 status from the pinned installed Stripe software.
+15. Confirm a rejected created result makes no Product-link write, Checkout Session, registration write, or order write.
+16. Confirm the report records no automatic retry. One Product attempt may already have succeeded and left an orphan that later needs private reconciliation.
+17. Confirm one valid made-up created Product keeps this order: Product-link write, then Checkout Session, then registration or order write.
+18. Confirm free participant and volunteer paths do not inspect Product links or access Stripe.
+19. Confirm the separate late-registration Product, Price, and Payment Link path is unchanged and remains **NOT AVAILABLE YET**.
+20. Record source, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, catalog data, migration, and live behavior as separate results.
+
+**Expected result:** a malformed present Product link stops before a new token, registration/order identifier, Product-link or registration/order write, or Stripe call. Earlier access and request-count checks may already have run, and their safety-counter writes are not rolled back. An accepted ID is copied without conversion or re-reading. A malformed created result stops after at most one mocked Product attempt but before any local mapping, Checkout Session, or business-record write. These checks do not prove Stripe origin, account ownership, intended catalog item, metadata binding, active status, approved price, provider delivery, or reconciliation. Missing mappings still enter anonymous lazy Product creation, which remains unsafe because public concurrent requests can create duplicate or orphaned Products.
+
+**Stop conditions:** any real event, item, runner, buyer, registration, order, Firebase record, Stripe object, Product link, payment, provider call, or production test; a request to repair Firestore or Stripe by hand; a missing exact commit; a rejected stored link that allocates a registration/order identifier, writes a Product link or registration/order record, or reaches Stripe; a rejected created result that writes a mapping or creates a Checkout Session; an instruction to retry an unconfirmed Product creation; deployment before #113 and owner-approved mappings; or a claim that source, tests, merge, preview, or green CI makes anonymous Product creation, checkout, or the catalog safe or live. An earlier request-count safety-counter write is expected and is not this stop condition.
+
+**Success proof:** exact #353 pull request and merge commit; recorded old-source failures; green focused race and Shop matrices, full server tests, database-permission tests, isolated test-database commerce tests, website tests, safety checks, and build checks; independent security, compatibility, and backup-officer reviews; and a written statement that website publication, `runmprc.com`, Firebase, Stripe, production data, migration, and live behavior were not changed or verified.
+
+A future live release also needs the completed private #113 inventory and an owner-approved event/item-to-Product disposition; authenticated, repeat-safe catalog management; Product-specific steps for planning, checking before sending, recording the result, handling a lost reply, retrying safely, and matching club records to Stripe; isolated Stripe test-mode proof; protected short-lived Firebase deployment authority under #133; exact Function deployment/readback; rollback; and made-up staged proof. The profile-specific #136 release does not authorize commerce deployment.
+
+**Undo:** before Firebase deployment, use one reviewed pull request that reverses the source change or corrects it safely. After any future approved backend deployment, use the protected commerce release process and verify the exact published Function revision. Never undo by changing an event, item, Product link, registration, order, Session, payment, or Stripe object by hand.
+
+**Escalation:** event lead and shop lead, plus treasurer and platform/security owner. Use the private incident path if a malformed mapping may have reached Stripe or if duplicate or orphaned Products may exist. Do not copy Product links, account details, catalog records, payment data, private provider links, or real customer/member information into an issue, screenshot, email, message, or AI tool.
+
+No main system map needs to change because this source slice adds one failure stop and changes no owner, permission, storage location, provider boundary, or publishing path. The small diagram records the new stop, the possible orphan after a rejected created result, and the unresolved anonymous lazy-create branch.
+
 ## Late-registration amount format guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** stop a missing, malformed, or out-of-range late-registration amount before the server allocates a registration identifier, writes a paid record, or asks Stripe to create a Product, Price, or Payment Link.
