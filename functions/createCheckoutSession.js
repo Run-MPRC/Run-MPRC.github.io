@@ -26,6 +26,10 @@ const {
   parseRaceCheckoutRequest,
   parseRaceCheckoutAnswers,
 } = require('./raceCheckoutValidation');
+const {
+  projectCreatedStripeProductId,
+  projectStoredStripeProductId,
+} = require('./stripeProductBinding');
 
 const HOUR_MS = 60 * 60 * 1000;
 const CHECKOUT_PER_IP_PER_HOUR = 20;
@@ -93,18 +97,34 @@ function resolvePriceTier({ requestedTier, event, callerRole, now }) {
   return 'nonMember';
 }
 
-async function ensureStripeProduct(stripe, eventRef, event) {
-  if (event.stripeProductId) return event.stripeProductId;
+async function ensureStripeProduct({
+  event,
+  eventRef,
+  expectedLivemode,
+  storedStripeProductId,
+  stripe,
+}) {
+  if (storedStripeProductId !== undefined) return storedStripeProductId;
   const product = await stripe.products.create({
     name: event.title,
     description: event.description?.slice(0, 500) || undefined,
     metadata: { eventId: eventRef.id, slug: event.slug || '' },
   });
+  const createdStripeProductId = projectCreatedStripeProductId(
+    product,
+    expectedLivemode,
+  );
+  if (createdStripeProductId === null) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Registration is unavailable for this event',
+    );
+  }
   await eventRef.update({
-    stripeProductId: product.id,
+    stripeProductId: createdStripeProductId,
     updatedAt: Timestamp.now(),
   });
-  return product.id;
+  return createdStripeProductId;
 }
 
 exports.createCheckoutSession = functions
@@ -224,6 +244,17 @@ exports.createCheckoutSession = functions
       );
     }
 
+    let storedStripeProductId;
+    if (amountCents > 0) {
+      storedStripeProductId = projectStoredStripeProductId(event);
+      if (storedStripeProductId === null) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Registration is unavailable for this event',
+        );
+      }
+    }
+
     const confirmationToken = generateToken();
     const regRef = eventRef.collection('registrations').doc();
     const regBase = {
@@ -286,7 +317,13 @@ exports.createCheckoutSession = functions
     ].join('&');
     const cancelUrl = `${origin}${CANCEL_PATH_PREFIX}${encodeURIComponent(eventSlug)}?cancelled=1`;
     const stripe = getStripe();
-    const productId = await ensureStripeProduct(stripe, eventRef, event);
+    const productId = await ensureStripeProduct({
+      event,
+      eventRef,
+      expectedLivemode: serverConfig.stripeLivemodeExpected,
+      storedStripeProductId,
+      stripe,
+    });
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
