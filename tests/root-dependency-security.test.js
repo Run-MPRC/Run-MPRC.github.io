@@ -239,7 +239,7 @@ test('pins the sole root websocket-driver resolution to the patched 0.7.5 releas
   assert.equal(installed.version, EXPECTED_WEBSOCKET_DRIVER.version);
 });
 
-test('fails a draft-75 length header that exceeds the configured maxLength closed', () => {
+function openSyntheticDraft75Driver(maxLength) {
   const websocket = require(path.join(REPOSITORY, 'node_modules/websocket-driver'));
 
   // A hixie-75 upgrade carries none of the newer key/version headers.
@@ -253,7 +253,7 @@ test('fails a draft-75 length header that exceeds the configured maxLength close
       upgrade: 'WebSocket',
     },
   };
-  const driver = websocket.http(request, { maxLength: 1 });
+  const driver = websocket.http(request, { maxLength });
 
   const events = [];
   driver.on('open', () => events.push('open'));
@@ -265,25 +265,44 @@ test('fails a draft-75 length header that exceeds the configured maxLength close
   // Prove a successful draft-75 handshake / open state before the hostile input.
   assert.equal(driver.version, 'hixie-75');
   assert.equal(driver.readyState, 0);
-  driver.start();
+  assert.equal(driver.start(), true);
   assert.equal(driver.readyState, 1);
-  assert.ok(events.includes('open'));
+  assert.deepEqual(events, ['open']);
   assert.match(
     Buffer.concat(handshake).toString('utf8'),
     /HTTP\/1\.1 101 Web Socket Protocol Handshake/,
   );
 
-  // Length-delimited binary frame: 0x80 marks a length-prefixed frame and 0x05
-  // declares a five-byte payload, five times the configured one-byte maxLength.
-  driver.parse(Buffer.from([0x80, 0x05]));
+  return { driver, events };
+}
 
-  // Patched 0.7.5 fails closed at the bound; vulnerable 0.7.4 stays open and skips bytes.
+test('closes draft-75 length headers only when declared length exceeds maxLength', () => {
+  // Length-delimited binary frame: 0x80 marks a length-prefixed frame and 0x05
+  // declares a five-byte payload.
+  const fiveByteLengthHeader = Buffer.from([0x80, 0x05]);
+
+  const overLimit = openSyntheticDraft75Driver(1);
+  assert.equal(overLimit.driver.io.write(fiveByteLengthHeader), true);
+
+  // Patched 0.7.5 fails closed above the bound; vulnerable 0.7.4 stays open.
   assert.equal(
-    driver.readyState,
+    overLimit.driver.readyState,
     3,
     'the driver must close when a declared length exceeds maxLength',
   );
-  assert.ok(events.includes('close'), 'a close event must fire at the length bound');
+  assert.deepEqual(overLimit.events, ['open', 'close']);
+
+  const atThreshold = openSyntheticDraft75Driver(5);
+  assert.equal(atThreshold.driver.io.write(fiveByteLengthHeader), true);
+
+  // The same header must remain open at the exact threshold. This control
+  // prevents an unconditional-disconnect implementation from satisfying the test.
+  assert.equal(atThreshold.driver.readyState, 1);
+  assert.deepEqual(atThreshold.events, ['open']);
+
+  assert.equal(atThreshold.driver.close(), true);
+  assert.equal(atThreshold.driver.readyState, 3);
+  assert.deepEqual(atThreshold.events, ['open', 'close']);
 });
 
 test('pins the sole root shell-quote resolution to the patched 1.8.4 release', () => {
