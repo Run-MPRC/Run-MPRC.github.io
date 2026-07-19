@@ -41,6 +41,17 @@ const EXPECTED_SHELL_QUOTE = Object.freeze({
   resolved: 'https://registry.npmjs.org/shell-quote/-/shell-quote-1.8.4.tgz',
   integrity: 'sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==',
 });
+const EXPECTED_PICOMATCH = Object.freeze({
+  version: '2.3.2',
+  resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-2.3.2.tgz',
+  integrity: 'sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==',
+});
+const EXPECTED_NESTED_PICOMATCH = Object.freeze({
+  path: 'node_modules/tinyglobby/node_modules/picomatch',
+  version: '4.0.4',
+  resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz',
+  integrity: 'sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==',
+});
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -310,4 +321,90 @@ test('rejects line-terminator shell operator objects without executing a shell',
   }
   assert.equal(quote([{ op: ';' }]), '\\;');
   assert.equal(quote(['safe value']), "'safe value'");
+});
+
+test('pins the sole root picomatch 2.x resolution to the patched 2.3.2 release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.picomatch, undefined);
+  assert.equal(packageJson.devDependencies?.picomatch, undefined);
+  assert.equal(packageJson.optionalDependencies?.picomatch, undefined);
+  assert.equal(packageJson.peerDependencies?.picomatch, undefined);
+  assert.equal(packageJson.resolutions?.picomatch, undefined);
+  assert.equal(packageJson.overrides?.picomatch, undefined);
+
+  assert.equal(
+    lock.packages['node_modules/jest-util']?.dependencies?.picomatch,
+    '^2.2.3',
+  );
+  assert.equal(
+    lock.packages['node_modules/micromatch']?.dependencies?.picomatch,
+    '^2.3.1',
+  );
+
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/picomatch'
+    || packagePath.endsWith('/node_modules/picomatch')
+  )).sort();
+  assert.deepEqual(lockedPaths, [
+    'node_modules/picomatch',
+    EXPECTED_NESTED_PICOMATCH.path,
+  ]);
+
+  const rootRecord = lock.packages['node_modules/picomatch'];
+  assert.deepEqual(
+    {
+      version: rootRecord.version,
+      resolved: rootRecord.resolved,
+      integrity: rootRecord.integrity,
+    },
+    EXPECTED_PICOMATCH,
+    'the root picomatch copy must retain its reviewed public-registry identity',
+  );
+  assert.notEqual(rootRecord.dev, true);
+  assert.equal(rootRecord.license, 'MIT');
+  assert.deepEqual(rootRecord.engines, { node: '>=8.6' });
+
+  const nestedRecord = lock.packages[EXPECTED_NESTED_PICOMATCH.path];
+  assert.deepEqual(
+    {
+      path: EXPECTED_NESTED_PICOMATCH.path,
+      version: nestedRecord.version,
+      resolved: nestedRecord.resolved,
+      integrity: nestedRecord.integrity,
+    },
+    EXPECTED_NESTED_PICOMATCH,
+    'the separate picomatch 4.x development copy must remain unchanged',
+  );
+  assert.equal(nestedRecord.dev, true);
+  assert.equal(
+    readJson(
+      path.join(REPOSITORY, EXPECTED_NESTED_PICOMATCH.path, 'package.json'),
+    ).version,
+    EXPECTED_NESTED_PICOMATCH.version,
+  );
+
+  const installed = readJson(
+    path.join(REPOSITORY, 'node_modules/picomatch/package.json'),
+  );
+  assert.equal(installed.version, EXPECTED_PICOMATCH.version);
+});
+
+test('does not compile inherited POSIX class names into host method text', () => {
+  const picomatch = require(path.join(REPOSITORY, 'node_modules/picomatch'));
+  const injectedHostText = /function|native code|\[object Object\]/i;
+
+  for (const className of ['constructor', 'toString', '__proto__']) {
+    const expression = picomatch.makeRe(`[[:${className}:]]`);
+    assert.doesNotMatch(
+      expression.source,
+      injectedHostText,
+      `${className} must not inject an inherited host value into the expression`,
+    );
+  }
+
+  const alpha = picomatch.makeRe('[[:alpha:]]');
+  assert.equal(alpha.test('A'), true);
+  assert.equal(alpha.test('7'), false);
 });
