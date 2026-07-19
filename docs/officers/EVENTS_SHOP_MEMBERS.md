@@ -2465,7 +2465,7 @@ Officer review steps after the source merge:
 
 **Expected result:** only the fully resolved current mocked event-and-registration result can show event or runner details, money totals, filters, the table, export, registration actions, or action windows. Loading and either rejection show no old or partial result. A missing event stays separate and starts no registration lookup. The fixed rejection sentence contains no private or technical detail. Older and closed-page values are inert. Successful empty and populated made-up results keep their existing display behavior.
 
-The existing CSV request and file contents, late-add, comp, refund, substitute, cancel, note, prompts, action responses, raw action-error text, authorization, idempotency, reconciliation, and audit behavior are separate unfinished work. This slice does not make the Admin Event registrations page, export, or actions safe for officer use.
+Issue [#383](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/383) adds a source-only browser guard around the existing CSV request and download. It does not approve the export or its file contents. Approved purpose and columns, server authorization, stronger authentication, audit, request bounds, retention, reconciliation, and live verification remain unfinished under [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110) and [#116](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/116). Late-add, comp, refund, substitute, cancel, note, prompts, action responses, server repeat safety, and durable audit are also separate unfinished work. This slice does not make the Admin Event registrations page, export, or actions safe for officer use.
 
 **Stop conditions:** any real officer, runner, name, email address, phone, emergency contact, event, registration, waiver, price, gross amount, payment, refund, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a stale, partial, orphaned, or false-empty result; a visible export or action control during loading or failure; an export or registration action; a Firebase, Rules, permission, provider, source, event, or registration-record change; or a claim that source, tests, merge, preview, or a green workflow proves the page is live.
 
@@ -2523,6 +2523,8 @@ Officer review steps after the source merge:
 
 **Expected result:** a pending mocked non-late action blocks every registration mutation and export entry point. A current resolved request keeps the existing one-time list reload. A current rejected request shows one fixed accessible instruction, no rejected detail, no runner or money result, and no action or export control. It cannot be repeated on that open page. Older results are inert. The alert says the result is unknown; it does not claim that Firebase or Stripe made no change.
 
+The reverse guard is also required by issue [#383](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/383): a pending CSV export blocks every registration action, and an uncertain CSV result hides both action and export controls. This changes only the browser-page guard. It does not change a mutation, server idempotency, reconciliation, audit, or provider behavior.
+
 Refreshing, closing, or reopening the page can recreate the controls. That does not prove what happened and never makes a repeat safe. Stop and contact the named owners instead. A browser guard does not provide server idempotency, reconciliation, durable audit, Stripe readback, authorization, backup, rollback, deployment, or live proof.
 
 **Stop conditions:** any real officer, runner, name, email address, phone, emergency contact, event, registration, price, payment, refund, Firebase, Stripe, provider, endpoint, credential, export, or production record used; an attempt to force a production failure; a raw detail in the page, analytics, console, screenshot, issue, email, message, or AI tool; an automatic retry or reload after rejection; runner, registration, money, action, or export content after the alert; a repeated action; a manual Firebase or Stripe repair; or a claim that a browser lock, source change, test, merge, preview, or green workflow proves financial safety or live behavior.
@@ -2534,6 +2536,68 @@ Refreshing, closing, or reopening the page can recreate the controls. That does 
 **Escalation:** stop and contact the event lead, treasurer, and platform/security owner. Add the privacy owner. Use the private incident path if an action might have completed, any personal, payment, provider, endpoint, token-shaped, or technical detail appeared, or another request was attempted. Do not copy private details into an issue, screenshot, email, message, or AI tool.
 
 No system-topology diagram changes are required because this source slice changes no server authority, data movement, permissions, account ownership, or deployment topology. The diagram above records only the current page's action-result display and repeat-click guard.
+
+### Admin registration CSV export result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep one mocked registration CSV download private and tied to the exact open Admin page. A pending export must block every registration action. An uncertain export must show one fixed stop instruction, hide private results and controls, and offer no same-page retry.
+
+**Approver:** event lead, treasurer, platform/security owner, and privacy owner. All four roles must approve any future live review. This source slice does not provide that approval.
+
+**Prerequisites:** issues [#315](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/315), [#359](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/359), [#363](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/363), and [#383](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/383) must be merged for source review. Use only a made-up admin identity, mocked app and database references, a made-up event, made-up registrations, and a mocked CSV response. Do not open the Admin screen, contact Firebase, or download production data. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. Issues [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110) and [#116](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/116) still own approved export purpose and columns, stronger authentication, server authorization, bounds, audit, retention, and live verification.
+
+```mermaid
+flowchart LR
+    A["Exact current made-up Admin page"] --> B["One mocked CSV export"]
+    B -- "Pending" --> C["Fixed polite status; export and registration actions blocked"]
+    B -- "Current success" --> D["One mocked file download"]
+    D --> E["Temporary browser file and link cleaned up"]
+    B -- "Rejected or cleanup failed" --> F["Fixed unknown-result alert"]
+    F --> G["Private result, actions, and export hidden; no retry"]
+    H["Route, account, app, database, ready state, newer attempt, or page closes"] --> I["Old request aborted or made inert"]
+    I --> J["No old file download"]
+    K["Complete rejected value"] -. "Discarded" .-> L["No page, analytics, storage, or console detail"]
+```
+
+Text alternative: the exact current made-up Admin page may start one mocked export. Pending work blocks export and registration actions. Current success downloads one file and cleans up its temporary browser link and file URL. Rejection or cleanup failure discards all details, hides private results and controls, and shows one fixed stop alert with no retry. A route, account, app, database, readiness, attempt, or page-lifecycle change makes the older request unable to download.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Event registrations page and CSV export marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #383 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the review used only a made-up admin identity, made-up event and registrations, mocked app and database references, and a mocked CSV response.
+4. Confirm no test contacts Firebase, opens the production Admin screen, or downloads a file containing real data.
+5. Confirm one click sends the existing mocked endpoint and current made-up identity token only once.
+6. Confirm a second same-moment export, registration action, or late-registration action starts no request.
+7. Confirm pending work shows exactly `Registration export in progress. Do not start another registration action or export.`
+8. Confirm assistive technology receives the whole pending sentence politely as one status.
+9. Confirm a pending export closes an open action window and disables every registration action and export entry point.
+10. Confirm a current mocked success clicks one temporary download link, uses the existing filename, and removes both the temporary link and browser file URL.
+11. Confirm token, endpoint, network, response, file-read, link-create, link-attach, click, link-remove, and browser-file cleanup failures all show exactly `We could not confirm that registration export. Do not try again on this page. Stop and contact the event lead, privacy lead, treasurer, and platform owner.`
+12. Confirm assistive technology receives the whole unknown-result sentence immediately as one alert.
+13. Confirm the complete rejected value is not inspected, coerced, logged, measured, stored, sent to analytics, or displayed.
+14. Confirm the unknown result hides runner details, money totals, filters, the registration table, action windows, registration actions, and export. Confirm it offers no reload or retry.
+15. Confirm changing the route, made-up page user, Firebase user, app, database, services, or ready state aborts or makes the older mocked response inert before its body or private fields are inspected.
+16. Confirm leaving and returning to the same route starts a newer page generation, so an older response cannot download after a later deliberate current export.
+17. Confirm a mocked response received after the page closes is inert and no temporary link or browser file URL remains.
+18. Confirm one later deliberate click may start one new request only after a confirmed success and cleanup.
+19. Confirm an unknown result never offers or admits another export request.
+20. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Rules or permission changes, provider configuration, event or registration records, export activity, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** one click admits at most one mocked CSV export for the exact current services, app, database, route, ready state, made-up page user, Firebase user, attempt, and lifecycle. Pending work shows one fixed polite status and blocks every export and registration action. Current success preserves one existing request and download, followed by browser cleanup. After that confirmed cleanup, one later deliberate click may start one new request. A current rejection or cleanup failure shows one fixed accessible stop instruction, no rejected detail, no private result or control, and no same-page retry. Older and closed-page results cannot download.
+
+This is only a browser-page privacy and repeat-click guard. It does not approve the CSV purpose or columns. It does not add stronger authentication, server authorization, export bounds, durable audit, retention, reconciliation, provider readback, backup, rollback, deployment, or live proof. Refreshing, reopening, using another tab, device, account, script, or direct endpoint can start another request. Never use those actions to reconcile or repeat an uncertain export.
+
+**Stop conditions:** any real officer, runner, name, email address, phone, emergency contact, event, registration, waiver, payment, Firebase, provider, endpoint, credential, token, or production record used; a production export or forced production failure; private or technical detail on the page, in analytics, storage, the console, screenshot, issue, email, message, or AI tool; more than one mocked request from one click, any request while another is pending, or any request after an unknown result; any registration action during pending export; any private result or control after the unknown alert; an older or closed-page download; temporary browser file or link cleanup that is not confirmed; a retry, reload, navigation, new tab, device, account, script, direct endpoint, or manual database inspection offered as recovery; or a claim that source, tests, merge, preview, or a green workflow proves the export is approved or live.
+
+**Success proof:** for source completion, record the exact #383 issue, reviewed pull request and merge commit, recorded old-source failures, green focused and compatibility tests, relevant full checks, and independent privacy/security, lifecycle, test-quality, and officer-continuity reviews. The safe officer review stops at source and mocked tests. A future live process still needs #110 and #116 decisions and evidence, server authorization and bounds, stronger authentication, durable audit, retention, backup, rollback, protected deployment, and dated exact-revision verification. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, event or registration changes, exports, production-data actions, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by retrying an export, refreshing, reopening the page, using another tab, device, account, script, or endpoint, or changing or deleting an event, registration, payment, officer account, permission, database record, downloaded file, or provider setting.
+
+**Escalation:** stop and contact the event lead, privacy lead, treasurer, and platform/security owner. Use the private incident path if an export might have completed, another request was attempted, cleanup failed, or any personal, payment, provider, endpoint, token-shaped, or technical detail appeared. Do not copy private details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology map changes are required because this source slice changes no server authority, data movement, permissions, account ownership, or deployment topology. The state-flow diagram above records only the current browser page's export display, exact-context boundary, cleanup, and immediate repeat guard.
 
 ## Stop conditions
 
