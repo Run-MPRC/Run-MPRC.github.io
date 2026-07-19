@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -52,6 +53,30 @@ const EXPECTED_NESTED_PICOMATCH = Object.freeze({
   resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz',
   integrity: 'sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==',
 });
+const EXPECTED_YAML = Object.freeze({
+  version: '1.10.3',
+  resolved: 'https://registry.npmjs.org/yaml/-/yaml-1.10.3.tgz',
+  integrity: 'sha512-vIYeF1u3CjlhAFekPPAk2h/Kv4T3mAkMox5OymRiJQB0spDP10LHvt+K7G9Ny6NuuMAb25/6n1qyUjAcGNf/AA==',
+});
+const EXPECTED_NESTED_YAML = Object.freeze({
+  'node_modules/lint-staged/node_modules/yaml': Object.freeze({
+    version: '2.7.1',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.7.1.tgz',
+    integrity: 'sha512-10ULxpnOCQXxJvBgxsn9ptjq6uviG/htZKk9veJGhlqn3w/DxQ631zFF+nlQXLwmImeS5amR2dl2U8sg6U9jsQ==',
+  }),
+  'node_modules/openapi3-ts/node_modules/yaml': Object.freeze({
+    version: '2.8.4',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.8.4.tgz',
+    integrity: 'sha512-ml/JPOj9fOQK8RNnWojA67GbZ0ApXAUlN2UQclwv2eVgTgn7O9gg9o7paZWKMp4g0H3nTLtS9LVzhkpOFIKzog==',
+  }),
+  'node_modules/postcss-load-config/node_modules/yaml': Object.freeze({
+    version: '2.8.0',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.8.0.tgz',
+    integrity: 'sha512-4lLa/EcQCB0cJkyts+FpIRx5G/llPxfP6VQU5KByHEhLxY3IJCH0f0Hy1MHI8sClTvsIb8qwRJ6R/ZdlDJ/leQ==',
+  }),
+});
+const YAML_RECURSION_DEPTH = 300;
+const YAML_RECURSION_BYTES = (YAML_RECURSION_DEPTH * 2) + 1;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -407,4 +432,112 @@ test('does not compile inherited POSIX class names into host method text', () =>
   const alpha = picomatch.makeRe('[[:alpha:]]');
   assert.equal(alpha.test('A'), true);
   assert.equal(alpha.test('7'), false);
+});
+
+test('pins the sole root yaml 1.x resolution to the patched 1.10.3 release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.yaml, undefined);
+  assert.equal(packageJson.devDependencies?.yaml, undefined);
+  assert.equal(packageJson.optionalDependencies?.yaml, undefined);
+  assert.equal(packageJson.peerDependencies?.yaml, undefined);
+  assert.equal(packageJson.resolutions?.yaml, undefined);
+  assert.equal(packageJson.overrides?.yaml, undefined);
+
+  assert.equal(
+    lock.packages['node_modules/cosmiconfig']?.dependencies?.yaml,
+    '^1.10.0',
+  );
+  assert.equal(
+    lock.packages['node_modules/cssnano']?.dependencies?.yaml,
+    '^1.10.2',
+  );
+  assert.equal(
+    lock.packages['node_modules/fork-ts-checker-webpack-plugin/node_modules/cosmiconfig']
+      ?.dependencies?.yaml,
+    '^1.7.2',
+  );
+
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/yaml'
+    || packagePath.endsWith('/node_modules/yaml')
+  )).sort();
+  assert.deepEqual(lockedPaths, [
+    'node_modules/lint-staged/node_modules/yaml',
+    'node_modules/openapi3-ts/node_modules/yaml',
+    'node_modules/postcss-load-config/node_modules/yaml',
+    'node_modules/yaml',
+  ]);
+
+  const record = lock.packages['node_modules/yaml'];
+  assert.deepEqual(
+    {
+      version: record.version,
+      resolved: record.resolved,
+      integrity: record.integrity,
+    },
+    EXPECTED_YAML,
+    'the root yaml copy must retain its reviewed public-registry identity',
+  );
+  assert.notEqual(record.dev, true);
+  assert.equal(record.license, 'ISC');
+  assert.deepEqual(record.engines, { node: '>= 6' });
+
+  for (const [packagePath, expected] of Object.entries(EXPECTED_NESTED_YAML)) {
+    const nestedRecord = lock.packages[packagePath];
+    assert.deepEqual(
+      {
+        version: nestedRecord.version,
+        resolved: nestedRecord.resolved,
+        integrity: nestedRecord.integrity,
+      },
+      expected,
+      `${packagePath} must remain byte-compatible with the reviewed base`,
+    );
+    assert.equal(nestedRecord.dev, true);
+  }
+
+  const installed = readJson(
+    path.join(REPOSITORY, 'node_modules/yaml/package.json'),
+  );
+  assert.equal(installed.version, EXPECTED_YAML.version);
+});
+
+test('turns bounded yaml collection stack exhaustion into a parser error', () => {
+  const yamlPath = path.join(REPOSITORY, 'node_modules/yaml');
+  const childSource = `
+    const YAML = require(${JSON.stringify(yamlPath)});
+    const depth = ${YAML_RECURSION_DEPTH};
+    const source = '['.repeat(depth) + '1' + ']'.repeat(depth);
+    const document = YAML.parseDocument(source);
+    process.stdout.write(JSON.stringify({
+      bytes: Buffer.byteLength(source),
+      errors: document.errors.map((error) => ({
+        name: error.name,
+        rangeError: error instanceof RangeError,
+      })),
+    }));
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ['--stack_size=256', '-e', childSource],
+    {
+      cwd: REPOSITORY,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024,
+      timeout: 5_000,
+    },
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const observation = JSON.parse(result.stdout);
+  assert.equal(observation.bytes, YAML_RECURSION_BYTES);
+  assert.deepEqual(observation.errors, [{
+    name: 'YAMLSemanticError',
+    rangeError: false,
+  }]);
 });
