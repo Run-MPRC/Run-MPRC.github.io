@@ -228,6 +228,52 @@ describe('Account profile recovery', () => {
     expect(getMyProfile).toHaveBeenCalledWith(firestore, USER.uid);
   });
 
+  test('describes an empty registration result as no current account link', async () => {
+    renderAccount();
+
+    expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+    const emptyState = screen.getByText(
+      /no upcoming registrations are linked to this account/i,
+    );
+    expect(emptyState).toHaveTextContent(
+      'No upcoming registrations are linked to this account.',
+    );
+    expect(emptyState).toHaveTextContent(
+      /a registration made while signed out may not appear/i,
+    );
+    expect(emptyState).toHaveTextContent(
+      /do not register or pay again/i,
+    );
+    expect(emptyState).toHaveAttribute('aria-live', 'polite');
+    expect(emptyState).toHaveAttribute('aria-atomic', 'true');
+    expect(document.body).not.toHaveTextContent(
+      /you haven.t registered for any upcoming events/i,
+    );
+  });
+
+  test('keeps an unavailable registration result separate from an empty account', async () => {
+    let rejectedValueReads = 0;
+    const hostileRejection = new Proxy({}, {
+      get() {
+        rejectedValueReads += 1;
+        throw new Error('registration rejection detail was inspected');
+      },
+    });
+    (listMyRegistrations as jest.Mock).mockRejectedValueOnce(hostileRejection);
+
+    renderAccount();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not load your registrations right now.',
+    );
+    expect(screen.queryByText(
+      /no upcoming registrations are linked to this account/i,
+    )).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Browse events' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/registration rejection detail was inspected/i);
+    expect(rejectedValueReads).toBe(0);
+  });
+
   test.each([
     ['unverified', 'Unverified'],
     ['member', 'Member'],
