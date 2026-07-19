@@ -25,7 +25,7 @@ import {
   stravaFetchStats,
   verifyStravaState,
 } from '../../services/strava/stravaService';
-import { AccountContent } from './Account';
+import AccountPage, { AccountContent, AccountPageShell } from './Account';
 import StravaCallback from './StravaCallback';
 
 const mockCaptureException = jest.fn();
@@ -152,7 +152,9 @@ function accountView(user = USER) {
         v7_startTransition: true,
       }}
     >
-      <AccountContent user={user} />
+      <AccountPageShell>
+        <AccountContent user={user} />
+      </AccountPageShell>
     </MemoryRouter>
   );
 }
@@ -226,6 +228,51 @@ describe('Account profile recovery', () => {
     expect(calls).toEqual(['ensure', 'read']);
     expect(ensureMyProfile).toHaveBeenCalledWith(app);
     expect(getMyProfile).toHaveBeenCalledWith(firestore, USER.uid);
+  });
+
+  test('shows the shared page hero while authentication is loading', () => {
+    (useAuth as jest.Mock).mockReturnValue({
+      isAuthenticated: false,
+      isLoading: true,
+      user: null,
+    });
+    const view = render(
+      <MemoryRouter
+        future={{
+          v7_relativeSplatPath: true,
+          v7_startTransition: true,
+        }}
+      >
+        <AccountPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'My Account' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading...');
+    expect(view.container.querySelectorAll('.header')).toHaveLength(1);
+  });
+
+  test('keeps one decorative page hero while the profile loads and becomes ready', async () => {
+    const request = accountDeferred<{ ready: true }>();
+    (ensureMyProfile as jest.Mock).mockReturnValueOnce(request.promise);
+    const view = renderAccount();
+
+    expect(screen.getByRole('heading', { level: 1, name: 'My Account' }))
+      .toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const image = view.container.querySelector('.header__container-lg img');
+    expect(image).toHaveAttribute('alt', '');
+    expect(image).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+
+    await act(async () => request.resolve({ ready: true }));
+
+    expect(await screen.findByText('Synthetic Member')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 2, name: 'Account details' }))
+      .toBeInTheDocument();
+    expect(view.container.querySelectorAll('.header')).toHaveLength(1);
   });
 
   test('describes an empty registration result as no current account link', async () => {
@@ -719,6 +766,12 @@ describe('Account profile recovery', () => {
       expect(screen.queryByText('$12.34')).not.toBeInTheDocument();
       expect(screen.queryByText('private-registration')).not.toBeInTheDocument();
       expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'My Account' }))
+        .toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      expect(screen.getByRole('heading', { level: 2, name: 'Sign out' }))
+        .toBeInTheDocument();
+      expect(document.querySelectorAll('.header')).toHaveLength(1);
     });
 
     test('keeps the private pending boundary after the command resolves', async () => {

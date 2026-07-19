@@ -1,7 +1,10 @@
 /* eslint-env jest */
 
+import React from 'react';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { render, screen } from '@testing-library/react';
+import Header from './components/Header';
 
 const readStylesheet = (...parts) => readFileSync(join(__dirname, ...parts), 'utf8');
 
@@ -97,17 +100,33 @@ describe('persistent navigation clearance', () => {
   });
 });
 
-describe('top-level page hero coverage', () => {
-  test.each([
-    ['Events', 'pages', 'events', 'Events.tsx'],
-    ['MPRC Shop', 'pages', 'shop', 'Shop.tsx'],
-    ['My Account', 'pages', 'account', 'Account.tsx'],
-  ])('%s includes the shared image header', (title, ...sourcePath) => {
-    const source = readStylesheet(...sourcePath);
+describe('shared page header semantics', () => {
+  test('renders one page heading, a decorative image, and its description', () => {
+    const view = render(
+      React.createElement(
+        Header,
+        { image: '/synthetic-events.jpg', title: 'Events' },
+        'Runs and social gatherings.',
+      ),
+    );
 
-    expect(source).toMatch(/import Header from ['"]\.\.\/\.\.\/components\/Header['"]/);
-    expect(source).toMatch(/import HeaderImage from ['"]\.\.\/\.\.\/images\/[^'"]+['"]/);
-    expect(source).toContain(`<Header title="${title}" image={HeaderImage}>`);
+    expect(screen.getByRole('heading', { level: 1, name: 'Events' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Runs and social gatherings.')).toBeInTheDocument();
+    const image = view.container.querySelector('.header__container-lg img');
+    expect(image).toHaveAttribute('alt', '');
+    expect(image).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  test('omits an empty description for self-closing page headers', () => {
+    const view = render(React.createElement(
+      Header,
+      { image: '/synthetic-activities.jpg', title: 'Activities' },
+    ));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Activities' }))
+      .toBeInTheDocument();
+    expect(view.container.querySelector('.header__content p')).toBeNull();
   });
 });
 

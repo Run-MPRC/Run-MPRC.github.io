@@ -5,8 +5,6 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
 import Header from '../../components/Header';
-// TypeScript does not have an image-module declaration in this legacy app.
-// @ts-expect-error Webpack resolves imported JPG assets to public URLs.
 import HeaderImage from '../../images/joinus/header_bg_1.jpg';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
@@ -33,6 +31,18 @@ function tsToDate(ts: Timestamp | null | undefined) {
 }
 
 const VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+
+export function AccountPageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <SEO title="My Account" noindex />
+      <Header title="My Account" image={HeaderImage}>
+        Manage your MPRC profile, registrations, and connected services.
+      </Header>
+      {children}
+    </>
+  );
+}
 
 function ResendVerificationButton() {
   const { services } = useServiceLocator();
@@ -486,10 +496,8 @@ export function AccountContent({
     }
 
     return (
-      <>
-        <SEO title="My Account" noindex />
+      <div className="account-content">
         <div className="account-sign-out container mx-auto p-4 max-w-3xl">
-          <h1 className="text-2xl font-bold">My Account</h1>
           <section className="account-sign-out__panel" aria-labelledby="sign-out-heading">
             <h2 id="sign-out-heading" className="account-sign-out__heading">
               Sign out
@@ -519,14 +527,16 @@ export function AccountContent({
             </button>
           </section>
         </div>
-      </>
+      </div>
     );
   }
 
   if (!profileBelongsToCurrentContext || profileState === 'loading') {
     return (
-      <div role="status" className="container mx-auto p-6">
-        Loading profile...
+      <div className="account-content">
+        <div role="status" className="container mx-auto p-6">
+          Loading profile...
+        </div>
       </div>
     );
   }
@@ -553,14 +563,10 @@ export function AccountContent({
   ) || [];
 
   return (
-    <>
-      <SEO title="My Account" noindex />
-      <Header title="My Account" image={HeaderImage}>
-        Manage your MPRC profile, registrations, and connected services.
-      </Header>
+    <div className="account-content">
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Account</h1>
+          <h2 className="text-2xl font-bold">Account details</h2>
           <button
             type="button"
             onClick={handleSignOut}
@@ -752,15 +758,21 @@ export function AccountContent({
 
         {profileState === 'ready' && <StravaSection uid={user.uid} />}
       </div>
-    </>
+    </div>
   );
 }
 
-function Account() {
+export function Account() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <div className="container mx-auto p-6">Loading...</div>;
+  if (isLoading) {
+    return (
+      <AccountPageShell>
+        <div role="status" className="container mx-auto p-6">Loading...</div>
+      </AccountPageShell>
+    );
+  }
   if (!isAuthenticated || !user) {
     return (
       <Navigate
@@ -770,7 +782,11 @@ function Account() {
       />
     );
   }
-  return <AccountContent user={user} />;
+  return (
+    <AccountPageShell>
+      <AccountContent user={user} />
+    </AccountPageShell>
+  );
 }
 
 export default Account;
