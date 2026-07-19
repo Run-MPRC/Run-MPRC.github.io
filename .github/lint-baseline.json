@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:0028a0bcbd4d16215b686756c518590b793b075b59ba4de69d6b5c17e90d0596",
+  "fingerprint": "sha256:47ec0995a4a8bcd84d2b0870cfccfc97c3eceada243fa62e5eac6c8eb7682409",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -1328,9 +1328,9 @@
     },
     {
       "file": "src/pages/events/Events.tsx",
-      "line": 124,
+      "line": 130,
       "column": 47,
-      "endLine": 124,
+      "endLine": 130,
       "endColumn": 54,
       "severity": 2,
       "ruleId": "react/jsx-one-expression-per-line",
@@ -1341,9 +1341,9 @@
     },
     {
       "file": "src/pages/events/Events.tsx",
-      "line": 124,
+      "line": 130,
       "column": 54,
-      "endLine": 124,
+      "endLine": 130,
       "endColumn": 61,
       "severity": 2,
       "ruleId": "react/jsx-one-expression-per-line",

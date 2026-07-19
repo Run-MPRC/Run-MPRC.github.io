@@ -97,6 +97,20 @@ describe('persistent navigation clearance', () => {
   });
 });
 
+describe('top-level page hero coverage', () => {
+  test.each([
+    ['Events', 'pages', 'events', 'Events.tsx'],
+    ['MPRC Shop', 'pages', 'shop', 'Shop.tsx'],
+    ['My Account', 'pages', 'account', 'Account.tsx'],
+  ])('%s includes the shared image header', (title, ...sourcePath) => {
+    const source = readStylesheet(...sourcePath);
+
+    expect(source).toMatch(/import Header from ['"]\.\.\/\.\.\/components\/Header['"]/);
+    expect(source).toMatch(/import HeaderImage from ['"]\.\.\/\.\.\/images\/[^'"]+['"]/);
+    expect(source).toContain(`<Header title="${title}" image={HeaderImage}>`);
+  });
+});
+
 describe('global keyboard focus visibility', () => {
   const globalStyles = readStylesheet('index.css');
   const stylesheetRules = getStylesheetRules(globalStyles);
