@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, {
+  useEffect, useLayoutEffect, useRef, useState,
+} from 'react';
 import {
   Link, useNavigate, useParams,
 } from 'react-router-dom';
@@ -102,11 +104,21 @@ const DEFAULT_FORM: FormState = {
 };
 
 const LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
+const SAVE_PENDING = 'Event save in progress. Do not start another save.';
+const SAVE_UNKNOWN = 'We could not confirm that event save. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.';
 
 interface EventLoadOutcome {
   firestore: unknown;
   slug: string;
   status: 'loading' | 'resolved' | 'missing' | 'unavailable';
+}
+
+interface EventSaveOutcome {
+  firestore: unknown;
+  routeSlug: string | null;
+  adminUid: string;
+  requestId: number;
+  status: 'pending' | 'unknown';
 }
 
 function eventToForm(e: Event): FormState {
@@ -300,20 +312,61 @@ function Inner({
   const isEdit = !!routeSlug;
   const navigate = useNavigate();
   const { user } = useAuth();
+  const adminUid = user?.uid || null;
   const firestore = isReady && services
     ? services.firebaseResources.firestore
     : null;
 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [loadOutcome, setLoadOutcome] = useState<EventLoadOutcome | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveOutcome, setSaveOutcome] = useState<EventSaveOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const saveSequence = useRef(0);
+  const saveRequestBlocked = useRef(false);
+  const mounted = useRef(true);
+  const saveContext = useRef({
+    firestore,
+    routeSlug: routeSlug ?? null,
+    adminUid,
+  });
+  saveContext.current = {
+    firestore,
+    routeSlug: routeSlug ?? null,
+    adminUid,
+  };
 
   let currentLoadStatus: EventLoadOutcome['status'] = 'loading';
   if (!isEdit) currentLoadStatus = 'resolved';
   else if (loadOutcome?.firestore === firestore && loadOutcome.slug === routeSlug) {
     currentLoadStatus = loadOutcome.status;
   }
+  const currentSaveOutcome = saveOutcome?.firestore === firestore
+    && saveOutcome.routeSlug === (routeSlug ?? null)
+    && saveOutcome.adminUid === adminUid
+    && saveOutcome.requestId === saveSequence.current
+    ? saveOutcome
+    : null;
+  const savePending = currentSaveOutcome?.status === 'pending';
+  const saveUnknown = currentSaveOutcome?.status === 'unknown';
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      saveSequence.current += 1;
+      saveRequestBlocked.current = true;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    saveSequence.current += 1;
+    saveRequestBlocked.current = false;
+    setSaveOutcome(null);
+    return () => {
+      saveSequence.current += 1;
+      saveRequestBlocked.current = true;
+    };
+  }, [firestore, routeSlug, adminUid]);
 
   useEffect(() => {
     if (!isEdit || !firestore || !routeSlug) return () => undefined;
@@ -348,25 +401,55 @@ function Inner({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (saveRequestBlocked.current) return;
     setError(null);
     const result = formToInput(form);
     if ('error' in result) {
       setError(result.error);
       return;
     }
-    setSaving(true);
+
+    const actionFirestore = firestore;
+    const actionRouteSlug = routeSlug ?? null;
+    const actionAdminUid = adminUid;
+    if (
+      !actionFirestore
+      || !actionAdminUid
+      || (isEdit && currentLoadStatus !== 'resolved')
+      || saveContext.current.firestore !== actionFirestore
+      || saveContext.current.routeSlug !== actionRouteSlug
+      || saveContext.current.adminUid !== actionAdminUid
+    ) return;
+
+    const requestId = saveSequence.current + 1;
+    saveSequence.current = requestId;
+    saveRequestBlocked.current = true;
+    const outcomeKey = {
+      firestore: actionFirestore,
+      routeSlug: actionRouteSlug,
+      adminUid: actionAdminUid,
+      requestId,
+    };
+    const isCurrentSave = () => mounted.current
+      && saveSequence.current === requestId
+      && saveContext.current.firestore === actionFirestore
+      && saveContext.current.routeSlug === actionRouteSlug
+      && saveContext.current.adminUid === actionAdminUid;
+
+    setSaveOutcome({ ...outcomeKey, status: 'pending' });
     try {
       if (isEdit) {
-        await updateEvent(services!.firebaseResources.firestore, routeSlug!, result);
+        await updateEvent(actionFirestore, routeSlug!, result);
       } else {
-        await createEvent(services!.firebaseResources.firestore, result, user?.uid || 'admin');
+        await createEvent(actionFirestore, result, actionAdminUid);
       }
-      navigate('/admin/events');
-    } catch (err: any) {
-      setError(err?.message || 'Save failed');
-    } finally {
-      setSaving(false);
+    } catch {
+      if (!isCurrentSave()) return;
+      setSaveOutcome({ ...outcomeKey, status: 'unknown' });
+      return;
     }
+    if (!isCurrentSave()) return;
+    navigate('/admin/events');
   }
 
   if (currentLoadStatus === 'loading') {
@@ -390,6 +473,27 @@ function Inner({
             aria-atomic={unavailable ? 'true' : undefined}
           >
             {unavailable ? LOAD_FAILURE : 'Event not found'}
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  if (savePending || saveUnknown) {
+    return (
+      <>
+        <SEO title={savePending ? 'Saving event' : 'Event save result'} noindex />
+        <div className="container mx-auto p-4 max-w-3xl">
+          <h1 className="text-2xl font-bold">
+            {savePending ? 'Event save in progress' : 'Event save result unknown'}
+          </h1>
+          <p
+            className={savePending ? 'text-gray-600 text-sm mt-4' : 'text-red-600 text-sm mt-4'}
+            role={savePending ? 'status' : 'alert'}
+            aria-live={savePending ? 'polite' : 'assertive'}
+            aria-atomic="true"
+          >
+            {savePending ? SAVE_PENDING : SAVE_UNKNOWN}
           </p>
         </div>
       </>
@@ -677,15 +781,26 @@ function Inner({
             </p>
           </fieldset>
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && (
+            <p
+              className="text-red-600 text-sm"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+            >
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3">
             <button
               type="submit"
-              disabled={saving}
+              disabled={!firestore || !adminUid}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold px-6 py-2 rounded"
             >
-              {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create event'}
+              {!firestore || !adminUid
+                ? 'Save unavailable'
+                : isEdit ? 'Save changes' : 'Create event'}
             </button>
             <Link
               to="/admin/events"
