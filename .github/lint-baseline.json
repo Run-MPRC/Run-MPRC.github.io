@@ -10,20 +10,20 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 108,
+  "scannedFileCount": 109,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 35,
+    ".ts": 36,
     ".tsx": 26
   },
-  "errorCount": 121,
+  "errorCount": 119,
   "warningCount": 6,
   "errorsByExtension": {
     ".js": 2,
     ".jsx": 26,
     ".ts": 2,
-    ".tsx": 91
+    ".tsx": 89
   },
   "warningsByExtension": {
     ".js": 0,
@@ -31,10 +31,11 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:47ec0995a4a8bcd84d2b0870cfccfc97c3eceada243fa62e5eac6c8eb7682409",
+  "fingerprint": "sha256:608fd51b4e05bce9a9c0a773f777c78daebec1e8b851471f3f87551b35a3c6a2",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
+    "src/assets.d.ts",
     "src/components/AnnouncementBanner.jsx",
     "src/components/Card.jsx",
     "src/components/ErrorBoundary.tsx",
@@ -1324,32 +1325,6 @@
       "message": "Do not nest ternary expressions.",
       "messageId": "noNestedTernary",
       "nodeType": "ConditionalExpression",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/events/Events.tsx",
-      "line": 130,
-      "column": 47,
-      "endLine": 130,
-      "endColumn": 54,
-      "severity": 2,
-      "ruleId": "react/jsx-one-expression-per-line",
-      "message": "`Error: ` must be placed on a new line",
-      "messageId": "moveToNewLine",
-      "nodeType": "JSXText",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/events/Events.tsx",
-      "line": 130,
-      "column": 54,
-      "endLine": 130,
-      "endColumn": 61,
-      "severity": 2,
-      "ruleId": "react/jsx-one-expression-per-line",
-      "message": "`{error}` must be placed on a new line",
-      "messageId": "moveToNewLine",
-      "nodeType": "JSXExpressionContainer",
       "fatal": false
     },
     {

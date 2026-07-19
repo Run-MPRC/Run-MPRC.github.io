@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 import Header from '../../components/Header';
-// @ts-expect-error Webpack resolves imported JPG assets to public URLs.
 import HeaderImage from '../../images/activities/header_bg_1.jpg';
 import {
   listPublicEvents,
@@ -127,7 +126,13 @@ function Events() {
           </Link>
         </div>
         {loading && <p className="text-gray-500">Loading events...</p>}
-        {error && <EventsSubscriptionAlertBox>Error: {error}</EventsSubscriptionAlertBox>}
+        {error && (
+          <EventsSubscriptionAlertBox>
+            Error:
+            {' '}
+            {error}
+          </EventsSubscriptionAlertBox>
+        )}
         {!loading && !error && events.length === 0 && (
           <p className="text-gray-500">No events scheduled at this time.</p>
         )}

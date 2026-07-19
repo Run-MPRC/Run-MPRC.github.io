@@ -226,8 +226,15 @@ test('renders the Auth action route and removes its query and fragment before us
 
   render(<App />);
 
+  expect(screen.getAllByRole('heading', {
+    level: 1,
+  })).toHaveLength(1);
   expect(screen.getByRole('heading', {
     level: 1,
+    name: /verify your email/i,
+  })).toBeInTheDocument();
+  expect(screen.getByRole('heading', {
+    level: 2,
     name: /email verification/i,
   })).toBeInTheDocument();
   expect(screen.queryByRole('heading', {

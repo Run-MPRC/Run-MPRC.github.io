@@ -218,9 +218,9 @@ function VerifyEmailAction() {
       </Header>
       <div className="container mx-auto px-4 py-10 flex justify-center">
         <section className="verify-email-panel" aria-labelledby="verify-email-title">
-          <h1 id="verify-email-title" className="text-xl font-semibold">
+          <h2 id="verify-email-title" className="text-xl font-semibold">
             Email verification
-          </h1>
+          </h2>
 
           {viewState === 'ready' && (
             <p>
