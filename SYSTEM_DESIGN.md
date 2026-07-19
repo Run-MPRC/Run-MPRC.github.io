@@ -566,6 +566,36 @@ This contract does not verify a person, payment, plan, evidence item, refund, di
 
 The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.0d Entitlement-to-authorization-claim reconciliation — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001E [#373](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/373) defines one unused pure contract that bridges the §8.0a entitlement result and the deferred custom-claim lifecycle. `membershipAuthority.js` (#208) derives whether a subject is a current member but explicitly defers "custom claims, token refresh/revocation" to a later child; nothing yet derives, from that entitlement, whether the membership authorization claim in a token **should** be present and — when it drifts — whether to grant or revoke it. #81 requires that custom claims carry authorization only, and names access-revocation as first-class. A second invariant is encoded: membership governs **only** the member authorization claim. The officer (`admin`) role is administered separately ([#115](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/115), `setMemberRole`); gaining or losing membership never grants or revokes it.
+
+```mermaid
+flowchart LR
+    V["Entitlement + email verification + observed member/officer claims"] --> G{"Well-formed authorization-only evidence?"}
+    G -- "No" --> X["One fixed error, input never echoed"]
+    G -- "Yes" --> D{"Entitled current member AND email verified?"}
+    D -- "Yes" --> DP["Desired member claim present"]
+    D -- "No, pending, or unverified" --> DA["Desired member claim absent (fail-closed)"]
+    DP --> C{"Matches the observed member claim?"}
+    DA --> C
+    C -- "Yes" --> AL["aligned"]
+    C -- "No, desired present" --> GM["grant_member"]
+    C -- "No, desired absent" --> RM["revoke_member"]
+    O["Observed officer (admin) claim"] -. "Never enters the member-claim decision" .-> C
+    AL --> Z["grantsAuthority: false / officerRoleAffected: false"]
+    GM --> Z
+    RM --> Z
+```
+
+Text alternative: the desired member claim is present only for a subject the §8.0a contract deems a current member whose sign-in email is verified; not entitled, decision pending, or unverified all fail closed to a desired-absent claim, so a stale claim is revoked. A desired state that matches the observed member claim is aligned; a missing entitled claim is grant_member; a present unentitled claim is revoke_member. The observed officer role never enters the decision, so an officer whose membership lapses is reconciled to revoke_member while the admin role is left untouched.
+
+The CommonJS module accepts an exact five-field revision-1 evidence object whose values are drawn only from closed authorization vocabularies — an entitlement disposition, an email-verification flag, and the observed member and officer claim states — and derives one of three frozen non-identifying dispositions. The verified-email requirement mirrors the existing `roleGrantPolicy.js` rule for the `member` role. Every result hard-codes `grantsAuthority: false` and `officerRoleAffected: false`. An unknown enum value, a wrong version, an extra or missing field, an accessor, an inherited field, or a proxy fails through one fixed error that never echoes the input.
+
+This contract writes no claim, mints and revokes no token, and derives the reconciliation verdict only. The evidence carries authorization state alone — never a provider ID, phone, profile field, roster, address, or token, exactly as #81 requires of custom claims. It invents no prices, plans, terms, retention duration, deletion window, or access-revocation SLA; those stay with #114/#110 and the owner. The entitlement derivation itself (§8.0a), the officer-role grant path (#115), and consent/link teardown ([#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367)/[#370](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/370)) are separate contracts. The actual custom-claim write, token refresh, and revocation remain gated on the AUTH-001/AUTH-003 Functions/Admin authorization work.
+
+The module is imported by no runtime or Functions index. It requires only `node:util`, reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81 or live claim reconciliation available. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.
