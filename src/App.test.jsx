@@ -251,6 +251,8 @@ const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Pleas
 const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const ADMIN_EVENT_EDITOR_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
+const ADMIN_EVENT_SAVE_PENDING = 'Event save in progress. Do not start another save.';
+const ADMIN_EVENT_SAVE_UNKNOWN = 'We could not confirm that event save. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.';
 const ADMIN_EVENT_REGISTRATIONS_LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
 const ADMIN_LATE_REGISTRATION_OUTCOME_UNKNOWN = 'We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.';
 const ADMIN_DASHBOARD_LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
@@ -5303,6 +5305,497 @@ describe('Admin Event editor load-failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
     expect(getEventBySlug).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Admin Event save privacy and one-attempt boundary', () => {
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+  }
+
+  function syntheticAdminEvent({
+    slug = 'synthetic-event',
+    title = 'Synthetic Club Run',
+  } = {}) {
+    const timestamp = (year, month, day, hour, minute) => ({
+      toDate: () => new Date(year, month, day, hour, minute),
+    });
+    return {
+      id: slug,
+      slug,
+      title,
+      description: 'A made-up event used only for this test.',
+      startAt: timestamp(2030, 0, 12, 9, 30),
+      endAt: timestamp(2030, 0, 12, 11, 0),
+      location: 'Synthetic Park',
+      locationDetails: 'Synthetic entrance',
+      capacity: 40,
+      status: 'open',
+      visibility: 'public',
+      pricing: {
+        memberCents: 2500,
+        nonMemberCents: 3000,
+        earlyBirdCents: 2000,
+      },
+      waiverText: 'Synthetic waiver text.',
+      waiverVersion: '7',
+      registrationOpensAt: null,
+      registrationClosesAt: null,
+      heroImageUrl: '',
+      customFields: [],
+      volunteerEnabled: false,
+      volunteerFields: [],
+      resultsUrl: null,
+      resultsText: null,
+    };
+  }
+
+  function adminAuth(uid = 'synthetic-admin') {
+    return {
+      user: uid ? { uid } : null,
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    };
+  }
+
+  function fillValidNewEvent() {
+    fireEvent.change(screen.getByLabelText('Title *'), {
+      target: { value: 'Synthetic New Run' },
+    });
+    fireEvent.change(screen.getByLabelText('Start *'), {
+      target: { value: '2030-01-12T09:30' },
+    });
+  }
+
+  async function renderLoadedEditor(event = syntheticAdminEvent()) {
+    getEventBySlug.mockResolvedValueOnce(event);
+    const view = renderAdminEventEditor(event.slug);
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: `Edit: ${event.title}`,
+    })).toBeInTheDocument();
+    return view;
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue(adminAuth());
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listAllEvents.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('preserves one exact edit request and the current success navigation', async () => {
+    updateEvent.mockResolvedValueOnce(undefined);
+    await renderLoadedEditor();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/events'));
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+    expect(updateEvent).toHaveBeenCalledWith(
+      firestore,
+      'synthetic-event',
+      {
+        slug: 'synthetic-event',
+        title: 'Synthetic Club Run',
+        description: 'A made-up event used only for this test.',
+        startAt: new Date(2030, 0, 12, 9, 30),
+        endAt: new Date(2030, 0, 12, 11, 0),
+        location: 'Synthetic Park',
+        locationDetails: 'Synthetic entrance',
+        capacity: 40,
+        status: 'open',
+        visibility: 'public',
+        pricing: {
+          memberCents: 2500,
+          nonMemberCents: 3000,
+          earlyBirdCents: 2000,
+        },
+        waiverText: 'Synthetic waiver text.',
+        waiverVersion: '7',
+        customFields: [],
+        volunteerEnabled: false,
+        volunteerFields: [],
+        resultsUrl: null,
+        resultsText: null,
+        registrationOpensAt: null,
+        registrationClosesAt: null,
+        heroImageUrl: '',
+      },
+    );
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  test('preserves one exact create request with the current authenticated UID', async () => {
+    createEvent.mockResolvedValueOnce(undefined);
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/events'));
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(createEvent).toHaveBeenCalledWith(
+      firestore,
+      {
+        slug: 'synthetic-new-run',
+        title: 'Synthetic New Run',
+        description: '',
+        startAt: new Date(2030, 0, 12, 9, 30),
+        endAt: null,
+        location: '',
+        locationDetails: '',
+        capacity: null,
+        status: 'draft',
+        visibility: 'public',
+        pricing: { memberCents: 0, nonMemberCents: 0 },
+        waiverText: '',
+        waiverVersion: '1',
+        customFields: [],
+        volunteerEnabled: false,
+        volunteerFields: [],
+        resultsUrl: null,
+        resultsText: null,
+        registrationOpensAt: null,
+        registrationClosesAt: null,
+        heroImageUrl: '',
+      },
+      'synthetic-admin',
+    );
+    expect(updateEvent).not.toHaveBeenCalled();
+  });
+
+  test('keeps local validation correctable without consuming the save attempt', async () => {
+    const request = deferred();
+    createEvent.mockReturnValueOnce(request.promise);
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByText('Start date/time is required')).toBeInTheDocument();
+    expect(createEvent).not.toHaveBeenCalled();
+
+    fillValidNewEvent();
+    fireEvent.submit(document.querySelector('form'));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+    expect(createEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('admits one immediate edit submission and hides the complete form while pending', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValue(request.promise);
+    await renderLoadedEditor();
+    const form = document.querySelector('form');
+
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe(ADMIN_EVENT_SAVE_PENDING);
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByText('Synthetic Club Run')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /All events/ })).not.toBeInTheDocument();
+  });
+
+  test('admits one immediate create submission while pending', async () => {
+    const request = deferred();
+    createEvent.mockReturnValue(request.promise);
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+    const form = document.querySelector('form');
+
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('status').textContent).toBe(ADMIN_EVENT_SAVE_PENDING);
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create event' })).not.toBeInTheDocument();
+  });
+
+  test('discards a hostile edit rejection and keeps the same-context page terminally unknown', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => 'admin-event-save-message-canary');
+    const toStringGetter = jest.fn(() => () => 'admin-event-save-string-canary');
+    const getTrap = jest.fn((target, key, receiver) => Reflect.get(target, key, receiver));
+    const hostile = new Proxy(Object.defineProperties({}, {
+      message: { configurable: true, get: messageGetter },
+      toString: { configurable: true, get: toStringGetter },
+    }), { get: getTrap });
+    updateEvent.mockRejectedValueOnce(hostile);
+    const view = await renderLoadedEditor();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_EVENT_SAVE_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(toStringGetter).not.toHaveBeenCalled();
+    expect(getTrap).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent(
+      /admin-event-save-message-canary|admin-event-save-string-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-event-save-message-canary|admin-event-save-string-canary/i,
+    );
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByText('Synthetic Club Run')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /All events/ })).not.toBeInTheDocument();
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(screen.getByRole('alert').textContent).toBe(ADMIN_EVENT_SAVE_UNKNOWN);
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('replaces an ordinary create rejection with the same fixed unknown result', async () => {
+    updateEvent.mockResolvedValue(undefined);
+    createEvent.mockRejectedValueOnce(Object.assign(
+      new Error('admin-event-create-private-canary officer@example.test'),
+      { endpoint: 'https://provider.example.test/?token=create-secret-canary' },
+    ));
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_EVENT_SAVE_UNKNOWN);
+    expect(document.body).not.toHaveTextContent(
+      /admin-event-create-private-canary|officer@example\.test|provider\.example|create-secret-canary/i,
+    );
+    expect(document.querySelector('form')).toBeNull();
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(updateEvent).not.toHaveBeenCalled();
+  });
+
+  test('performs no create when the current UID or database is missing', async () => {
+    useAuth.mockReturnValue(adminAuth(null));
+    window.history.pushState({}, '', '/admin/events/new');
+    const missingUidView = render(<App />);
+    fillValidNewEvent();
+    fireEvent.submit(document.querySelector('form'));
+    expect(createEvent).not.toHaveBeenCalled();
+    missingUidView.unmount();
+
+    useAuth.mockReturnValue(adminAuth());
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: null } },
+      isReady: true,
+    });
+    window.history.replaceState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+    fireEvent.submit(document.querySelector('form'));
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  test('makes an older success inert after the route changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    getEventBySlug.mockResolvedValueOnce(syntheticAdminEvent({
+      slug: 'current-event',
+      title: 'Current Synthetic Run',
+    }));
+    window.history.pushState({}, '', '/admin/events/current-event/edit');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/current-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not inspect an older hostile rejection after the route changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    getEventBySlug.mockResolvedValueOnce(syntheticAdminEvent({
+      slug: 'current-event',
+      title: 'Current Synthetic Run',
+    }));
+    window.history.pushState({}, '', '/admin/events/current-event/edit');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+    const messageGetter = jest.fn(() => 'obsolete-event-save-message-canary');
+
+    await act(async () => {
+      request.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await request.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/admin/events/current-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+  });
+
+  test('makes an older success inert after the database changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    const currentFirestore = { name: 'synthetic-current-save-firestore' };
+    getEventBySlug.mockResolvedValueOnce(syntheticAdminEvent({
+      title: 'Current Database Run',
+    }));
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Database Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Database Run',
+    })).toBeInTheDocument();
+  });
+
+  test('makes an older success inert after the admin UID changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    useAuth.mockReturnValue(adminAuth('synthetic-current-admin'));
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Synthetic Club Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Synthetic Club Run',
+    })).toBeInTheDocument();
+  });
+
+  test('makes an older success inert after readiness changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    useServiceLocator.mockReturnValue({ services: null, isReady: false });
+    view.rerender(<App />);
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+  });
+
+  test('makes a completion inert after the editor unmounts', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+    view.unmount();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(updateEvent).toHaveBeenCalledTimes(1);
   });
 });
 

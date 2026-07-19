@@ -2346,7 +2346,7 @@ Officer review steps after the source merge:
 
 **Expected result:** pending, rejected, and missing edit lookups show no editable event form. A rejection uses one fixed accessible sentence and no rejected detail. A missing event stays separate from a provider failure. Only the terminal result of the latest lookup attempt for the current mocked route and database may settle the page, and only a fulfilled current event may populate the form. Older and unmounted results are inert. A changed edit route or edit-route service-readiness state starts a clean editor boundary before any new lookup. A later current lookup can recover without briefly restoring an earlier form. Moving from edit to new starts a blank draft. Service-readiness changes and an internal page update with the same database connection do not start an edit lookup or erase that new-event draft. Existing successful edit projection remains unchanged.
 
-The existing form validation, create/update requests, save rejection text, save retry behavior, event-source choice, pricing, capacity, registration, waiver, payment, and refund behavior are separate unfinished work. This slice does not make the Admin Event editor safe for officer use.
+The existing form validation, create/update request shapes, and current successful navigation remain unchanged. Issue [#378](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/378) separately contains the browser page's raw save rejection and immediate repeat-click behavior. Server idempotency, durable audit, reconciliation, event-source choice, pricing, capacity, registration, waiver, payment, and refund behavior remain unfinished. Neither slice makes the Admin Event editor safe for officer use.
 
 **Stop conditions:** any real officer, member, event, route, price, capacity, registration, waiver, payment, Firebase, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a blank, old, or editable event form after an unknown lookup; an attempted create or save; a Firebase, Rules, provider, permission, source, or event-record change; or a claim that source, tests, merge, preview, or a green workflow proves the result or editor is live.
 
@@ -2357,6 +2357,68 @@ The existing form validation, create/update requests, save rejection text, save 
 **Escalation:** event lead plus platform/security owner. Add the privacy owner if any private or technical detail appeared. Add the treasurer if price, capacity, registration, payment, or refund state might be affected. Use the private incident path if an event write might have occurred without a current readback. Do not copy private details into an issue, screenshot, email, message, or AI tool.
 
 No system-topology diagram changes are required because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the editor's current-lookup display behavior.
+
+### Admin Event save unknown result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop one open Admin Event editor page from starting a second save after the first result becomes unknown. A pending or unknown save must show no event detail, form, save button, cancel action, database detail, or provider detail.
+
+**Approver:** event lead, treasurer, and platform/security and privacy owners.
+
+**Prerequisites:** issue [#311](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/311) and issue [#378](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/378) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up events, and mocked save results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. Issue [#121](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/121) still owns the approved event source. This slice does not approve the editor, save an event, add server idempotency, reconcile an unknown write, deploy Firebase, change Rules or permissions, use production data, or prove live behavior.
+
+Before #378, the page could show a rejected provider message, accept two immediate save requests, and enable Save again after a rejected request that might already have written the event. An older request could also send the officer to the event list after the route, database connection, account, ready state, or page had changed.
+
+```mermaid
+flowchart LR
+    A["Current made-up event form"] --> B["Local validation"]
+    B -- "Invalid" --> C["Fixed local correction; no save attempt"]
+    B -- "Valid" --> D["One browser-page save attempt"]
+    D --> E["Fixed polite pending status; no form or action"]
+    E -- "Current mocked success" --> F["Existing Admin Events navigation"]
+    E -- "Current mocked rejection" --> G["Fixed unknown alert; no form, action, reload, or repeat"]
+    H["Older or closed-page result"] -. "Ignored" .-> I["No navigation or display change"]
+    J["Reload, another tab, device, or script"] -. "Not protected by this browser guard" .-> K["Stop; private reconciliation is still required"]
+```
+
+Text alternative: local validation errors remain correctable without a save. One valid form may start one mocked save on the current page. Pending work hides the form and actions. A current mocked success keeps the existing navigation. A current rejection shows one fixed stop alert and no retry. An older or closed-page result changes nothing. Reloading or using another tab, device, or script is outside this browser guard and never makes a repeat safe.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Event editor marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #378 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, made-up events, and mocked create or update requests.
+4. Confirm a local form error starts no save and remains correctable.
+5. Confirm one valid made-up edit sends the existing database reference, event path, and event input exactly once.
+6. Confirm one valid made-up create sends the existing database reference, event input, and exact current made-up admin ID exactly once.
+7. Confirm two immediate submissions still start only one request.
+8. Confirm a pending request shows exactly `Event save in progress. Do not start another save.`
+9. Confirm assistive technology receives the whole pending sentence politely as one status.
+10. Confirm pending work shows no event title, field, form, **Create event**, **Save changes**, **Cancel**, or **All events** action.
+11. Confirm an ordinary or hostile mocked rejection shows exactly `We could not confirm that event save. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.`
+12. Confirm assistive technology receives the whole unknown-result sentence immediately as one alert.
+13. Confirm the rejected value is not inspected, coerced, logged, measured, stored, sent to analytics, or displayed.
+14. Confirm the unknown result shows no event title, field, form, create, save, cancel, navigation, reload, or retry action.
+15. Confirm changing the route, database reference, ready state, or made-up admin ID makes the older mocked success or rejection inert.
+16. Confirm a result received after the page closes is inert.
+17. Confirm an internal page update with the same effective route, database reference, and made-up admin ID does not clear a pending or unknown lock.
+18. Confirm a current mocked success keeps the existing one-time navigation to the Admin Events list.
+19. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Rules or permissions, provider configuration, event records, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** one mounted page admits at most one valid mocked save for its current route, database reference, and made-up admin ID. Pending work shows one fixed polite status and no event detail or action. A current rejection is discarded without inspection and becomes one fixed terminal alert. An older or closed-page result is inert. A current success preserves the existing request and navigation. A missing admin ID or database reference starts no save.
+
+This is only an immediate browser-page guard. Leaving or reloading the page resets it. Another tab, device, or script can repeat a write. The current create service still checks then writes without one durable command ID. The current update service has no version fence. A rejected database promise might already have committed. Do not use refresh, navigation, a new tab, a new device, or another account as a reconciliation method or a reason to repeat the save.
+
+**Stop conditions:** any real officer, event, route, price, capacity, registration, waiver, payment, Firebase, provider, endpoint, credential, or production record used to exercise a save; a request to force a production failure; a private or technical detail on the page, in analytics, in the console, or in a review record; more than one mocked request; any form or action visible during pending or unknown state; any older result that navigates or changes the page; a reload, navigation, new tab, device, script, manual database inspection, or repeated save offered as recovery; a Firebase, Rules, permission, source, or event-record change; or a claim that source, tests, merge, preview, or a green workflow proves the result or editor is live.
+
+**Success proof:** for source completion, record the exact #378 issue, reviewed pull request, merged commit, old-source failures, green synthetic actual-route tests, relevant full checks, and independent privacy/security, lifecycle/compatibility, accessibility, and officer-continuity reviews. The safe officer review stops at source and mocked tests because the Admin screen is not approved for officer use. A future live process still needs server-authoritative idempotency, durable audit, private readback and reconciliation, authorization, backup, rollback, approved deployment, and exact-revision verification. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, event changes, production-data actions, saves, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by refreshing, leaving the page, repeating a save, or creating, changing, deleting, or manually repairing an event, registration, payment, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** stop and contact the event lead, treasurer, and platform/security owner. Add the privacy owner if any private or technical detail appeared. Use the private incident path if a save might have completed, another request was attempted, or the page navigated after its context changed. Do not copy event details, provider details, database records, or account details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because this source slice changes no server authority, data movement, permissions, account ownership, or deployment topology. The state-flow diagram above records only the current browser page's save display and immediate repeat guard.
 
 ### Admin Event registrations load failure privacy — SOURCE ONLY, NOT LIVE
 
