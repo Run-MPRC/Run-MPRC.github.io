@@ -10,20 +10,20 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 109,
+  "scannedFileCount": 111,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 36,
+    ".ts": 38,
     ".tsx": 26
   },
-  "errorCount": 119,
+  "errorCount": 117,
   "warningCount": 6,
   "errorsByExtension": {
     ".js": 2,
     ".jsx": 26,
     ".ts": 2,
-    ".tsx": 89
+    ".tsx": 87
   },
   "warningsByExtension": {
     ".js": 0,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:608fd51b4e05bce9a9c0a773f777c78daebec1e8b851471f3f87551b35a3c6a2",
+  "fingerprint": "sha256:f6d14c2fd59a703cf4c69f45f80ea93f02ee33484980f9dd028cb37f149ca671",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -101,6 +101,8 @@
     "src/pages/shop/ProductDetail.tsx",
     "src/pages/shop/PurchaseSuccess.tsx",
     "src/pages/shop/Shop.tsx",
+    "src/pages/shop/merchCheckoutRequest.test.ts",
+    "src/pages/shop/merchCheckoutRequest.ts",
     "src/reportWebVitals.js",
     "src/services/ServiceLocatorContext.ts",
     "src/services/ServiceLocatorProvider.tsx",
@@ -1628,9 +1630,9 @@
     },
     {
       "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 50,
+      "line": 51,
       "column": 3,
-      "endLine": 50,
+      "endLine": 51,
       "endColumn": 58,
       "severity": 2,
       "ruleId": "react-hooks/exhaustive-deps",
@@ -1641,35 +1643,9 @@
     },
     {
       "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 83,
-      "column": 18,
-      "endLine": 83,
-      "endColumn": 19,
-      "severity": 2,
-      "ruleId": "object-curly-newline",
-      "message": "Expected a line break after this opening brace.",
-      "messageId": "expectedLinebreakAfterOpeningBrace",
-      "nodeType": "ObjectExpression",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 83,
-      "column": 54,
-      "endLine": 83,
-      "endColumn": 55,
-      "severity": 2,
-      "ruleId": "object-curly-newline",
-      "message": "Expected a line break before this closing brace.",
-      "messageId": "expectedLinebreakBeforeClosingBrace",
-      "nodeType": "ObjectExpression",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 136,
+      "line": 142,
       "column": 17,
-      "endLine": 136,
+      "endLine": 142,
       "endColumn": 42,
       "severity": 2,
       "ruleId": "jsx-a11y/label-has-associated-control",
@@ -1680,9 +1656,9 @@
     },
     {
       "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 152,
+      "line": 158,
       "column": 17,
-      "endLine": 152,
+      "endLine": 158,
       "endColumn": 42,
       "severity": 2,
       "ruleId": "jsx-a11y/label-has-associated-control",
@@ -1693,9 +1669,9 @@
     },
     {
       "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 204,
+      "line": 210,
       "column": 18,
-      "endLine": 208,
+      "endLine": 214,
       "endColumn": 65,
       "severity": 2,
       "ruleId": "no-nested-ternary",

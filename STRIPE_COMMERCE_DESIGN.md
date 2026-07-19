@@ -127,6 +127,17 @@ The website source projects only answers for the currently selected participant 
 
 Both phases return new immutable projections and one fixed non-identifying public failure. They do not log request data. This is a source boundary, not a launch claim. PAY-001B2 still must persist immutable event-field, price, and waiver snapshots and prove compatibility in protected staging. Request IDs, capacity holds, persistence-first records, idempotent Stripe attempts, removal of URL capabilities, deployment, and live behavior remain later work.
 
+### Merchandise request and option boundary (PAY-001C1B)
+
+PAY-001C1B is tracked in live issue [#389](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/389). It is the first bounded endpoint adoption of PAY-001A for the merchandise checkout callable and replaces the previous inline size/color check. The callable uses two validation phases:
+
+1. After App Check and fail-closed static configuration, and before any Firestore, commerce-admission, rate-limit, or Stripe work, `parseMerchCheckoutRequest` accepts only the exact callable root: an opaque bounded `productSlug`, a bounded `buyer` (normalized first and last name, conservative email, optional trimmed phone), and an optional bounded `size` and `color`. Unknown root or buyer keys, malformed prototypes/accessors/proxies, unsafe Unicode, oversized values, and non-string selections stop here before any side effect.
+2. After commerce admission returns the one stored product and the active-status check passes, `matchMerchandiseOptions` matches the validated selections against the stored catalog option lists. It requires exactly one in-list selection for every offered dimension, rejects any selection for a dimension the product does not offer, and rejects a malformed or oversized stored option list. This runs before the immutable price projection, Stripe Product binding, and Checkout Session creation.
+
+A selection that does not fit a well-formed catalog is a request fault (`invalid-argument`); a malformed stored option list is an availability fault (`failed-precondition`). The website source (`buildMerchCheckoutRequest`) projects only a size or color the product actually offers, so inactive form state and JavaScript `undefined` never enter the payload. This is compatibility hygiene, not authority; the server still rejects any mismatched request.
+
+Both phases return new immutable projections and one fixed non-identifying public failure. They do not log request data. This is a source boundary, not a launch claim. Immutable merchandise price snapshots and multi-quantity remain open under the rest of PAY-001C; PAY-001D, persistence-first orders, provider idempotency, deployment, and live behavior remain later work.
+
 ## 5. Catalog model
 
 ### Race pricing

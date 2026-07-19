@@ -6,7 +6,6 @@ const {
   generateToken,
   requireAppCheck,
   auditEntry,
-  isValidEmail,
   Timestamp,
 } = require('./stripeHelpers');
 const { checkRateLimit, extractIp } = require('./rateLimit');
@@ -16,6 +15,10 @@ const {
   requireCommerceAdmission,
 } = require('./commerceControl');
 const {
+  MerchCatalogError,
+  MerchCheckoutValidationError,
+  matchMerchandiseOptions,
+  parseMerchCheckoutRequest,
   projectMerchandisePriceCents,
 } = require('./merchCheckoutValidation');
 const {
@@ -31,6 +34,37 @@ const {
 const HOUR_MS = 60 * 60 * 1000;
 const MERCH_PER_IP_PER_HOUR = 20;
 const MERCH_PER_EMAIL_PER_HOUR = 10;
+const INVALID_REQUEST_MESSAGE = 'Request data is invalid';
+
+// Bound and freeze the untrusted payload before any Firestore or Stripe work.
+// A shape/field failure is a fixed, message-stable invalid-argument.
+function parseRequest(data) {
+  try {
+    return parseMerchCheckoutRequest(data);
+  } catch (error) {
+    if (error instanceof MerchCheckoutValidationError) {
+      throw new functions.https.HttpsError('invalid-argument', INVALID_REQUEST_MESSAGE);
+    }
+    throw error;
+  }
+}
+
+// Match the validated selections against the stored option lists. A selection
+// that does not fit a well-formed catalog is a request fault (invalid-argument);
+// a malformed stored option list is an availability fault (failed-precondition).
+function matchOptions(product, request) {
+  try {
+    return matchMerchandiseOptions(product, request);
+  } catch (error) {
+    if (error instanceof MerchCheckoutValidationError) {
+      throw new functions.https.HttpsError('invalid-argument', INVALID_REQUEST_MESSAGE);
+    }
+    if (error instanceof MerchCatalogError) {
+      throw new functions.https.HttpsError('failed-precondition', 'This item is unavailable');
+    }
+    throw error;
+  }
+}
 
 async function ensureStripeProduct({
   expectedLivemode,
@@ -72,16 +106,9 @@ exports.createMerchCheckout = functions
       requireCommerceCeiling: true,
     });
 
-    const {
-      productSlug,
-      buyer,
-      size,
-      color,
-    } = data || {};
+    const request = parseRequest(data);
+    const { productSlug, buyer } = request;
 
-    if (!productSlug || typeof productSlug !== 'string') {
-      throw new functions.https.HttpsError('invalid-argument', 'productSlug required');
-    }
     const db = admin.firestore();
     const productRef = db.collection('products').doc(productSlug);
     const { targetSnapshot: productSnap } = await requireCommerceAdmission({
@@ -90,15 +117,8 @@ exports.createMerchCheckout = functions
       deploymentEnabled: serverConfig.commerceEnabled,
       targetRef: productRef,
     });
-    if (!buyer || !isValidEmail(buyer.email)
-      || !buyer.firstName?.trim() || !buyer.lastName?.trim()) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'buyer first name, last name, and valid email required',
-      );
-    }
 
-    const normalizedEmail = buyer.email.trim().toLowerCase();
+    const normalizedEmail = buyer.email;
     await Promise.all([
       checkRateLimit({
         scope: 'merch_ip',
@@ -122,12 +142,7 @@ exports.createMerchCheckout = functions
       );
     }
 
-    if (size && Array.isArray(product.sizes) && !product.sizes.includes(size)) {
-      throw new functions.https.HttpsError('invalid-argument', 'Invalid size');
-    }
-    if (color && Array.isArray(product.colors) && !product.colors.includes(color)) {
-      throw new functions.https.HttpsError('invalid-argument', 'Invalid color');
-    }
+    const selections = matchOptions(product, request);
 
     const priceCents = projectMerchandisePriceCents(product);
     if (priceCents === null) {
@@ -152,14 +167,14 @@ exports.createMerchCheckout = functions
       productSlug,
       productTitle: product.title,
       buyer: {
-        firstName: buyer.firstName.trim(),
-        lastName: buyer.lastName.trim(),
+        firstName: buyer.firstName,
+        lastName: buyer.lastName,
         email: normalizedEmail,
-        phone: buyer.phone?.trim() || null,
+        phone: buyer.phone,
       },
       shipping: null,
-      size: size || null,
-      color: color || null,
+      size: selections.size,
+      color: selections.color,
       amountCents: priceCents,
       currency: 'usd',
       status: 'pending',
@@ -179,7 +194,7 @@ exports.createMerchCheckout = functions
       auditLog: [auditEntry({
         actorEmail: normalizedEmail,
         action: 'order.created',
-        note: `product=${productSlug} size=${size || '-'} color=${color || '-'}`,
+        note: `product=${productSlug} size=${selections.size || '-'} color=${selections.color || '-'}`,
       })],
     };
 
@@ -191,8 +206,8 @@ exports.createMerchCheckout = functions
       type: 'merch',
       productSlug,
       orderId: orderRef.id,
-      size: size || '',
-      color: color || '',
+      size: selections.size || '',
+      color: selections.color || '',
     });
     const resultExpectation = buildLegacyCheckoutSessionExpectation({
       livemode: serverConfig.stripeLivemodeExpected,

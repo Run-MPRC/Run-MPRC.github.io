@@ -1896,8 +1896,8 @@ describe('Checkout promotion policy', () => {
   });
 
   test.each([
-    ['size', { sizes: ['M'], colors: ['blue'] }, { size: 'XL' }, 'Invalid size'],
-    ['color', { sizes: ['M'], colors: ['blue'] }, { color: 'red' }, 'Invalid color'],
+    ['size', { sizes: ['M'], colors: ['blue'] }, { size: 'XL', color: 'blue' }, 'Request data is invalid'],
+    ['color', { sizes: ['M'], colors: ['blue'] }, { size: 'M', color: 'red' }, 'Request data is invalid'],
   ])('keeps invalid %s ahead of the price guard', async (
     _name,
     options,
