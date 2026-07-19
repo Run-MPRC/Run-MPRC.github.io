@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../components/SEO';
+import Header from '../../components/Header';
+// @ts-expect-error Webpack resolves imported JPG assets to public URLs.
+import HeaderImage from '../../images/home/mprc_home.jpg';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { Product } from '../../types/shop';
 import { listActiveProducts, formatPrice } from '../../services/shop/shopService';
@@ -26,6 +29,9 @@ function Shop() {
         url="https://runmprc.com/shop"
         canonicalUrl="https://runmprc.com/shop"
       />
+      <Header title="MPRC Shop" image={HeaderImage}>
+        Club merchandise and gear for the MPRC community.
+      </Header>
       <div className="container mx-auto p-4 max-w-5xl">
         <h1 className="text-2xl font-bold mb-4">MPRC Shop</h1>
         {loading && <p className="text-gray-500">Loading...</p>}

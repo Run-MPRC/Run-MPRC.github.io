@@ -4,6 +4,10 @@ import React, {
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
+import Header from '../../components/Header';
+// TypeScript does not have an image-module declaration in this legacy app.
+// @ts-expect-error Webpack resolves imported JPG assets to public URLs.
+import HeaderImage from '../../images/joinus/header_bg_1.jpg';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import {
@@ -551,6 +555,9 @@ export function AccountContent({
   return (
     <>
       <SEO title="My Account" noindex />
+      <Header title="My Account" image={HeaderImage}>
+        Manage your MPRC profile, registrations, and connected services.
+      </Header>
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">My Account</h1>
