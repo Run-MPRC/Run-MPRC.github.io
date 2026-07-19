@@ -701,9 +701,18 @@ export function AccountContent({
                 {currentRegistrationsError}
               </p>
             )}
-            {!currentRegistrationsLoading && upcoming.length === 0 && (
-              <p className="text-gray-500 text-sm">
-                You haven&apos;t registered for any upcoming events.
+            {!currentRegistrationsLoading
+              && !currentRegistrationsError
+              && upcoming.length === 0 && (
+              <p
+                aria-live="polite"
+                aria-atomic="true"
+                className="text-gray-500 text-sm"
+              >
+                No upcoming registrations are linked to this account.
+                {' '}
+                A registration made while signed out may not appear. Do not register or pay
+                again. Ask the event lead for help.
                 {' '}
                 <Link to="/events" className="text-blue-600 hover:underline">
                   Browse events
