@@ -7,6 +7,8 @@ import {
   ServiceLocatorContextValue,
   useServiceLocator,
 } from '../../../services/ServiceLocatorContext';
+import { useAuth } from '../../../services/hooks/useAuth';
+import type { AuthUser } from '../../../services/identity/Identity';
 import AdminGuard from '../AdminGuard';
 import { Event, Registration } from '../../../types/events';
 import { getEventBySlug, formatPrice, formatEventDate } from '../../../services/events/eventsService';
@@ -158,23 +160,29 @@ interface RegistrationActionOutcome {
 const LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
 const LATE_REGISTRATION_OUTCOME_UNKNOWN = 'We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.';
 const REGISTRATION_ACTION_OUTCOME_UNKNOWN = 'We could not confirm that registration action. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.';
+const EXPORT_PENDING = 'Registration export in progress. Do not start another registration action or export.';
+const EXPORT_OUTCOME_UNKNOWN = 'We could not confirm that registration export. Do not try again on this page. Stop and contact the event lead, privacy lead, treasurer, and platform owner.';
 
 function Inner({
   routeSlug,
   services,
   isReady,
+  adminUid,
+  adminUser,
 }: {
   routeSlug?: string;
   services: ServiceLocatorContextValue['services'];
   isReady: boolean;
+  adminUid: string | null;
+  adminUser: AuthUser | null;
 }) {
   const slug = routeSlug;
-  const firestore = isReady && services
-    ? services.firebaseResources.firestore
+  const firebaseResources = isReady && services
+    ? services.firebaseResources
     : null;
-  const firebaseApp = isReady && services
-    ? services.firebaseResources.app
-    : null;
+  const firestore = firebaseResources?.firestore || null;
+  const firebaseApp = firebaseResources?.app || null;
+  const firebaseAuthUser = firebaseResources?.auth?.currentUser || null;
   const [loadOutcome, setLoadOutcome] = useState<RegistrationsLoadOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lateRegistrationOutcomeUnknown, setLateRegistrationOutcomeUnknown] = useState(false);
@@ -198,13 +206,38 @@ function Inner({
   const registrationActionSequence = useRef(0);
   const registrationActionRequestBlocked = useRef(false);
   const lateRegistrationRequestBlocked = useRef(false);
+  const exportSequence = useRef(0);
+  const exportRequestBlocked = useRef(false);
+  const exportAbortController = useRef<AbortController | null>(null);
   const mounted = useRef(true);
+  const currentServices = useRef(services);
+  const currentFirebaseResources = useRef(firebaseResources);
   const currentFirebaseApp = useRef(firebaseApp);
   const currentFirestore = useRef(firestore);
   const currentSlug = useRef(slug);
+  const currentIsReady = useRef(isReady);
+  const currentAdminUid = useRef(adminUid);
+  const currentAdminUser = useRef(adminUser);
+  const currentFirebaseAuthUser = useRef(firebaseAuthUser);
+  currentServices.current = services;
+  currentFirebaseResources.current = firebaseResources;
   currentFirebaseApp.current = firebaseApp;
   currentFirestore.current = firestore;
   currentSlug.current = slug;
+  currentIsReady.current = isReady;
+  currentAdminUid.current = adminUid;
+  currentAdminUser.current = adminUser;
+  currentFirebaseAuthUser.current = firebaseAuthUser;
+
+  function detachAndAbortExport() {
+    const controller = exportAbortController.current;
+    exportAbortController.current = null;
+    try {
+      controller?.abort();
+    } catch {
+      // Sequence and exact-context checks remain the fail-closed authority.
+    }
+  }
 
   const currentRegistrationActionOutcome = registrationActionOutcome?.app === firebaseApp
     && registrationActionOutcome.firestore === firestore
@@ -222,7 +255,8 @@ function Inner({
   const currentLoadStatus = currentOutcome?.status || 'loading';
   const canShowResolved = currentLoadStatus === 'resolved'
     && !lateRegistrationOutcomeUnknown
-    && !registrationActionOutcomeUnknown;
+    && !registrationActionOutcomeUnknown
+    && !error;
   const event = canShowResolved ? currentOutcome?.event || null : null;
   const regs = canShowResolved
     ? currentOutcome?.registrations || []
@@ -239,6 +273,37 @@ function Inner({
       && currentFirebaseApp.current === app
       && currentFirestore.current === db
       && currentSlug.current === eventSlug;
+  }
+
+  function isCurrentExport(
+    exportId: number,
+    serviceContext: NonNullable<typeof services>,
+    resources: NonNullable<typeof firebaseResources>,
+    app: unknown,
+    db: unknown,
+    eventSlug: string,
+    uid: string,
+    renderedUser: AuthUser,
+    authUser: NonNullable<typeof resources.auth.currentUser>,
+  ) {
+    try {
+      return mounted.current
+        && exportSequence.current === exportId
+        && currentServices.current === serviceContext
+        && currentFirebaseResources.current === resources
+        && currentFirebaseApp.current === app
+        && currentFirestore.current === db
+        && currentSlug.current === eventSlug
+        && currentIsReady.current
+        && currentAdminUid.current === uid
+        && currentAdminUser.current === renderedUser
+        && currentFirebaseAuthUser.current === authUser
+        && resources.auth.currentUser === authUser
+        && renderedUser.uid === uid
+        && authUser.uid === uid;
+    } catch {
+      return false;
+    }
   }
 
   async function reload(resetContext = false) {
@@ -319,8 +384,34 @@ function Inner({
     return () => {
       mounted.current = false;
       requestSequence.current += 1;
+      exportSequence.current += 1;
+      exportRequestBlocked.current = true;
+      detachAndAbortExport();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    exportSequence.current += 1;
+    exportRequestBlocked.current = false;
+    detachAndAbortExport();
+    setExporting(false);
+    setError(null);
+    return () => {
+      exportSequence.current += 1;
+      exportRequestBlocked.current = true;
+      detachAndAbortExport();
+    };
+  }, [
+    adminUid,
+    adminUser,
+    firebaseApp,
+    firebaseAuthUser,
+    firebaseResources,
+    firestore,
+    isReady,
+    services,
+    slug,
+  ]);
 
   useLayoutEffect(() => {
     registrationActionSequence.current += 1;
@@ -340,30 +431,135 @@ function Inner({
   }, [firebaseApp, firestore, slug]);
 
   async function downloadCsv() {
-    if (!services || !slug || registrationActionRequestBlocked.current) return;
+    const serviceContext = services;
+    const resources = firebaseResources;
+    const app = firebaseApp;
+    const db = firestore;
+    const eventSlug = slug;
+    const uid = adminUid;
+    const renderedUser = adminUser;
+    if (
+      !serviceContext
+      || !resources
+      || !app
+      || !db
+      || !eventSlug
+      || !uid
+      || !renderedUser
+      || renderedUser.uid !== uid
+      || currentLoadStatus !== 'resolved'
+      || error
+      || modal
+      || exportRequestBlocked.current
+      || registrationActionRequestBlocked.current
+      || lateRegistrationRequestBlocked.current
+    ) {
+      return;
+    }
+    const authUser = firebaseAuthUser;
+    if (
+      !authUser
+      || resources.auth?.currentUser !== authUser
+      || authUser.uid !== uid
+    ) return;
+
+    const exportId = exportSequence.current + 1;
+    exportSequence.current = exportId;
+    const controller = new AbortController();
+    detachAndAbortExport();
+    exportAbortController.current = controller;
+    exportRequestBlocked.current = true;
     setExporting(true);
+    setError(null);
+    setModal(null);
+    const isCurrent = () => isCurrentExport(
+      exportId,
+      serviceContext,
+      resources,
+      app,
+      db,
+      eventSlug,
+      uid,
+      renderedUser,
+      authUser,
+    );
+    let completed = false;
     try {
-      const token = await services.firebaseResources.auth.currentUser?.getIdToken();
-      if (!token) throw new Error('Not signed in');
-      const endpoint = services.firebaseResources.getHttpFunctionUrl('exportRegistrationsCsv');
-      const url = `${endpoint}?eventId=${encodeURIComponent(slug)}`;
+      const token = await authUser.getIdToken();
+      if (!isCurrent()) return;
+      if (!token) throw new Error('Export unavailable');
+      const endpoint = firebaseResources.getHttpFunctionUrl('exportRegistrationsCsv');
+      const url = `${endpoint}?eventId=${encodeURIComponent(eventSlug)}`;
       const resp = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
-      if (!resp.ok) throw new Error(`Export failed: ${resp.status}`);
+      if (!isCurrent()) return;
+      if (!resp.ok) throw new Error('Export unavailable');
       const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = `registrations-${slug}-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch (err: any) {
-      setError(err.message);
+      if (!isCurrent()) return;
+
+      let blobUrl: string | null = null;
+      let anchor: HTMLAnchorElement | null = null;
+      let clicked = false;
+      let cleanupFailed = false;
+      try {
+        blobUrl = URL.createObjectURL(blob);
+        if (!isCurrent()) return;
+        anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = `registrations-${eventSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(anchor);
+        if (!isCurrent()) return;
+        anchor.click();
+        clicked = true;
+      } finally {
+        if (anchor) {
+          try {
+            anchor.removeAttribute('href');
+            anchor.removeAttribute('download');
+          } catch {
+            cleanupFailed = true;
+          }
+          try {
+            anchor.remove();
+          } catch {
+            cleanupFailed = true;
+            try {
+              anchor.parentNode?.removeChild(anchor);
+            } catch {
+              // The fixed terminal outcome below is the only safe recovery.
+            }
+          }
+        }
+        if (blobUrl !== null) {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            cleanupFailed = true;
+          }
+        }
+      }
+      if (cleanupFailed) throw new Error('Export cleanup unavailable');
+      completed = clicked;
+    } catch {
+      if (!isCurrent()) return;
+      setError(EXPORT_OUTCOME_UNKNOWN);
     } finally {
-      setExporting(false);
+      try {
+        controller.abort();
+      } catch {
+        // Sequence and exact-context checks remain the fail-closed authority.
+      }
+      if (exportAbortController.current === controller) {
+        exportAbortController.current = null;
+      }
+      if (isCurrent()) {
+        setExporting(false);
+        if (completed) {
+          exportRequestBlocked.current = false;
+        }
+      }
     }
   }
 
@@ -401,6 +597,7 @@ function Inner({
       || currentSlug.current !== slug
       || registrationActionRequestBlocked.current
       || lateRegistrationRequestBlocked.current
+      || exportRequestBlocked.current
     ) {
       return;
     }
@@ -486,6 +683,7 @@ function Inner({
     if (
       registrationActionRequestBlocked.current
       || lateRegistrationRequestBlocked.current
+      || exportRequestBlocked.current
     ) {
       return;
     }
@@ -565,7 +763,7 @@ function Inner({
               <button
                 type="button"
                 onClick={() => openModal({ kind: 'late_add' })}
-                disabled={registrationActionPending}
+                disabled={registrationActionPending || exporting}
                 className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 text-sm"
               >
                 + Late registration — $0 only
@@ -573,7 +771,7 @@ function Inner({
               <button
                 type="button"
                 onClick={() => openModal({ kind: 'mark_comp' })}
-                disabled={registrationActionPending}
+                disabled={registrationActionPending || exporting}
                 className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 disabled:bg-gray-400 text-sm"
               >
                 + Comp registration
@@ -581,7 +779,7 @@ function Inner({
               <button
                 type="button"
                 onClick={downloadCsv}
-                disabled={exporting || registrationActionPending}
+                disabled={exporting || submitting || registrationActionPending}
                 className="border px-3 py-2 rounded hover:bg-gray-50 disabled:opacity-50 text-sm"
               >
                 {exporting ? 'Exporting...' : 'Export CSV'}
@@ -612,6 +810,16 @@ function Inner({
             Registration action in progress. Do not start another action.
           </p>
         )}
+        {exporting && (
+          <p
+            className="text-sm mt-4"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {EXPORT_PENDING}
+          </p>
+        )}
         {registrationActionOutcomeUnknown && (
           <p
             className="text-red-500 text-sm mt-4"
@@ -632,8 +840,15 @@ function Inner({
             {LATE_REGISTRATION_OUTCOME_UNKNOWN}
           </p>
         )}
-        {canShowResolved && error && (
-          <p className="text-red-500 text-sm">{error}</p>
+        {error && (
+          <p
+            className="text-red-500 text-sm mt-4"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {error}
+          </p>
         )}
 
         {canShowResolved && (
@@ -680,7 +895,7 @@ function Inner({
                           <button
                             type="button"
                             onClick={() => openModal({ kind: 'refund_full', reg: r })}
-                            disabled={registrationActionPending}
+                            disabled={registrationActionPending || exporting}
                             className="text-red-600 hover:underline mr-2 text-xs"
                           >
                             Refund
@@ -688,7 +903,7 @@ function Inner({
                           <button
                             type="button"
                             onClick={() => openModal({ kind: 'refund_partial', reg: r })}
-                            disabled={registrationActionPending}
+                            disabled={registrationActionPending || exporting}
                             className="text-red-600 hover:underline mr-2 text-xs"
                           >
                             Partial
@@ -698,7 +913,7 @@ function Inner({
                       <button
                         type="button"
                         onClick={() => openModal({ kind: 'substitute', reg: r })}
-                        disabled={registrationActionPending}
+                        disabled={registrationActionPending || exporting}
                         className="text-blue-600 hover:underline mr-2 text-xs"
                       >
                         Sub
@@ -707,7 +922,7 @@ function Inner({
                         <button
                           type="button"
                           onClick={() => openModal({ kind: 'cancel', reg: r })}
-                          disabled={registrationActionPending}
+                          disabled={registrationActionPending || exporting}
                           className="text-amber-700 hover:underline mr-2 text-xs"
                         >
                           Cancel
@@ -716,7 +931,7 @@ function Inner({
                       <button
                         type="button"
                         onClick={() => openModal({ kind: 'add_note', reg: r })}
-                        disabled={registrationActionPending}
+                        disabled={registrationActionPending || exporting}
                         className="text-gray-600 hover:underline text-xs"
                       >
                         Note
@@ -879,14 +1094,18 @@ function Inner({
 function RegistrationsRoute() {
   const { slug: routeSlug } = useParams<{ slug: string }>();
   const locator = useServiceLocator();
+  const { user } = useAuth();
+  const adminUid = typeof user?.uid === 'string' && user.uid ? user.uid : null;
   const readinessKey = locator.isReady && locator.services ? 'ready' : 'not-ready';
 
   return (
     <Inner
-      key={`${routeSlug || 'missing'}:${readinessKey}`}
+      key={`${routeSlug || 'missing'}:${readinessKey}:${adminUid || 'no-user'}`}
       routeSlug={routeSlug}
       services={locator.services}
       isReady={locator.isReady}
+      adminUid={adminUid}
+      adminUser={user}
     />
   );
 }

@@ -31,7 +31,7 @@
 | Account exists but a verification email request is unavailable | Ask the member to stop resending. Record only the time, route path `/login` or `/account`, and plain status. Omit all query/fragment text. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
 | Verification link is unusable or temporarily unavailable | Ask the member to stop after one deliberate check and one retry. Record only the time, clean route `/auth/action`, and plain result. Never copy anything after `?` or `#`, and never ask for the link, code, email address, or screenshot. |
 | Password reset does not lead to a private message | Ask the member to stop after one displayed wait and one retry. Record only the time, route path `/login`, and plain status. Do not ask which address they entered or whether an account exists. |
-| Profile Save says permission is missing | Ask the member to stop, sign out, and wait. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
+| Profile Save says permission is missing | Ask the member to stop and choose **Sign out** once. If the result is not confirmed, assume they are still signed in. Ask them to close the browser and not let anyone else use that device. Open a new redacted incident through [Request a change](./REQUEST_A_CHANGE.md). Do not edit the database, delete the login, recreate the account, or grant a role. |
 | Private member information is visible | Contact platform and privacy owners immediately; they choose containment through an approved service procedure. Do not change permissions yourself. |
 | Unexpected payment, refund, order, or signup | Contact treasurer and platform owners. The new source guard is not deployed and its officer control is NOT AVAILABLE YET. Do not test with real money. |
 | Password, secret, or recovery code exposed | Contact the owning service's two approved owners. They revoke/rotate through the service-specific procedure and record evidence. Do not rotate it from this generic guide. |
@@ -267,11 +267,15 @@ Officer steps after every prerequisite has live proof:
 **Prerequisites:** the time, the public `/account` address, and a redacted description with no member details.
 
 1. Ask the member to stop using Save.
-2. Ask the member to sign out.
-3. Open a new redacted incident by following [Request a change](./REQUEST_A_CHANGE.md).
-4. Use [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) only as engineering context. Do not add member incidents or private details to it.
-5. Share only the time and the plain symptom.
-6. Wait for a made-up account test and separate website, server Function, and database-permission proof.
+2. Ask the member to choose **Sign out** once.
+3. If the result is not confirmed, assume the member is still signed in.
+4. Ask the member to close the browser.
+5. Ask the member not to let anyone else use that device until the membership lead or platform owner helps.
+6. Keep the linked [safer sign-out result](./EVENTS_SHOP_MEMBERS.md#my-account-sign-out-result--source-only-not-live) marked **NOT LIVE** until exact website proof exists.
+7. Open a new redacted incident by following [Request a change](./REQUEST_A_CHANGE.md).
+8. Use [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) only as engineering context. Do not add member incidents or private details to it.
+9. Share only the time and the plain symptom.
+10. Wait for a made-up account test and separate website, server Function, and database-permission proof.
 
 **Expected result:** no manual account or database change occurs. The member retries only after the automated repair is proven live.
 
