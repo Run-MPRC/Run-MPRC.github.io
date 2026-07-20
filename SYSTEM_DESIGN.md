@@ -642,6 +642,32 @@ An authorized finance action creates a separate refund-operation record with a s
 
 The ingress verifies method, raw payload, signature, and secret. Relevant event types are written or claimed using the Stripe Event ID. Business processing validates object type, livemode/environment, metadata schema version, business reference, Session/PaymentIntent ownership, currency, and amount. Unknown transitions are quarantined for review. Stripe does not guarantee event order, so each transition is based on current domain state and the retrieved Stripe object when necessary.
 
+### 8.5a Idempotent side-effect outbox delivery-state contract — SOURCE ONLY, UNUSED
+
+PAY-003B1 [#364](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/364) defines one unused pure contract for the *side-effect outbox* named by parent PAY-003 [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106): the durable delivery lifecycle of an internal side-effect intent a confirmed command produces, such as a transactional email to send or a role grant to apply. It is a sibling of the `functions/commerceState.js` business-state reducers in the same non-throwing result-object idiom, and does not duplicate them, the provider-call classifiers, or the Firestore-backed command journal. It governs only *whether a delivery step is allowed and how many attempts have begun*, never a recipient, message, or provider.
+
+```mermaid
+flowchart LR
+    Q["queued\nattempts = 0"] -->|"begin attempt (+1)"| D["dispatching"]
+    D -->|"provider accepted"| S["dispatched"]
+    D -->|"transient failure"| R["retry_scheduled"]
+    D -->|"permanent failure"| X["dead_letter"]
+    D -->|"caller suppressed"| U["suppressed"]
+    R -->|"begin attempt (+1)"| D
+    R -->|"give up"| X
+    S -->|"provider confirmed"| V["delivered"]
+    S -->|"reversed"| X
+    S -->|"caller suppressed"| U
+```
+
+Text alternative: a side-effect intent starts `queued` with zero attempts. Entering `dispatching` — the only edge that begins a fresh provider attempt — increments a monotonic attempt counter by exactly one; every other edge holds it unchanged. `dispatching` resolves to `dispatched`, `retry_scheduled`, `dead_letter`, or `suppressed`; `retry_scheduled` returns to `dispatching` or gives up to `dead_letter`; `dispatched` resolves to `delivered`, `dead_letter`, or `suppressed`. The terminals `delivered`, `dead_letter`, and `suppressed` have no outgoing edges and cannot be resurrected. Any other edge, a backward or wrong-delta counter, or a count incoherent with the state fails through a fixed reason.
+
+The CommonJS module reduces the mutable `{ deliveryState, attemptCount }` pair and returns a frozen `{ accepted, outcome, changed, state, attemptCount, reason }` verdict — `applied`, `unchanged`, or `rejected` with a fixed reason code — never throwing and never echoing raw input. It also validates the exact record `{ outboxStateSchemaVersion, outboxKey, intentType, deliveryState, attemptCount }`, where `outboxKey` and `intentType` are bounded opaque server tokens, and returns a frozen canonical projection or a fixed rejection reason. A same-state replay must keep the identical count and is idempotent (`unchanged`). Lifecycle/attempt coherence — `queued` with exactly zero attempts, any other state with at least one — is enforced on both operands. A proxy, accessor, getter, extra or missing key, `Object.prototype` pollution, unknown state, or non-integer/negative/unsafe count is rejected without leaking the input.
+
+This contract invents no policy. It fixes no maximum retry count, backoff schedule, time-to-live, dead-letter threshold, or alert; it holds no recipient, address, message body, template, or provider identity; and it decides nothing about *when* to retry, suppress, or dead-letter. `outboxKey` and `intentType` are opaque caller-supplied tokens, never an email or other PII; bounce and suppression are modeled as caller-supplied edges rather than distinct policy states. Those numbers and decisions belong to later PAY-003B/PAY-003C children and to MAIL-001, exactly as `commerceState` leaves capacity, price, and provider identity out.
+
+The module is imported by no runtime or Functions index and requires only `node:util`. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no delivery, email, role, or business record. It does not persist or replay an outbox, define Firestore schema or Rules, run a retry or quarantine worker, or wire into `sendConfirmationEmail.js` or `stripeWebhook.js`. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ## 9. Consistency and failure model
 
 Stripe and Firestore cannot share a distributed transaction. Checkout and refunds are therefore explicit sagas:
