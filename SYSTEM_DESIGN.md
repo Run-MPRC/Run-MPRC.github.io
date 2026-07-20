@@ -477,6 +477,29 @@ Outputs are fresh frozen fixed three-field records: `untrusted_transport_binding
 
 CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) runs the exact opt-in command-journal emulator suite as a named hosted release prerequisite; #169, #173, #182, #206, #226, #232, and #238 expand that same suite. These are synthetic source checks only. Source change, tests, merge, Firebase deployment, Stripe configuration, production data, website publication, `runmprc.com` verification, and live behavior remain separate states. The current journal source remains unused and makes no endpoint, provider, production, website, or officer change.
 
+### PAY-003C1 commerce attempt-failure disposition — SOURCE ONLY, UNUSED
+
+PAY-003C1 is tracked in live [#377](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/377) under PAY-003 [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106). The pure `classifyAttemptFailure` policy reads one exact flat revision-1 evidence record `{ failureDispositionSchemaVersion, failureSignal, sideEffectIdempotency, retryBudget }` drawn only from closed vocabularies and returns one frozen disposition — `retry_transient`, `dead_letter`, `quarantine_permanent`, or `ignore_duplicate` — each carrying a boolean `retryable`. `failureSignal` reuses the house transient names (`timeout`, `connection_lost`, `rate_limited`, `server_failure`, `external_dependency_failure`) plus permanent (`permanent_client_error`, `malformed_response`), reconcile-needed (`conflict`, `unknown`), and already-applied (`duplicate_replay`); `sideEffectIdempotency` is `idempotent`/`non_idempotent` and `retryBudget` is `available`/`exhausted`. It imports only `node:util`.
+
+```mermaid
+flowchart TD
+    E["Exact revision-1 failure evidence"] --> D{"duplicate_replay?"}
+    D -- "Yes" --> Ig["ignore_duplicate"]
+    D -- "No" --> T{"Transient signal?"}
+    T -- "No" --> Q["quarantine_permanent"]
+    T -- "Yes" --> I{"Idempotent effect?"}
+    I -- "No" --> Q
+    I -- "Yes" --> B{"Retry budget available?"}
+    B -- "Yes" --> Rt["retry_transient (retryable)"]
+    B -- "No" --> Dl["dead_letter"]
+```
+
+Text alternative: an already-applied duplicate is ignored; any non-transient signal, or a transient signal on a non-idempotent effect, is quarantined; a transient failure on an idempotent effect retries while the caller's budget remains and otherwise dead-letters.
+
+The safety invariant is that a non-idempotent side effect is never `retry_transient`: a transient failure on a non-idempotent effect quarantines instead, so the deferred worker can never double-apply an external create, refund, or send (external effects must be idempotent and retry-safe). Only genuinely transient signals retry, and only while `retryBudget` is `available`; an exhausted budget dead-letters; `conflict` and `unknown` fail closed to `quarantine_permanent`; `duplicate_replay` yields `ignore_duplicate` with no new delivery. `retryable` is true only for `retry_transient`.
+
+The retry budget is an input, never a baked-in maximum count, backoff schedule, TTL, dead-letter threshold, or alert — those stay with the deferred PAY-003C worker and retention approval [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110). The module names no provider, recipient, address, money, or message and accepts no free-form identifiers, so nothing PII-shaped can ride in; malformed, proxy, accessor, inherited, extra-or-missing-key, unknown-enum, or wrong-version input throws one fixed `CommerceFailureDispositionError` that never echoes the input. The sibling `commerceOutboxState` (PAY-003B1, [#364](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/364)) validates whether a proposed delivery transition is legal but is handed the target state; this classifier derives which target a failure warrants. The `commerceProviderResult`/`commerceProviderReconciliation` classifiers answer business-advance-versus-reconcile and never emit a retry-versus-permanent verdict. It reads no clock, randomness, environment, network, Firestore, or Stripe; is imported by no runtime entry point or Functions index; stores and logs nothing; and creates no attempt, send, retry, deletion, or business record. Source change, tests, merge, Firebase deployment, Stripe configuration, production data, website publication, and live behavior remain separate states; #377 changes no officer task and proves none of the external or live states.
+
 ## 7. Business invariants
 
 The following are correctness rules, not UI preferences:
@@ -586,6 +609,117 @@ The CommonJS module validates one exact envelope with the same fail-closed primi
 This contract does not verify an actor, capability, recent authentication, evidence item, plan, price, term calendar, or policy decision. It does not read or write the authoritative record, mint the applied prior/new revision, stamp a server time, record a command result, associate a UID, refresh or revoke entitlement, or register a durable command ID for replay. Its identifier grammar is not a semantic privacy classifier; a future trusted runtime must mint every opaque value, verify the officer's capability and recent authentication under AUTH-003, establish each referenced fact, apply the command against the current record, and persist the completed audit entry.
 
 The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, mints no identifier, and cannot make manual dues recording, an officer review queue, or any officer membership tool available. Source tests and a merge are not Firebase deployment or live behavior proof.
+### 8.0c Entitlement-to-authorization-claim reconciliation — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001E [#373](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/373) defines one unused pure contract that bridges the §8.0a entitlement result and the deferred custom-claim lifecycle. `membershipAuthority.js` (#208) derives whether a subject is a current member but explicitly defers "custom claims, token refresh/revocation" to a later child; nothing yet derives, from that entitlement, whether the membership authorization claim in a token **should** be present and — when it drifts — whether to grant or revoke it. #81 requires that custom claims carry authorization only, and names access-revocation as first-class. A second invariant is encoded: membership governs **only** the member authorization claim. The officer (`admin`) role is administered separately ([#115](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/115), `setMemberRole`); gaining or losing membership never grants or revokes it.
+
+```mermaid
+flowchart LR
+    V["Entitlement + email verification + observed member/officer claims"] --> G{"Well-formed authorization-only evidence?"}
+    G -- "No" --> X["One fixed error, input never echoed"]
+    G -- "Yes" --> D{"Entitled current member AND email verified?"}
+    D -- "Yes" --> DP["Desired member claim present"]
+    D -- "No, pending, or unverified" --> DA["Desired member claim absent (fail-closed)"]
+    DP --> C{"Matches the observed member claim?"}
+    DA --> C
+    C -- "Yes" --> AL["aligned"]
+    C -- "No, desired present" --> GM["grant_member"]
+    C -- "No, desired absent" --> RM["revoke_member"]
+    O["Observed officer (admin) claim"] -. "Never enters the member-claim decision" .-> C
+    AL --> Z["grantsAuthority: false / officerRoleAffected: false"]
+    GM --> Z
+    RM --> Z
+```
+
+Text alternative: the desired member claim is present only for a subject the §8.0a contract deems a current member whose sign-in email is verified; not entitled, decision pending, or unverified all fail closed to a desired-absent claim, so a stale claim is revoked. A desired state that matches the observed member claim is aligned; a missing entitled claim is grant_member; a present unentitled claim is revoke_member. The observed officer role never enters the decision, so an officer whose membership lapses is reconciled to revoke_member while the admin role is left untouched.
+
+The CommonJS module accepts an exact five-field revision-1 evidence object whose values are drawn only from closed authorization vocabularies — an entitlement disposition, an email-verification flag, and the observed member and officer claim states — and derives one of three frozen non-identifying dispositions. The verified-email requirement mirrors the existing `roleGrantPolicy.js` rule for the `member` role. Every result hard-codes `grantsAuthority: false` and `officerRoleAffected: false`. An unknown enum value, a wrong version, an extra or missing field, an accessor, an inherited field, or a proxy fails through one fixed error that never echoes the input.
+
+This contract writes no claim, mints and revokes no token, and derives the reconciliation verdict only. The evidence carries authorization state alone — never a provider ID, phone, profile field, roster, address, or token, exactly as #81 requires of custom claims. It invents no prices, plans, terms, retention duration, deletion window, or access-revocation SLA; those stay with #114/#110 and the owner. The entitlement derivation itself (§8.0a), the officer-role grant path (#115), and consent/link teardown ([#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367)/[#370](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/370)) are separate contracts. The actual custom-claim write, token refresh, and revocation remain gated on the AUTH-001/AUTH-003 Functions/Admin authorization work.
+
+The module is imported by no runtime or Functions index. It requires only `node:util`, reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81 or live claim reconciliation available. Source tests and a merge are not Firebase deployment or live behavior proof.
+### 8.0d Provider-neutral versioned consent state — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001D [#370](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/370) defines one unused pure contract that derives the current effective consent state for a single (provider, subject, scope) track under the policy version now in force. It sits beside the §8.0a membership authority and the external-account link contract (`membershipProviderLink.js`, [#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367)), which consumes a consent value that it itself defers. Consent is provider-neutral: email/password, Google, WhatsApp, and Strava share one identical rule, and no consent state is membership authority.
+
+```mermaid
+flowchart LR
+    V["Consent evidence: provider, subject, scope, latest decision, its policy version, policy version in force"] --> G{"Well-formed and coherent?"}
+    G -- "No" --> R["One fixed error, input never echoed"]
+    G -- "Yes" --> D{"Latest recorded decision?"}
+    D -- "None" --> NC["not_consented"]
+    D -- "Withdrawn" --> W["withdrawn"]
+    D -- "Granted" --> P{"Granting version equals the version in force?"}
+    P -- "Equal" --> AC["active"]
+    P -- "Differs" --> RA["reaffirmation_required"]
+    NC --> Z(["grantsAuthority: false"])
+    W --> Z
+    AC --> Z
+    RA --> Z
+    X["Any consent decision"] -. "Never grants membership, price, or role" .-> Z
+```
+
+Text alternative: given the latest recorded consent decision for a track and the policy version now in force, the contract returns one of four fixed dispositions. No recorded decision yields not_consented; a withdrawn decision yields withdrawn regardless of any version; a granted decision yields active only when its policy version equals the version in force, and reaffirmation_required otherwise. Every result carries grantsAuthority false. Malformed or incoherent evidence fails closed through one fixed error that never echoes the input.
+
+The CommonJS module publishes a revision-1 schema, a frozen provider-neutral enum set, and one fixed error, and classifies an exact seven-field evidence object — schema version, provider, opaque subject and scope references, latest decision, its policy version, and the policy version in force. A recorded decision must carry an opaque policy version and a `none` decision must carry exactly null, so an incoherent decision/version pairing, an unknown enum, a non-opaque or PII-shaped reference, a wrong version, an extra field, a missing field, an accessor, or a proxy all fail through the one error. Policy versions are compared for equality only.
+
+This contract invents no policy. It sets no prices, plans, or terms, writes no policy text, and defines no retention duration, deletion window, or access-revocation SLA — those remain with #110 and the owner. It assumes no version ordering, recency, or precedence: a differing policy version is simply superseded and routed to reaffirmation, and which version is current is the caller-supplied requiredPolicyVersion. `grantsAuthority` is hard-coded false on every result, so consenting to link WhatsApp or share Strava never confers membership, price, payment state, or role. It derives the current state only — the append-only capture of consent events and their versioned history, withdrawal side effects such as link teardown and claim revocation, the retention/minimization/deletion matrix (#110), and provider-specific WhatsApp consent wiring (#87) are later work, gated on the remaining AUTH-001 Functions/Admin authorization protections.
+
+The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, versioned WhatsApp consent, or any officer membership tool available. Source tests and a merge are not Firebase deployment or live behavior proof.
+### 8.0e Provider-neutral external-account link and collision — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001C [#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367) defines one unused pure contract that sits beside the §8.0a membership authority and classifies how a single external-account link is reconciled and where a link collision is refused. Email/password, Google, WhatsApp, and Strava are one provider-neutral vocabulary with identical rules; a link is a minimal derived identity projection and never membership evidence. Every classified result carries `grantsAuthority: false`, so no connection, matching identifier, or observed link ever confers membership, price, payment state, or role.
+
+```mermaid
+flowchart LR
+    I["Provider link evidence"] --> V{"Exact, opaque, in-vocabulary?"}
+    V -- "No" --> ERR["One fixed error; no echo"]
+    V -- "Yes" --> D{"Desired linked?"}
+    D -- "Yes" --> C{"Bound to a different membership?"}
+    C -- "Yes" --> COL["collision"]
+    C -- "No" --> K{"Consent granted?"}
+    K -- "No" --> BLK["blocked — consent_required"]
+    K -- "Yes" --> O{"Observed state known?"}
+    D -- "No (unlinked)" --> O
+    O -- "No" --> OP["observation_pending"]
+    O -- "Yes" --> AL{"Desired equals observed?"}
+    AL -- "Yes" --> ALN["aligned"]
+    AL -- "No" --> RC["reconcile_link or reconcile_unlink"]
+    COL -.-> NA["Every result grants no authority"]
+    BLK -.-> NA
+    OP -.-> NA
+    ALN -.-> NA
+    RC -.-> NA
+```
+
+Text alternative: a well-formed link request is classified in one deterministic pass. A request to link is refused as a collision when the opaque account reference is already bound to a different membership, and is blocked when consent is not granted; otherwise an unknown observation is pending, a matching desired/observed pair is aligned, and a mismatch is a link or unlink reconciliation. Malformed, non-opaque, PII-shaped, out-of-vocabulary, extra-field, accessor, or proxy input fails through one fixed error that never echoes the input. No result grants authority.
+
+The CommonJS module exposes a schema version, one frozen input/disposition enum set, one fixed error, and one classifier over an exact eight-field evidence object: schema version, provider, opaque membership ID, opaque non-secret `providerAccountRef`, consent, desired state, observed state, and the membership the account is currently bound to (or none). The opaque-identifier grammar structurally rejects raw email- and phone-shaped references. Collision detection consumes caller-supplied binding evidence rather than reading any index; the classifier holds no state and mints no identifiers.
+
+This contract decides nothing about prices, plans, term boundaries, renewal, retention, or roster disposition, and it issues no custom claim, token, or role — those remain with §8.0a, #114/#115, #110/#113, and the AUTH-003/ADMIN work. Its identifier grammar is not a semantic privacy classifier; a future trusted server must mint opaque references and establish every bound-elsewhere fact. Durable cross-membership uniqueness, consent capture and withdrawal side effects, provider connect/disconnect execution, Firestore schema/Rules, and reconciliation scheduling are later work gated on the remaining AUTH-001 Functions/Admin authorization protections.
+
+The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, provider linking, or any officer tool available. Source tests and a merge are not Firebase deployment or live behavior proof.
+### 8.0f Immutable membership term/evidence receipt ledger — SOURCE ONLY, UNUSED
+
+MEMBERS-DUES-001A [#345](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/345) defines one unused pure contract that preserves the immutable renewal/evidence history the §8.0a authority cannot hold by itself. The §8.0a reducer keeps only one replaceable current-term snapshot, so each recorded term decision overwrites the previous one. This contract records each term decision as an ordered, append-only receipt and projects any receipt back into the exact `record_term_decision` command the shipped authority already accepts, without duplicating that reducer.
+
+```mermaid
+flowchart LR
+    E["Empty ledger (receiptRevision 0)"] --> A["Append receipt: termRevision equals one-based position"]
+    A -- "Reused command/receipt id, skipped or repeated revision, reversed range" --> X["Fails closed"]
+    A -- "Exact re-append of the tail command" --> R["Read-only; returns the same ledger"]
+    A --> H["Ordered append-only history; earlier receipts never change"]
+    H --> P["Project one receipt with an expected revision"]
+    P --> C["Exact record_term_decision command accepted by the 8.0a authority"]
+```
+
+Text alternative: a ledger starts empty and grows only by appending one term/evidence receipt at a time, where each receipt's term revision equals its one-based position, command and receipt identifiers are unique across the whole history, and earlier receipts are never mutated. An exact re-append of the most recent command is read-only. A reused identifier, a skipped or repeated revision, a reversed time range, an unsupported version/state, an extra field, an accessor, a proxy, or a tampered snapshot fails through one fixed error. Any receipt projects into the exact versioned `record_term_decision` command that the §8.0a authority accepts, so the two contracts compose without a shared type.
+
+The CommonJS module creates an empty versioned ledger, creates one frozen receipt from an opaque evidence bundle (receipt id, command id, term revision/state/id, explicit half-open start/end, and opaque plan/evidence/policy references), appends receipts as an immutable ordered history with monotonic position-bound revisions and global identifier uniqueness, treats an exact tail re-append as read-only, and projects a receipt into the frozen `record_term_decision` command input. It accepts exact plain objects, bounded server-minted opaque identifiers, and safe-integer time values only.
+
+This contract does not verify a person, payment, plan, evidence item, refund, dispute, or policy decision, and it grants no entitlement by itself. It does not choose calendar-year versus anniversary terms, grace, prices, currency, plan eligibility, retention, tax, or legacy disposition; every reference is an opaque caller-supplied token and only technical bounds — a positive-duration range and a monotonic position-bound revision — are enforced. Durable persistence and replay, Firestore schema/Rules, custom claims and token refresh/revocation, cross-record uniqueness, runtime authorization and adoption, migration, and deployment are later children behind #114 and the protected release work.
+
+The module is imported by no runtime or Functions index and updates no officer procedure because it makes nothing officer-observable. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no current profile/role/claim. Source tests and a merge are not Firebase deployment or live behavior proof.
 
 ### 8.1 Paid race registration
 
@@ -640,6 +774,32 @@ An authorized finance action creates a separate refund-operation record with a s
 ### 8.5 Webhook processing
 
 The ingress verifies method, raw payload, signature, and secret. Relevant event types are written or claimed using the Stripe Event ID. Business processing validates object type, livemode/environment, metadata schema version, business reference, Session/PaymentIntent ownership, currency, and amount. Unknown transitions are quarantined for review. Stripe does not guarantee event order, so each transition is based on current domain state and the retrieved Stripe object when necessary.
+
+### 8.5a Idempotent side-effect outbox delivery-state contract — SOURCE ONLY, UNUSED
+
+PAY-003B1 [#364](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/364) defines one unused pure contract for the *side-effect outbox* named by parent PAY-003 [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106): the durable delivery lifecycle of an internal side-effect intent a confirmed command produces, such as a transactional email to send or a role grant to apply. It is a sibling of the `functions/commerceState.js` business-state reducers in the same non-throwing result-object idiom, and does not duplicate them, the provider-call classifiers, or the Firestore-backed command journal. It governs only *whether a delivery step is allowed and how many attempts have begun*, never a recipient, message, or provider.
+
+```mermaid
+flowchart LR
+    Q["queued\nattempts = 0"] -->|"begin attempt (+1)"| D["dispatching"]
+    D -->|"provider accepted"| S["dispatched"]
+    D -->|"transient failure"| R["retry_scheduled"]
+    D -->|"permanent failure"| X["dead_letter"]
+    D -->|"caller suppressed"| U["suppressed"]
+    R -->|"begin attempt (+1)"| D
+    R -->|"give up"| X
+    S -->|"provider confirmed"| V["delivered"]
+    S -->|"reversed"| X
+    S -->|"caller suppressed"| U
+```
+
+Text alternative: a side-effect intent starts `queued` with zero attempts. Entering `dispatching` — the only edge that begins a fresh provider attempt — increments a monotonic attempt counter by exactly one; every other edge holds it unchanged. `dispatching` resolves to `dispatched`, `retry_scheduled`, `dead_letter`, or `suppressed`; `retry_scheduled` returns to `dispatching` or gives up to `dead_letter`; `dispatched` resolves to `delivered`, `dead_letter`, or `suppressed`. The terminals `delivered`, `dead_letter`, and `suppressed` have no outgoing edges and cannot be resurrected. Any other edge, a backward or wrong-delta counter, or a count incoherent with the state fails through a fixed reason.
+
+The CommonJS module reduces the mutable `{ deliveryState, attemptCount }` pair and returns a frozen `{ accepted, outcome, changed, state, attemptCount, reason }` verdict — `applied`, `unchanged`, or `rejected` with a fixed reason code — never throwing and never echoing raw input. It also validates the exact record `{ outboxStateSchemaVersion, outboxKey, intentType, deliveryState, attemptCount }`, where `outboxKey` and `intentType` are bounded opaque server tokens, and returns a frozen canonical projection or a fixed rejection reason. A same-state replay must keep the identical count and is idempotent (`unchanged`). Lifecycle/attempt coherence — `queued` with exactly zero attempts, any other state with at least one — is enforced on both operands. A proxy, accessor, getter, extra or missing key, `Object.prototype` pollution, unknown state, or non-integer/negative/unsafe count is rejected without leaking the input.
+
+This contract invents no policy. It fixes no maximum retry count, backoff schedule, time-to-live, dead-letter threshold, or alert; it holds no recipient, address, message body, template, or provider identity; and it decides nothing about *when* to retry, suppress, or dead-letter. `outboxKey` and `intentType` are opaque caller-supplied tokens, never an email or other PII; bounce and suppression are modeled as caller-supplied edges rather than distinct policy states. Those numbers and decisions belong to later PAY-003B/PAY-003C children and to MAIL-001, exactly as `commerceState` leaves capacity, price, and provider identity out.
+
+The module is imported by no runtime or Functions index and requires only `node:util`. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no delivery, email, role, or business record. It does not persist or replay an outbox, define Firestore schema or Rules, run a retry or quarantine worker, or wire into `sendConfirmationEmail.js` or `stripeWebhook.js`. Source tests and a merge are not Firebase deployment or live behavior proof.
 
 ## 9. Consistency and failure model
 
