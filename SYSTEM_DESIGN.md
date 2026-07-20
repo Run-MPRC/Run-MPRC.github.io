@@ -801,6 +801,35 @@ This contract invents no policy. It fixes no maximum retry count, backoff schedu
 
 The module is imported by no runtime or Functions index and requires only `node:util`. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no delivery, email, role, or business record. It does not persist or replay an outbox, define Firestore schema or Rules, run a retry or quarantine worker, or wire into `sendConfirmationEmail.js` or `stripeWebhook.js`. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.5b Idempotent event-inbox deduplication and ordering disposition — SOURCE ONLY, UNUSED
+
+PAY-003B2 [#397](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/397) defines one unused pure contract for the *event inbox* named by parent PAY-003 [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106) and by §8.5: the ingress decision of whether one verified event, already reduced to closed evidence, should be processed, ignored, or quarantined *before* any canonical reducer runs. PAY-003A already claims events by id inline in `stripeWebhook.js`; this contract extracts the *decision itself* as a standalone, owner-reviewable function, exactly as PAY-003C1 extracted the failure decision. The pure `classifyEventInboxDisposition` policy reads one exact flat revision-1 evidence record `{ eventInboxSchemaVersion, priorRecord, objectOrdering }` drawn only from closed vocabularies and returns one frozen disposition — `process`, `reprocess_incomplete`, `ignore_duplicate`, `ignore_stale`, or `quarantine` — each carrying a boolean `appliesEffect`. `priorRecord` is the durable inbox state for the exact event id (`absent`, `pending`, `applied`, `ignored`, `quarantined`); `objectOrdering` is the incoming event's position relative to the last-applied state for the same business object (`first_for_object`, `advances`, `equal`, `stale`, `indeterminate`), supplied as evidence from current domain state because event order is not guaranteed. It imports only `node:util`.
+
+```mermaid
+flowchart TD
+    E["Exact revision-1 inbox evidence"] --> S{"id already applied or ignored?"}
+    S -- "Yes" --> Ig["ignore_duplicate"]
+    S -- "No" --> Qp{"id quarantined?"}
+    Qp -- "Yes" --> Qz["quarantine"]
+    Qp -- "No" --> Oi{"order indeterminate?"}
+    Oi -- "Yes" --> Qz
+    Oi -- "No" --> Os{"order stale?"}
+    Os -- "Yes" --> St["ignore_stale"]
+    Os -- "No" --> Oe{"order equal?"}
+    Oe -- "Yes" --> Ig
+    Oe -- "No" --> Pp{"prior attempt pending?"}
+    Pp -- "Yes" --> Rp["reprocess_incomplete (appliesEffect)"]
+    Pp -- "No" --> Pr["process (appliesEffect)"]
+```
+
+Text alternative: an event id already applied or already decided a no-op is ignored regardless of any fresh ordering claim; a quarantined id or an event whose order cannot be established fails closed to quarantine; a strictly older event is dropped as stale and a same-position event as a duplicate; only a fresh, in-order event that is not yet settled applies an effect — resuming a crashed `pending` attempt as `reprocess_incomplete` or a first-seen `absent` id as `process`.
+
+The safety invariant is that `appliesEffect` is true only for `process` and `reprocess_incomplete`, and only for a `first_for_object`/`advances` event whose `priorRecord` is `absent` or `pending`: an already-`applied` id can never re-apply (exactly-once), an `indeterminate` or `stale` order never applies (fail closed to quarantine or drop), and an `equal` order is an idempotent replay. Because the event id is the deduplication key, `applied` and `ignored` short-circuit ahead of the ordering test, so no late-arriving ordering evidence can re-drive a settled effect; `reprocess_incomplete` is safe only because the downstream canonical apply is itself idempotent.
+
+This contract invents no policy and duplicates no sibling. It fixes no retry count, backoff schedule, TTL, or dead-letter threshold — those stay with the deferred PAY-003C worker, `commerceFailureDisposition` (PAY-003C1, [#377](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/377)), and retention approval [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110). It decides *whether to admit an event*, never *whether a delivery step is legal* (the `commerceOutboxState` outbox contract, PAY-003B1, [#364](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/364)) and never *which target a failure warrants* (PAY-003C1). It computes no business transition — `functions/commerceState.js` owns the payment/registration/refund reducers that run only after this gate returns an applying verdict — and it does not call the `commerceProviderResult`/`commerceProviderReconciliation` classifiers. `priorRecord` and `objectOrdering` are closed enums, so no id, amount, address, or other PII-shaped value can ride in; malformed, proxy, accessor, inherited, extra-or-missing-key, unknown-enum, or wrong-version input throws one fixed `CommerceEventInboxError` that never echoes the input.
+
+The module is imported by no runtime or Functions index and requires only `node:util`. It reads no clock, randomness, environment, network, Firestore, or provider service; is imported by no endpoint; stores and logs nothing; and creates no inbox record, claim, deduplication write, quarantine, or business record. It defines no Firestore schema or Rules, runs no ingress verifier or worker, and wires into no `stripeWebhook.js` or reducer. Source change, tests, merge, Firebase deployment, provider configuration, production data, website publication, and live behavior remain separate states; #397 changes no officer task and proves none of the external or live states.
+
 ## 9. Consistency and failure model
 
 Stripe and Firestore cannot share a distributed transaction. Checkout and refunds are therefore explicit sagas:
