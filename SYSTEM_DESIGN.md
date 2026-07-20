@@ -477,6 +477,29 @@ Outputs are fresh frozen fixed three-field records: `untrusted_transport_binding
 
 CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) runs the exact opt-in command-journal emulator suite as a named hosted release prerequisite; #169, #173, #182, #206, #226, #232, and #238 expand that same suite. These are synthetic source checks only. Source change, tests, merge, Firebase deployment, Stripe configuration, production data, website publication, `runmprc.com` verification, and live behavior remain separate states. The current journal source remains unused and makes no endpoint, provider, production, website, or officer change.
 
+### PAY-003C1 commerce attempt-failure disposition — SOURCE ONLY, UNUSED
+
+PAY-003C1 is tracked in live [#377](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/377) under PAY-003 [#106](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/106). The pure `classifyAttemptFailure` policy reads one exact flat revision-1 evidence record `{ failureDispositionSchemaVersion, failureSignal, sideEffectIdempotency, retryBudget }` drawn only from closed vocabularies and returns one frozen disposition — `retry_transient`, `dead_letter`, `quarantine_permanent`, or `ignore_duplicate` — each carrying a boolean `retryable`. `failureSignal` reuses the house transient names (`timeout`, `connection_lost`, `rate_limited`, `server_failure`, `external_dependency_failure`) plus permanent (`permanent_client_error`, `malformed_response`), reconcile-needed (`conflict`, `unknown`), and already-applied (`duplicate_replay`); `sideEffectIdempotency` is `idempotent`/`non_idempotent` and `retryBudget` is `available`/`exhausted`. It imports only `node:util`.
+
+```mermaid
+flowchart TD
+    E["Exact revision-1 failure evidence"] --> D{"duplicate_replay?"}
+    D -- "Yes" --> Ig["ignore_duplicate"]
+    D -- "No" --> T{"Transient signal?"}
+    T -- "No" --> Q["quarantine_permanent"]
+    T -- "Yes" --> I{"Idempotent effect?"}
+    I -- "No" --> Q
+    I -- "Yes" --> B{"Retry budget available?"}
+    B -- "Yes" --> Rt["retry_transient (retryable)"]
+    B -- "No" --> Dl["dead_letter"]
+```
+
+Text alternative: an already-applied duplicate is ignored; any non-transient signal, or a transient signal on a non-idempotent effect, is quarantined; a transient failure on an idempotent effect retries while the caller's budget remains and otherwise dead-letters.
+
+The safety invariant is that a non-idempotent side effect is never `retry_transient`: a transient failure on a non-idempotent effect quarantines instead, so the deferred worker can never double-apply an external create, refund, or send (external effects must be idempotent and retry-safe). Only genuinely transient signals retry, and only while `retryBudget` is `available`; an exhausted budget dead-letters; `conflict` and `unknown` fail closed to `quarantine_permanent`; `duplicate_replay` yields `ignore_duplicate` with no new delivery. `retryable` is true only for `retry_transient`.
+
+The retry budget is an input, never a baked-in maximum count, backoff schedule, TTL, dead-letter threshold, or alert — those stay with the deferred PAY-003C worker and retention approval [#110](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/110). The module names no provider, recipient, address, money, or message and accepts no free-form identifiers, so nothing PII-shaped can ride in; malformed, proxy, accessor, inherited, extra-or-missing-key, unknown-enum, or wrong-version input throws one fixed `CommerceFailureDispositionError` that never echoes the input. The sibling `commerceOutboxState` (PAY-003B1, [#364](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/364)) validates whether a proposed delivery transition is legal but is handed the target state; this classifier derives which target a failure warrants. The `commerceProviderResult`/`commerceProviderReconciliation` classifiers answer business-advance-versus-reconcile and never emit a retry-versus-permanent verdict. It reads no clock, randomness, environment, network, Firestore, or Stripe; is imported by no runtime entry point or Functions index; stores and logs nothing; and creates no attempt, send, retry, deletion, or business record. Source change, tests, merge, Firebase deployment, Stripe configuration, production data, website publication, and live behavior remain separate states; #377 changes no officer task and proves none of the external or live states.
+
 ## 7. Business invariants
 
 The following are correctness rules, not UI preferences:
