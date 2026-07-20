@@ -589,7 +589,40 @@ This contract does not verify a person, payment, plan, evidence item, refund, di
 
 The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
 
-### 8.0b Immutable membership term/evidence receipt ledger — SOURCE ONLY, UNUSED
+### 8.0b Provider-neutral external-account link and collision — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001C [#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367) defines one unused pure contract that sits beside the §8.0a membership authority and classifies how a single external-account link is reconciled and where a link collision is refused. Email/password, Google, WhatsApp, and Strava are one provider-neutral vocabulary with identical rules; a link is a minimal derived identity projection and never membership evidence. Every classified result carries `grantsAuthority: false`, so no connection, matching identifier, or observed link ever confers membership, price, payment state, or role.
+
+```mermaid
+flowchart LR
+    I["Provider link evidence"] --> V{"Exact, opaque, in-vocabulary?"}
+    V -- "No" --> ERR["One fixed error; no echo"]
+    V -- "Yes" --> D{"Desired linked?"}
+    D -- "Yes" --> C{"Bound to a different membership?"}
+    C -- "Yes" --> COL["collision"]
+    C -- "No" --> K{"Consent granted?"}
+    K -- "No" --> BLK["blocked — consent_required"]
+    K -- "Yes" --> O{"Observed state known?"}
+    D -- "No (unlinked)" --> O
+    O -- "No" --> OP["observation_pending"]
+    O -- "Yes" --> AL{"Desired equals observed?"}
+    AL -- "Yes" --> ALN["aligned"]
+    AL -- "No" --> RC["reconcile_link or reconcile_unlink"]
+    COL -.-> NA["Every result grants no authority"]
+    BLK -.-> NA
+    OP -.-> NA
+    ALN -.-> NA
+    RC -.-> NA
+```
+
+Text alternative: a well-formed link request is classified in one deterministic pass. A request to link is refused as a collision when the opaque account reference is already bound to a different membership, and is blocked when consent is not granted; otherwise an unknown observation is pending, a matching desired/observed pair is aligned, and a mismatch is a link or unlink reconciliation. Malformed, non-opaque, PII-shaped, out-of-vocabulary, extra-field, accessor, or proxy input fails through one fixed error that never echoes the input. No result grants authority.
+
+The CommonJS module exposes a schema version, one frozen input/disposition enum set, one fixed error, and one classifier over an exact eight-field evidence object: schema version, provider, opaque membership ID, opaque non-secret `providerAccountRef`, consent, desired state, observed state, and the membership the account is currently bound to (or none). The opaque-identifier grammar structurally rejects raw email- and phone-shaped references. Collision detection consumes caller-supplied binding evidence rather than reading any index; the classifier holds no state and mints no identifiers.
+
+This contract decides nothing about prices, plans, term boundaries, renewal, retention, or roster disposition, and it issues no custom claim, token, or role — those remain with §8.0a, #114/#115, #110/#113, and the AUTH-003/ADMIN work. Its identifier grammar is not a semantic privacy classifier; a future trusted server must mint opaque references and establish every bound-elsewhere fact. Durable cross-membership uniqueness, consent capture and withdrawal side effects, provider connect/disconnect execution, Firestore schema/Rules, and reconciliation scheduling are later work gated on the remaining AUTH-001 Functions/Admin authorization protections.
+
+The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, provider linking, or any officer tool available. Source tests and a merge are not Firebase deployment or live behavior proof.
+### 8.0c Immutable membership term/evidence receipt ledger — SOURCE ONLY, UNUSED
 
 MEMBERS-DUES-001A [#345](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/345) defines one unused pure contract that preserves the immutable renewal/evidence history the §8.0a authority cannot hold by itself. The §8.0a reducer keeps only one replaceable current-term snapshot, so each recorded term decision overwrites the previous one. This contract records each term decision as an ordered, append-only receipt and projects any receipt back into the exact `record_term_decision` command the shipped authority already accepts, without duplicating that reducer.
 
