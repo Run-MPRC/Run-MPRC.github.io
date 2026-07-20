@@ -9,6 +9,7 @@ import {
   formatPrice,
   getProductBySlug,
 } from '../../services/shop/shopService';
+import buildMerchCheckoutRequest from './merchCheckoutRequest';
 
 const CHECKOUT_FAILURE = 'We could not confirm checkout. Do not try again. Contact MPRC for help.';
 
@@ -78,12 +79,17 @@ function ProductDetail() {
     try {
       const result = await createMerchCheckout(
         services!.firebaseResources.app,
-        {
-          productSlug: product.slug,
-          buyer: { firstName, lastName, email, phone },
-          size: size || undefined,
-          color: color || undefined,
-        },
+        buildMerchCheckoutRequest({
+          product,
+          buyer: {
+            firstName,
+            lastName,
+            email,
+            phone,
+          },
+          size,
+          color,
+        }),
       );
       const checkoutUrl = result.url;
       if (typeof checkoutUrl === 'string' && checkoutUrl.trim() !== '') {
