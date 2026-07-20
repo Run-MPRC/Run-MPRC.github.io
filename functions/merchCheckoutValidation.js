@@ -10,6 +10,12 @@ const {
 const STRIPE_MINIMUM_USD_CENTS = 50;
 const STRIPE_UNIT_AMOUNT_MAX_CENTS = 99_999_999;
 const MAX_MERCH_OPTIONS = 50;
+// A single merchandise checkout may buy one line item in a bounded quantity.
+// The ceiling keeps the projected total a safe integer (max unit price times
+// MAX_MERCH_QUANTITY stays far below Number.MAX_SAFE_INTEGER) and blocks a
+// buyer from driving an implausibly large charge through a valid unit price.
+const MAX_MERCH_QUANTITY = 25;
+const MERCH_PRICE_SNAPSHOT_SCHEMA_VERSION = '1';
 const MERCH_CHECKOUT_VALIDATION_MESSAGE = 'Merchandise checkout request is invalid';
 const MERCH_CATALOG_MESSAGE = 'Merchandise catalog entry is invalid';
 // Shared "not an own enumerable data value" marker for the accessor/hole/missing
@@ -75,6 +81,44 @@ function projectMerchandisePriceCents(product) {
   }
 
   return priceCents;
+}
+
+// Project the immutable price snapshot persisted with an order (PAY-001C1C).
+// The server owns every number: the unit price comes only from the stored
+// product through projectMerchandisePriceCents, the quantity is re-validated
+// here rather than trusted from the caller, and the total is recomputed under
+// a safe-integer and Stripe-minimum guard. Any fault collapses to null so the
+// caller treats the item as unavailable instead of charging a guessed amount.
+// The returned record is frozen: an order persists exactly what was charged.
+function projectMerchandisePriceSnapshot(product, quantity) {
+  const unitAmountCents = projectMerchandisePriceCents(product);
+  if (unitAmountCents === null) return null;
+
+  if (
+    typeof quantity !== 'number'
+    || !numberIsSafeInteger(quantity)
+    || objectIs(quantity, -0)
+    || quantity < 1
+    || quantity > MAX_MERCH_QUANTITY
+  ) {
+    return null;
+  }
+
+  const totalAmountCents = unitAmountCents * quantity;
+  if (
+    !numberIsSafeInteger(totalAmountCents)
+    || totalAmountCents < STRIPE_MINIMUM_USD_CENTS
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    schemaVersion: MERCH_PRICE_SNAPSHOT_SCHEMA_VERSION,
+    currency: 'usd',
+    unitAmountCents,
+    quantity,
+    totalAmountCents,
+  });
 }
 
 // --- Request-shape validation (PAY-001C1B) -------------------------------
@@ -197,6 +241,24 @@ function parseSelection(value) {
   return parseText(value, { maxCodePoints: 100, maxBytes: 400 });
 }
 
+// An absent quantity means one (the pre-PAY-001C1C contract). When present it
+// must already be a finite number (parseStrictObject rejects NaN/Infinity/-0),
+// so tighten it to a positive safe integer within the per-order ceiling. A
+// float, sign, or out-of-range value is a request fault, not a silent clamp.
+function parseQuantity(value, present) {
+  if (!present) return 1;
+  if (
+    typeof value !== 'number'
+    || !numberIsSafeInteger(value)
+    || objectIs(value, -0)
+    || value < 1
+    || value > MAX_MERCH_QUANTITY
+  ) {
+    rejectRequest();
+  }
+  return value;
+}
+
 function parseBuyer(value) {
   const buyer = parseStrictObject(value, {
     requiredKeys: ['firstName', 'lastName', 'email'],
@@ -224,7 +286,7 @@ function parseMerchCheckoutRequest(data) {
   return withRequestFailure(() => {
     const request = parseStrictObject(data, {
       requiredKeys: ['productSlug', 'buyer'],
-      optionalKeys: ['size', 'color'],
+      optionalKeys: ['size', 'color', 'quantity'],
       limits: {
         maxDepth: 2,
         maxEntries: 12,
@@ -239,6 +301,7 @@ function parseMerchCheckoutRequest(data) {
     const result = {
       productSlug: parseProductSlug(request.productSlug),
       buyer: parseBuyer(request.buyer),
+      quantity: parseQuantity(request.quantity, hasOwn(request, 'quantity')),
     };
     if (hasOwn(request, 'size')) {
       defineOwnDataProperty(result, 'size', parseSelection(request.size));
@@ -365,6 +428,7 @@ function matchMerchandiseOptions(product, request) {
 }
 
 module.exports = {
+  MAX_MERCH_QUANTITY,
   MerchCatalogError,
   MerchCheckoutValidationError,
   STRIPE_MINIMUM_USD_CENTS,
@@ -372,4 +436,5 @@ module.exports = {
   matchMerchandiseOptions,
   parseMerchCheckoutRequest,
   projectMerchandisePriceCents,
+  projectMerchandisePriceSnapshot,
 };
