@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
+import Header from '../../components/Header';
+import HeaderImage from '../../images/activities/header_bg_1.jpg';
 import {
   listPublicEvents,
   listMemberEvents,
@@ -113,6 +115,9 @@ function Events() {
         canonicalUrl={SEO_CONFIG.url}
         structuredData={structuredData}
       />
+      <Header title="Events" image={HeaderImage}>
+        Runs, races, and social gatherings with the MPRC community.
+      </Header>
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">Upcoming Events</h2>
@@ -121,7 +126,13 @@ function Events() {
           </Link>
         </div>
         {loading && <p className="text-gray-500">Loading events...</p>}
-        {error && <EventsSubscriptionAlertBox>Error: {error}</EventsSubscriptionAlertBox>}
+        {error && (
+          <EventsSubscriptionAlertBox>
+            Error:
+            {' '}
+            {error}
+          </EventsSubscriptionAlertBox>
+        )}
         {!loading && !error && events.length === 0 && (
           <p className="text-gray-500">No events scheduled at this time.</p>
         )}

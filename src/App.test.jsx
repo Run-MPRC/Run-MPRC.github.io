@@ -226,8 +226,15 @@ test('renders the Auth action route and removes its query and fragment before us
 
   render(<App />);
 
+  expect(screen.getAllByRole('heading', {
+    level: 1,
+  })).toHaveLength(1);
   expect(screen.getByRole('heading', {
     level: 1,
+    name: /verify your email/i,
+  })).toBeInTheDocument();
+  expect(screen.getByRole('heading', {
+    level: 2,
     name: /email verification/i,
   })).toBeInTheDocument();
   expect(screen.queryByRole('heading', {
@@ -251,6 +258,8 @@ const ADMIN_PRODUCTS_LOAD_FAILURE = 'We could not load products right now. Pleas
 const ADMIN_PRODUCT_EDITOR_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const ADMIN_EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 const ADMIN_EVENT_EDITOR_LOAD_FAILURE = 'We could not load this event right now. Please try again later.';
+const ADMIN_EVENT_SAVE_PENDING = 'Event save in progress. Do not start another save.';
+const ADMIN_EVENT_SAVE_UNKNOWN = 'We could not confirm that event save. Do not repeat it. Stop and contact the event lead, treasurer, and platform owner.';
 const ADMIN_EVENT_REGISTRATIONS_LOAD_FAILURE = 'We could not load registrations right now. Stop and contact the event lead, treasurer, and platform owner before taking any registration action.';
 const ADMIN_LATE_REGISTRATION_OUTCOME_UNKNOWN = 'We could not confirm this $0 late registration. Do not try again on this page. Stop and contact the event lead, treasurer, and platform owner.';
 const ADMIN_DASHBOARD_LOAD_FAILURE = 'We could not load the admin summary right now. Please try again later.';
@@ -5306,6 +5315,497 @@ describe('Admin Event editor load-failure boundary', () => {
   });
 });
 
+describe('Admin Event save privacy and one-attempt boundary', () => {
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+  }
+
+  function syntheticAdminEvent({
+    slug = 'synthetic-event',
+    title = 'Synthetic Club Run',
+  } = {}) {
+    const timestamp = (year, month, day, hour, minute) => ({
+      toDate: () => new Date(year, month, day, hour, minute),
+    });
+    return {
+      id: slug,
+      slug,
+      title,
+      description: 'A made-up event used only for this test.',
+      startAt: timestamp(2030, 0, 12, 9, 30),
+      endAt: timestamp(2030, 0, 12, 11, 0),
+      location: 'Synthetic Park',
+      locationDetails: 'Synthetic entrance',
+      capacity: 40,
+      status: 'open',
+      visibility: 'public',
+      pricing: {
+        memberCents: 2500,
+        nonMemberCents: 3000,
+        earlyBirdCents: 2000,
+      },
+      waiverText: 'Synthetic waiver text.',
+      waiverVersion: '7',
+      registrationOpensAt: null,
+      registrationClosesAt: null,
+      heroImageUrl: '',
+      customFields: [],
+      volunteerEnabled: false,
+      volunteerFields: [],
+      resultsUrl: null,
+      resultsText: null,
+    };
+  }
+
+  function adminAuth(uid = 'synthetic-admin') {
+    return {
+      user: uid ? { uid } : null,
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    };
+  }
+
+  function fillValidNewEvent() {
+    fireEvent.change(screen.getByLabelText('Title *'), {
+      target: { value: 'Synthetic New Run' },
+    });
+    fireEvent.change(screen.getByLabelText('Start *'), {
+      target: { value: '2030-01-12T09:30' },
+    });
+  }
+
+  async function renderLoadedEditor(event = syntheticAdminEvent()) {
+    getEventBySlug.mockResolvedValueOnce(event);
+    const view = renderAdminEventEditor(event.slug);
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: `Edit: ${event.title}`,
+    })).toBeInTheDocument();
+    return view;
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue(adminAuth());
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    listAllEvents.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('preserves one exact edit request and the current success navigation', async () => {
+    updateEvent.mockResolvedValueOnce(undefined);
+    await renderLoadedEditor();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/events'));
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+    expect(updateEvent).toHaveBeenCalledWith(
+      firestore,
+      'synthetic-event',
+      {
+        slug: 'synthetic-event',
+        title: 'Synthetic Club Run',
+        description: 'A made-up event used only for this test.',
+        startAt: new Date(2030, 0, 12, 9, 30),
+        endAt: new Date(2030, 0, 12, 11, 0),
+        location: 'Synthetic Park',
+        locationDetails: 'Synthetic entrance',
+        capacity: 40,
+        status: 'open',
+        visibility: 'public',
+        pricing: {
+          memberCents: 2500,
+          nonMemberCents: 3000,
+          earlyBirdCents: 2000,
+        },
+        waiverText: 'Synthetic waiver text.',
+        waiverVersion: '7',
+        customFields: [],
+        volunteerEnabled: false,
+        volunteerFields: [],
+        resultsUrl: null,
+        resultsText: null,
+        registrationOpensAt: null,
+        registrationClosesAt: null,
+        heroImageUrl: '',
+      },
+    );
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  test('preserves one exact create request with the current authenticated UID', async () => {
+    createEvent.mockResolvedValueOnce(undefined);
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/events'));
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(createEvent).toHaveBeenCalledWith(
+      firestore,
+      {
+        slug: 'synthetic-new-run',
+        title: 'Synthetic New Run',
+        description: '',
+        startAt: new Date(2030, 0, 12, 9, 30),
+        endAt: null,
+        location: '',
+        locationDetails: '',
+        capacity: null,
+        status: 'draft',
+        visibility: 'public',
+        pricing: { memberCents: 0, nonMemberCents: 0 },
+        waiverText: '',
+        waiverVersion: '1',
+        customFields: [],
+        volunteerEnabled: false,
+        volunteerFields: [],
+        resultsUrl: null,
+        resultsText: null,
+        registrationOpensAt: null,
+        registrationClosesAt: null,
+        heroImageUrl: '',
+      },
+      'synthetic-admin',
+    );
+    expect(updateEvent).not.toHaveBeenCalled();
+  });
+
+  test('keeps local validation correctable without consuming the save attempt', async () => {
+    const request = deferred();
+    createEvent.mockReturnValueOnce(request.promise);
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByText('Start date/time is required')).toBeInTheDocument();
+    expect(createEvent).not.toHaveBeenCalled();
+
+    fillValidNewEvent();
+    fireEvent.submit(document.querySelector('form'));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+    expect(createEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('admits one immediate edit submission and hides the complete form while pending', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValue(request.promise);
+    await renderLoadedEditor();
+    const form = document.querySelector('form');
+
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe(ADMIN_EVENT_SAVE_PENDING);
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByText('Synthetic Club Run')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /All events/ })).not.toBeInTheDocument();
+  });
+
+  test('admits one immediate create submission while pending', async () => {
+    const request = deferred();
+    createEvent.mockReturnValue(request.promise);
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+    const form = document.querySelector('form');
+
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('status').textContent).toBe(ADMIN_EVENT_SAVE_PENDING);
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create event' })).not.toBeInTheDocument();
+  });
+
+  test('discards a hostile edit rejection and keeps the same-context page terminally unknown', async () => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const messageGetter = jest.fn(() => 'admin-event-save-message-canary');
+    const toStringGetter = jest.fn(() => () => 'admin-event-save-string-canary');
+    const getTrap = jest.fn((target, key, receiver) => Reflect.get(target, key, receiver));
+    const hostile = new Proxy(Object.defineProperties({}, {
+      message: { configurable: true, get: messageGetter },
+      toString: { configurable: true, get: toStringGetter },
+    }), { get: getTrap });
+    updateEvent.mockRejectedValueOnce(hostile);
+    const view = await renderLoadedEditor();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(ADMIN_EVENT_SAVE_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(toStringGetter).not.toHaveBeenCalled();
+    expect(getTrap).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent(
+      /admin-event-save-message-canary|admin-event-save-string-canary/i,
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toMatch(
+      /admin-event-save-message-canary|admin-event-save-string-canary/i,
+    );
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByText('Synthetic Club Run')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /All events/ })).not.toBeInTheDocument();
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(screen.getByRole('alert').textContent).toBe(ADMIN_EVENT_SAVE_UNKNOWN);
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('replaces an ordinary create rejection with the same fixed unknown result', async () => {
+    updateEvent.mockResolvedValue(undefined);
+    createEvent.mockRejectedValueOnce(Object.assign(
+      new Error('admin-event-create-private-canary officer@example.test'),
+      { endpoint: 'https://provider.example.test/?token=create-secret-canary' },
+    ));
+    window.history.pushState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+
+    fireEvent.submit(document.querySelector('form'));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_EVENT_SAVE_UNKNOWN);
+    expect(document.body).not.toHaveTextContent(
+      /admin-event-create-private-canary|officer@example\.test|provider\.example|create-secret-canary/i,
+    );
+    expect(document.querySelector('form')).toBeNull();
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(updateEvent).not.toHaveBeenCalled();
+  });
+
+  test('performs no create when the current UID or database is missing', async () => {
+    useAuth.mockReturnValue(adminAuth(null));
+    window.history.pushState({}, '', '/admin/events/new');
+    const missingUidView = render(<App />);
+    fillValidNewEvent();
+    fireEvent.submit(document.querySelector('form'));
+    expect(createEvent).not.toHaveBeenCalled();
+    missingUidView.unmount();
+
+    useAuth.mockReturnValue(adminAuth());
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: null } },
+      isReady: true,
+    });
+    window.history.replaceState({}, '', '/admin/events/new');
+    render(<App />);
+    fillValidNewEvent();
+    fireEvent.submit(document.querySelector('form'));
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  test('makes an older success inert after the route changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    getEventBySlug.mockResolvedValueOnce(syntheticAdminEvent({
+      slug: 'current-event',
+      title: 'Current Synthetic Run',
+    }));
+    window.history.pushState({}, '', '/admin/events/current-event/edit');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/current-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not inspect an older hostile rejection after the route changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    getEventBySlug.mockResolvedValueOnce(syntheticAdminEvent({
+      slug: 'current-event',
+      title: 'Current Synthetic Run',
+    }));
+    window.history.pushState({}, '', '/admin/events/current-event/edit');
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+    const messageGetter = jest.fn(() => 'obsolete-event-save-message-canary');
+
+    await act(async () => {
+      request.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await request.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/admin/events/current-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Synthetic Run',
+    })).toBeInTheDocument();
+  });
+
+  test('makes an older success inert after the database changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    const currentFirestore = { name: 'synthetic-current-save-firestore' };
+    getEventBySlug.mockResolvedValueOnce(syntheticAdminEvent({
+      title: 'Current Database Run',
+    }));
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { firestore: currentFirestore } },
+      isReady: true,
+    });
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Database Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Current Database Run',
+    })).toBeInTheDocument();
+  });
+
+  test('makes an older success inert after the admin UID changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    useAuth.mockReturnValue(adminAuth('synthetic-current-admin'));
+    view.rerender(<App />);
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Edit: Synthetic Club Run',
+    })).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(screen.getByRole('heading', {
+      level: 1,
+      name: 'Edit: Synthetic Club Run',
+    })).toBeInTheDocument();
+  });
+
+  test('makes an older success inert after readiness changes', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+
+    useServiceLocator.mockReturnValue({ services: null, isReady: false });
+    view.rerender(<App />);
+    expect(await screen.findByText('Loading...')).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+  });
+
+  test('makes a completion inert after the editor unmounts', async () => {
+    const request = deferred();
+    updateEvent.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedEditor();
+    fireEvent.submit(document.querySelector('form'));
+    expect(await screen.findByRole('status')).toHaveTextContent(ADMIN_EVENT_SAVE_PENDING);
+    view.unmount();
+
+    await act(async () => {
+      request.resolve(undefined);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(window.location.pathname).toBe('/admin/events/synthetic-event/edit');
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Admin Event registrations load-failure privacy boundary', () => {
   let originalFetch;
 
@@ -8997,5 +9497,769 @@ describe('Admin registration action unknown-result boundary', () => {
     expect(listRegistrationsForEvent).toHaveBeenCalledTimes(1);
     expect(adminRegistrationAction).toHaveBeenCalledTimes(1);
     expect(track).not.toHaveBeenCalled();
+  });
+});
+
+describe('Admin registration CSV export privacy and current-context boundary', () => {
+  const CSV_PENDING = 'Registration export in progress. Do not start another registration action or export.';
+  const CSV_UNKNOWN = 'We could not confirm that registration export. Do not try again on this page. Stop and contact the event lead, privacy lead, treasurer, and platform owner.';
+  const CSV_ENDPOINT = 'https://functions.example.test/exportRegistrationsCsv';
+  const CSV_UID = 'synthetic-csv-admin';
+  const csvRegistration = {
+    id: 'synthetic-csv-registration',
+    status: 'paid',
+    amountCents: 2500,
+    signupType: 'participant',
+    priceTier: 'member',
+    runner: {
+      firstName: 'Synthetic',
+      lastName: 'CSV Runner',
+      email: 'synthetic-csv-runner@example.test',
+      shirtSize: 'M',
+    },
+  };
+
+  let originalFetch;
+  let originalCreateObjectUrlDescriptor;
+  let originalRevokeObjectUrlDescriptor;
+  let originalElementRemove;
+  let pageUser;
+  let firebaseUser;
+  let resources;
+  let services;
+  let getHttpFunctionUrl;
+  let csvBlob;
+  let blobReader;
+  let failureStage;
+  let exportAnchor;
+  let appendedAnchors;
+  let clickedDownloads;
+  let appendSpy;
+  let clickSpy;
+  let removeSpy;
+  let createObjectUrl;
+  let revokeObjectUrl;
+
+  function createDeferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, reject, resolve };
+  }
+
+  function csvEvent({
+    slug = 'synthetic-event',
+    title = 'Synthetic CSV Run',
+  } = {}) {
+    return {
+      id: slug,
+      slug,
+      title,
+      startAt: { toDate: () => new Date(2030, 0, 12, 9, 30) },
+      location: 'Synthetic CSV Park',
+      capacity: 40,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 2500, nonMemberCents: 3000 },
+    };
+  }
+
+  function authResult(user = pageUser) {
+    return {
+      user,
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    };
+  }
+
+  function makeResources({
+    app = firebaseApp,
+    authUser = firebaseUser,
+    db = firestore,
+    endpoint = getHttpFunctionUrl,
+  } = {}) {
+    return {
+      app,
+      firestore: db,
+      auth: { currentUser: authUser },
+      getHttpFunctionUrl: endpoint,
+    };
+  }
+
+  function applyCsvContext({
+    currentPageUser = pageUser,
+    currentResources = resources,
+    currentServices = services,
+    ready = true,
+  } = {}) {
+    pageUser = currentPageUser;
+    resources = currentResources;
+    services = currentServices;
+    useAuth.mockReturnValue(authResult(pageUser));
+    useServiceLocator.mockReturnValue({
+      services: ready ? services : null,
+      isReady: ready,
+    });
+  }
+
+  function installDownloadHarness() {
+    if (appendSpy) return;
+    const originalAppend = document.body.appendChild;
+    appendSpy = jest.spyOn(document.body, 'appendChild')
+      .mockImplementation(function appendChild(node) {
+        const result = originalAppend.call(this, node);
+        if (node instanceof HTMLAnchorElement) {
+          exportAnchor = node;
+          appendedAnchors.push(node);
+          if (failureStage === 'append') {
+            throw new Error('csv-append-private-canary');
+          }
+        }
+        return result;
+      });
+    clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function click() {
+        clickedDownloads.push({
+          download: this.download,
+          href: this.href,
+        });
+        if (failureStage === 'click') {
+          throw new Error('csv-click-private-canary');
+        }
+      });
+    removeSpy = jest.spyOn(Element.prototype, 'remove')
+      .mockImplementation(function remove() {
+        if (this === exportAnchor && failureStage === 'remove') {
+          failureStage = null;
+          throw new Error('csv-remove-private-canary');
+        }
+        return originalElementRemove.call(this);
+      });
+  }
+
+  async function renderLoadedCsv(slug = 'synthetic-event') {
+    const view = renderAdminEventRegistrations(slug);
+    expect(await screen.findByText(csvRegistration.runner.email)).toBeInTheDocument();
+    installDownloadHarness();
+    return view;
+  }
+
+  async function expectCsvPrivateSurfacesHidden(...privateText) {
+    privateText.forEach((text) => expect(document.body).not.toHaveTextContent(text));
+    expect(document.body).not.toHaveTextContent(csvRegistration.runner.email);
+    expect(document.body).not.toHaveTextContent('Synthetic CSV Run');
+    expect(document.body).not.toHaveTextContent('Synthetic CSV Park');
+    expect(screen.queryByText('Paid registrations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunds')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gross revenue')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refunded amount')).not.toBeInTheDocument();
+    await waitFor(() => expect(document.title).not.toContain('Synthetic CSV Run'));
+    expect(screen.queryByPlaceholderText('Search by name or email...'))
+      .not.toBeInTheDocument();
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Export CSV|Exporting/ }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Late registration — $0 only' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Comp registration' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {
+      name: /^(Refund|Partial|Sub|Cancel|Note|Create \$0 registration|Create comp)$/,
+    })).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  }
+
+  function hostileResponse() {
+    const okGetter = jest.fn(() => true);
+    const blobGetter = jest.fn(() => jest.fn());
+    return {
+      blobGetter,
+      okGetter,
+      value: Object.defineProperties({}, {
+        ok: {
+          configurable: true,
+          get: okGetter,
+        },
+        blob: {
+          configurable: true,
+          get: blobGetter,
+        },
+      }),
+    };
+  }
+
+  beforeEach(() => {
+    pageUser = { uid: CSV_UID };
+    firebaseUser = {
+      uid: CSV_UID,
+      getIdToken: jest.fn().mockResolvedValue('synthetic-csv-token'),
+    };
+    getHttpFunctionUrl = jest.fn().mockReturnValue(CSV_ENDPOINT);
+    resources = makeResources();
+    services = { firebaseResources: resources };
+    applyCsvContext();
+    getEventBySlug.mockResolvedValue(csvEvent());
+    listRegistrationsForEvent.mockResolvedValue([csvRegistration]);
+    adminRegistrationAction.mockReset();
+    track.mockReset();
+
+    originalFetch = global.fetch;
+    csvBlob = new Blob(['synthetic,csv\nvalue,only'], { type: 'text/csv' });
+    blobReader = jest.fn().mockResolvedValue(csvBlob);
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, blob: blobReader });
+
+    originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
+      URL,
+      'createObjectURL',
+    );
+    originalRevokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
+      URL,
+      'revokeObjectURL',
+    );
+    createObjectUrl = jest.fn(() => {
+      if (failureStage === 'create-url') {
+        throw new Error('csv-create-url-private-canary');
+      }
+      return `blob:synthetic-csv-${createObjectUrl.mock.calls.length}`;
+    });
+    revokeObjectUrl = jest.fn(() => {
+      if (failureStage === 'revoke') {
+        failureStage = null;
+        throw new Error('csv-revoke-private-canary');
+      }
+    });
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectUrl,
+      writable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectUrl,
+      writable: true,
+    });
+
+    originalElementRemove = Element.prototype.remove;
+    failureStage = null;
+    exportAnchor = null;
+    appendedAnchors = [];
+    clickedDownloads = [];
+    appendSpy = null;
+    clickSpy = null;
+    removeSpy = null;
+  });
+
+  afterEach(() => {
+    try {
+      appendedAnchors.forEach((anchor) => {
+        if (anchor.isConnected) originalElementRemove.call(anchor);
+      });
+    } finally {
+      appendSpy?.mockRestore();
+      clickSpy?.mockRestore();
+      removeSpy?.mockRestore();
+      if (originalCreateObjectUrlDescriptor) {
+        Object.defineProperty(
+          URL,
+          'createObjectURL',
+          originalCreateObjectUrlDescriptor,
+        );
+      } else {
+        delete URL.createObjectURL;
+      }
+      if (originalRevokeObjectUrlDescriptor) {
+        Object.defineProperty(
+          URL,
+          'revokeObjectURL',
+          originalRevokeObjectUrlDescriptor,
+        );
+      } else {
+        delete URL.revokeObjectURL;
+      }
+      if (originalFetch === undefined) delete global.fetch;
+      else global.fetch = originalFetch;
+      jest.restoreAllMocks();
+    }
+  });
+
+  test('preserves one exact current download and permits one later deliberate download', async () => {
+    await renderLoadedCsv();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => expect(clickedDownloads).toHaveLength(1));
+    expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(1);
+    expect(getHttpFunctionUrl).toHaveBeenCalledWith('exportRegistrationsCsv');
+    expect(getHttpFunctionUrl).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${CSV_ENDPOINT}?eventId=synthetic-event`,
+      {
+        headers: { Authorization: 'Bearer synthetic-csv-token' },
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(global.fetch.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(blobReader).toHaveBeenCalledTimes(1);
+    expect(createObjectUrl).toHaveBeenCalledWith(csvBlob);
+    expect(clickedDownloads[0].href).toBe('blob:synthetic-csv-1');
+    expect(clickedDownloads[0].download)
+      .toMatch(/^registrations-synthetic-event-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(appendedAnchors[0].isConnected).toBe(false);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:synthetic-csv-1');
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(clickedDownloads).toHaveLength(2));
+    expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(blobReader).toHaveBeenCalledTimes(2);
+    expect(createObjectUrl).toHaveBeenCalledTimes(2);
+    expect(revokeObjectUrl).toHaveBeenCalledTimes(2);
+    expect(appendedAnchors.every((anchor) => !anchor.isConnected)).toBe(true);
+  });
+
+  test('sets a synchronous cross-action lock before token work settles', async () => {
+    const tokenRequest = createDeferred();
+    firebaseUser.getIdToken.mockReturnValueOnce(tokenRequest.promise);
+    const view = await renderLoadedCsv();
+    const exportButton = screen.getByRole('button', { name: 'Export CSV' });
+    const lateButton = screen.getByRole('button', {
+      name: '+ Late registration — $0 only',
+    });
+    const compButton = screen.getByRole('button', { name: '+ Comp registration' });
+    const noteButton = screen.getByRole('button', { name: 'Note' });
+
+    act(() => {
+      exportButton.click();
+      exportButton.click();
+      lateButton.click();
+      compButton.click();
+      noteButton.click();
+    });
+
+    const pending = await screen.findByRole('status');
+    expect(pending.textContent).toBe(CSV_PENDING);
+    expect(pending).toHaveAttribute('aria-live', 'polite');
+    expect(pending).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.getByRole('button', { name: 'Exporting...' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '+ Late registration — $0 only' }))
+      .toBeDisabled();
+    expect(screen.getByRole('button', { name: '+ Comp registration' })).toBeDisabled();
+    ['Refund', 'Partial', 'Sub', 'Cancel', 'Note'].forEach((name) => {
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    });
+    expect(screen.queryByRole('heading', { name: /Add note|Comp registration|Late registration/ }))
+      .not.toBeInTheDocument();
+    expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(1);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(adminRegistrationAction).not.toHaveBeenCalled();
+
+    view.unmount();
+    await act(async () => {
+      tokenRequest.resolve('synthetic-csv-token');
+      await tokenRequest.promise;
+      await Promise.resolve();
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('closes a same-act modal and prevents its submit while export is pending', async () => {
+    const tokenRequest = createDeferred();
+    firebaseUser.getIdToken.mockReturnValueOnce(tokenRequest.promise);
+    const view = await renderLoadedCsv();
+    const exportButton = screen.getByRole('button', { name: 'Export CSV' });
+    const noteButton = screen.getByRole('button', { name: 'Note' });
+
+    act(() => {
+      noteButton.click();
+      exportButton.click();
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(CSV_PENDING);
+    expect(screen.queryByRole('heading', { name: 'Add note' })).not.toBeInTheDocument();
+    expect(adminRegistrationAction).not.toHaveBeenCalled();
+    expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    tokenRequest.resolve('synthetic-csv-token');
+    await tokenRequest.promise;
+  });
+
+  test('keeps export blocked while a late-registration request is pending', async () => {
+    const actionRequest = createDeferred();
+    adminRegistrationAction.mockReturnValueOnce(actionRequest.promise);
+    const view = await renderLoadedCsv();
+    const exportButton = screen.getByRole('button', { name: 'Export CSV' });
+
+    fireEvent.click(screen.getByRole('button', {
+      name: '+ Late registration — $0 only',
+    }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create $0 registration' }));
+    await waitFor(() => expect(adminRegistrationAction).toHaveBeenCalledTimes(1));
+    expect(exportButton).toBeDisabled();
+    exportButton.click();
+    expect(firebaseUser.getIdToken).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    view.unmount();
+    actionRequest.resolve({ ok: true });
+    await actionRequest.promise;
+  });
+
+  test.each([
+    'token',
+    'endpoint',
+    'fetch',
+    'http',
+    'blob',
+    'create-url',
+    'append',
+    'click',
+    'remove',
+    'revoke',
+  ])('maps a current %s failure to one terminal private result with cleanup', async (
+    stage,
+  ) => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const storageSpy = jest.spyOn(Storage.prototype, 'setItem');
+    const privateCanary = `csv-${stage}-private-canary@example.test`;
+    let statusGetter;
+    if (stage === 'token') {
+      firebaseUser.getIdToken.mockRejectedValueOnce(new Error(privateCanary));
+    } else if (stage === 'endpoint') {
+      getHttpFunctionUrl.mockImplementationOnce(() => {
+        throw new Error(privateCanary);
+      });
+    } else if (stage === 'fetch') {
+      global.fetch.mockRejectedValueOnce(new Error(privateCanary));
+    } else if (stage === 'http') {
+      statusGetter = jest.fn(() => privateCanary);
+      global.fetch.mockResolvedValueOnce(Object.defineProperties({}, {
+        ok: { configurable: true, value: false },
+        status: { configurable: true, get: statusGetter },
+      }));
+    } else if (stage === 'blob') {
+      blobReader.mockRejectedValueOnce(new Error(privateCanary));
+    } else {
+      failureStage = stage;
+    }
+
+    const view = await renderLoadedCsv();
+    const exportButton = screen.getByRole('button', { name: 'Export CSV' });
+    fireEvent.click(exportButton);
+
+    const alert = await screen.findByRole('alert');
+    const [, fetchOptions] = global.fetch.mock.calls[0] || [];
+    expect(alert.textContent).toBe(CSV_UNKNOWN);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    await expectCsvPrivateSurfacesHidden(privateCanary);
+    if (statusGetter) {
+      expect(statusGetter).not.toHaveBeenCalled();
+    }
+    expect(track).not.toHaveBeenCalled();
+    expect(storageSpy).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    if (fetchOptions) {
+      expect(fetchOptions.signal.aborted).toBe(true);
+    }
+    expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(1);
+    expect(getHttpFunctionUrl).toHaveBeenCalledTimes(stage === 'token' ? 0 : 1);
+    expect(global.fetch).toHaveBeenCalledTimes(
+      ['token', 'endpoint'].includes(stage) ? 0 : 1,
+    );
+    expect(blobReader).toHaveBeenCalledTimes(
+      ['blob', 'create-url', 'append', 'click', 'remove', 'revoke'].includes(stage)
+        ? 1
+        : 0,
+    );
+    expect(createObjectUrl).toHaveBeenCalledTimes(
+      ['create-url', 'append', 'click', 'remove', 'revoke'].includes(stage) ? 1 : 0,
+    );
+    expect(clickSpy).toHaveBeenCalledTimes(
+      ['click', 'remove', 'revoke'].includes(stage) ? 1 : 0,
+    );
+    expect(clickedDownloads).toHaveLength(
+      ['click', 'remove', 'revoke'].includes(stage) ? 1 : 0,
+    );
+    appendedAnchors.forEach((anchor) => expect(anchor.isConnected).toBe(false));
+    if (['create-url', 'append', 'click', 'remove', 'revoke'].includes(stage)) {
+      if (stage !== 'create-url') {
+        expect(revokeObjectUrl).toHaveBeenCalledTimes(1);
+      }
+      expect(document.querySelector('a[download]')).not.toBeInTheDocument();
+    }
+
+    view.rerender(<App />);
+    expect(screen.getByRole('alert')).toHaveTextContent(CSV_UNKNOWN);
+    await expectCsvPrivateSurfacesHidden(privateCanary);
+  });
+
+  test.each([
+    ['undefined', () => ({ traps: [], value: undefined })],
+    ['null', () => ({ traps: [], value: null })],
+    ['primitive', () => ({
+      traps: [],
+      value: 'csv-primitive-private-canary@example.test',
+    })],
+    ['accessor and coercion', () => {
+      const message = jest.fn(() => 'csv-accessor-private-canary');
+      const toString = jest.fn(() => 'csv-string-private-canary');
+      const valueOf = jest.fn(() => 41);
+      const toPrimitive = jest.fn(() => 'csv-primitive-hook-canary');
+      return {
+        traps: [message, toString, valueOf, toPrimitive],
+        value: Object.defineProperties({}, {
+          message: { configurable: true, get: message },
+          toString: { configurable: true, value: toString },
+          valueOf: { configurable: true, value: valueOf },
+          [Symbol.toPrimitive]: { configurable: true, value: toPrimitive },
+        }),
+      };
+    }],
+    ['Proxy', () => {
+      const traps = {
+        get: jest.fn(() => { throw new Error('csv-get-trap-canary'); }),
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('csv-descriptor-trap-canary');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('csv-prototype-trap-canary');
+        }),
+        has: jest.fn(() => { throw new Error('csv-has-trap-canary'); }),
+        ownKeys: jest.fn(() => { throw new Error('csv-keys-trap-canary'); }),
+      };
+      return {
+        traps: Object.values(traps),
+        value: new Proxy({}, traps),
+      };
+    }],
+  ])('does not inspect a hostile %s rejection', async (_label, makeRejection) => {
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    const { traps, value } = makeRejection();
+    global.fetch.mockRejectedValueOnce(value);
+    await renderLoadedCsv();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(CSV_UNKNOWN);
+    traps.forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expect(document.body).not.toHaveTextContent(
+      /csv-(accessor|descriptor|get|has|keys|primitive|prototype|string)-.*canary/i,
+    );
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test.each([
+    ['empty page UID', { authUid: CSV_UID, pageUid: '' }],
+    ['empty Firebase UID', { authUid: '', pageUid: CSV_UID }],
+    ['mismatched UIDs', { authUid: 'synthetic-other-admin', pageUid: CSV_UID }],
+    ['missing Firebase user', { authUid: null, pageUid: CSV_UID }],
+  ])('starts no export for %s', async (_label, { authUid, pageUid }) => {
+    pageUser = { uid: pageUid };
+    firebaseUser = authUid === null
+      ? null
+      : { uid: authUid, getIdToken: jest.fn() };
+    resources = makeResources({ authUser: firebaseUser });
+    services = { firebaseResources: resources };
+    applyCsvContext();
+    await renderLoadedCsv();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await act(async () => Promise.resolve());
+
+    if (firebaseUser) {
+      expect(firebaseUser.getIdToken).not.toHaveBeenCalled();
+    }
+    expect(getHttpFunctionUrl).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(clickedDownloads).toHaveLength(0);
+  });
+
+  test.each([
+    'services',
+    'resources',
+    'app',
+    'firestore',
+    'route',
+    'readiness',
+    'page-user',
+    'firebase-user',
+  ])('aborts and ignores an older response after %s changes', async (change) => {
+    const request = createDeferred();
+    global.fetch.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedCsv();
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    const [, { signal }] = global.fetch.mock.calls[0];
+
+    if (change === 'services') {
+      services = { firebaseResources: resources };
+      applyCsvContext({ currentServices: services });
+      view.rerender(<App />);
+    } else if (change === 'resources') {
+      resources = makeResources();
+      services = { firebaseResources: resources };
+      applyCsvContext({ currentResources: resources, currentServices: services });
+      view.rerender(<App />);
+    } else if (change === 'app') {
+      resources = makeResources({ app: { name: 'synthetic-current-csv-app' } });
+      services = { firebaseResources: resources };
+      applyCsvContext({ currentResources: resources, currentServices: services });
+      view.rerender(<App />);
+    } else if (change === 'firestore') {
+      resources = makeResources({ db: { name: 'synthetic-current-csv-firestore' } });
+      services = { firebaseResources: resources };
+      applyCsvContext({ currentResources: resources, currentServices: services });
+      view.rerender(<App />);
+    } else if (change === 'route') {
+      window.history.pushState(
+        {},
+        '',
+        '/admin/events/synthetic-current-csv-event/registrations',
+      );
+      fireEvent(window, new PopStateEvent('popstate'));
+    } else if (change === 'readiness') {
+      applyCsvContext({ ready: false });
+      view.rerender(<App />);
+    } else if (change === 'page-user') {
+      pageUser = { uid: CSV_UID };
+      applyCsvContext({ currentPageUser: pageUser });
+      view.rerender(<App />);
+    } else {
+      firebaseUser = {
+        uid: CSV_UID,
+        getIdToken: jest.fn().mockResolvedValue('synthetic-current-token'),
+      };
+      resources.auth.currentUser = firebaseUser;
+      applyCsvContext();
+      view.rerender(<App />);
+    }
+
+    expect(signal.aborted).toBe(true);
+    const oldResponse = hostileResponse();
+    await act(async () => {
+      request.resolve(oldResponse.value);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(oldResponse.okGetter).not.toHaveBeenCalled();
+    expect(oldResponse.blobGetter).not.toHaveBeenCalled();
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(clickedDownloads).toHaveLength(0);
+    expect(screen.queryByText(CSV_UNKNOWN)).not.toBeInTheDocument();
+  });
+
+  test.each(['token', 'blob'])(
+    'checks the exact context again after the %s await boundary',
+    async (boundary) => {
+      const request = createDeferred();
+      if (boundary === 'token') {
+        firebaseUser.getIdToken.mockReturnValueOnce(request.promise);
+      } else {
+        blobReader.mockReturnValueOnce(request.promise);
+      }
+      const view = await renderLoadedCsv();
+      fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+      if (boundary === 'blob') {
+        await waitFor(() => expect(blobReader).toHaveBeenCalledTimes(1));
+      }
+
+      pageUser = { uid: CSV_UID };
+      applyCsvContext({ currentPageUser: pageUser });
+      view.rerender(<App />);
+      await act(async () => {
+        request.resolve(boundary === 'token' ? 'synthetic-old-token' : csvBlob);
+        await request.promise;
+        await Promise.resolve();
+      });
+
+      if (boundary === 'token') expect(global.fetch).not.toHaveBeenCalled();
+      expect(createObjectUrl).not.toHaveBeenCalled();
+      expect(clickedDownloads).toHaveLength(0);
+    },
+  );
+
+  test('keeps an A to B to A response inert after a newer A download', async () => {
+    const oldRequest = createDeferred();
+    const oldResponse = hostileResponse();
+    global.fetch
+      .mockReturnValueOnce(oldRequest.promise)
+      .mockResolvedValueOnce({ ok: true, blob: blobReader });
+    await renderLoadedCsv();
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    const [, { signal: oldSignal }] = global.fetch.mock.calls[0];
+
+    window.history.pushState(
+      {},
+      '',
+      '/admin/events/synthetic-csv-event-b/registrations',
+    );
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByText(csvRegistration.runner.email)).toBeInTheDocument();
+    window.history.pushState(
+      {},
+      '',
+      '/admin/events/synthetic-event/registrations',
+    );
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(await screen.findByText(csvRegistration.runner.email)).toBeInTheDocument();
+    expect(oldSignal.aborted).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(clickedDownloads).toHaveLength(1));
+
+    await act(async () => {
+      oldRequest.resolve(oldResponse.value);
+      await oldRequest.promise;
+      await Promise.resolve();
+    });
+    expect(oldResponse.okGetter).not.toHaveBeenCalled();
+    expect(oldResponse.blobGetter).not.toHaveBeenCalled();
+    expect(clickedDownloads).toHaveLength(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('aborts and ignores a hostile response after unmount', async () => {
+    const request = createDeferred();
+    const oldResponse = hostileResponse();
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+    global.fetch.mockReturnValueOnce(request.promise);
+    const view = await renderLoadedCsv();
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    const [, { signal }] = global.fetch.mock.calls[0];
+    view.unmount();
+    expect(signal.aborted).toBe(true);
+
+    await act(async () => {
+      request.resolve(oldResponse.value);
+      await request.promise;
+      await Promise.resolve();
+    });
+
+    expect(oldResponse.okGetter).not.toHaveBeenCalled();
+    expect(oldResponse.blobGetter).not.toHaveBeenCalled();
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(clickedDownloads).toHaveLength(0);
+    expect(track).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });

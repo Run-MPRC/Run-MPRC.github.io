@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -41,6 +42,41 @@ const EXPECTED_SHELL_QUOTE = Object.freeze({
   resolved: 'https://registry.npmjs.org/shell-quote/-/shell-quote-1.8.4.tgz',
   integrity: 'sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==',
 });
+const EXPECTED_PICOMATCH = Object.freeze({
+  version: '2.3.2',
+  resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-2.3.2.tgz',
+  integrity: 'sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==',
+});
+const EXPECTED_NESTED_PICOMATCH = Object.freeze({
+  path: 'node_modules/tinyglobby/node_modules/picomatch',
+  version: '4.0.4',
+  resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz',
+  integrity: 'sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==',
+});
+const EXPECTED_YAML = Object.freeze({
+  version: '1.10.3',
+  resolved: 'https://registry.npmjs.org/yaml/-/yaml-1.10.3.tgz',
+  integrity: 'sha512-vIYeF1u3CjlhAFekPPAk2h/Kv4T3mAkMox5OymRiJQB0spDP10LHvt+K7G9Ny6NuuMAb25/6n1qyUjAcGNf/AA==',
+});
+const EXPECTED_NESTED_YAML = Object.freeze({
+  'node_modules/lint-staged/node_modules/yaml': Object.freeze({
+    version: '2.7.1',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.7.1.tgz',
+    integrity: 'sha512-10ULxpnOCQXxJvBgxsn9ptjq6uviG/htZKk9veJGhlqn3w/DxQ631zFF+nlQXLwmImeS5amR2dl2U8sg6U9jsQ==',
+  }),
+  'node_modules/openapi3-ts/node_modules/yaml': Object.freeze({
+    version: '2.8.4',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.8.4.tgz',
+    integrity: 'sha512-ml/JPOj9fOQK8RNnWojA67GbZ0ApXAUlN2UQclwv2eVgTgn7O9gg9o7paZWKMp4g0H3nTLtS9LVzhkpOFIKzog==',
+  }),
+  'node_modules/postcss-load-config/node_modules/yaml': Object.freeze({
+    version: '2.8.0',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.8.0.tgz',
+    integrity: 'sha512-4lLa/EcQCB0cJkyts+FpIRx5G/llPxfP6VQU5KByHEhLxY3IJCH0f0Hy1MHI8sClTvsIb8qwRJ6R/ZdlDJ/leQ==',
+  }),
+});
+const YAML_RECURSION_DEPTH = 300;
+const YAML_RECURSION_BYTES = (YAML_RECURSION_DEPTH * 2) + 1;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -203,7 +239,7 @@ test('pins the sole root websocket-driver resolution to the patched 0.7.5 releas
   assert.equal(installed.version, EXPECTED_WEBSOCKET_DRIVER.version);
 });
 
-test('fails a draft-75 length header that exceeds the configured maxLength closed', () => {
+function openSyntheticDraft75Driver(maxLength) {
   const websocket = require(path.join(REPOSITORY, 'node_modules/websocket-driver'));
 
   // A hixie-75 upgrade carries none of the newer key/version headers.
@@ -217,7 +253,7 @@ test('fails a draft-75 length header that exceeds the configured maxLength close
       upgrade: 'WebSocket',
     },
   };
-  const driver = websocket.http(request, { maxLength: 1 });
+  const driver = websocket.http(request, { maxLength });
 
   const events = [];
   driver.on('open', () => events.push('open'));
@@ -229,25 +265,44 @@ test('fails a draft-75 length header that exceeds the configured maxLength close
   // Prove a successful draft-75 handshake / open state before the hostile input.
   assert.equal(driver.version, 'hixie-75');
   assert.equal(driver.readyState, 0);
-  driver.start();
+  assert.equal(driver.start(), true);
   assert.equal(driver.readyState, 1);
-  assert.ok(events.includes('open'));
+  assert.deepEqual(events, ['open']);
   assert.match(
     Buffer.concat(handshake).toString('utf8'),
     /HTTP\/1\.1 101 Web Socket Protocol Handshake/,
   );
 
-  // Length-delimited binary frame: 0x80 marks a length-prefixed frame and 0x05
-  // declares a five-byte payload, five times the configured one-byte maxLength.
-  driver.parse(Buffer.from([0x80, 0x05]));
+  return { driver, events };
+}
 
-  // Patched 0.7.5 fails closed at the bound; vulnerable 0.7.4 stays open and skips bytes.
+test('closes draft-75 length headers only when declared length exceeds maxLength', () => {
+  // Length-delimited binary frame: 0x80 marks a length-prefixed frame and 0x05
+  // declares a five-byte payload.
+  const fiveByteLengthHeader = Buffer.from([0x80, 0x05]);
+
+  const overLimit = openSyntheticDraft75Driver(1);
+  assert.equal(overLimit.driver.io.write(fiveByteLengthHeader), true);
+
+  // Patched 0.7.5 fails closed above the bound; vulnerable 0.7.4 stays open.
   assert.equal(
-    driver.readyState,
+    overLimit.driver.readyState,
     3,
     'the driver must close when a declared length exceeds maxLength',
   );
-  assert.ok(events.includes('close'), 'a close event must fire at the length bound');
+  assert.deepEqual(overLimit.events, ['open', 'close']);
+
+  const atThreshold = openSyntheticDraft75Driver(5);
+  assert.equal(atThreshold.driver.io.write(fiveByteLengthHeader), true);
+
+  // The same header must remain open at the exact threshold. This control
+  // prevents an unconditional-disconnect implementation from satisfying the test.
+  assert.equal(atThreshold.driver.readyState, 1);
+  assert.deepEqual(atThreshold.events, ['open']);
+
+  assert.equal(atThreshold.driver.close(), true);
+  assert.equal(atThreshold.driver.readyState, 3);
+  assert.deepEqual(atThreshold.events, ['open', 'close']);
 });
 
 test('pins the sole root shell-quote resolution to the patched 1.8.4 release', () => {
@@ -310,4 +365,198 @@ test('rejects line-terminator shell operator objects without executing a shell',
   }
   assert.equal(quote([{ op: ';' }]), '\\;');
   assert.equal(quote(['safe value']), "'safe value'");
+});
+
+test('pins the sole root picomatch 2.x resolution to the patched 2.3.2 release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.picomatch, undefined);
+  assert.equal(packageJson.devDependencies?.picomatch, undefined);
+  assert.equal(packageJson.optionalDependencies?.picomatch, undefined);
+  assert.equal(packageJson.peerDependencies?.picomatch, undefined);
+  assert.equal(packageJson.resolutions?.picomatch, undefined);
+  assert.equal(packageJson.overrides?.picomatch, undefined);
+
+  assert.equal(
+    lock.packages['node_modules/jest-util']?.dependencies?.picomatch,
+    '^2.2.3',
+  );
+  assert.equal(
+    lock.packages['node_modules/micromatch']?.dependencies?.picomatch,
+    '^2.3.1',
+  );
+
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/picomatch'
+    || packagePath.endsWith('/node_modules/picomatch')
+  )).sort();
+  assert.deepEqual(lockedPaths, [
+    'node_modules/picomatch',
+    EXPECTED_NESTED_PICOMATCH.path,
+  ]);
+
+  const rootRecord = lock.packages['node_modules/picomatch'];
+  assert.deepEqual(
+    {
+      version: rootRecord.version,
+      resolved: rootRecord.resolved,
+      integrity: rootRecord.integrity,
+    },
+    EXPECTED_PICOMATCH,
+    'the root picomatch copy must retain its reviewed public-registry identity',
+  );
+  assert.notEqual(rootRecord.dev, true);
+  assert.equal(rootRecord.license, 'MIT');
+  assert.deepEqual(rootRecord.engines, { node: '>=8.6' });
+
+  const nestedRecord = lock.packages[EXPECTED_NESTED_PICOMATCH.path];
+  assert.deepEqual(
+    {
+      path: EXPECTED_NESTED_PICOMATCH.path,
+      version: nestedRecord.version,
+      resolved: nestedRecord.resolved,
+      integrity: nestedRecord.integrity,
+    },
+    EXPECTED_NESTED_PICOMATCH,
+    'the separate picomatch 4.x development copy must remain unchanged',
+  );
+  assert.equal(nestedRecord.dev, true);
+  assert.equal(
+    readJson(
+      path.join(REPOSITORY, EXPECTED_NESTED_PICOMATCH.path, 'package.json'),
+    ).version,
+    EXPECTED_NESTED_PICOMATCH.version,
+  );
+
+  const installed = readJson(
+    path.join(REPOSITORY, 'node_modules/picomatch/package.json'),
+  );
+  assert.equal(installed.version, EXPECTED_PICOMATCH.version);
+});
+
+test('does not compile inherited POSIX class names into host method text', () => {
+  const picomatch = require(path.join(REPOSITORY, 'node_modules/picomatch'));
+  const injectedHostText = /function|native code|\[object Object\]/i;
+
+  for (const className of ['constructor', 'toString', '__proto__']) {
+    const expression = picomatch.makeRe(`[[:${className}:]]`);
+    assert.doesNotMatch(
+      expression.source,
+      injectedHostText,
+      `${className} must not inject an inherited host value into the expression`,
+    );
+  }
+
+  const alpha = picomatch.makeRe('[[:alpha:]]');
+  assert.equal(alpha.test('A'), true);
+  assert.equal(alpha.test('7'), false);
+});
+
+test('pins the sole root yaml 1.x resolution to the patched 1.10.3 release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.yaml, undefined);
+  assert.equal(packageJson.devDependencies?.yaml, undefined);
+  assert.equal(packageJson.optionalDependencies?.yaml, undefined);
+  assert.equal(packageJson.peerDependencies?.yaml, undefined);
+  assert.equal(packageJson.resolutions?.yaml, undefined);
+  assert.equal(packageJson.overrides?.yaml, undefined);
+
+  assert.equal(
+    lock.packages['node_modules/cosmiconfig']?.dependencies?.yaml,
+    '^1.10.0',
+  );
+  assert.equal(
+    lock.packages['node_modules/cssnano']?.dependencies?.yaml,
+    '^1.10.2',
+  );
+  assert.equal(
+    lock.packages['node_modules/fork-ts-checker-webpack-plugin/node_modules/cosmiconfig']
+      ?.dependencies?.yaml,
+    '^1.7.2',
+  );
+
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/yaml'
+    || packagePath.endsWith('/node_modules/yaml')
+  )).sort();
+  assert.deepEqual(lockedPaths, [
+    'node_modules/lint-staged/node_modules/yaml',
+    'node_modules/openapi3-ts/node_modules/yaml',
+    'node_modules/postcss-load-config/node_modules/yaml',
+    'node_modules/yaml',
+  ]);
+
+  const record = lock.packages['node_modules/yaml'];
+  assert.deepEqual(
+    {
+      version: record.version,
+      resolved: record.resolved,
+      integrity: record.integrity,
+    },
+    EXPECTED_YAML,
+    'the root yaml copy must retain its reviewed public-registry identity',
+  );
+  assert.notEqual(record.dev, true);
+  assert.equal(record.license, 'ISC');
+  assert.deepEqual(record.engines, { node: '>= 6' });
+
+  for (const [packagePath, expected] of Object.entries(EXPECTED_NESTED_YAML)) {
+    const nestedRecord = lock.packages[packagePath];
+    assert.deepEqual(
+      {
+        version: nestedRecord.version,
+        resolved: nestedRecord.resolved,
+        integrity: nestedRecord.integrity,
+      },
+      expected,
+      `${packagePath} must remain byte-compatible with the reviewed base`,
+    );
+    assert.equal(nestedRecord.dev, true);
+  }
+
+  const installed = readJson(
+    path.join(REPOSITORY, 'node_modules/yaml/package.json'),
+  );
+  assert.equal(installed.version, EXPECTED_YAML.version);
+});
+
+test('turns bounded yaml collection stack exhaustion into a parser error', () => {
+  const yamlPath = path.join(REPOSITORY, 'node_modules/yaml');
+  const childSource = `
+    const YAML = require(${JSON.stringify(yamlPath)});
+    const depth = ${YAML_RECURSION_DEPTH};
+    const source = '['.repeat(depth) + '1' + ']'.repeat(depth);
+    const document = YAML.parseDocument(source);
+    process.stdout.write(JSON.stringify({
+      bytes: Buffer.byteLength(source),
+      errors: document.errors.map((error) => ({
+        name: error.name,
+        rangeError: error instanceof RangeError,
+      })),
+    }));
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ['--stack_size=256', '-e', childSource],
+    {
+      cwd: REPOSITORY,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024,
+      timeout: 5_000,
+    },
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const observation = JSON.parse(result.stdout);
+  assert.equal(observation.bytes, YAML_RECURSION_BYTES);
+  assert.deepEqual(observation.errors, [{
+    name: 'YAMLSemanticError',
+    rangeError: false,
+  }]);
 });

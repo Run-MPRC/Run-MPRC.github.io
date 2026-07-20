@@ -15,10 +15,6 @@ jest.mock('../../services/ServiceLocatorContext', () => ({
   useServiceLocator: jest.fn(),
 }));
 
-jest.mock('../../components/Header', () => function Header({ title }: { title: string }) {
-  return <div>{title}</div>;
-});
-
 jest.mock('../../components/SEO', () => function SEO() {
   return null;
 });
@@ -127,6 +123,11 @@ describe('VerifyEmailAction', () => {
     );
     expect(verifyEmailAction).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Verify email' })).toBeEnabled();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Verify your email' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Email verification' }))
+      .toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(token);
     expect(document.body).not.toHaveTextContent(fragment);
   });

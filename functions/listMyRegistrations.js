@@ -30,8 +30,6 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
   }
   const { uid } = context.auth;
-  const email = context.auth.token?.email;
-  const emailVerified = context.auth.token?.email_verified === true;
 
   const db = admin.firestore();
   const byUid = await db.collectionGroup('registrations')
@@ -40,15 +38,6 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
 
   const results = new Map();
   byUid.forEach((d) => results.set(d.ref.path, sanitize(d)));
-
-  if (email && emailVerified) {
-    const byEmail = await db.collectionGroup('registrations')
-      .where('runner.email', '==', email.toLowerCase())
-      .get();
-    byEmail.forEach((d) => {
-      if (!results.has(d.ref.path)) results.set(d.ref.path, sanitize(d));
-    });
-  }
 
   const eventIds = Array.from(new Set(
     Array.from(results.values()).map((r) => r.eventId).filter(Boolean),

@@ -1,9 +1,11 @@
 import React, {
-  useEffect, useRef, useState,
+  useEffect, useLayoutEffect, useRef, useState,
 } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
+import Header from '../../components/Header';
+import HeaderImage from '../../images/joinus/header_bg_1.jpg';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import {
@@ -29,6 +31,18 @@ function tsToDate(ts: Timestamp | null | undefined) {
 }
 
 const VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+
+export function AccountPageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <SEO title="My Account" noindex />
+      <Header title="My Account" image={HeaderImage}>
+        Manage your MPRC profile, registrations, and connected services.
+      </Header>
+      {children}
+    </>
+  );
+}
 
 function ResendVerificationButton() {
   const { services } = useServiceLocator();
@@ -219,6 +233,9 @@ function RegistrationRow({
 
 const PROFILE_UNAVAILABLE_MESSAGE = 'Your profile is temporarily unavailable. Sign out and try again later. No membership or payment status was changed.';
 const PROFILE_CHANGE_UNCONFIRMED_MESSAGE = 'We could not confirm your profile change. Try the profile again before making another change.';
+const SIGN_OUT_PENDING_MESSAGE = 'Signing out. Keep this page open.';
+const SIGN_OUT_RETRY_MESSAGE = 'We could not confirm sign-out. You may still be signed in. Try sign out once more.';
+const SIGN_OUT_TERMINAL_MESSAGE = 'We still could not confirm sign-out. You may still be signed in. Close the browser and do not let anyone else use this device until the membership lead or platform owner helps.';
 
 export function AccountContent({
   user,
@@ -240,14 +257,67 @@ export function AccountContent({
   const [regsData, setRegsData] = useState<MyRegistrationsResponse | null>(null);
   const [regsLoading, setRegsLoading] = useState(true);
   const [regsError, setRegsError] = useState<string | null>(null);
+  const identityService = services?.identityService || null;
+  const firebaseApp = services?.firebaseResources.app || null;
+  type AccountContext = {
+    firebaseApp: typeof firebaseApp;
+    identityService: typeof identityService;
+    uid: string;
+  };
+  type SignOutOutcome = AccountContext & {
+    attemptId: number;
+    attemptNumber: 1 | 2;
+    generation: number;
+    status: 'pending' | 'retry' | 'terminal';
+  };
+  const [profileContext, setProfileContext] = useState<AccountContext | null>(null);
+  const [registrationsContext, setRegistrationsContext] = useState<
+    AccountContext | null
+  >(null);
+  const [signOutOutcome, setSignOutOutcome] = useState<SignOutOutcome | null>(null);
+  const signOutAttemptIdRef = useRef(0);
+  const signOutAttemptsRef = useRef(0);
+  const signOutBlockedRef = useRef(false);
+  const signOutGenerationRef = useRef(0);
+  const signOutMountedRef = useRef(false);
+  const currentSignOutContextRef = useRef({
+    firebaseApp,
+    identityService,
+    uid: user.uid,
+  });
+
+  useLayoutEffect(() => {
+    currentSignOutContextRef.current = {
+      firebaseApp,
+      identityService,
+      uid: user.uid,
+    };
+    signOutMountedRef.current = true;
+    signOutGenerationRef.current += 1;
+    signOutBlockedRef.current = false;
+    signOutAttemptsRef.current = 0;
+    setSignOutOutcome(null);
+
+    return () => {
+      signOutMountedRef.current = false;
+      signOutGenerationRef.current += 1;
+      signOutBlockedRef.current = true;
+    };
+  }, [firebaseApp, identityService, user.uid]);
 
   useEffect(() => {
     if (!services) return undefined;
     const activeServices = services;
+    const loadContext = {
+      firebaseApp: activeServices.firebaseResources.app,
+      identityService: activeServices.identityService,
+      uid: user.uid,
+    };
     let active = true;
 
     async function loadProfile() {
       setProfileState('loading');
+      setProfileContext(null);
       setProfile(null);
       setProfileError(null);
       setEditing(false);
@@ -263,10 +333,12 @@ export function AccountContent({
         if (!active) return;
         setProfile(nextProfile);
         setFullName(nextProfile.fullName || '');
+        setProfileContext(loadContext);
         setProfileState('ready');
       } catch {
         if (!active) return;
         setProfileError(PROFILE_UNAVAILABLE_MESSAGE);
+        setProfileContext(loadContext);
         setProfileState('unavailable');
       }
     }
@@ -277,19 +349,27 @@ export function AccountContent({
 
   useEffect(() => {
     if (!services || profileState !== 'ready') return undefined;
+    const loadContext = {
+      firebaseApp: services.firebaseResources.app,
+      identityService: services.identityService,
+      uid: user.uid,
+    };
     let active = true;
     setRegsData(null);
+    setRegistrationsContext(null);
     setRegsError(null);
     setRegsLoading(true);
     listMyRegistrations(services.firebaseResources.app)
       .then((result) => {
         if (!active) return;
         setRegsData(result);
+        setRegistrationsContext(loadContext);
         setRegsLoading(false);
       })
       .catch(() => {
         if (!active) return;
         setRegsError('We could not load your registrations right now.');
+        setRegistrationsContext(loadContext);
         setRegsLoading(false);
       });
     return () => { active = false; };
@@ -329,38 +409,169 @@ export function AccountContent({
   }
 
   async function handleSignOut() {
-    if (!services) return;
-    await services.identityService.signOut();
+    const currentContext = currentSignOutContextRef.current;
+    if (
+      !currentContext.firebaseApp
+      || !currentContext.identityService
+      || signOutBlockedRef.current
+      || signOutAttemptsRef.current >= 2
+    ) return;
+
+    signOutBlockedRef.current = true;
+    signOutAttemptsRef.current += 1;
+    const attemptNumber = signOutAttemptsRef.current as 1 | 2;
+    const attemptId = signOutAttemptIdRef.current + 1;
+    signOutAttemptIdRef.current = attemptId;
+    const generation = signOutGenerationRef.current;
+    const outcomeContext = {
+      attemptId,
+      attemptNumber,
+      firebaseApp: currentContext.firebaseApp,
+      generation,
+      identityService: currentContext.identityService,
+      status: 'pending' as const,
+      uid: currentContext.uid,
+    };
+    setSignOutOutcome(outcomeContext);
+
+    try {
+      await currentContext.identityService.signOut();
+    } catch {
+      const latestContext = currentSignOutContextRef.current;
+      if (
+        !signOutMountedRef.current
+        || signOutGenerationRef.current !== generation
+        || signOutAttemptIdRef.current !== attemptId
+        || latestContext.uid !== outcomeContext.uid
+        || latestContext.identityService !== outcomeContext.identityService
+        || latestContext.firebaseApp !== outcomeContext.firebaseApp
+      ) return;
+
+      if (attemptNumber === 1) {
+        signOutBlockedRef.current = false;
+        setSignOutOutcome({
+          ...outcomeContext,
+          status: 'retry',
+        });
+        return;
+      }
+
+      setSignOutOutcome({
+        ...outcomeContext,
+        status: 'terminal',
+      });
+    }
   }
 
-  if (profileState === 'loading') {
+  const currentSignOutOutcome = signOutOutcome
+    && signOutOutcome.uid === user.uid
+    && signOutOutcome.identityService === identityService
+    && signOutOutcome.firebaseApp === firebaseApp
+    && signOutOutcome.generation === signOutGenerationRef.current
+    ? signOutOutcome
+    : null;
+  const profileBelongsToCurrentContext = profileContext
+    && profileContext.uid === user.uid
+    && profileContext.identityService === identityService
+    && profileContext.firebaseApp === firebaseApp;
+  const registrationsBelongToCurrentContext = registrationsContext
+    && registrationsContext.uid === user.uid
+    && registrationsContext.identityService === identityService
+    && registrationsContext.firebaseApp === firebaseApp;
+
+  if (currentSignOutOutcome) {
+    const isRetry = currentSignOutOutcome.status === 'retry';
+    const isTerminal = currentSignOutOutcome.status === 'terminal';
+    let message = SIGN_OUT_PENDING_MESSAGE;
+    if (isRetry) {
+      message = SIGN_OUT_RETRY_MESSAGE;
+    } else if (isTerminal) {
+      message = SIGN_OUT_TERMINAL_MESSAGE;
+    }
+    let buttonLabel = 'Sign out';
+    if (isRetry) {
+      buttonLabel = 'Try sign out once more';
+    } else if (isTerminal) {
+      buttonLabel = 'Sign out unavailable';
+    }
+
     return (
-      <div role="status" className="container mx-auto p-6">
-        Loading profile...
+      <div className="account-content">
+        <div className="account-sign-out container mx-auto p-4 max-w-3xl">
+          <section className="account-sign-out__panel" aria-labelledby="sign-out-heading">
+            <h2 id="sign-out-heading" className="account-sign-out__heading">
+              Sign out
+            </h2>
+            <p
+              id="account-sign-out-result"
+              role={currentSignOutOutcome.status === 'pending' ? 'status' : 'alert'}
+              aria-live={
+                currentSignOutOutcome.status === 'pending' ? 'polite' : 'assertive'
+              }
+              aria-atomic="true"
+              className={[
+                'account-sign-out__result',
+                `account-sign-out__result--${currentSignOutOutcome.status}`,
+              ].join(' ')}
+            >
+              {message}
+            </p>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={!isRetry}
+              aria-describedby="account-sign-out-result"
+              className="account-sign-out__button"
+            >
+              {buttonLabel}
+            </button>
+          </section>
+        </div>
       </div>
     );
   }
 
-  const upcoming = regsData?.registrations.filter((r) => {
-    const ev = regsData.events[r.eventId];
+  if (!profileBelongsToCurrentContext || profileState === 'loading') {
+    return (
+      <div className="account-content">
+        <div role="status" className="container mx-auto p-6">
+          Loading profile...
+        </div>
+      </div>
+    );
+  }
+
+  const currentRegistrations = registrationsBelongToCurrentContext
+    ? regsData
+    : null;
+  const currentRegistrationsLoading = registrationsBelongToCurrentContext
+    ? regsLoading
+    : true;
+  const currentRegistrationsError = registrationsBelongToCurrentContext
+    ? regsError
+    : null;
+  const upcoming = currentRegistrations?.registrations.filter((r) => {
+    const ev = currentRegistrations.events[r.eventId];
     if (!ev?.startAt) return false;
     const ms = typeof (ev.startAt as any).toMillis === 'function'
       ? (ev.startAt as any).toMillis()
       : new Date(ev.startAt as any).getTime();
     return ms > Date.now();
   }) || [];
-  const past = regsData?.registrations.filter((r) => !upcoming.includes(r)) || [];
+  const past = currentRegistrations?.registrations.filter(
+    (r) => !upcoming.includes(r),
+  ) || [];
 
   return (
-    <>
-      <SEO title="My Account" noindex />
+    <div className="account-content">
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Account</h1>
+          <h2 className="text-2xl font-bold">Account details</h2>
           <button
             type="button"
             onClick={handleSignOut}
-            className="text-sm text-gray-600 hover:underline"
+            disabled={!identityService || !firebaseApp}
+            className="account-sign-out__button"
           >
             Sign out
           </button>
@@ -495,11 +706,26 @@ export function AccountContent({
         {profileState === 'ready' && (
           <section className="mt-6">
             <h2 className="text-lg font-semibold mb-3">Upcoming events</h2>
-            {regsLoading && <p className="text-gray-500 text-sm">Loading...</p>}
-            {regsError && <p role="alert" className="text-red-500 text-sm">{regsError}</p>}
-            {!regsLoading && upcoming.length === 0 && (
-              <p className="text-gray-500 text-sm">
-                You haven&apos;t registered for any upcoming events.
+            {currentRegistrationsLoading && (
+              <p className="text-gray-500 text-sm">Loading...</p>
+            )}
+            {currentRegistrationsError && (
+              <p role="alert" className="text-red-500 text-sm">
+                {currentRegistrationsError}
+              </p>
+            )}
+            {!currentRegistrationsLoading
+              && !currentRegistrationsError
+              && upcoming.length === 0 && (
+              <p
+                aria-live="polite"
+                aria-atomic="true"
+                className="text-gray-500 text-sm"
+              >
+                No upcoming registrations are linked to this account.
+                {' '}
+                A registration made while signed out may not appear. Do not register or pay
+                again. Ask the event lead for help.
                 {' '}
                 <Link to="/events" className="text-blue-600 hover:underline">
                   Browse events
@@ -511,7 +737,7 @@ export function AccountContent({
               <RegistrationRow
                 key={r.id}
                 reg={r}
-                event={regsData?.events[r.eventId]}
+                event={currentRegistrations?.events[r.eventId]}
               />
             ))}
           </section>
@@ -524,7 +750,7 @@ export function AccountContent({
               <RegistrationRow
                 key={r.id}
                 reg={r}
-                event={regsData?.events[r.eventId]}
+                event={currentRegistrations?.events[r.eventId]}
               />
             ))}
           </section>
@@ -532,15 +758,21 @@ export function AccountContent({
 
         {profileState === 'ready' && <StravaSection uid={user.uid} />}
       </div>
-    </>
+    </div>
   );
 }
 
-function Account() {
+export function Account() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <div className="container mx-auto p-6">Loading...</div>;
+  if (isLoading) {
+    return (
+      <AccountPageShell>
+        <div role="status" className="container mx-auto p-6">Loading...</div>
+      </AccountPageShell>
+    );
+  }
   if (!isAuthenticated || !user) {
     return (
       <Navigate
@@ -550,7 +782,11 @@ function Account() {
       />
     );
   }
-  return <AccountContent user={user} />;
+  return (
+    <AccountPageShell>
+      <AccountContent user={user} />
+    </AccountPageShell>
+  );
 }
 
 export default Account;
