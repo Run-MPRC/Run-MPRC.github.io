@@ -19,7 +19,7 @@ const {
   MerchCheckoutValidationError,
   matchMerchandiseOptions,
   parseMerchCheckoutRequest,
-  projectMerchandisePriceCents,
+  projectMerchandisePriceSnapshot,
 } = require('./merchCheckoutValidation');
 const {
   projectCreatedStripeProductId,
@@ -144,8 +144,13 @@ exports.createMerchCheckout = functions
 
     const selections = matchOptions(product, request);
 
-    const priceCents = projectMerchandisePriceCents(product);
-    if (priceCents === null) {
+    // Snapshot the price the server will charge: a server-owned unit price from
+    // the stored product times the validated request quantity, recomputed under
+    // safe-integer and Stripe-minimum guards. The order persists this immutable
+    // record so the amount is fixed at creation, never re-derived from a product
+    // that may later change price.
+    const priceSnapshot = projectMerchandisePriceSnapshot(product, request.quantity);
+    if (priceSnapshot === null) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         'This item is unavailable',
@@ -175,8 +180,16 @@ exports.createMerchCheckout = functions
       shipping: null,
       size: selections.size,
       color: selections.color,
-      amountCents: priceCents,
-      currency: 'usd',
+      quantity: priceSnapshot.quantity,
+      amountCents: priceSnapshot.totalAmountCents,
+      currency: priceSnapshot.currency,
+      priceSnapshot: {
+        schemaVersion: priceSnapshot.schemaVersion,
+        currency: priceSnapshot.currency,
+        unitAmountCents: priceSnapshot.unitAmountCents,
+        quantity: priceSnapshot.quantity,
+        totalAmountCents: priceSnapshot.totalAmountCents,
+      },
       status: 'pending',
       stripeSessionId: null,
       stripePaymentIntentId: null,
@@ -194,7 +207,7 @@ exports.createMerchCheckout = functions
       auditLog: [auditEntry({
         actorEmail: normalizedEmail,
         action: 'order.created',
-        note: `product=${productSlug} size=${selections.size || '-'} color=${selections.color || '-'}`,
+        note: `product=${productSlug} qty=${priceSnapshot.quantity} size=${selections.size || '-'} color=${selections.color || '-'}`,
       })],
     };
 
@@ -211,7 +224,7 @@ exports.createMerchCheckout = functions
     });
     const resultExpectation = buildLegacyCheckoutSessionExpectation({
       livemode: serverConfig.stripeLivemodeExpected,
-      amountCents: priceCents,
+      amountCents: priceSnapshot.totalAmountCents,
       customerEmail: normalizedEmail,
       successUrl,
       cancelUrl,
@@ -241,10 +254,10 @@ exports.createMerchCheckout = functions
         line_items: [{
           price_data: {
             currency: 'usd',
-            unit_amount: priceCents,
+            unit_amount: priceSnapshot.unitAmountCents,
             product: stripeProductId,
           },
-          quantity: 1,
+          quantity: priceSnapshot.quantity,
         }],
         // Discounts remain disabled until a server-approved discount snapshot
         // and reconciliation contract is implemented (PROMO-001).

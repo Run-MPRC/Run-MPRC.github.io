@@ -138,6 +138,18 @@ A selection that does not fit a well-formed catalog is a request fault (`invalid
 
 Both phases return new immutable projections and one fixed non-identifying public failure. They do not log request data. This is a source boundary, not a launch claim. Immutable merchandise price snapshots and multi-quantity remain open under the rest of PAY-001C; PAY-001D, persistence-first orders, provider idempotency, deployment, and live behavior remain later work.
 
+### Merchandise price snapshot and multi-quantity (PAY-001C1C)
+
+PAY-001C1C is tracked in live issue [#393](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/393). Stacked on PAY-001C1B, it lets one checkout buy a single line item in a bounded quantity and persists an immutable, server-owned price snapshot on the order.
+
+`parseMerchCheckoutRequest` adds `quantity` as an optional exact root key. Absent quantity means one unit, applied server-side. A present quantity must be a finite safe integer that is not `-0`, at least `1`, and at most `MAX_MERCH_QUANTITY` (25); any other value is the same fixed `invalid-argument` denial as the other request faults, before any Firestore, rate-limit, or Stripe work. The ceiling keeps the projected total a safe integer (max unit price `99_999_999` × 25 stays far below `Number.MAX_SAFE_INTEGER`) and bounds the maximum charge a valid unit price can drive.
+
+`projectMerchandisePriceSnapshot(product, quantity)` owns every number. The unit price comes only from the stored product through `projectMerchandisePriceCents`; the quantity is re-validated inside the projector rather than trusted from the caller; the total is recomputed as `unit × quantity` and re-checked to be a safe integer at or above the Stripe minimum. Any fault collapses to `null`, and the callable treats the item as unavailable (`failed-precondition`) instead of charging a guessed amount. The projection is a frozen record with exact keys `schemaVersion`, `currency`, `unitAmountCents`, `quantity`, and `totalAmountCents`; distinct calls return distinct frozen records.
+
+The pending order persists `quantity`, `amountCents` (the **total**, `unit × quantity`), `currency`, and an immutable `priceSnapshot` sub-object, so the amount is fixed at creation and never re-derived from a product that may later change price. `amountCents` is the total because the webhook `validateSessionMoney` reconciles `session.amount_subtotal` against the stored amount and, with no adjustments, `session.amount_total` against that subtotal; for one line item Stripe reports `amount_subtotal = amount_total = unit × quantity`, so the order amount must be the total for a multi-quantity payment to reconcile. The legacy Checkout Session result expectation and the Stripe line item derive from the same snapshot: `unit_amount = unitAmountCents`, `quantity = quantity`, and the expected amount is `totalAmountCents`.
+
+The Stripe session metadata keeps its exact six-key shape (`schemaVersion`, `type`, `productSlug`, `orderId`, `size`, `color`). A `quantity` metadata key is deliberately **not** added, because `parseMetadataInput` enforces an exact-key match; quantity-in-metadata reconciliation is deferred to a PAY-005 follow-up that would extend `MERCH_METADATA_KEYS` and its validation together. This slice is server-only: the website still sends no quantity, so the existing single-unit checkout is byte-compatible, and a browser quantity selector is a later web slice. This is a source boundary, not a launch claim; cart/multi-line, inventory, canonical variant IDs, persistence-first idempotency, provider configuration, deployment, and live behavior remain later work.
+
 ## 5. Catalog model
 
 ### Race pricing

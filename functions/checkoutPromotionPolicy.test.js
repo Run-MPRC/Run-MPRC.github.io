@@ -234,7 +234,9 @@ function validCheckoutSessionForPayload(
     mode: 'payment',
     status: 'open',
     payment_status: 'unpaid',
-    amount_total: payload.line_items[0].price_data.unit_amount,
+    // Stripe multiplies the unit amount by the line quantity for amount_total.
+    amount_total: payload.line_items[0].price_data.unit_amount
+      * payload.line_items[0].quantity,
     currency: 'usd',
     customer_email: payload.customer_email,
     metadata: { ...payload.metadata },
@@ -1720,6 +1722,110 @@ describe('Checkout promotion policy', () => {
     expect(Object.hasOwn(storedOrder, 'url')).toBe(false);
     expect(Object.values(storedOrder)).not.toContain(result.url);
     expect(mockProductCreate).not.toHaveBeenCalled();
+  });
+
+  test('merchandise checkout charges the unit times the requested quantity', async () => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      description: 'Synthetic test product',
+      slug: 'hat',
+      status: 'active',
+      priceCents: 2000,
+      sizes: ['M'],
+      colors: ['blue'],
+      stripeProductId: 'prod_hat_policy',
+    });
+
+    const result = await createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+      size: 'M',
+      color: 'blue',
+      quantity: 3,
+    }, { auth: null, rawRequest: {} });
+
+    expect(mockCheckoutCreate).toHaveBeenCalledTimes(1);
+    // The server sends a per-unit price and the quantity; Stripe multiplies.
+    // The quantity never enters the fixed merch metadata key set.
+    const expectedMetadata = {
+      schemaVersion: '1',
+      type: 'merch',
+      productSlug: 'hat',
+      orderId: 'order-new-1',
+      size: 'M',
+      color: 'blue',
+    };
+    expect(mockCheckoutCreate).toHaveBeenCalledWith(expect.objectContaining({
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          unit_amount: 2000,
+          product: 'prod_hat_policy',
+        },
+        quantity: 3,
+      }],
+      metadata: expectedMetadata,
+      payment_intent_data: { metadata: expectedMetadata },
+    }));
+    expect(result).toMatchObject({
+      sessionId: 'cs_test_orderpolicy',
+      orderId: 'order-new-1',
+    });
+    const storedOrder = admin.__get('orders/order-new-1');
+    // amountCents is the immutable total (unit x quantity), not the unit price.
+    expect(storedOrder).toMatchObject({
+      quantity: 3,
+      amountCents: 6000,
+      currency: 'usd',
+      priceSnapshot: {
+        schemaVersion: '1',
+        currency: 'usd',
+        unitAmountCents: 2000,
+        quantity: 3,
+        totalAmountCents: 6000,
+      },
+      stripeSessionId: 'cs_test_orderpolicy',
+    });
+    expect(mockProductCreate).not.toHaveBeenCalled();
+  });
+
+  test('merchandise checkout without a quantity persists a single-unit snapshot', async () => {
+    admin.__seed('products/hat', {
+      checkoutEnabled: true,
+      title: 'Synthetic Hat',
+      slug: 'hat',
+      status: 'active',
+      priceCents: 2000,
+      stripeProductId: 'prod_hat_policy',
+    });
+
+    await createMerchCheckout({
+      productSlug: 'hat',
+      buyer: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+      },
+    }, { auth: null, rawRequest: {} });
+
+    // Backward compatible: an absent quantity is one, amountCents is the unit
+    // price, and the order still carries the structured immutable snapshot.
+    const storedOrder = admin.__get('orders/order-new-1');
+    expect(storedOrder).toMatchObject({
+      quantity: 1,
+      amountCents: 2000,
+      priceSnapshot: {
+        unitAmountCents: 2000,
+        quantity: 1,
+        totalAmountCents: 2000,
+      },
+    });
+    expect(mockCheckoutCreate.mock.calls[0][0].line_items[0].quantity).toBe(1);
   });
 
   test.each([

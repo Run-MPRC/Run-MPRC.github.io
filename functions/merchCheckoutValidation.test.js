@@ -1,4 +1,5 @@
 const {
+  MAX_MERCH_QUANTITY,
   MerchCatalogError,
   MerchCheckoutValidationError,
   STRIPE_MINIMUM_USD_CENTS,
@@ -6,6 +7,7 @@ const {
   matchMerchandiseOptions,
   parseMerchCheckoutRequest,
   projectMerchandisePriceCents,
+  projectMerchandisePriceSnapshot,
 } = require('./merchCheckoutValidation');
 
 describe('merchandise Checkout price projection', () => {
@@ -248,6 +250,134 @@ describe('merchandise Checkout price projection', () => {
   });
 });
 
+describe('merchandise price snapshot projection', () => {
+  test('projects a frozen unit/quantity/total record with exact keys', () => {
+    const snapshot = projectMerchandisePriceSnapshot({ priceCents: 2_000 }, 3);
+
+    expect(snapshot).toEqual({
+      schemaVersion: '1',
+      currency: 'usd',
+      unitAmountCents: 2_000,
+      quantity: 3,
+      totalAmountCents: 6_000,
+    });
+    expect(Reflect.ownKeys(snapshot)).toEqual([
+      'schemaVersion',
+      'currency',
+      'unitAmountCents',
+      'quantity',
+      'totalAmountCents',
+    ]);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  test('a single unit yields a total equal to the unit price', () => {
+    expect(projectMerchandisePriceSnapshot({ priceCents: 2_000 }, 1)).toEqual({
+      schemaVersion: '1',
+      currency: 'usd',
+      unitAmountCents: 2_000,
+      quantity: 1,
+      totalAmountCents: 2_000,
+    });
+  });
+
+  test.each([
+    ['minimum unit at one', STRIPE_MINIMUM_USD_CENTS, 1, STRIPE_MINIMUM_USD_CENTS],
+    ['minimum unit at max quantity', STRIPE_MINIMUM_USD_CENTS, MAX_MERCH_QUANTITY, STRIPE_MINIMUM_USD_CENTS * MAX_MERCH_QUANTITY],
+    ['max unit at one', STRIPE_UNIT_AMOUNT_MAX_CENTS, 1, STRIPE_UNIT_AMOUNT_MAX_CENTS],
+    ['max unit at max quantity', STRIPE_UNIT_AMOUNT_MAX_CENTS, MAX_MERCH_QUANTITY, STRIPE_UNIT_AMOUNT_MAX_CENTS * MAX_MERCH_QUANTITY],
+  ])('computes an exact safe-integer total at the %s boundary', (_name, priceCents, quantity, total) => {
+    const snapshot = projectMerchandisePriceSnapshot({ priceCents }, quantity);
+    expect(snapshot.totalAmountCents).toBe(total);
+    expect(Number.isSafeInteger(snapshot.totalAmountCents)).toBe(true);
+  });
+
+  test('the largest total stays a safe integer', () => {
+    // Max unit times the quantity ceiling must not approach Number.MAX_SAFE_INTEGER.
+    const total = STRIPE_UNIT_AMOUNT_MAX_CENTS * MAX_MERCH_QUANTITY;
+    expect(total).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    expect(projectMerchandisePriceSnapshot({ priceCents: STRIPE_UNIT_AMOUNT_MAX_CENTS }, MAX_MERCH_QUANTITY)
+      .totalAmountCents).toBe(total);
+  });
+
+  test('returns a distinct frozen record per call (no shared mutable state)', () => {
+    const first = projectMerchandisePriceSnapshot({ priceCents: 2_000 }, 2);
+    const second = projectMerchandisePriceSnapshot({ priceCents: 2_000 }, 2);
+    expect(first).not.toBe(second);
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
+  test.each([
+    ['explicit undefined', undefined],
+    ['null', null],
+    ['false', false],
+    ['true', true],
+    ['zero', 0],
+    ['negative zero', -0],
+    ['fractional', 2.5],
+    ['just above one', 1.0000001],
+    ['negative', -1],
+    ['NaN', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+    ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+    ['one over the ceiling', MAX_MERCH_QUANTITY + 1],
+    ['numeric string', '3'],
+    ['bigint', 3n],
+    ['boxed number', new Number(3)], // eslint-disable-line no-new-wrappers
+    ['array', [3]],
+    ['object', { valueOf: () => 3 }],
+    ['symbol', Symbol('synthetic-quantity')],
+  ])('rejects a %s quantity without conversion', (_name, quantity) => {
+    const conversion = jest.fn(() => {
+      throw new Error('conversion should not run');
+    });
+    if (quantity && (typeof quantity === 'object' || typeof quantity === 'function')) {
+      for (const key of [Symbol.toPrimitive, 'valueOf', 'toString', 'toJSON']) {
+        Object.defineProperty(quantity, key, { configurable: true, value: conversion });
+      }
+    }
+
+    expect(projectMerchandisePriceSnapshot({ priceCents: 2_000 }, quantity)).toBeNull();
+    expect(conversion).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['missing price', {}],
+    ['below the minimum', { priceCents: STRIPE_MINIMUM_USD_CENTS - 1 }],
+    ['zero', { priceCents: 0 }],
+    ['negative', { priceCents: -2_000 }],
+    ['fractional', { priceCents: 2_000.5 }],
+    ['over the provider limit', { priceCents: STRIPE_UNIT_AMOUNT_MAX_CENTS + 1 }],
+    ['non-record', null],
+    ['array', [2_000]],
+  ])('returns null for a %s product regardless of a valid quantity', (_name, product) => {
+    expect(projectMerchandisePriceSnapshot(product, 2)).toBeNull();
+  });
+
+  test('does not read the product through an accessor or proxy', () => {
+    const getter = jest.fn(() => {
+      throw new Error('getter should not run');
+    });
+    const accessorProduct = {};
+    Object.defineProperty(accessorProduct, 'priceCents', { enumerable: true, get: getter });
+    const trap = jest.fn(() => {
+      throw new Error('proxy trap should not run');
+    });
+    const proxy = new Proxy({ priceCents: 2_000 }, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+
+    expect(projectMerchandisePriceSnapshot(accessorProduct, 2)).toBeNull();
+    expect(projectMerchandisePriceSnapshot(proxy, 2)).toBeNull();
+    expect(getter).not.toHaveBeenCalled();
+    expect(trap).not.toHaveBeenCalled();
+  });
+});
+
 const validRequest = () => ({
   productSlug: 'hat',
   buyer: {
@@ -269,11 +399,15 @@ describe('merchandise checkout request validation', () => {
         email: 'buyer@example.test',
         phone: null,
       },
+      quantity: 1,
     });
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.buyer)).toBe(true);
     expect(Object.prototype.hasOwnProperty.call(result, 'size')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(result, 'color')).toBe(false);
+    // An absent quantity defaults to one as an own data property.
+    expect(Object.prototype.hasOwnProperty.call(result, 'quantity')).toBe(true);
+    expect(result.quantity).toBe(1);
   });
 
   test('accepts an opaque slug byte for byte', () => {
@@ -312,6 +446,50 @@ describe('merchandise checkout request validation', () => {
 
     expect(result.size).toBe('M');
     expect(result.color).toBe('blue');
+  });
+
+  test('keeps a supplied quantity as a frozen own property', () => {
+    const result = parseMerchCheckoutRequest({ ...validRequest(), quantity: 3 });
+
+    expect(result.quantity).toBe(3);
+    expect(Object.prototype.hasOwnProperty.call(result, 'quantity')).toBe(true);
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  test('accepts the maximum quantity at the boundary', () => {
+    const result = parseMerchCheckoutRequest({
+      ...validRequest(),
+      quantity: MAX_MERCH_QUANTITY,
+    });
+    expect(result.quantity).toBe(MAX_MERCH_QUANTITY);
+  });
+
+  test.each([
+    ['zero', 0],
+    ['negative zero', -0],
+    ['negative', -1],
+    ['fractional', 2.5],
+    ['just above one', 1.0000001],
+    ['one over the ceiling', MAX_MERCH_QUANTITY + 1],
+    ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+  ])('rejects a numeric but invalid %s quantity', (_name, quantity) => {
+    expect(() => parseMerchCheckoutRequest({ ...validRequest(), quantity }))
+      .toThrow(MerchCheckoutValidationError);
+  });
+
+  test.each([
+    ['NaN', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+    ['numeric string', '3'],
+    ['boolean', true],
+    ['null', null],
+    ['bigint', 3n],
+    ['array', [3]],
+    ['object', { quantity: 3 }],
+  ])('rejects a %s quantity anywhere on the parse path', (_name, quantity) => {
+    expect(() => parseMerchCheckoutRequest({ ...validRequest(), quantity }))
+      .toThrow(MerchCheckoutValidationError);
   });
 
   test('treats a blank phone as null', () => {
