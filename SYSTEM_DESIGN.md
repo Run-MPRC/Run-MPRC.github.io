@@ -566,6 +566,27 @@ This contract does not verify a person, payment, plan, evidence item, refund, di
 
 The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.0b Officer manual off-platform dues-evidence command — SOURCE ONLY, UNUSED
+
+MEMBERS-ADMIN-001A [#395](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/395) defines one unused pure contract for the first MEMBERS-ADMIN-001 [#115](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/115) behavior: recording an owner-approved off-platform dues confirmation for a membership term without creating or claiming a Stripe payment. It turns one exact officer-audit envelope into the exact approved `record_term_decision` command the §8.0a reducer already accepts, plus a paired immutable audit record stamped with an off-platform provenance. It decides no policy; every owner-meaningful value is carried through as an opaque token.
+
+```mermaid
+flowchart LR
+    O["Officer-attested off-platform dues-evidence envelope"] --> V{"Exact envelope: opaque actor / capability / recent-auth / evidence references, safe-integer revisions, half-open term window?"}
+    V -- "Missing, malformed, non-opaque, out of range, reversed, or wrong version" --> F["One fixed fail-closed error, no command"]
+    V -- "Valid" --> C["Approved record_term_decision command, owner values carried through verbatim"]
+    V -- "Valid" --> A["Paired audit record: provenance manual_off_platform, no Stripe or charge identifier"]
+    C --> R["§8.0a reducer accepts the command and approves the linked term"]
+```
+
+Text alternative: a well-formed officer envelope — bounded opaque references for actor, capability, recent authentication, membership, evidence category, evidence, reason, and correlation; safe-integer expected and term revisions; an opaque term ID, plan reference, and policy version; and a half-open start/end window — projects the exact approved `record_term_decision` command the §8.0a reducer accepts, plus a paired immutable audit record stamped with an off-platform provenance and carrying no Stripe or charge identifier. Any missing, extra, non-opaque, out-of-range, reversed, wrong-version, accessor, or proxy input fails closed through one fixed error and produces no command.
+
+The CommonJS module validates one exact envelope with the same fail-closed primitives as §8.0a — bounded server-minted opaque identifiers, safe-integer revisions and half-open time bounds, exact plain objects only — and returns two frozen values: the reducer command, whose command type and `approved` term state are the fixed identity of this manual path, and the audit record, which names who acted, under what capability and recent re-authentication, on which membership and term, with what off-platform evidence category and reference, and why. The audit record carries no Stripe, charge, session, or contact identifier, so "records dues without claiming an external charge" is a testable invariant. The module re-declares the reducer's validation primitives and its command schema version locally so the contract stays standalone; an integration test imports the shipped reducer and fails if that version ever drifts.
+
+This contract does not verify an actor, capability, recent authentication, evidence item, plan, price, term calendar, or policy decision. It does not read or write the authoritative record, mint the applied prior/new revision, stamp a server time, record a command result, associate a UID, refresh or revoke entitlement, or register a durable command ID for replay. Its identifier grammar is not a semantic privacy classifier; a future trusted runtime must mint every opaque value, verify the officer's capability and recent authentication under AUTH-003, establish each referenced fact, apply the command against the current record, and persist the completed audit entry.
+
+The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, mints no identifier, and cannot make manual dues recording, an officer review queue, or any officer membership tool available. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.
