@@ -290,7 +290,8 @@ section {
   color: var(--color-gray-100);
 }
 
-.header__content h2 {
+.header__content h1 {
+  font-size: 2rem;
   margin-bottom: 1rem;
 }
 

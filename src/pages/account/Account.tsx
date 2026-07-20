@@ -4,6 +4,8 @@ import React, {
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
+import Header from '../../components/Header';
+import HeaderImage from '../../images/joinus/header_bg_1.jpg';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import {
@@ -29,6 +31,18 @@ function tsToDate(ts: Timestamp | null | undefined) {
 }
 
 const VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+
+export function AccountPageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <SEO title="My Account" noindex />
+      <Header title="My Account" image={HeaderImage}>
+        Manage your MPRC profile, registrations, and connected services.
+      </Header>
+      {children}
+    </>
+  );
+}
 
 function ResendVerificationButton() {
   const { services } = useServiceLocator();
@@ -482,10 +496,8 @@ export function AccountContent({
     }
 
     return (
-      <>
-        <SEO title="My Account" noindex />
+      <div className="account-content">
         <div className="account-sign-out container mx-auto p-4 max-w-3xl">
-          <h1 className="text-2xl font-bold">My Account</h1>
           <section className="account-sign-out__panel" aria-labelledby="sign-out-heading">
             <h2 id="sign-out-heading" className="account-sign-out__heading">
               Sign out
@@ -515,14 +527,16 @@ export function AccountContent({
             </button>
           </section>
         </div>
-      </>
+      </div>
     );
   }
 
   if (!profileBelongsToCurrentContext || profileState === 'loading') {
     return (
-      <div role="status" className="container mx-auto p-6">
-        Loading profile...
+      <div className="account-content">
+        <div role="status" className="container mx-auto p-6">
+          Loading profile...
+        </div>
       </div>
     );
   }
@@ -549,11 +563,10 @@ export function AccountContent({
   ) || [];
 
   return (
-    <>
-      <SEO title="My Account" noindex />
+    <div className="account-content">
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Account</h1>
+          <h2 className="text-2xl font-bold">Account details</h2>
           <button
             type="button"
             onClick={handleSignOut}
@@ -701,9 +714,18 @@ export function AccountContent({
                 {currentRegistrationsError}
               </p>
             )}
-            {!currentRegistrationsLoading && upcoming.length === 0 && (
-              <p className="text-gray-500 text-sm">
-                You haven&apos;t registered for any upcoming events.
+            {!currentRegistrationsLoading
+              && !currentRegistrationsError
+              && upcoming.length === 0 && (
+              <p
+                aria-live="polite"
+                aria-atomic="true"
+                className="text-gray-500 text-sm"
+              >
+                No upcoming registrations are linked to this account.
+                {' '}
+                A registration made while signed out may not appear. Do not register or pay
+                again. Ask the event lead for help.
                 {' '}
                 <Link to="/events" className="text-blue-600 hover:underline">
                   Browse events
@@ -736,15 +758,21 @@ export function AccountContent({
 
         {profileState === 'ready' && <StravaSection uid={user.uid} />}
       </div>
-    </>
+    </div>
   );
 }
 
-function Account() {
+export function Account() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <div className="container mx-auto p-6">Loading...</div>;
+  if (isLoading) {
+    return (
+      <AccountPageShell>
+        <div role="status" className="container mx-auto p-6">Loading...</div>
+      </AccountPageShell>
+    );
+  }
   if (!isAuthenticated || !user) {
     return (
       <Navigate
@@ -754,7 +782,11 @@ function Account() {
       />
     );
   }
-  return <AccountContent user={user} />;
+  return (
+    <AccountPageShell>
+      <AccountContent user={user} />
+    </AccountPageShell>
+  );
 }
 
 export default Account;

@@ -1,7 +1,10 @@
 /* eslint-env jest */
 
+import React from 'react';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { render, screen } from '@testing-library/react';
+import Header from './components/Header';
 
 const readStylesheet = (...parts) => readFileSync(join(__dirname, ...parts), 'utf8');
 
@@ -94,6 +97,36 @@ describe('persistent navigation clearance', () => {
   test('does not add legacy hero offsets on top of the shared clearance', () => {
     expect(getRule(globalStyles, '.header')).toMatch(/margin-top:\s*0\s*;/);
     expect(getRule(homeStyles, '.main__header')).toMatch(/margin-top:\s*0\s*;/);
+  });
+});
+
+describe('shared page header semantics', () => {
+  test('renders one page heading, a decorative image, and its description', () => {
+    const view = render(
+      React.createElement(
+        Header,
+        { image: '/synthetic-events.jpg', title: 'Events' },
+        'Runs and social gatherings.',
+      ),
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Events' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Runs and social gatherings.')).toBeInTheDocument();
+    const image = view.container.querySelector('.header__container-lg img');
+    expect(image).toHaveAttribute('alt', '');
+    expect(image).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  test('omits an empty description for self-closing page headers', () => {
+    const view = render(React.createElement(
+      Header,
+      { image: '/synthetic-activities.jpg', title: 'Activities' },
+    ));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Activities' }))
+      .toBeInTheDocument();
+    expect(view.container.querySelector('.header__content p')).toBeNull();
   });
 });
 

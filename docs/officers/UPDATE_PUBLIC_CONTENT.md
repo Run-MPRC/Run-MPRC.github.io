@@ -35,8 +35,9 @@ Helpful request:
 2. Confirm the correct name and role of each person shown.
 3. Use a clear JPG or PNG; a square photo works best for officers.
 4. Remove private location or device information when possible.
-5. Tell AI where the photo should appear and provide a short description for screen readers.
+5. Tell AI where the photo should appear. Provide a short description for screen readers unless the photo is only decorative.
 6. Review the crop on phone and computer views.
+7. Confirm the page title and first line of content begin below the blue navigation bar.
 
 Do not publish photos of minors, private events, name badges, addresses, license plates, or private screens without specific approval.
 
@@ -52,7 +53,8 @@ Do not publish photos of minors, private events, name badges, addresses, license
 
 - The exact change appears on `runmprc.com`.
 - Every new link opens correctly without requiring editor access.
-- Photos have correct names and descriptions.
+- Photos have correct names and descriptions, or are correctly marked decorative.
+- Each intended page shows its header photo, and no page text is hidden behind the navigation bar.
 - No unrelated page changed.
 - The delivery report separates “merged” from “verified live.”
 
