@@ -364,6 +364,42 @@ describe('precedence', () => {
       .toBe('actor_not_owner');
   });
 
+  // Structural validation of BOTH inputs precedes the actor gate (the actor gate is
+  // the first *semantic* gate, not the first check). So a non-owner actor paired with
+  // a structurally malformed currentChallenge reports the structural denial, not
+  // actor_not_owner. This is by design and safe: the only returns reachable before the
+  // actor gate are the two malformed *denials*, so actor != memberRef can never reach
+  // an issue path, and a denial reveals nothing about stored challenge state (it only
+  // reflects the shape of the object the caller itself assembled).
+  test('structural malformed_current_challenge outranks actor_not_owner (by design, safe)', () => {
+    expect(classify(request({ actor: OTHER_MEMBER }), {}))
+      .toEqual({ decision: 'denied', reason: 'malformed_current_challenge' });
+    // ...and malformed_request still outranks both, even with a bad actor + bad challenge.
+    expect(classify({ actor: OTHER_MEMBER }, {}))
+      .toEqual({ decision: 'denied', reason: 'malformed_request' });
+  });
+
+  // The safety consequence of the ordering above, stated directly: across the full
+  // matrix of well-formed challenge shapes (null / every status / matching+mismatching
+  // subject / past+future cooldown), a request whose actor is not the member NEVER
+  // yields an issue — it is always refused (or, for malformed challenge input, denied),
+  // never granted.
+  test('no actor != memberRef input ever reaches an issue decision', () => {
+    const challenges = [
+      null,
+      challenge({ status: 'pending', expiresAt: EXPIRES_FUTURE, reissueAfter: REISSUE_PAST }),
+      challenge({ status: 'pending', expiresAt: EXPIRES_PAST, reissueAfter: REISSUE_PAST }),
+      challenge({ status: 'voided', reissueAfter: REISSUE_PAST }),
+      challenge({ status: 'verified', reissueAfter: REISSUE_PAST }),
+      challenge({ memberRef: OTHER_MEMBER, status: 'pending', expiresAt: EXPIRES_FUTURE, reissueAfter: REISSUE_PAST }),
+      challenge({ phoneRef: OTHER_PHONE, status: 'pending', expiresAt: EXPIRES_FUTURE, reissueAfter: REISSUE_PAST }),
+    ];
+    for (const chal of challenges) {
+      const verdict = classify(request({ actor: OTHER_MEMBER }), chal);
+      expect(verdict.decision).not.toBe('issue');
+    }
+  });
+
   test('subject_mismatch outranks already_verified and cooldown_active', () => {
     expect(classify(request(), challenge({ memberRef: OTHER_MEMBER, status: 'verified', reissueAfter: REISSUE_FUTURE })).reason)
       .toBe('subject_mismatch');
