@@ -372,6 +372,16 @@ describe('malformed intent denies without evaluating the observation', () => {
     ['non-string intendedState', intent({ intendedState: 1 })],
     ['empty postRef', intent({ postRef: '' })],
     ['postRef with a newline', intent({ postRef: 'post_1\n=cmd' })],
+    // A BARE trailing newline is the sharp edge: JS `$` (no `m` flag) anchors at true
+    // end-of-string, so this must deny. It locks the anchor semantics — a future
+    // refactor that added the `m` flag to HANDLE_PATTERN would let a trailing newline
+    // slip into an audit line, and this row would catch it.
+    ['postRef with a bare trailing newline', intent({ postRef: 'post_1\n' })],
+    ['postRef with a trailing carriage return', intent({ postRef: 'post_1\r' })],
+    ['postRef with a line separator U+2028', intent({ postRef: 'post_1\u2028' })],
+    ['postRef with a paragraph separator U+2029', intent({ postRef: 'post_1\u2029' })],
+    ['postRef with an embedded NUL', intent({ postRef: 'post_1\0' })],
+    ['postRef with a tab', intent({ postRef: 'post_1\t' })],
     ['postRef with a comma', intent({ postRef: 'post,1' })],
     ['postRef non-string', intent({ postRef: 12345 })],
     ['null containerRef (both stuck states require a container)', intent({ containerRef: null })],
@@ -434,6 +444,7 @@ describe('malformed observation denies (well-formed intent)', () => {
     ['extra key', observation({ extra: 1 })],
     ['missing containerState', (() => { const o = observation(); delete o.containerState; return o; })()],
     ['bad postRef', observation({ postRef: 'post 1' })],
+    ['postRef with a bare trailing newline', observation({ postRef: 'post_9a8b7c6d\n' })],
   ])('%s -> denied malformed_observation', (_label, badObs) => {
     const v = classifyPublishReconciliation(intent(), badObs);
     expect(v).toEqual({ decision: 'denied', reason: 'malformed_observation', causesPublish: false });
@@ -452,6 +463,16 @@ describe('malformed observation denies (well-formed intent)', () => {
       const v = classifyPublishReconciliation(
         intent(),
         observation({ mediaState: 'media_present', mediaRef: 42, containerState: 'container_live' }),
+      );
+      expect(v.reason).toBe('malformed_observation');
+    });
+
+    test('media_present with a bare trailing-newline mediaRef -> malformed (locks the $ anchor)', () => {
+      // A published verdict carries the mediaRef into an audit line; a trailing
+      // newline must never reach it. JS `$` (no `m` flag) rejects this.
+      const v = classifyPublishReconciliation(
+        intent(),
+        observation({ mediaState: 'media_present', mediaRef: '17895695668004550\n', containerState: 'container_live' }),
       );
       expect(v.reason).toBe('malformed_observation');
     });
@@ -560,6 +581,26 @@ describe('determinism and immutability', () => {
     classifyPublishReconciliation(i, o);
     expect(JSON.stringify(i)).toBe(iSnap);
     expect(JSON.stringify(o)).toBe(oSnap);
+  });
+
+  test('a frozen verdict cannot be tampered by write-through (strict mode)', () => {
+    // Object.isFrozen is necessary but not sufficient — prove an actual
+    // write-through-and-re-read is a no-op (it throws in this strict-mode file),
+    // so a caller cannot flip causesPublish or rewrite the terminal state/mediaRef.
+    const v = classifyPublishReconciliation(
+      intent({ intendedState: 'container_created' }),
+      observation({ mediaState: 'media_present', mediaRef: MEDIA_REF, containerState: 'container_live' }),
+    );
+    expect(() => { v.causesPublish = true; }).toThrow(TypeError);
+    expect(() => { v.decision = 'republish'; }).toThrow(TypeError);
+    expect(() => { v.next.terminalState = 'republished'; }).toThrow(TypeError);
+    expect(() => { v.next.mediaRef = 'tampered'; }).toThrow(TypeError);
+    expect(() => { v.injected = 'x'; }).toThrow(TypeError);
+    expect(v.causesPublish).toBe(false);
+    expect(v.decision).toBe('resolved');
+    expect(v.next.terminalState).toBe('published');
+    expect(v.next.mediaRef).toBe(MEDIA_REF);
+    expect(v).not.toHaveProperty('injected');
   });
 });
 
