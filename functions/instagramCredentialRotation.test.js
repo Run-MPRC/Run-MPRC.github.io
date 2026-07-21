@@ -594,6 +594,98 @@ describe('determinism, sharing, non-echo', () => {
   });
 });
 
+// ---- 9b. calendar-aware timestamps: lexical order == chronological order --
+
+describe('impossible calendar dates are rejected so lexical order equals chronological order', () => {
+  // Root-cause regression (adversarial pre-merge review, MEDIUM). isUtcTimestamp
+  // previously bounded the day to 1..31 with no regard to month length or leap years,
+  // so an impossible date (non-leap Feb 29, Feb 30/31, Apr/Jun/Sep/Nov 31) passed
+  // validation. Its real instant rolls forward, so lexical order stopped matching
+  // chronological order and a shorter-lived / already-expired / equal-expiry candidate
+  // could WRONGLY PROMOTE, overwriting the known-good. Impossible dates must now deny
+  // as malformed (strictly safer than a wrong promote), which keeps lexical ==
+  // chronological exact.
+
+  test.each([
+    '2026-02-29T00:00:00Z', // 2026 is not a leap year
+    '2025-02-29T00:00:00Z',
+    '2100-02-29T00:00:00Z', // century year, not a leap year
+    '2026-02-30T00:00:00Z',
+    '2026-02-31T00:00:00Z',
+    '2026-04-31T00:00:00Z',
+    '2026-06-31T00:00:00Z',
+    '2026-09-31T00:00:00Z',
+    '2026-11-31T00:00:00Z',
+  ])('impossible date %s in current.expiresAt is malformed_current', (ts) => {
+    expect(classifyCredentialRotationPromotion(current({ expiresAt: ts }), candidate()).reason)
+      .toBe('malformed_current');
+  });
+
+  test.each([
+    '2026-02-29T00:00:00Z',
+    '2026-04-31T00:00:00Z',
+  ])('impossible date %s in candidate.asOf is malformed_candidate', (ts) => {
+    expect(classifyCredentialRotationPromotion(current(), candidate({ asOf: ts })).reason)
+      .toBe('malformed_candidate');
+  });
+
+  test('a real leap day (2024-02-29) is a valid expiry — a longer-lived candidate still promotes', () => {
+    const verdict = classifyCredentialRotationPromotion(
+      current({ expiresAt: '2024-02-29T00:00:00Z' }),
+      candidate({ expiresAt: '2024-03-01T00:00:00Z', asOf: '2024-01-01T00:00:00Z' }),
+    );
+    expect(verdict.decision).toBe('promote');
+  });
+
+  test('a real leap day (2024-02-29) is a valid validation instant — the candidate promotes', () => {
+    const verdict = classifyCredentialRotationPromotion(
+      current({ expiresAt: '2024-02-28T00:00:00Z' }),
+      candidate({ expiresAt: '2024-06-01T00:00:00Z', asOf: '2024-02-29T00:00:00Z' }),
+    );
+    expect(verdict.decision).toBe('promote');
+  });
+
+  test.each([
+    '2026-02-28T00:00:00Z', // last real Feb day in a non-leap year
+    '2026-04-30T00:00:00Z',
+    '2026-06-30T00:00:00Z',
+    '2026-09-30T00:00:00Z',
+    '2026-11-30T00:00:00Z',
+    '2026-01-31T00:00:00Z', // 31-day months remain valid
+  ])('real month-end date %s in current.expiresAt is accepted (not malformed)', (ts) => {
+    expect(classifyCredentialRotationPromotion(current({ expiresAt: ts }), candidate()).reason)
+      .not.toBe('malformed_current');
+  });
+
+  // The three adversarial repros, each of which previously returned `promote`.
+  test('Repro A — impossible current.expiresAt (2026-02-31) never promotes a chronologically shorter-lived candidate', () => {
+    const verdict = classifyCredentialRotationPromotion(
+      current({ expiresAt: '2026-02-31T00:00:00Z' }), // real instant 2026-03-03, after the candidate
+      candidate({ expiresAt: '2026-03-02T00:00:00Z', asOf: '2026-01-01T00:00:00Z' }),
+    );
+    expect(verdict.decision).not.toBe('promote');
+    expect(verdict).toEqual({ decision: 'denied', reason: 'malformed_current' });
+  });
+
+  test('Repro B — impossible candidate.asOf (2026-02-31) never promotes an already-expired candidate', () => {
+    const verdict = classifyCredentialRotationPromotion(
+      current({ expiresAt: '2026-03-01T00:00:00Z' }),
+      candidate({ expiresAt: '2026-03-02T00:00:00Z', asOf: '2026-02-31T00:00:00Z' }), // real asOf 2026-03-03, after expiry
+    );
+    expect(verdict.decision).not.toBe('promote');
+    expect(verdict).toEqual({ decision: 'denied', reason: 'malformed_candidate' });
+  });
+
+  test('Repro C — non-leap Feb 29 current.expiresAt never promotes an equal-expiry replay', () => {
+    const verdict = classifyCredentialRotationPromotion(
+      current({ expiresAt: '2026-02-29T00:00:00Z' }), // real instant 2026-03-01, equal to the candidate
+      candidate({ expiresAt: '2026-03-01T00:00:00Z', asOf: '2026-01-01T00:00:00Z' }),
+    );
+    expect(verdict.decision).not.toBe('promote');
+    expect(verdict).toEqual({ decision: 'denied', reason: 'malformed_current' });
+  });
+});
+
 // ---- 10. source boundary (comment-stripped) -----------------------------
 
 describe('source boundary', () => {
