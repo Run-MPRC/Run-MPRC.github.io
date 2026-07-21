@@ -234,6 +234,17 @@ describe('draft identity and idempotency', () => {
     expect(v.decision).toBe('skip');
     expect(v.reason).toBe('already_current');
   });
+
+  test('-0 leadTimeMinutes is accepted and identical to 0 (no phantom distinct tuple)', () => {
+    const zero = classify(slot({ leadTimeMinutes: 0 }), null);
+    const negZero = classify(slot({ leadTimeMinutes: -0 }), null);
+    expect(negZero.decision).toBe('generate');
+    expect(negZero.draftId).toBe(zero.draftId);
+    expect(negZero.draftId).toBe(expectId(EVENT_REF, REV_A, TEMPLATE_ID, 0));
+    // A draft persisted at 0 is the SAME tuple as a -0 slot, so it idempotently skips.
+    expect(classify(slot({ leadTimeMinutes: -0 }), existingDraft({ leadTimeMinutes: 0 })).decision)
+      .toBe('skip');
+  });
 });
 
 // ---- 4. crown jewel: never auto-approve ----------------------------------
@@ -367,6 +378,19 @@ describe('slot coherence', () => {
     );
     expect(v.decision).toBe('regenerate');
   });
+
+  test('slot_mismatch outranks a withdrawal admission (never cancel another slot\'s draft)', () => {
+    // A mismatched draft belongs to a DIFFERENT slot; a cancelled/withheld event here must
+    // not reach in and cancel it. Coherence is checked before the admission branch, so the
+    // fail-safe withdrawal path can never act on the wrong draft.
+    for (const admission of ['cancelled', 'withheld']) {
+      const v = classify(
+        slot({ eventAdmission: admission }),
+        existingDraft({ templateId: OTHER_TEMPLATE_ID, lifecycle: 'active' }),
+      );
+      expect(v).toEqual({ decision: 'denied', reason: 'slot_mismatch' });
+    }
+  });
 });
 
 // ---- 8. malformed-slot battery -------------------------------------------
@@ -385,6 +409,9 @@ describe('malformed slot -> denied malformed_slot', () => {
     'null prototype': Object.assign(Object.create(null), slot()),
     'missing field': (() => { const s = slot(); delete s.templateId; return s; })(),
     'extra field': { ...slot(), sneaky: 1 },
+    // Same key COUNT as a valid slot, but one name is wrong — exercises the membership
+    // check, not just the length bound.
+    'field-name swap (right key count, wrong name)': (() => { const s = slot(); delete s.templateId; s.template_id = TEMPLATE_ID; return s; })(),
     'wrong schema version': slot({ eventReminderSchemaVersion: 2 }),
     'schema version as string': slot({ eventReminderSchemaVersion: '1' }),
     'unknown admission': slot({ eventAdmission: 'maybe' }),
@@ -393,6 +420,13 @@ describe('malformed slot -> denied malformed_slot', () => {
     'eventRef too long': slot({ eventRef: 'a'.repeat(257) }),
     'eventRef with delimiter': slot({ eventRef: 'evt|x' }),
     'eventRef with space': slot({ eventRef: 'evt x' }),
+    // The HANDLE_PATTERN $ anchor carries no `m` flag: JS `$` matches only the absolute
+    // end of input, so a trailing line terminator must be rejected (adding `m` would let a
+    // handle end in a newline, corrupting draftId structure and audit lines).
+    'eventRef trailing newline': slot({ eventRef: 'evt\n' }),
+    'eventRef trailing carriage return': slot({ eventRef: 'evt\r' }),
+    'eventRef trailing line separator U+2028': slot({ eventRef: 'evt\u2028' }),
+    'eventRef trailing paragraph separator U+2029': slot({ eventRef: 'evt\u2029' }),
     'eventRef non-string': slot({ eventRef: 123 }),
     'bad sourceRevision': slot({ sourceRevision: 'rev\n1' }),
     'bad templateId': slot({ templateId: 'tmpl/../x' }),
@@ -532,6 +566,27 @@ describe('hostile input never throws', () => {
       if (h === null) continue;
       expect(classify(slot(), h).decision).toBe('denied');
     }
+  });
+
+  test('a descriptor-forging proxy is rejected by the isProxy guard with NO trap consulted', () => {
+    // Even a Proxy whose traps would forge a perfectly valid data descriptor must be
+    // rejected structurally — the isProxy check fires before any own-key/descriptor read,
+    // so no trap can smuggle a value (or a getter) past readExact.
+    let trapCalls = 0;
+    const p = new Proxy(slot(), {
+      getOwnPropertyDescriptor(t, k) { trapCalls += 1; return Object.getOwnPropertyDescriptor(t, k); },
+      ownKeys(t) { trapCalls += 1; return Reflect.ownKeys(t); },
+      get(t, k) { trapCalls += 1; return t[k]; },
+    });
+    expect(classify(p, existingDraft())).toEqual({ decision: 'denied', reason: 'malformed_slot' });
+    expect(trapCalls).toBe(0);
+  });
+
+  test('a self-referential (cyclic) input never throws and denies', () => {
+    const c = slot();
+    c.self = c; // a cycle, and an extra key the closed-shape read rejects before any recursion
+    expect(() => classify(c, null)).not.toThrow();
+    expect(classify(c, null).reason).toBe('malformed_slot');
   });
 });
 
