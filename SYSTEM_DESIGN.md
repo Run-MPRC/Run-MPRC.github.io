@@ -852,6 +852,34 @@ This contract invents no policy and duplicates no sibling. It is a *projection*,
 
 The module is imported by no runtime or Functions index and requires only `node:util`. It reads no clock, randomness, environment, network, Firestore, or provider service; is imported by no endpoint; stores and logs nothing; and creates, publishes, or persists no event, draft, or public record. It defines no Firestore schema or Rules, runs no importer or publish worker, and wires into no endpoint or Google-Site sync. Source change, tests, merge, Firebase deployment, provider configuration, production data, website publication, and live behavior remain separate states; #399 changes no officer task and proves none of the external or live states.
 
+### 8.7 Approval-gated social post lifecycle and audit — SOURCE ONLY, UNUSED
+
+INSTAGRAM-002A [#401](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/401) builds the first **conservative, safe-by-default** slice of parent INSTAGRAM-002 [#92](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/92): one unused pure contract for the *approval-gated lifecycle of a social post*, in the same non-throwing frozen-verdict idiom as the commerce outbox sibling (`commerceOutboxState`, §8.5a). It governs only *whether a lifecycle transition is allowed and whether a publish is authorized*, never a caption, media reference, or provider. The pure `classifySocialPostTransition(current, command)` reducer reads the durable record `{ socialPostSchemaVersion, lifecycleStatus, sourceKind, payloadHash, approvedHash, authorActor, approverActor }` and one exact revision-1 command `{ socialPostSchemaVersion, type, expectedLifecycle, payloadHash, actor, capability, selfApprovalAllowed }`, both drawn only from closed vocabularies and opaque tokens, and returns one frozen verdict — `applied`, `unchanged`, or `rejected` with a fixed reason code — never throwing and never echoing raw input. A companion `validateSocialPostRecord` validates the same durable record and returns a frozen canonical projection or a fixed rejection reason. It imports only `node:util`.
+
+```mermaid
+flowchart LR
+    Df["draft"] -->|"submit (officer)"| Pr["pending_review"]
+    Pr -->|"approve (reviewer)"| Ap["approved"]
+    Pr -->|"reject (reviewer)"| Df
+    Ap -->|"schedule (reviewer)"| Sc["scheduled"]
+    Sc -->|"begin_publish (system)"| Pb["publishing"]
+    Pb -->|"provider confirmed"| Pd["published"]
+    Pb -->|"provider failed"| Fa["failed"]
+    Pb -->|"provider indeterminate"| Ou["outcome_unknown"]
+    Fa -->|"retry (system)"| Sc
+    Ou -->|"reconciled published"| Pd
+    Ou -->|"reconciled failed"| Fa
+    Df -->|"edit — new hash, approval cleared"| Df
+```
+
+Text alternative: a post starts `draft`; an officer editor `submit`s it to `pending_review`; a reviewer `approve`s it to `approved` or `reject`s it back to `draft`; a reviewer `schedule`s an approved post; only a system publisher may `begin_publish` a scheduled post into `publishing`; the provider outcome resolves `publishing` to `published`, `failed`, or `outcome_unknown`; a system publisher may `retry` a `failed` post back to `scheduled`, and a system reconciler may settle an `outcome_unknown` post to `published` or `failed`. Any `edit` from a non-terminal editable state returns the post to `draft`, mints a new payload hash, and clears any recorded approval; `cancel` moves any non-publishing, non-terminal post to the terminal `cancelled`. Every human edge requires an officer capability and every machine edge a system capability, so a client that presents neither can drive no edge.
+
+The safety invariant is that **no post is published without a recorded human approval bound to its exact current payload hash**: the record itself is invalid in any `approved`/`scheduled`/`publishing`/`published`/`failed`/`outcome_unknown` state unless `approvedHash === payloadHash` and an `approverActor` is present, so an approval can never outlive the content it approved. Approval is recorded only by the `approve` command, only from `pending_review`, and only under a reviewer capability; any `edit` resets the lifecycle to `draft` and clears the approval, so a post edited after approval must be re-reviewed before it can schedule or publish. Self-approval — the same actor authoring and approving — is refused unless an explicit `selfApprovalAllowed` owner flag is set on the command, and defaults closed. A command names the `expectedLifecycle` it believes current, so a duplicate or concurrent command against an already-advanced post fails as `state_conflict` rather than re-applying, and an approval carrying a stale `payloadHash` fails as `stale_approval`.
+
+This contract invents no policy and duplicates no sibling. It is an approval-and-lifecycle reducer, not a projection or an admission gate: it decides *whether a lifecycle transition is legal and whether a publish is authorized*, never *what a public view may contain* (the `projectPublicEvent` projection, §8.6), *whether an event should be admitted* (the `commerceEventInboxDisposition` inbox gate, §8.5b), or *whether a delivery step is legal* (the `commerceOutboxState` outbox contract, §8.5a). It holds only opaque hashes, closed enums, and opaque capability-scoped actor tokens — never a caption, media reference, alt text, URL, timezone, disclosure flag, recipient, or request body; the canonical `payloadHash` **binds** content by equality without holding it. Only an intentionally public event source (`sourceKind: 'public_event'`) may become a post; membership, discount, WhatsApp, and Strava sources have no representation. The provider adapter, audit store, scheduling clock, retry and reconciliation cadence, Firestore schema/Rules, and endpoints remain with #92, #93, and their gating owner decisions; schema is additive by construction (a `socialPostSchemaVersion` constant) with no migration to run. Malformed, proxy, accessor-backed, inherited, extra-or-missing-key, unknown-enum, or wrong-version input is rejected through a fixed reason that never echoes the input.
+
+The module is imported by no runtime or Functions index and requires only `node:util`. It reads no clock, randomness, environment, network, Firestore, or provider service; is imported by no endpoint; stores and logs nothing; and creates, approves, schedules, publishes, or persists no post, draft, approval, or audit record. It defines no Firestore schema or Rules, runs no publish or reconciliation worker, and wires into no endpoint or Instagram/provider adapter. Source change, tests, merge, Firebase deployment, provider configuration, production data, website publication, and live behavior remain separate states; #401 changes no officer task and proves none of the external or live states.
+
 ## 9. Consistency and failure model
 
 Stripe and Firestore cannot share a distributed transaction. Checkout and refunds are therefore explicit sagas:
