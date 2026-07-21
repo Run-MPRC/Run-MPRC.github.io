@@ -189,11 +189,12 @@ function isUtcTimestamp(value) {
   return true;
 }
 
-// Read an exact, closed record: an ordinary object whose own enumerable string
-// keys are precisely `expectedFields`, each a plain data property. Returns a
-// null-prototype copy read with no getter ever invoked, or null on any deviation
-// (proxy, array, foreign prototype, symbol key, wrong key count, missing, extra,
-// inherited, accessor, or non-enumerable field).
+// Read an exact, closed record: an ordinary object whose own string-keyed
+// properties are precisely `expectedFields`, each an enumerable data property.
+// Returns a null-prototype copy read with no getter ever invoked, or null on any
+// deviation (proxy, array, foreign prototype, symbol key, wrong key count,
+// missing, extra — enumerable OR non-enumerable — inherited, accessor, or
+// non-enumerable field).
 function readExact(value, expectedFields) {
   if (value === null || typeof value !== 'object') return null;
   // isProxy before Array.isArray: Array.isArray throws on a revoked proxy, while
@@ -203,6 +204,11 @@ function readExact(value, expectedFields) {
   if (Array.isArray(value)) return null;
   if (Object.getPrototypeOf(value) !== Object.prototype) return null;
   if (Object.getOwnPropertySymbols(value).length !== 0) return null;
+  // Own property NAMES, not just enumerable keys: a non-enumerable extra own
+  // property must also deny — it is invisible to Object.keys but would still make
+  // the record something other than the exact closed shape. With symbols already
+  // rejected, this bounds the total own-key surface to exactly `expectedFields`.
+  if (Object.getOwnPropertyNames(value).length !== expectedFields.length) return null;
   const keys = Object.keys(value);
   if (keys.length !== expectedFields.length) return null;
   for (const key of keys) {

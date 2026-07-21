@@ -515,6 +515,27 @@ describe('malformed command is denied malformed_command', () => {
     expect(classifyMembershipAssociation(st, c).reason).toBe('malformed_command');
   });
 
+  // Regression (adversarial review, LOW): an EXTRA non-enumerable own key is
+  // invisible to Object.keys, yet the record must still deny — the exact closed
+  // shape is bounded by own property NAMES, not just enumerable keys.
+  test('a command with an extra non-enumerable key', () => {
+    const c = command();
+    Object.defineProperty(c, 'shadow', { enumerable: false, configurable: true, value: 'x' });
+    expect(classifyMembershipAssociation(st, c).reason).toBe('malformed_command');
+  });
+
+  test('a command with an extra non-enumerable throwing accessor — never throws, never invoked', () => {
+    let invoked = false;
+    const c = command();
+    Object.defineProperty(c, 'shadow', {
+      enumerable: false, configurable: true, get() { invoked = true; throw new Error('trap'); },
+    });
+    let verdict;
+    expect(() => { verdict = classifyMembershipAssociation(st, c); }).not.toThrow();
+    expect(verdict.reason).toBe('malformed_command');
+    expect(invoked).toBe(false);
+  });
+
   test.each([
     ['wrong schema version 0', { membershipAdminSchemaVersion: 0 }],
     ['wrong schema version 2', { membershipAdminSchemaVersion: 2 }],
@@ -590,6 +611,14 @@ describe('malformed state is denied malformed_state', () => {
     expect(classifyMembershipAssociation(state({ extra: 1 }), cmd).reason).toBe('malformed_state');
   });
 
+  // Regression (adversarial review, LOW): extra non-enumerable own key on the
+  // state envelope must also deny.
+  test('a state with an extra non-enumerable key', () => {
+    const s = state();
+    Object.defineProperty(s, 'shadow', { enumerable: false, configurable: true, value: 'x' });
+    expect(classifyMembershipAssociation(s, cmd).reason).toBe('malformed_state');
+  });
+
   test('a state with a symbol key', () => {
     const s = state();
     s[Symbol('x')] = 1;
@@ -634,6 +663,11 @@ describe('malformed state is denied malformed_state', () => {
   test.each([
     ['membership missing key', (() => { const m = membership(); delete m.term; return m; })()],
     ['membership extra key', membership({ surprise: 1 })],
+    ['membership extra non-enumerable key', (() => {
+      const m = membership();
+      Object.defineProperty(m, 'shadow', { enumerable: false, configurable: true, value: 1 });
+      return m;
+    })()],
     ['membership bad membershipId (all-digits)', membership({ membershipId: '20260001' })],
     ['membership empty membershipId', membership({ membershipId: '' })],
     ['membership bad status enum', membership({ status: 'gold' })],
@@ -650,6 +684,11 @@ describe('malformed state is denied malformed_state', () => {
   test.each([
     ['account missing key', (() => { const a = account(); delete a.uid; return a; })()],
     ['account extra key', account({ surprise: 1 })],
+    ['account extra non-enumerable key', (() => {
+      const a = account();
+      Object.defineProperty(a, 'shadow', { enumerable: false, configurable: true, value: 1 });
+      return a;
+    })()],
     ['account bad uid (all-digits)', account({ uid: '5551234567' })],
     ['account empty uid', account({ uid: '' })],
     ['account emailVerified non-boolean', account({ emailVerified: 'yes' })],
