@@ -721,6 +721,36 @@ This contract does not verify a person, payment, plan, evidence item, refund, di
 
 The module is imported by no runtime or Functions index and updates no officer procedure because it makes nothing officer-observable. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no current profile/role/claim. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.0g Token-refresh/revocation disposition — SOURCE ONLY, UNUSED
+
+MEMBERS-DUES-001E [#427](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/427) defines one unused pure contract for item 4 of parent [#114](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/114) — "Expiry/reconciliation job and derived Auth-claim/access refresh/revocation without deleting membership history", whose acceptance criterion requires expiry, refund/chargeback/dispute, suspension, and offboarding to "force safe token refresh/revocation". It is the step the §8.0c claim contract (`membershipClaimReconciliation.js`, MEMBERS-IDENTITY-001E, [#373](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/373)) explicitly DEFERS: §8.0c derives the desired member-claim VALUE (`aligned` / `grant_member` / `revoke_member`) and states that "the actual custom-claim write, token refresh, and revocation remain gated" on later Functions/Admin work. This contract consumes that disposition and derives the distinct next decision — given whether the subject holds an outstanding session and which claims-version that session's token carries, whether to force-revoke outstanding sessions, force a token refresh, or do nothing.
+
+```mermaid
+flowchart LR
+    V["§8.0c disposition + session state + authoritative/observed claims-version"] --> G{"Well-formed evidence?"}
+    G -- "No" --> X["One fixed error, input never echoed"]
+    G -- "Yes" --> R{"reconciliationDisposition?"}
+    R -- "revoke_member" --> FR["force_revoke (unconditional, fail-closed)"]
+    R -- "grant_member" --> GS{"Active session?"}
+    GS -- "Yes" --> RF["force_refresh"]
+    GS -- "No" --> N1["noop — next sign-in mints the claim"]
+    R -- "aligned" --> AS{"Active session?"}
+    AS -- "No" --> N2["noop"]
+    AS -- "Yes" --> VV{"Stamped version equals authoritative?"}
+    VV -- "Yes" --> N3["noop"]
+    VV -- "No" --> RF2["force_refresh — stale claims-version"]
+```
+
+Text alternative: a revoked member authorization always forces session revocation, regardless of the observed session or version evidence, because `revokeRefreshTokens` is idempotent and sets a revocation watermark that invalidates even a session the evidence did not observe. A newly granted claim propagates only on refresh, so an active session is force-refreshed while a subject with no outstanding session is left for the next sign-in to mint the claim. An aligned claim whose value already matches needs nothing unless an active session carries a claims-version that differs from the authoritative cursor, in which case a refresh is forced so version-gated consumers converge. A malformed shape, an unknown enum, a non-integer or negative version, an extra or missing field, an accessor, an inherited field, or a proxy fails through one fixed error that never echoes the input.
+
+The marquee property is fail-closed access removal, proven across the seam: `force_revoke` is emitted if and only if the reconciliation disposition is `revoke_member` — no other path can produce it, and a de-entitlement never resolves to a refresh or a noop. Driving the entire shipped §8.0c input space through the composed pipeline confirms that every path §8.0c resolves to `revoke_member` (a lapsed, suspended, unverified, or decision-pending subject still holding the claim) forces revocation of an active session, so item 4's "expiry/refund/suspension → force safe token revocation" holds for every disposition the claim contract can take. As in §8.0c, the officer (`admin`) role is administered separately and is never touched (`officerRoleAffected: false`), so a lapsed officer's member session is revoked while their admin role is left intact, and the verdict itself confers no membership, price, or role (`grantsAuthority: false`).
+
+The CommonJS module accepts an exact five-field revision-1 evidence object — the §8.0c disposition, the session state, and the authoritative and observed claims-version cursors — and derives one of three frozen non-identifying dispositions with a closed reason. The two version fields are validated as non-negative safe integers even on the `revoke_member` branch that ignores them, so validation is shape-complete rather than decision-driven, mirroring how §8.0c validates `observedOfficerClaim` even though it never affects the outcome. The evidence carries authorization and version state alone — never a token value, provider ID, phone, profile field, roster, address, or secret; "token" names the SESSION being reconciled, not a stored credential.
+
+This contract invents no revocation SLA, grace period, expiry date, timing, or clock: it reads no clock and compares only caller-supplied version cursors, honoring the #114 owner-decision constraint that such values are recorded as versioned server configuration rather than invented. It writes no token, mints and revokes nothing, and derives the reconciliation verdict only; the actual refresh-token revocation and forced re-mint remain gated on the AUTH-001/AUTH-003 Functions/Admin authorization work. The entitlement derivation (§8.0a), the claim-value reconciliation (§8.0c), the officer-role grant path ([#115](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/115)), and the immutable receipt ledger (§8.0f) are separate contracts.
+
+The module is imported by no runtime or Functions index and updates no officer procedure because it makes nothing officer-observable. It requires only `node:util`, reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no current profile/role/claim. Source tests and a merge are not Firebase deployment or live behavior proof.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.
