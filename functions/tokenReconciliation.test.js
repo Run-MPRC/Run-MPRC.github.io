@@ -30,8 +30,13 @@ const RESULT_KEYS = [
 const DISPOSITIONS = TOKEN_RECONCILIATION_ENUMS.reconciliationDisposition;
 const SESSIONS = TOKEN_RECONCILIATION_ENUMS.sessionState;
 // (authoritativeClaimsVersion, observedTokenClaimsVersion) pairs covering equal,
-// stale-behind, ahead-anomalous, and zero cursors.
-const VERSION_PAIRS = [[7, 7], [7, 6], [6, 7], [0, 0], [0, 1], [1, 0]];
+// stale-behind, ahead-anomalous, zero, negative-zero (must compare equal to 0), and
+// equal/off-by-one at the safe-integer ceiling.
+const MAXV = Number.MAX_SAFE_INTEGER;
+const VERSION_PAIRS = [
+  [7, 7], [7, 6], [6, 7], [0, 0], [0, 1], [1, 0],
+  [0, -0], [-0, 0], [MAXV, MAXV], [MAXV, MAXV - 1],
+];
 
 function evidence(overrides = {}) {
   return {
@@ -65,6 +70,37 @@ function expectedResult(e) {
   return e.observedTokenClaimsVersion !== e.authoritativeClaimsVersion
     ? { action: 'force_refresh', reason: 'aligned_stale_claims_version' }
     : { action: 'noop', reason: 'aligned_current_claims_version' };
+}
+
+// A SECOND, independently-derived oracle built by boolean composition rather than
+// the nested-disposition cascade used by the implementation AND by expectedResult.
+// Agreement between all three is real cross-validation, not a restatement of one
+// shape -- it closes the "the test just mirrors the code" gap for this
+// authorization-critical decision.
+function independentExpected(e) {
+  const mustRevoke = e.reconciliationDisposition === 'revoke_member';
+  const versionsDiffer = e.observedTokenClaimsVersion !== e.authoritativeClaimsVersion;
+  const claimNeedsPropagation =
+    e.reconciliationDisposition === 'grant_member'
+    || (e.reconciliationDisposition === 'aligned' && versionsDiffer);
+  const activeSession = e.sessionState === 'active_session';
+
+  if (mustRevoke) return { action: 'force_revoke', reason: 'deentitled_revoke_sessions' };
+  if (claimNeedsPropagation && activeSession) {
+    return {
+      action: 'force_refresh',
+      reason: e.reconciliationDisposition === 'grant_member'
+        ? 'entitled_refresh_active_session'
+        : 'aligned_stale_claims_version',
+    };
+  }
+  let reason;
+  if (e.reconciliationDisposition === 'grant_member') {
+    reason = 'entitled_pending_next_signin';
+  } else {
+    reason = activeSession ? 'aligned_current_claims_version' : 'aligned_no_session';
+  }
+  return { action: 'noop', reason };
 }
 
 function classifyError(input) {
@@ -110,8 +146,13 @@ describe('token-reconciliation decision matrix', () => {
           expect(TOKEN_RECONCILIATION_ENUMS.action).toContain(result.action);
 
           const expected = expectedResult(e);
+          const independent = independentExpected(e);
+          // The two independently-structured oracles must agree with each other...
+          expect(independent).toEqual(expected);
+          // ...and the module must match them both.
           expect(result.action).toBe(expected.action);
           expect(result.reason).toBe(expected.reason);
+          expect({ action: result.action, reason: result.reason }).toEqual(independent);
 
           if (result.action === 'force_revoke') forceRevokeInputs.push(e);
           count += 1;
@@ -119,7 +160,7 @@ describe('token-reconciliation decision matrix', () => {
       }
     }
     expect(count).toBe(DISPOSITIONS.length * SESSIONS.length * VERSION_PAIRS.length);
-    expect(count).toBe(36);
+    expect(count).toBe(60);
 
     // Crown jewel: force_revoke happens for EXACTLY the revoke_member inputs, and
     // for ALL of them (both directions of the iff).
