@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const alerts = require('./instagramPublisherAlerts');
 
@@ -582,5 +583,84 @@ describe('source boundary — pure, content-free, imported by nothing', () => {
         return text.includes('instagramPublisherAlerts');
       });
     expect(importers).toEqual([]);
+  });
+});
+
+// ---- 12. adversarial hardening (independent-review-probed edges) ----------
+
+describe('adversarial hardening — reviewer-probed edges', () => {
+  test('an adversarial subjectRef echoes into identity but cannot flip decision/notify', () => {
+    // subjectRef is an opaque caller handle. The REDUCER emits no publish/escalate
+    // action (its decision/reason/severity alphabet is closed), but it echoes the
+    // caller's handle verbatim into the identity field — so a downstream consumer
+    // must trust `decision`/`notify`, not a substring scan of the whole verdict. An
+    // action-word handle must not change those trustworthy signals.
+    for (const handle of ['publish', 'retry', 'escalate', 'republish']) {
+      const v = classifyPublisherAlert(null, observation({ subjectRef: handle, health: 'faulting' }));
+      expect(v.decision).toBe('raise');
+      expect(v.notify).toBe(true);
+      expect(v.subjectRef).toBe(handle);
+    }
+  });
+
+  test('a genuine cross-realm object (foreign Object.prototype) denies on both sides', () => {
+    const foreignObs = vm.runInNewContext(
+      '({ publisherAlertSchemaVersion: 1, condition: "refresh_failure",'
+      + ' subjectRef: "acct_1", health: "faulting" })',
+    );
+    expect(classifyPublisherAlert(null, foreignObs).reason).toBe('malformed_observation');
+    const foreignOpen = vm.runInNewContext(
+      '({ publisherAlertSchemaVersion: 1, condition: "refresh_failure", subjectRef: "acct_1" })',
+    );
+    expect(classifyPublisherAlert(foreignOpen, observation()).reason).toBe('malformed_open_state');
+  });
+
+  test('object-valued fields are never coerced (no toString/valueOf/Symbol.toPrimitive)', () => {
+    let coerced = false;
+    const trap = {
+      toString() { coerced = true; return 'refresh_failure'; },
+      valueOf() { coerced = true; return 'refresh_failure'; },
+      [Symbol.toPrimitive]() { coerced = true; return 'refresh_failure'; },
+    };
+    const v = classifyPublisherAlert(null, observation({ condition: trap }));
+    expect(v.decision).toBe('denied');
+    expect(v.reason).toBe('malformed_observation');
+    expect(coerced).toBe(false);
+  });
+
+  test('verdicts resist Reflect-based tamper and the export surface is immutable', () => {
+    const v = classifyPublisherAlert(null, observation({ health: 'faulting' }));
+    expect(Reflect.set(v, 'notify', false)).toBe(false);
+    expect(Reflect.defineProperty(v, 'injected', { value: 1 })).toBe(false);
+    expect(Reflect.deleteProperty(v, 'decision')).toBe(false);
+    expect(v.notify).toBe(true);
+    expect(v.decision).toBe('raise');
+    // the shared denial singleton cannot be corrupted for a later caller
+    const d1 = classifyPublisherAlert(42, observation());
+    expect(Reflect.set(d1, 'notify', false)).toBe(false);
+    expect(classifyPublisherAlert('other', observation()).notify).toBe(true);
+    // the module export surface is frozen — the entry point cannot be swapped out
+    expect(Reflect.defineProperty(alerts, 'classifyPublisherAlert', { value: () => {} })).toBe(false);
+  });
+
+  test('subjectRef length boundary: exactly 256 is valid, 257 denies', () => {
+    const big = 'a'.repeat(256);
+    const at = classifyPublisherAlert(null, observation({ subjectRef: big, health: 'faulting' }));
+    expect(at.decision).toBe('raise');
+    const over = classifyPublisherAlert(null, observation({ subjectRef: 'a'.repeat(257) }));
+    expect(over.decision).toBe('denied');
+    expect(over.reason).toBe('malformed_observation');
+  });
+
+  test('a BigInt or boxed-Number schema version denies (strict identity, no coercion)', () => {
+    const bad = (val) => classifyPublisherAlert(
+      null, observation({ publisherAlertSchemaVersion: val }),
+    );
+    expect(bad(1n).reason).toBe('malformed_observation');
+    expect(bad(Object(1)).reason).toBe('malformed_observation');
+    const openBad = classifyPublisherAlert(
+      openAlert({ publisherAlertSchemaVersion: 1n }), observation(),
+    );
+    expect(openBad.reason).toBe('malformed_open_state');
   });
 });
