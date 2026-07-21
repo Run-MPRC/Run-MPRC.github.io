@@ -1,6 +1,6 @@
 'use strict';
 
-// Tests for §8.0h MEMBERS-DUES-001E `projectMemberAccountStatus` — the
+// Tests for §8.0h MEMBERS-DUES-001F `projectMemberAccountStatus` — the
 // member-facing account/status DISPLAY projection (item 6 of #114). The module
 // is SOURCE ONLY and imported by nothing; these tests exercise it directly.
 //
@@ -609,7 +609,7 @@ describe('source-boundary — pure, composes only the authority, imported by not
     expect([...requiresOf(authCode)]).toEqual(['node:util']);
   });
 
-  test('the header pins §8.0h / MEMBERS-DUES-001E and the SOURCE ONLY status', () => {
+  test('the header pins §8.0h / MEMBERS-DUES-001F and the SOURCE ONLY status', () => {
     expect(raw).toContain('§8.0h');
     expect(raw).toContain('MEMBERS-DUES-001F');
     expect(raw).toContain('SOURCE ONLY, UNUSED');
