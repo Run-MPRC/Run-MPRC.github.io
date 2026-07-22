@@ -99,7 +99,7 @@ npm run test:rules
 CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
 ```
 
-The Rules suite needs Java 17. The direct `react-scripts build` command is preferred for a diagnostic build because normal `npm run build` regenerates the sitemap. Run dependency audits for security/dependency issues, but do not apply forced automatic upgrades.
+The Rules and commerce-emulator suites need Java 21. The direct `react-scripts build` command is preferred for a diagnostic build because normal `npm run build` regenerates the sitemap. Run dependency audits for security/dependency issues, but do not apply forced automatic upgrades.
 
 The deterministic frontend Jest baseline is available through the command above. Hosted CI runs it as the blocking `Run frontend Jest tests` step under #124 and runs the standalone SPA suite under #126. #135 adds a tested manual, exact-commit, backend-first GitHub release gate and pauses Git-triggered Netlify production builds. This proves source shape only: protected environments/OIDC (#133), staged/live deployment (#136), fail-closed lint, required checks, Netlify publication, provider configuration, and production behavior remain separate work under #105 and WEB-001.
 
