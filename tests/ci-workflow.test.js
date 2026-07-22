@@ -9,10 +9,12 @@ const ROOT = path.resolve(__dirname, '..');
 const CI_PATH = path.join(ROOT, '.github/workflows/ci.yml');
 const RELEASE_PATH = path.join(ROOT, '.github/workflows/deploy.yml');
 const PACKAGE_PATH = path.join(ROOT, 'package.json');
+const FUNCTIONS_PACKAGE_PATH = path.join(ROOT, 'functions', 'package.json');
 const LINT_BASELINE_PATH = path.join(ROOT, '.github/lint-baseline.json');
 const ciWorkflow = fs.readFileSync(CI_PATH, 'utf8');
 const releaseWorkflow = fs.readFileSync(RELEASE_PATH, 'utf8');
 const packageJson = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8'));
+const functionsPackageJson = JSON.parse(fs.readFileSync(FUNCTIONS_PACKAGE_PATH, 'utf8'));
 const lintBaseline = JSON.parse(fs.readFileSync(LINT_BASELINE_PATH, 'utf8'));
 const lintGate = require('../.github/scripts/check-frontend-lint.cjs');
 
@@ -21,6 +23,11 @@ const JOB_NAME = 'Commerce command journal emulator';
 const DEMO_PROJECT = 'demo-pay002b2-test';
 const OPT_IN = 'REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR';
 const TEST_FILE = 'commerceCommandJournal.emulator.test.js';
+const FIRESTORE_JOB_ID = 'firestore-rules';
+const FIRESTORE_JOB_NAME = 'Firestore security-rules tests';
+const FIRESTORE_DEMO_PROJECT = 'demo-rules-test';
+const JAVA_VERSION = '21';
+const FIRESTORE_RULES_STEP_NAME = 'Run Firestore rules tests against the emulator';
 const NEVER_RUN = ['$', '{{ false }}'].join('');
 const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const FRONTEND_JOB_ID = 'frontend';
@@ -100,7 +107,76 @@ function jobBlock(workflow, jobId) {
   return workflow.slice(start, end);
 }
 
-function ciErrors(workflow) {
+function exactEmulatorJobErrors(workflow, jobId, expectedJob) {
+  const parsed = parseWorkflow(workflow);
+  if (!isPlainObject(parsed) || !isPlainObject(parsed.jobs)) {
+    return ['workflow YAML is invalid'];
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed, 'defaults')
+    || Object.prototype.hasOwnProperty.call(parsed, 'env')
+    || Object.prototype.hasOwnProperty.call(parsed, 'permissions')) {
+    return ['workflow-wide execution authority is forbidden'];
+  }
+
+  const job = parsed.jobs[jobId];
+  if (!isPlainObject(job) || !util.isDeepStrictEqual(job, expectedJob)) {
+    return ['emulator job execution contract is not exact'];
+  }
+  return [];
+}
+
+function expectedCommerceJob() {
+  return {
+    name: JOB_NAME,
+    'runs-on': 'ubuntu-latest',
+    'timeout-minutes': 10,
+    permissions: { contents: 'read' },
+    steps: [
+      { uses: 'actions/checkout@v6', with: { 'persist-credentials': false } },
+      { uses: 'actions/setup-node@v6', with: { 'node-version': '20', cache: 'npm' } },
+      {
+        uses: 'actions/setup-java@v5',
+        with: { distribution: 'temurin', 'java-version': JAVA_VERSION },
+      },
+      {
+        name: 'Install committed root dependencies',
+        run: 'npm ci --legacy-peer-deps --ignore-scripts',
+      },
+      {
+        name: 'Install committed Functions dependencies',
+        run: 'npm --prefix functions ci --ignore-scripts',
+      },
+      {
+        name: 'Run commerce command journal concurrency tests',
+        env: { [OPT_IN]: '1' },
+        run: 'npx --no-install firebase emulators:exec '
+          + `--project ${DEMO_PROJECT} --only firestore `
+          + '"npm --prefix functions run test:run -- '
+          + `--runInBand ${TEST_FILE}"`,
+      },
+    ],
+  };
+}
+
+function expectedFirestoreRulesJob() {
+  return {
+    name: FIRESTORE_JOB_NAME,
+    'runs-on': 'ubuntu-latest',
+    permissions: { contents: 'read' },
+    steps: [
+      { uses: 'actions/checkout@v6', with: { 'persist-credentials': false } },
+      { uses: 'actions/setup-node@v6', with: { 'node-version': '20', cache: 'npm' } },
+      {
+        uses: 'actions/setup-java@v5',
+        with: { distribution: 'temurin', 'java-version': JAVA_VERSION },
+      },
+      { run: 'npm ci --legacy-peer-deps --ignore-scripts' },
+      { name: FIRESTORE_RULES_STEP_NAME, run: 'npm run test:rules' },
+    ],
+  };
+}
+
+function ciErrors(workflow, functionsScripts = functionsPackageJson.scripts) {
   const errors = [];
   const block = jobBlock(workflow, JOB_ID);
   if (!block) return ['missing job'];
@@ -109,7 +185,7 @@ function ciErrors(workflow) {
     [`name: ${JOB_NAME}`, 'wrong job name'],
     ["node-version: '20'", 'wrong Node version'],
     ["distribution: 'temurin'", 'missing Java distribution'],
-    ["java-version: '17'", 'wrong Java version'],
+    [`java-version: '${JAVA_VERSION}'`, 'wrong Java version'],
     ['npm ci --legacy-peer-deps --ignore-scripts', 'root install is not locked'],
     ['npm --prefix functions ci --ignore-scripts', 'Functions install is not locked'],
     [`${OPT_IN}: '1'`, 'missing explicit opt-in'],
@@ -139,6 +215,55 @@ function ciErrors(workflow) {
   if (/mid-peninsula-running-club|runmprc-97922/.test(block)) {
     errors.push('job names a hosted project');
   }
+  if (functionsScripts?.['test:run'] !== 'jest'
+    || functionsScripts?.['pretest:run'] !== undefined
+    || functionsScripts?.['posttest:run'] !== undefined) {
+    errors.push('Functions test command or lifecycle hooks are not exact');
+  }
+  errors.push(...exactEmulatorJobErrors(workflow, JOB_ID, expectedCommerceJob()));
+  return errors;
+}
+
+function firestoreRulesErrors(workflow, scripts = packageJson.scripts) {
+  const errors = [];
+  const block = jobBlock(workflow, FIRESTORE_JOB_ID);
+  if (!block) return ['missing Firestore Rules job'];
+
+  const checks = [
+    [`name: ${FIRESTORE_JOB_NAME}`, 'wrong Firestore Rules job name'],
+    ["node-version: '20'", 'wrong Firestore Rules Node version'],
+    ["distribution: 'temurin'", 'missing Firestore Rules Java distribution'],
+    [`java-version: '${JAVA_VERSION}'`, 'wrong Firestore Rules Java version'],
+    ['npm ci --legacy-peer-deps --ignore-scripts', 'Firestore Rules install is not locked'],
+    ['run: npm run test:rules', 'wrong Firestore Rules command'],
+  ];
+  checks.forEach(([required, message]) => {
+    if (!block.includes(required)) errors.push(message);
+  });
+
+  const exactRulesScript = 'firebase emulators:exec --only firestore '
+    + `--project ${FIRESTORE_DEMO_PROJECT} `
+    + '"npx --no-install jest --config tests/firestore-rules/jest.config.js"';
+  if (scripts?.['test:rules'] !== exactRulesScript) {
+    errors.push('Firestore Rules script is not exact and lockfile-bound');
+  }
+  if (/firebase-tools@|npm install -g/.test(block)) {
+    errors.push('Firestore Rules job installs an uncommitted CLI');
+  }
+  if (/secrets\.|FIREBASE_SERVICE_ACCOUNT|FIREBASE_TOKEN|STRIPE_SECRET/.test(block)) {
+    errors.push('Firestore Rules job receives a secret or cloud credential');
+  }
+  if (/mid-peninsula-running-club|runmprc-97922/.test(block)) {
+    errors.push('Firestore Rules job names a hosted project');
+  }
+  if (scripts?.['pretest:rules'] !== undefined || scripts?.['posttest:rules'] !== undefined) {
+    errors.push('Firestore Rules lifecycle hooks are forbidden');
+  }
+  errors.push(...exactEmulatorJobErrors(
+    workflow,
+    FIRESTORE_JOB_ID,
+    expectedFirestoreRulesJob(),
+  ));
   return errors;
 }
 
@@ -263,6 +388,7 @@ function releaseErrors(workflow) {
 
 test('journal emulator CI job is exact, isolated, and blocking', () => {
   assert.deepEqual(ciErrors(ciWorkflow), []);
+  assert.deepEqual(firestoreRulesErrors(ciWorkflow), []);
   assert.deepEqual(releaseErrors(releaseWorkflow), []);
 });
 
@@ -457,6 +583,7 @@ test('lint baseline rejects parser errors and malformed result or baseline data'
 });
 
 test('guard rejects missing, renamed, broadened, or unsafe CI wiring', () => {
+  const commerceBlock = jobBlock(ciWorkflow, JOB_ID);
   const mutations = [
     ciWorkflow.replace(`  ${JOB_ID}:\n`, '  removed-journal-job:\n'),
     ciWorkflow.replace(`name: ${JOB_NAME}`, 'name: Generic emulator'),
@@ -472,9 +599,98 @@ test('guard rejects missing, renamed, broadened, or unsafe CI wiring', () => {
         + '        run: >-\n          npx --no-install firebase emulators:exec',
     ),
     ciWorkflow.replace(TEST_FILE, `${TEST_FILE} || true`),
+    ciWorkflow.replace(`java-version: '${JAVA_VERSION}'`, "java-version: '17'"),
+    ciWorkflow.replace(commerceBlock, `${commerceBlock}      - run: npm i -g firebase-tools\n`),
+    ciWorkflow.replace(
+      commerceBlock,
+      commerceBlock.replace(
+        `    name: ${JOB_NAME}\n`,
+        `    name: ${JOB_NAME}\n    env:\n      GOOGLE_APPLICATION_CREDENTIALS: /tmp/synthetic.json\n`,
+      ),
+    ),
+    ciWorkflow.replace(
+      commerceBlock,
+      commerceBlock.replace(
+        `--runInBand ${TEST_FILE}\"`,
+        `--runInBand ${TEST_FILE}\"\n      - run: npx --no-install firebase emulators:exec --project hosted-other --only auth \"true\"`,
+      ),
+    ),
+    ciWorkflow.replace(
+      'jobs:\n',
+      'permissions:\n  id-token: write\njobs:\n',
+    ),
   ];
 
   mutations.forEach((mutated) => assert.notDeepEqual(ciErrors(mutated), []));
+
+  const functionsScriptMutations = [
+    { ...functionsPackageJson.scripts, 'test:run': 'jest || true' },
+    { ...functionsPackageJson.scripts, 'pretest:run': 'npx firebase-tools@latest --version' },
+    { ...functionsPackageJson.scripts, 'posttest:run': 'firebase use hosted-other' },
+  ];
+  functionsScriptMutations.forEach((scripts) => {
+    assert.notDeepEqual(ciErrors(ciWorkflow, scripts), []);
+  });
+});
+
+test('guard rejects unsafe Firestore Rules runtime or lockfile mutations', () => {
+  const firestoreBlock = jobBlock(ciWorkflow, FIRESTORE_JOB_ID);
+  const mutations = [
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      `java-version: '${JAVA_VERSION}'`,
+      "java-version: '17'",
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      "distribution: 'temurin'",
+      "distribution: 'zulu'",
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      'run: npm run test:rules',
+      'run: npx firebase-tools@latest emulators:exec',
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      `      - name: ${FIRESTORE_RULES_STEP_NAME}`,
+      `      - name: ${FIRESTORE_RULES_STEP_NAME}\n        if: ${NEVER_RUN}`,
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      `      - name: ${FIRESTORE_RULES_STEP_NAME}`,
+      `      - continue-on-error: ${ALWAYS_TRUE}\n        name: ${FIRESTORE_RULES_STEP_NAME}`,
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      'run: npm run test:rules',
+      'run: npm run test:rules || true',
+    )),
+    ciWorkflow.replace(firestoreBlock, `${firestoreBlock}      - run: npm i -g firebase-tools\n`),
+    ciWorkflow.replace(firestoreBlock, `${firestoreBlock}      - run: npx --no-install firebase emulators:exec --project hosted-other --only auth \"true\"\n`),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      `    name: ${FIRESTORE_JOB_NAME}\n`,
+      `    name: ${FIRESTORE_JOB_NAME}\n    env:\n      GOOGLE_GHA_CREDS_PATH: /tmp/synthetic.json\n`,
+    )),
+    ciWorkflow.replace(`  ${FIRESTORE_JOB_ID}:\n`, '  removed-firestore-rules:\n'),
+  ];
+  mutations.forEach((mutated) => {
+    assert.notDeepEqual(firestoreRulesErrors(mutated), []);
+  });
+
+  const scriptMutations = [
+    packageJson.scripts['test:rules'].replace(FIRESTORE_DEMO_PROJECT, 'runmprc-97922'),
+    packageJson.scripts['test:rules'].replace('--only firestore', '--only auth,firestore'),
+    packageJson.scripts['test:rules'].replace('firebase emulators:exec', 'firebase-tools@latest'),
+  ];
+  scriptMutations.forEach((testRules) => {
+    assert.notDeepEqual(
+      firestoreRulesErrors(ciWorkflow, { ...packageJson.scripts, 'test:rules': testRules }),
+      [],
+    );
+  });
+
+  const lifecycleMutations = [
+    { ...packageJson.scripts, 'pretest:rules': 'npx firebase-tools@latest --version' },
+    { ...packageJson.scripts, 'posttest:rules': 'firebase use hosted-other' },
+  ];
+  lifecycleMutations.forEach((scripts) => {
+    assert.notDeepEqual(firestoreRulesErrors(ciWorkflow, scripts), []);
+  });
 });
 
 test('guard rejects omission from either protected-release recheck', () => {

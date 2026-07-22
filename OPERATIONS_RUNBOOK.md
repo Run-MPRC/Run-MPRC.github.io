@@ -172,8 +172,8 @@ Never print secret values into CI output, issue bodies, screenshots, chat, or th
 
 - Node.js 20 matching Functions runtime.
 - npm matching the lockfiles.
-- Java 17 for the Firestore emulator/rules tests.
-- Firebase CLI from the repository dependency where possible.
+- Java 21 for every repository-owned Firebase emulator command.
+- Firebase CLI 15.24.0 from the repository lockfile; never install or invoke a floating CLI.
 - Stripe CLI for signed local webhook testing.
 
 ### Install — available now
@@ -334,6 +334,10 @@ SUPPLY-001D8 [#453](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/453) i
 
 Clean before/after builds keep the same 49 non-map files, 9,975,968 bytes, and aggregate SHA-256 `3fa30c6d66827277432dcf7d42b0ead9e9fd543c9907571b092cfa43ba3f1e46`. Only the main source map changes. Its 477 source paths and contents are identical; updated mapping/name tables add 2,574 bytes. This does not change public runtime code. It does not publish the website, deploy Firebase, configure a provider, inspect production data, or prove live behavior.
 
+SUPPLY-001D9 [#455](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/455) pins the repository-owned Firebase CLI to 15.24.0 and moves both hosted emulator jobs to Java 21. The full root audit changes from 64 findings (2 critical, 32 high, 17 moderate, 13 low) to 58 (0 critical, 24 high, 21 moderate, 13 low): the old CLI `protobufjs` and `tar` critical groups are gone, but the remaining findings are not accepted as safe. The production-only root audit remains 2 high and 1 low. Java 17 must stop before emulator startup; Java 21 must pass the complete Rules and commerce suites plus the credential-free `demo-mprc-local` Auth/Firestore/Functions readiness smoke. Clean Node 20 builds before and after the upgrade are byte-for-byte identical across all 59 files and 19,520,717 bytes. The Functions manifest, lockfile, audits, and runtime source do not change.
+
+This is a maintainer and CI compatibility boundary. Officers do not install Java, run Firebase CLI, or deploy from a terminal. Source changes, local tests, hosted checks, merge, Firebase deployment, website publication, provider configuration, and production behavior remain separate evidence states.
+
 ### Race checkout request boundary — SOURCE ONLY, NOT LIVE
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) makes the race checkout Function reject malformed or unexpected signup data in two steps. First, it checks one exact, bounded request shape before opening Firestore. Second, after the read-only commerce admission returns the event snapshot, it checks every submitted answer against the event's bounded participant or volunteer field definitions. A denial uses one fixed message and must occur before a rate-limit write, role or capacity call, token creation, registration write, Stripe Product creation, or Stripe Checkout Session call.
@@ -369,7 +373,7 @@ flowchart LR
 
 Text alternative: exact saved evidence, a matching closed transition, and a fresh later lease can create only an authorization record; a separate plan and send gate is still required.
 
-Run only with Node 20, Java 17, the repository lockfiles, and synthetic demo data:
+Run only with Node 20, Java 21, the repository lockfiles, and synthetic demo data:
 
 ```bash
 npm --prefix functions run test:run -- --runInBand commerceCommandJournal.test.js
@@ -403,7 +407,7 @@ Text alternative: the exact C3C authorization and current active lease can creat
 
 Version 1 allows no provider-parameter change. Account, mode, API version, operation, endpoint, and canonical parameters must equal attempt 1. Only the internally derived attempt-2 key commitment, current fence/time, attempt number, and authorization provenance may differ.
 
-Run only with Node 20, Java 17, repository lockfiles, and synthetic demo data:
+Run only with Node 20, Java 21, repository lockfiles, and synthetic demo data:
 
 ```bash
 npm --prefix functions run test:run -- --runInBand commerceCommandJournal.test.js
@@ -448,7 +452,7 @@ C4B leaves the existing version-1 plan-commitment bytes unchanged. It uses `prov
 
 The fixed permitted result contains only schema versions, `send_permitted`, and `pre_send_recorded`. The fixed ambiguous result contains only schema versions, `reconciliation_required`, and `provider_outcome_unknown`. Neither result proves caller authority, current business state, Stripe-account control, request execution, or a provider result. This boundary is only for `checkout_session_create` at `POST /v1/checkout/sessions`; Product/Price creation, Session expiry, refunds, and privileged provider actions need separate reviewed boundaries.
 
-Run only with Node 20, Java 17, repository lockfiles, and synthetic demo data:
+Run only with Node 20, Java 21, repository lockfiles, and synthetic demo data:
 
 ```bash
 npm --prefix functions run test:run -- --runInBand commerceCommandJournal.test.js
