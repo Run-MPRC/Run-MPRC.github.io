@@ -835,6 +835,42 @@ This contract invents no policy and duplicates no sibling. It owns the *member-f
 
 The module is imported by no runtime or Functions index and makes nothing officer- or member-observable. It requires only `node:util` and `./membershipAuthority` (itself `node:util`-only), reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, and changes no current profile/role/claim. Source tests and a merge are not Firebase deployment or live behavior proof.
 
+### 8.0i Provider-link lifecycle reconciliation — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001F [#445](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/445) defines one unused, pure, versioned snapshot contract and optimistic-concurrency reducer for the provider-neutral account link in §8.0e. It composes §8.0e's reviewed classifier for consent gating, collision, and desired-versus-observed drift instead of reproducing those decisions. The caller supplies the effective consent disposition already derived by §8.0d: only `active` maps to granted consent, `withdrawn` maps to withdrawn consent, and `reaffirmation_required` or `not_consented` maps to unknown consent. Changing that disposition does not silently request a provider action.
+
+```mermaid
+flowchart LR
+    I["Current lifecycle snapshot + exact command"] --> V{"Current revision and stable command?"}
+    V -- "Malformed, stale, or conflicting" --> X["One fixed error; no input echo"]
+    V -- "Exact latest retry" --> R["Same frozen snapshot"]
+    V -- "Valid new command" --> C{"Command type?"}
+    C -- "Consent or desired state" --> D["Update safe local intent"]
+    C -- "Reconciliation evidence" --> O{"Next ordered outcome?"}
+    C -- "Replace provider account" --> A{"Desired and observed unlinked?"}
+    O -- "Success" --> S["Advance the known observation"]
+    O -- "Definitive failure" --> F["Keep the last known observation"]
+    O -- "Outcome unknown" --> U["Keep desired state; mark observation unknown"]
+    A -- "Only confirmed unlinked" --> N["Reset observation for the new opaque account"]
+    A -- "Linked or unknown" --> X
+    D --> P["§8.0e classifies consent, collision, and drift"]
+    S --> P
+    F --> P
+    U --> P
+    N --> P
+    R --> Z["grantsAuthority: false"]
+    P --> Z
+    X --> Z
+```
+
+Text alternative: a well-formed current command either returns the same frozen snapshot for an exact latest retry or advances one revision; ordered success records a known observation, definitive failure preserves the last known observation, an unknown outcome invalidates the observation without changing intent, and a provider account can change only after confirmed unlink, while every result grants no authority.
+
+The exact snapshot contains bounded typed membership and provider-account references, one existing provider enum, the effective consent disposition, desired and observed link state, optional collision evidence, a safe-integer revision, the last reconciliation sequence/outcome/typed attempt reference/fixed error code, and the latest stable command ID, payload hash, and expected revision. Creation requests `unlinked` but records provider observation as `unknown`; source never fabricates an external fact. Commands can change consent, request link or unlink, record the exact next reconciliation result, or replace the account after desired and observed state are both unlinked. A reconciliation command pins the current provider-account reference, desired state, record revision, and next per-account sequence, so a delayed link result cannot satisfy a later unlink or relink. Reversing an unresolved link or unlink intent invalidates the prior observation, preventing an in-flight action from making the record look aligned or replaceable. Success must report the requested known state; a foreign bound-membership reference remains collision evidence for §8.0e. Definitive failure keeps the prior observation, while outcome-unknown clears it. Account replacement resets observation and reconciliation to unknown/not-attempted for the new reference.
+
+Inputs and every nested value are exact plain data objects: missing, extra, symbol, non-enumerable, inherited, accessor, proxy, malformed, out-of-range, stale, skipped, and conflicting shapes fail through one fixed non-echoing error. Purpose-specific prefixes reject raw phone, token, error, URL, and name values from reference fields; a payload hash must be the exact lowercase SHA-256 digest that the reducer recomputes over the canonical command type and safe payload fields. Outputs and nested records are frozen, and records and verdicts hard-code `grantsAuthority: false`. Exact latest retry is read-only. Reusing an ID with a changed type or payload produces another digest and fails; a changed expected revision fails the separate revision comparison. Durable all-history replay protection, cross-record uniqueness, storage transactions, and command authorization remain future trusted-runtime work.
+
+This contract does not capture consent events or choose a policy-version order, retention rule, deletion service level, provider behavior, relink policy, or officer approval. It makes no provider call and adds no persistence, migration, Firestore schema or Rules, Auth claim, endpoint, route, interface, package, workflow, or deployment. It is imported by no runtime or Functions index, requires only deterministic `node:util`/`node:crypto` operations and the pure §8.0e classifier, and reads no clock, environment, randomness, network, service SDK, or logger. Parent [#81](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/81) remains open for those boundaries. Source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, outside provider configured, production data migrated, and production behavior verified are separate states; this source contract proves only the first two before merge.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.

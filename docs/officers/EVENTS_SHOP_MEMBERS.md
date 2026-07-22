@@ -933,6 +933,73 @@ Officer review steps after the source merge:
 
 **Escalation:** membership lead plus treasurer and privacy/security owner. Add the platform owner for source/deployment evidence and use the private incident path if real data or unintended access is involved.
 
+## Provider-link lifecycle reconciliation — SOURCE ONLY, UNUSED
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** define how a future provider-account record can distinguish a requested link or unlink from what the provider has confirmed, without treating email, Google, WhatsApp, Strava, or that record as proof of membership, discounts, payment, a website role, or officer access.
+
+**Approver:** membership lead plus privacy/security and platform owners.
+
+**Prerequisites:** issue [#445](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/445), its reviewed pull request, and its exact merge commit are required for source review. The pure classifier from [#367](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/367) and current-consent contract from [#370](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/370) are its source dependencies. Use only made-up references that contain no member or provider information. Approved data purpose and retention under #110, legacy migration under #113, authorization, cross-account uniqueness, storage, provider wiring, protected deployment, readback, and live verification remain future prerequisites.
+
+```mermaid
+flowchart TD
+    Start["Made-up current snapshot + command"] --> Check{"Exact and current?"}
+    Check -- "No" --> Stop["Fixed rejection; no private detail"]
+    Check -- "Exact latest retry" --> Same["Same frozen snapshot"]
+    Check -- "Valid new command" --> Kind{"Command type?"}
+    Kind -- "Consent or requested state" --> Local["Update safe local intent"]
+    Kind -- "Reconciliation evidence" --> Result{"Provider result"}
+    Kind -- "Change provider account" --> Replace{"Requested and confirmed unlinked?"}
+    Result -- "Success" --> Known["Record the requested known state"]
+    Result -- "Definitive failure" --> Keep["Keep the last known state"]
+    Result -- "Outcome unknown" --> Unknown["Keep the request; mark provider state unknown"]
+    Replace -- "Confirmed unlinked" --> Reset["Start the new account with unknown provider state"]
+    Replace -- "Linked or unknown" --> Stop
+    Same --> NoAuthority["Never grants authority"]
+    Local --> NoAuthority
+    Known --> NoAuthority
+    Keep --> NoAuthority
+    Unknown --> NoAuthority
+    Reset --> NoAuthority
+    Stop --> NoAuthority
+```
+
+Text alternative: the future source rejects malformed or stale input, treats an exact latest retry as read-only, handles local intent, provider evidence, and account replacement as separate commands, preserves uncertainty instead of guessing success, permits replacement only after confirmed unlink, and never grants membership or any other authority.
+
+Backup-officer source-review steps:
+
+1. Keep this procedure marked **NOT AVAILABLE YET**.
+2. Obtain the exact #445 issue, reviewed pull request, merge commit, and synthetic test report.
+3. Confirm the report uses only made-up references and labels that contain no name, email, phone, provider identifier, URL, error, or token.
+4. Confirm the made-up test matrix applies the same provider-neutral contract to email/password, Google, WhatsApp, and Strava values; no live provider uses it yet.
+5. Confirm a new snapshot requests unlinked state but marks the provider observation unknown.
+6. Confirm the existing classifier blocks link action unless the current consent result is active; ordered provider evidence may still be recorded without granting authority.
+7. Confirm a consent change does not silently make a provider call or create an unlink request.
+8. Confirm an exact latest command retry returns the same frozen record. The source recomputes a SHA-256 fingerprint, which is a fixed-length one-way summary of the command type and safe payload fields; it checks the expected record version separately.
+9. Confirm a changed command with the same ID, stale version, skipped result number, wrong account, reversed in-flight request, or delayed link/unlink result is rejected or marked unknown with one fixed safe boundary.
+10. Confirm success records only the requested known state.
+11. Confirm a definitive failure keeps the last known state and stores only a fixed error code.
+12. Confirm an unknown outcome keeps the requested state but marks provider observation unknown.
+13. Confirm a different provider account is accepted only after unlink is both requested and confirmed.
+14. Confirm the replacement starts with unknown provider state and cannot accept a delayed result for the old account.
+15. Confirm collision, consent, and drift decisions come from the already reviewed #367 classifier.
+16. Confirm every record and verdict says it grants no authority.
+17. Confirm the module has no runtime import, provider call, database action, claim or role change, route, interface, migration, deployment, log, or production record.
+
+**Expected result:** the unused synthetic contract can represent ordered link, unlink, relink, failure, uncertainty, collision, and safe account replacement without granting authority. Current signup, membership, discounts, email/password, Google, WhatsApp, Strava, officer screens, provider accounts, and website behavior remain unchanged.
+
+**Stop conditions:** any real member or provider data; a raw provider error, response, URL, token, email, phone, name, or screenshot; a production inspection; a manual database or provider action; a request to choose consent, retention, relink, or migration policy; missing prerequisite evidence; or a claim that source, tests, a pull request, merge, or green workflow makes this live.
+
+**Success proof:** exact #445 issue, pull request, reviewed merge commit, focused and full test/lint reports, and the source-isolation scan. Record website publication, `runmprc.com` verification, Firebase deployment, outside-provider configuration, production-data changes, migration, and live behavior separately as **not performed** for this source-only issue.
+
+**Undo:** before runtime adoption, use one reviewed revert or safe roll-forward for the two unused module/test files and these named documentation sections. No production record repair exists. Any future runtime child must provide its own data-safe rollback.
+
+**Escalation:** membership lead plus privacy/security and platform owners. Use the private incident route if real data, unintended authority, or a provider action appears.
+
+No system-topology map changes are required because this unused contract changes no data movement, permissions, account ownership, or deployment topology.
+
 ## My Account membership truth — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**
