@@ -89,8 +89,12 @@ jobs:
     name: Commerce command journal emulator
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
@@ -116,8 +120,12 @@ jobs:
   firestore-rules:
     name: Firestore security-rules tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
@@ -126,6 +134,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - run: npm ci --legacy-peer-deps
+      - run: npm ci --legacy-peer-deps --ignore-scripts
       - name: Run Firestore rules tests against the emulator
         run: npm run test:rules

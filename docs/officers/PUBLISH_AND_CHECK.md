@@ -39,7 +39,7 @@ In words: merging does not release; a request checks one exact commit and may pr
 
 ## Current facts
 
-As of **2026-07-22**:
+As of **2026-07-13**, with the internal tooling note below checked from source on **2026-07-22**:
 
 - `main` is the canonical branch.
 - A merge starts CI checks. It does not start `.github/workflows/deploy.yml`.
@@ -50,7 +50,7 @@ As of **2026-07-22**:
 - Missing environment configuration or cloud authority makes the release red before backend dependencies, cloud authentication, or deployment. A public website artifact may be prepared without cloud authority, but it cannot be published.
 - The backend uses a short-lived cloud identity when #133 configures it. The website job receives public browser values only.
 - The Firebase CLI comes from the committed lockfile. The release does not install `latest`.
-- The committed internal CLI is Firebase CLI 15.24.0, and its emulator checks use Java 21. Officers do not install or run either tool; the platform maintainer owns them. This version change does not alter the release diagram or prove that Firebase was deployed.
+- Source checked on 2026-07-22 pins the internal Firebase CLI to 15.24.0, and its emulator checks use Java 21. Officers do not install or run either tool; the platform maintainer owns them. This source change does not alter the release diagram or prove that Firebase was deployed. The provider and live-host facts below were not reverified for this tooling update.
 - A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
 - The `staging` option deliberately stops before deployment until #113/#133 name one exact approved staging Firebase project. A future staging release remains backend-only until a separate staging browser configuration and host exist.
 - `runmprc.com` is served by Netlify, not GitHub Pages.
