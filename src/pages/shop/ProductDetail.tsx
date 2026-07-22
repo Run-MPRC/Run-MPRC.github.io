@@ -48,7 +48,7 @@ function ProductDetail() {
 
   useEffect(() => {
     if (user?.email && !email) setEmail(user.email);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Current user projection changes retrigger prefill; local email edits do not.
   }, [user]);
 
   if (loading) return <div className="container mx-auto p-6">Loading...</div>;

@@ -427,7 +427,7 @@ function Inner({
     if (!firestore || !slug) return () => undefined;
     reload(true);
     return () => { requestSequence.current += 1; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Firebase app, Firestore, and slug changes are the deliberate reload boundary.
   }, [firebaseApp, firestore, slug]);
 
   async function downloadCsv() {

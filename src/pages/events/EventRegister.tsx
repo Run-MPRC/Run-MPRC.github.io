@@ -124,7 +124,7 @@ function EventRegister() {
     if (user?.email && !runner.email) {
       setRunner((r) => ({ ...r, email: user.email || '' }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Current user projection changes retrigger prefill; local email edits do not.
   }, [user]);
 
   useEffect(() => {
