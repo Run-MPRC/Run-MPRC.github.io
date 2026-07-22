@@ -1,5 +1,5 @@
 nav {
-  height: 5.5rem;
+  height: var(--site-nav-height);
   width: 100vw; /*100% of the window/browser*/
   background: var(--color-primary);
   display: grid;

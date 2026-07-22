@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
+import Header from '../../components/Header';
+import HeaderImage from '../../images/joinus/header_bg_1.jpg';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import { Member } from '../../types/member';
@@ -26,6 +28,18 @@ function tsToDate(ts: Timestamp | null | undefined) {
   if (!ts) return '';
   const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts as any);
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+export function AccountPageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <SEO title="My Account" noindex />
+      <Header title="My Account" image={HeaderImage}>
+        Manage your MPRC profile, registrations, and connected services.
+      </Header>
+      {children}
+    </>
+  );
 }
 
 function ResendVerificationButton() {
@@ -183,11 +197,10 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
   const past = regsData?.registrations.filter((r) => !upcoming.includes(r)) || [];
 
   return (
-    <>
-      <SEO title="My Account" noindex />
+    <div className="account-content">
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Account</h1>
+          <h2 className="text-2xl font-bold">Account details</h2>
           <button
             type="button"
             onClick={handleSignOut}
@@ -338,15 +351,21 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
 
         <StravaSection uid={user.uid} />
       </div>
-    </>
+    </div>
   );
 }
 
-function Account() {
+export function Account() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <div className="container mx-auto p-6">Loading...</div>;
+  if (isLoading) {
+    return (
+      <AccountPageShell>
+        <div role="status" className="container mx-auto p-6">Loading...</div>
+      </AccountPageShell>
+    );
+  }
   if (!isAuthenticated || !user) {
     return (
       <Navigate
@@ -356,7 +375,11 @@ function Account() {
       />
     );
   }
-  return <AccountContent user={user} />;
+  return (
+    <AccountPageShell>
+      <AccountContent user={user} />
+    </AccountPageShell>
+  );
 }
 
 export default Account;

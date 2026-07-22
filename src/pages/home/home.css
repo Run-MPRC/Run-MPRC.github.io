@@ -2,7 +2,7 @@
   width: 100vw;
   height: calc(100vh - 3.49rem);
   display: grid;
-  margin-top: 3rem;
+  margin-top: 0;
 }
 
 .main__header-container {
