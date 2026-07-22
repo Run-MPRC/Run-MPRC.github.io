@@ -100,6 +100,14 @@ const unlinkedRecord = makeRecord({
   commandType: 'create_membership',
   commandId: 'cmd_create',
 });
+// unlinked + approved term: revision 2, record_term_decision.
+const unlinkedApprovedRecord = makeRecord({
+  association: unlinkedAssoc,
+  term: decidedTerm('approved', STARTS, ENDS),
+  revision: 2,
+  commandType: 'record_term_decision',
+  commandId: 'cmd_term_unlinked',
+});
 
 function input(record, asOfMs, uid = UID) {
   return { membershipAccountStatusSchemaVersion: V, record, uid, asOfMs };
@@ -169,6 +177,14 @@ const ROWS = [
   {
     name: 'none (unlinked association)',
     record: unlinkedRecord,
+    asOfMs: STARTS + 100 * DAY,
+    window: WINDOW,
+    status: 'none', entitlement: 'not_entitled',
+    renewalOffered: false, activeThroughMs: null,
+  },
+  {
+    name: 'none (approved in-window term but no account association)',
+    record: unlinkedApprovedRecord,
     asOfMs: STARTS + 100 * DAY,
     window: WINDOW,
     status: 'none', entitlement: 'not_entitled',
@@ -253,6 +269,7 @@ describe('the consistency seam — display never over-states authorization', () 
       decidedRecord('approved', STARTS, ENDS, otherAssoc),
       pendingRecord,
       unlinkedRecord,
+      unlinkedApprovedRecord,
     ];
     for (const record of records) {
       for (let k = -3; k <= 370; k += 7) {

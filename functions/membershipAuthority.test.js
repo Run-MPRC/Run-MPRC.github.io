@@ -72,6 +72,13 @@ function createLinkedRecord() {
   );
 }
 
+function createUnlinkedTermRecord(overrides = {}) {
+  return applyMembershipAuthorityCommand(
+    createMembershipAuthority(createInput()),
+    termCommand({ expectedRevision: 1, ...overrides }),
+  );
+}
+
 function createApprovedRecord(overrides = {}) {
   return applyMembershipAuthorityCommand(
     createLinkedRecord(),
@@ -193,6 +200,166 @@ describe('provider-neutral membership authority contract', () => {
       entitlement: 'decision_pending',
       state: 'requires_policy_decision',
     });
+  });
+
+  test('records a term before association while withholding entitlement until explicit linking', () => {
+    const approvedUnlinked = createUnlinkedTermRecord();
+
+    expect(approvedUnlinked.revision).toBe(2);
+    expect(approvedUnlinked.association).toEqual({
+      state: 'unlinked',
+      uid: null,
+      revision: 0,
+    });
+    expect(approvedUnlinked.term).toEqual({
+      state: 'approved',
+      termId: 'term_test_2026',
+      startsAtMs: TERM_START_MS,
+      endsAtMs: TERM_END_MS,
+      planRef: 'plan_test_001',
+      evidenceRef: 'evidence_test_001',
+      policyVersion: 'policy_test_001',
+      revision: 1,
+    });
+    expect(deriveMembershipEntitlement(entitlementInput(approvedUnlinked))).toEqual({
+      membershipAuthoritySchemaVersion: 1,
+      entitlement: 'not_entitled',
+      state: 'inactive',
+    });
+
+    const linked = applyMembershipAuthorityCommand(approvedUnlinked, associateCommand({
+      commandId: 'cmd_link_002',
+      expectedRevision: 2,
+    }));
+    expect(linked.revision).toBe(3);
+    expect(linked.term).toEqual(approvedUnlinked.term);
+    expectDeepFrozen(linked);
+    expect(deriveMembershipEntitlement(entitlementInput(linked))).toEqual({
+      membershipAuthoritySchemaVersion: 1,
+      entitlement: 'current_member',
+      state: 'active',
+    });
+
+    const linkedFirst = createApprovedRecord();
+    expect(linked.revision).toBe(linkedFirst.revision);
+    expect(linked.association).toEqual(linkedFirst.association);
+    expect(linked.term).toEqual(linkedFirst.term);
+    expect(linked.lastCommand.commandType).toBe('associate_account');
+    expect(linkedFirst.lastCommand.commandType).toBe('record_term_decision');
+  });
+
+  test.each([
+    ['decision_pending', 'decision_pending', TERM_START_MS, 'decision_pending', 'requires_policy_decision'],
+    ['suspended', 'suspended', TERM_START_MS, 'not_entitled', 'inactive'],
+    ['ended', 'ended', TERM_START_MS, 'not_entitled', 'inactive'],
+    ['approved future', 'approved', TERM_START_MS - 1, 'not_entitled', 'inactive'],
+    ['approved expired', 'approved', TERM_END_MS, 'not_entitled', 'inactive'],
+  ])('term-first %s evidence never becomes current merely because an account is linked', (
+    _caseName,
+    termState,
+    asOfMs,
+    entitlement,
+    state,
+  ) => {
+    const unlinked = createUnlinkedTermRecord({ termState });
+
+    expect(deriveMembershipEntitlement(entitlementInput(unlinked, { asOfMs }))).toEqual({
+      membershipAuthoritySchemaVersion: 1,
+      entitlement: 'not_entitled',
+      state: 'inactive',
+    });
+
+    const linked = applyMembershipAuthorityCommand(unlinked, associateCommand({
+      commandId: 'cmd_link_after_term_001',
+      expectedRevision: 2,
+    }));
+    expect(linked.term).toEqual(unlinked.term);
+    expect(deriveMembershipEntitlement(entitlementInput(linked, { asOfMs }))).toEqual({
+      membershipAuthoritySchemaVersion: 1,
+      entitlement,
+      state,
+    });
+  });
+
+  test('preserves the latest unlinked term across association and keeps retries read-only', () => {
+    const approved = createUnlinkedTermRecord();
+    expect(applyMembershipAuthorityCommand(approved, termCommand({
+      expectedRevision: 1,
+    }))).toBe(approved);
+
+    const suspendCommand = termCommand({
+      commandId: 'cmd_term_suspend_002',
+      expectedRevision: 2,
+      termRevision: 2,
+      termState: 'suspended',
+      evidenceRef: 'evidence_reversal_002',
+    });
+    const suspended = applyMembershipAuthorityCommand(approved, suspendCommand);
+    expect(suspended.association.state).toBe('unlinked');
+    expect(suspended.term.state).toBe('suspended');
+    expect(suspended.term.revision).toBe(2);
+    expect(applyMembershipAuthorityCommand(suspended, suspendCommand)).toBe(suspended);
+
+    const linkCommand = associateCommand({
+      commandId: 'cmd_link_after_suspend_001',
+      expectedRevision: 3,
+    });
+    const linked = applyMembershipAuthorityCommand(suspended, linkCommand);
+    expect(linked.revision).toBe(4);
+    expect(linked.term).toEqual(suspended.term);
+    expect(applyMembershipAuthorityCommand(linked, linkCommand)).toBe(linked);
+    expect(deriveMembershipEntitlement(entitlementInput(linked))).toEqual({
+      membershipAuthoritySchemaVersion: 1,
+      entitlement: 'not_entitled',
+      state: 'inactive',
+    });
+
+    expectSafeError(() => applyMembershipAuthorityCommand(
+      linked,
+      { ...linkCommand, uid: 'uid_other_001' },
+    ));
+    expectSafeError(() => applyMembershipAuthorityCommand(linked, termCommand({
+      expectedRevision: 1,
+    })));
+    expectSafeError(() => applyMembershipAuthorityCommand(linked, associateCommand({
+      commandId: 'cmd_link_second_002',
+      expectedRevision: 4,
+      uid: 'uid_other_001',
+    })));
+  });
+
+  test('rejects stale, skipped, and impossible term-first histories without mutation', () => {
+    const initial = createMembershipAuthority(createInput());
+    const before = JSON.stringify(initial);
+
+    expectSafeError(() => applyMembershipAuthorityCommand(initial, termCommand({
+      expectedRevision: 2,
+    })));
+    expectSafeError(() => applyMembershipAuthorityCommand(initial, termCommand({
+      expectedRevision: 1,
+      termRevision: 2,
+    })));
+    expect(JSON.stringify(initial)).toBe(before);
+
+    const approved = createUnlinkedTermRecord();
+    expectSafeError(() => applyMembershipAuthorityCommand(approved, termCommand({
+      commandId: 'cmd_term_stale_002',
+      expectedRevision: 1,
+      termRevision: 2,
+    })));
+    expectSafeError(() => applyMembershipAuthorityCommand(approved, termCommand({
+      commandId: 'cmd_term_repeat_002',
+      expectedRevision: 2,
+      termRevision: 1,
+    })));
+    expectSafeError(() => deriveMembershipEntitlement(entitlementInput({
+      ...approved,
+      lastCommand: {
+        commandType: 'associate_account',
+        commandId: 'cmd_impossible_001',
+        expectedRevision: 1,
+      },
+    })));
   });
 
   test('makes an exact command retry read-only and rejects a changed reuse', () => {

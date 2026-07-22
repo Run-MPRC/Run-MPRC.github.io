@@ -858,6 +858,51 @@ describe('the emitted command is accepted by the shipped membership authority re
     });
   });
 
+  test('a verified reversal suspends an unlinked term before later association', () => {
+    const unlinked = createMembershipAuthority({
+      membershipAuthoritySchemaVersion: 1,
+      membershipId: 'mbr_test_001',
+      commandId: 'cmd_create_001',
+    });
+    const approved = applyMembershipAuthorityCommand(unlinked, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'record_term_decision',
+      commandId: 'cmd_approve_unlinked_001',
+      expectedRevision: 1,
+      termRevision: 1,
+      termState: 'approved',
+      termId: 'term_test_2026',
+      startsAtMs: TERM_START_MS,
+      endsAtMs: TERM_END_MS,
+      planRef: 'plan_test_001',
+      evidenceRef: 'pi_test_activating_001',
+      policyVersion: 'policy_test_001',
+    });
+    const { reducerCommand } = classifyVerifiedDuesReversal(
+      expectation({ expectedRevision: 2 }),
+      outcome(),
+    );
+
+    const suspended = applyMembershipAuthorityCommand(approved, reducerCommand);
+    expect(suspended.association.state).toBe('unlinked');
+    expect(suspended.term.state).toBe('suspended');
+
+    const linked = applyMembershipAuthorityCommand(suspended, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'associate_account',
+      commandId: 'cmd_link_after_reversal_001',
+      expectedRevision: 3,
+      uid: 'uid_test_001',
+    });
+    expect(linked.term).toEqual(suspended.term);
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: linked,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('not_entitled');
+  });
+
   test('re-applying the same emitted command is an idempotent no-op (downstream ordering guard)', () => {
     const approved = approvedRecord();
     const { reducerCommand } = classifyVerifiedDuesReversal(expectation(), outcome());
