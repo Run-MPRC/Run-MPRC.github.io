@@ -2349,6 +2349,14 @@ describe('Strava disconnect browser failure boundary', () => {
 });
 
 const STRAVA_CALLBACK_FAILURE = 'We could not connect Strava. Please return to My Account and try again.';
+const prepareStravaCallbackAppCheck = jest.fn();
+
+function makeCallbackFirebaseResources(firebaseApp: object = app) {
+  return {
+    app: firebaseApp,
+    prepareAppCheckAfterStravaCallbackCleanup: prepareStravaCallbackAppCheck,
+  };
+}
 
 function CallbackAccountDestination() {
   const navigationType = useNavigationType();
@@ -2376,6 +2384,7 @@ function CallbackLocationWitness() {
 }
 
 type CallbackRouterSnapshot = Readonly<{
+  pathname: string;
   search: string;
   hash: string;
   state: unknown;
@@ -2390,15 +2399,35 @@ function CallbackSameRouteProbe() {
   const navigate = useNavigate();
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(
-        '/account/strava/callback?code=second-code-canary&state=second-state-canary'
-        + '#second-fragment-canary',
-      )}
-    >
-      Load another callback
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => navigate(
+          '/account/strava/callback?code=second-code-canary&state=second-state-canary'
+          + '#second-fragment-canary',
+        )}
+      >
+        Load another callback
+      </button>
+      <button
+        type="button"
+        onClick={() => navigate(
+          '/account/strava/callback',
+          { replace: true, state: { privateRouterState: 'second-router-state-canary' } },
+        )}
+      >
+        Inject callback Router state
+      </button>
+      <button
+        type="button"
+        onClick={() => navigate(
+          '/account/strava/callback',
+          { replace: true, state: null },
+        )}
+      >
+        Replace clean callback entry
+      </button>
+    </>
   );
 }
 
@@ -2411,6 +2440,7 @@ function CallbackRouteHarness({
   const observationTarget = observation;
   if (observationTarget) {
     const snapshot = {
+      pathname: location.pathname,
       search: location.search,
       hash: location.hash,
       state: location.state,
@@ -2468,28 +2498,15 @@ function renderBrowserStravaCallback(
 function renderStravaCallback(
   entry = '/account/strava/callback?code=synthetic-code&state=synthetic-state',
 ) {
-  window.history.replaceState(null, '', '/account/strava/callback');
-  return render(
-    <MemoryRouter
-      initialEntries={[entry]}
-      future={{
-        v7_relativeSplatPath: true,
-        v7_startTransition: true,
-      }}
-    >
-      <Routes>
-        <Route path="/account/strava/callback" element={<StravaCallback />} />
-        <Route path="/account" element={<CallbackAccountDestination />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  return renderBrowserStravaCallback(entry);
 }
 
 describe('Strava callback error boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    prepareStravaCallbackAppCheck.mockResolvedValue(undefined);
     (useServiceLocator as jest.Mock).mockReturnValue({
-      services: { firebaseResources: { app } },
+      services: { firebaseResources: makeCallbackFirebaseResources() },
       isReady: true,
     });
     (useAuth as jest.Mock).mockReturnValue({
@@ -2509,18 +2526,203 @@ describe('Strava callback error boundary', () => {
   });
 
   describe('current browser history cleanup', () => {
+    test('prepares App Check after cleanup and before starting the exchange', async () => {
+      const calls: string[] = [];
+      let markAppCheckReady: (() => void) | undefined;
+      const prepareAppCheckAfterStravaCallbackCleanup = jest.fn(() => {
+        calls.push('prepare');
+        return new Promise<void>((resolve) => {
+          markAppCheckReady = resolve;
+        });
+      });
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: {
+          firebaseResources: {
+            app,
+            prepareAppCheckAfterStravaCallbackCleanup,
+          },
+        },
+        isReady: true,
+      });
+      (stravaExchangeCode as jest.Mock).mockImplementationOnce(() => {
+        calls.push('exchange');
+        return new Promise(() => {
+          // Keep the made-up exchange pending after the readiness gate opens.
+        });
+      });
+
+      renderBrowserStravaCallback();
+
+      await waitFor(() => expect(calls).not.toHaveLength(0));
+      expect(calls).toEqual(['prepare']);
+      expect(prepareAppCheckAfterStravaCallbackCleanup).toHaveBeenCalledTimes(1);
+      expect(prepareAppCheckAfterStravaCallbackCleanup).toHaveBeenCalledWith();
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+
+      await act(async () => {
+        markAppCheckReady?.();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
+      expect(calls).toEqual(['prepare', 'exchange']);
+      expect(stravaExchangeCode).toHaveBeenCalledWith(
+        app,
+        'synthetic-code',
+        'synthetic-state',
+      );
+    });
+
+    test.each([
+      ['short', 0.5, 'i'],
+      ['empty', 0, ''],
+    ])('accepts a %s key produced by the pinned BrowserRouter', async (
+      _case,
+      randomValue,
+      nativeKey,
+    ) => {
+      jest.spyOn(Math, 'random').mockReturnValue(randomValue);
+      (stravaExchangeCode as jest.Mock).mockReturnValueOnce(new Promise(() => {
+        // Keep the made-up exchange pending on the short-key callback entry.
+      }));
+
+      renderBrowserStravaCallback();
+
+      await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
+      expect(window.history.state).toEqual(expect.objectContaining({
+        key: nativeKey,
+        usr: null,
+      }));
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      [
+        'case-changed',
+        '/ACCOUNT/STRAVA/CALLBACK?code=variant-code&state=variant-state',
+      ],
+      [
+        'encoded segments',
+        '/%61ccount/%73trava/%63allback?code=variant-code&state=variant-state',
+      ],
+      [
+        'trailing slashes',
+        '/account/strava/callback///?code=variant-code&state=variant-state',
+      ],
+    ])('keeps every %s readiness and exchange boundary clean', async (
+      _case,
+      entry,
+    ) => {
+      const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const routerObservation: CallbackRouterObservation = { current: null };
+      const observations: Array<{
+        boundary: string;
+        nativePathname: string;
+        native: string;
+        router: CallbackRouterSnapshot | null;
+      }> = [];
+      const observe = (boundary: string) => {
+        observations.push({
+          boundary,
+          nativePathname: window.location.pathname,
+          native: `${window.location.search}${window.location.hash}`,
+          router: routerObservation.current,
+        });
+      };
+      prepareStravaCallbackAppCheck.mockImplementationOnce(async () => {
+        observe('prepare');
+      });
+      (stravaExchangeCode as jest.Mock).mockImplementationOnce(() => {
+        observe('exchange');
+        return new Promise(() => {
+          // Keep the made-up exchange pending after both clean observations.
+        });
+      });
+
+      renderBrowserStravaCallback(entry, true, false, routerObservation);
+
+      await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
+      expect(observations.map(({ boundary }) => boundary)).toEqual([
+        'prepare',
+        'exchange',
+      ]);
+      observations.forEach(({ nativePathname, native, router }) => {
+        expect(native).toBe('');
+        expect(router).not.toBeNull();
+        expect(router).toMatchObject({ search: '', hash: '', state: null });
+        expect(nativePathname).toBe(router?.pathname);
+      });
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledWith();
+      expect(stravaExchangeCode).toHaveBeenCalledWith(
+        app,
+        'variant-code',
+        'variant-state',
+      );
+      expect(consoleWarn).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['synchronous throw', 'throw'],
+      ['asynchronous rejection', 'reject'],
+    ])('uses one fixed stop for a hostile preparation %s', async (_case, outcome) => {
+      const messageGetter = jest.fn(() => {
+        throw new Error('app-check-message-getter-canary');
+      });
+      const rejection = Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      });
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+      if (outcome === 'throw') {
+        prepareStravaCallbackAppCheck.mockImplementationOnce(() => {
+          throw rejection;
+        });
+      } else {
+        prepareStravaCallbackAppCheck.mockRejectedValueOnce(rejection);
+      }
+
+      renderBrowserStravaCallback();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1);
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(messageGetter).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('app-check-message-getter-canary');
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('fails closed when the current Firebase resources lack the preparation boundary', async () => {
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: { firebaseResources: { app } },
+        isReady: true,
+      });
+
+      renderBrowserStravaCallback();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+    });
+
     test('cleans native and Router state before hooks or exchange', async () => {
       const routerObservation: CallbackRouterObservation = { current: null };
       const observedLocations: Array<{
         native: string;
         router: CallbackRouterSnapshot | null;
       }> = [];
-      const observedServices = { firebaseResources: { app } };
       const observeLocation = () => {
         observedLocations.push({
           native: `${window.location.search}${window.location.hash}`,
           router: routerObservation.current,
         });
+      };
+      const observedServices = {
+        firebaseResources: {
+          app,
+          prepareAppCheckAfterStravaCallbackCleanup: jest.fn(async () => {
+            observeLocation();
+          }),
+        },
       };
       (useServiceLocator as jest.Mock).mockImplementation(() => {
         observeLocation();
@@ -2557,7 +2759,12 @@ describe('Strava callback error boundary', () => {
       expect(observedLocations).not.toHaveLength(0);
       expect(observedLocations).toEqual(observedLocations.map(() => ({
         native: '',
-        router: { search: '', hash: '', state: null },
+        router: {
+          pathname: '/account/strava/callback',
+          search: '',
+          hash: '',
+          state: null,
+        },
       })));
       expect(window.location.pathname).toBe('/account/strava/callback');
       expect(window.location.search).toBe('');
@@ -2593,7 +2800,7 @@ describe('Strava callback error boundary', () => {
       ['authentication is loading', true, true],
     ])('cleans the current entry before waiting when %s', async (_case, isReady, isLoading) => {
       const observedLocations: string[] = [];
-      const observedServices = { firebaseResources: { app } };
+      const observedServices = { firebaseResources: makeCallbackFirebaseResources() };
       const observeLocation = () => {
         observedLocations.push(`${window.location.search}${window.location.hash}`);
       };
@@ -2680,7 +2887,13 @@ describe('Strava callback error boundary', () => {
       expect(document.body).not.toHaveTextContent(/history-noop-.*-canary/);
     });
 
-    test('fails closed when native replacement silently changes to another path', async () => {
+    test.each([
+      ['another path', '/silent-path-divergence'],
+      ['an equivalent case-changed path', '/ACCOUNT/STRAVA/CALLBACK'],
+    ])('fails closed when native replacement silently changes to %s', async (
+      _case,
+      divergentPath,
+    ) => {
       const routerObservation: CallbackRouterObservation = {
         current: null,
         onLocation: (location) => {
@@ -2693,7 +2906,7 @@ describe('Strava callback error boundary', () => {
             window.history.replaceState(
               window.history.state,
               '',
-              '/silent-path-divergence',
+              divergentPath,
             );
           }
         },
@@ -2709,7 +2922,7 @@ describe('Strava callback error boundary', () => {
 
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
-      expect(window.location.pathname).toBe('/silent-path-divergence');
+      expect(window.location.pathname).toBe(divergentPath);
       expect(useServiceLocator).not.toHaveBeenCalled();
       expect(useAuth).not.toHaveBeenCalled();
       expect(stravaExchangeCode).not.toHaveBeenCalled();
@@ -2742,6 +2955,7 @@ describe('Strava callback error boundary', () => {
       const page = renderBrowserStravaCallback(undefined, true, true);
 
       await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1);
       page.rerender(
         <React.StrictMode>
           <BrowserRouter
@@ -2759,12 +2973,280 @@ describe('Strava callback error boundary', () => {
       );
 
       expect(stravaExchangeCode).toHaveBeenCalledTimes(1);
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1);
       await act(async () => {
         finishExchange?.();
         await Promise.resolve();
       });
       expect(await screen.findByText('Account destination')).toBeInTheDocument();
       expect(screen.getByTestId('callback-navigation-type')).toHaveTextContent('REPLACE');
+    });
+
+    test.each([
+      ['signed-in UID'],
+      ['service identity'],
+      ['Firebase resources'],
+      ['Firebase app'],
+    ])('discards App Check readiness after a %s change', async (changedContext) => {
+      const readiness = accountDeferred<void>();
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      let firstFirebaseResources = makeCallbackFirebaseResources();
+      const firstServices = { firebaseResources: firstFirebaseResources };
+      let nextUser = USER;
+      let nextServices = firstServices;
+      (useServiceLocator as jest.Mock).mockImplementation(() => ({
+        services: nextServices,
+        isReady: true,
+      }));
+      (useAuth as jest.Mock).mockImplementation(() => ({
+        user: nextUser,
+        isAuthenticated: true,
+        isLoading: false,
+      }));
+      const page = renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+
+      if (changedContext === 'signed-in UID') {
+        nextUser = { ...USER, uid: 'second-synthetic-user' };
+      } else if (changedContext === 'service identity') {
+        nextServices = { firebaseResources: firstFirebaseResources };
+      } else if (changedContext === 'Firebase resources') {
+        firstFirebaseResources = makeCallbackFirebaseResources();
+        firstServices.firebaseResources = firstFirebaseResources;
+      } else {
+        firstFirebaseResources.app = { name: 'second-synthetic-app' };
+      }
+
+      page.rerender(
+        <BrowserRouter
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <Routes>
+            <Route path="/account/strava/callback" element={<CallbackRouteHarness />} />
+            <Route path="/account" element={<CallbackAccountDestination />} />
+          </Routes>
+        </BrowserRouter>,
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['a later callback', 'Load another callback'],
+      ['non-null Router state', 'Inject callback Router state'],
+      ['a replacement Router entry', 'Replace clean callback entry'],
+    ])('makes readiness inert after reinjection of %s', async (_case, buttonName) => {
+      const readiness = accountDeferred<void>();
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: buttonName }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent(/second-.*-canary/);
+    });
+
+    test('blocks native Router state before a transition render commits', async () => {
+      const readiness = accountDeferred<void>();
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+
+      window.history.replaceState(
+        {
+          idx: 0,
+          key: 'silent-router-state-entry',
+          usr: { privateRouterState: 'silent-router-state-canary' },
+        },
+        '',
+        '/account/strava/callback',
+      );
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('silent-router-state-canary');
+    });
+
+    test('blocks extra native history detail injected before preparation', async () => {
+      let injected = false;
+      const routerObservation: CallbackRouterObservation = {
+        current: null,
+        onLocation: (location) => {
+          if (
+            !injected
+            && location.search === ''
+            && location.hash === ''
+            && location.state === null
+          ) {
+            injected = true;
+            const nativeState = window.history.state as {
+              idx: number;
+              key: string;
+              usr: null;
+            };
+            window.history.replaceState(
+              {
+                ...nativeState,
+                code: 'preparation-saved-code-canary',
+              },
+              '',
+              window.location.pathname,
+            );
+          }
+        },
+      };
+
+      renderBrowserStravaCallback(undefined, true, false, routerObservation);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(injected).toBe(true);
+      expect(prepareStravaCallbackAppCheck).not.toHaveBeenCalled();
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('preparation-saved-code-canary');
+    });
+
+    test.each([
+      ['extra saved detail'],
+      ['a mismatched Router key'],
+    ])('blocks native history with %s after readiness', async (historyCase) => {
+      const readiness = accountDeferred<void>();
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+      const cleanState = window.history.state as {
+        idx: number;
+        key: string;
+        usr: null;
+      };
+      const changedState = historyCase === 'extra saved detail'
+        ? { ...cleanState, state: 'readiness-saved-state-canary' }
+        : { ...cleanState, key: 'different-router-key' };
+
+      window.history.replaceState(changedState, '', '/account/strava/callback');
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('readiness-saved-state-canary');
+    });
+
+    test('rechecks the native address after readiness without relying on a Router render', async () => {
+      const readiness = accountDeferred<void>();
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+
+      window.history.replaceState(
+        window.history.state,
+        '',
+        '/silent-readiness-divergence?private=native-readiness-canary',
+      );
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('native-readiness-canary');
+    });
+
+    test('makes pending App Check readiness inert after unmount without logging', async () => {
+      const readiness = accountDeferred<void>();
+      const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+        .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      const page = renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+      page.unmount();
+
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('keeps App Check readiness invalid after the account changes away and back', async () => {
+      const readiness = accountDeferred<void>();
+      const firstServices = { firebaseResources: makeCallbackFirebaseResources() };
+      let nextUser = USER;
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: firstServices,
+        isReady: true,
+      });
+      (useAuth as jest.Mock).mockImplementation(() => ({
+        user: nextUser,
+        isAuthenticated: true,
+        isLoading: false,
+      }));
+      prepareStravaCallbackAppCheck.mockReturnValueOnce(readiness.promise);
+      const page = renderBrowserStravaCallback();
+      await waitFor(() => expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1));
+
+      nextUser = { ...USER, uid: 'second-synthetic-user' };
+      page.rerender(
+        <BrowserRouter
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <Routes>
+            <Route path="/account/strava/callback" element={<CallbackRouteHarness />} />
+            <Route path="/account" element={<CallbackAccountDestination />} />
+          </Routes>
+        </BrowserRouter>,
+      );
+      expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+
+      nextUser = USER;
+      page.rerender(
+        <BrowserRouter
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <Routes>
+            <Route path="/account/strava/callback" element={<CallbackRouteHarness />} />
+            <Route path="/account" element={<CallbackAccountDestination />} />
+          </Routes>
+        </BrowserRouter>,
+      );
+      await act(async () => {
+        readiness.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+      expect(stravaExchangeCode).not.toHaveBeenCalled();
+      expect(prepareStravaCallbackAppCheck).toHaveBeenCalledTimes(1);
     });
 
     test.each([
@@ -2776,7 +3258,7 @@ describe('Strava callback error boundary', () => {
       outcome,
     ) => {
       let settleExchange: (() => void) | undefined;
-      const firstFirebaseResources = { app };
+      const firstFirebaseResources = makeCallbackFirebaseResources();
       const firstServices = { firebaseResources: firstFirebaseResources };
       (useServiceLocator as jest.Mock).mockReturnValue({
         services: firstServices,
@@ -2807,7 +3289,7 @@ describe('Strava callback error boundary', () => {
         nextServices = { firebaseResources: firstFirebaseResources };
       } else {
         nextServices = {
-          firebaseResources: { app: { name: 'second-synthetic-app' } },
+          firebaseResources: makeCallbackFirebaseResources({ name: 'second-synthetic-app' }),
         };
       }
       (useServiceLocator as jest.Mock).mockReturnValue({
@@ -2847,7 +3329,7 @@ describe('Strava callback error boundary', () => {
 
     test('keeps a pending attempt invalid after the account changes away and back', async () => {
       let finishExchange: (() => void) | undefined;
-      const firstServices = { firebaseResources: { app } };
+      const firstServices = { firebaseResources: makeCallbackFirebaseResources() };
       (useServiceLocator as jest.Mock).mockReturnValue({
         services: firstServices,
         isReady: true,
@@ -2938,7 +3420,7 @@ describe('Strava callback error boundary', () => {
     ['authentication is loading', true, true],
   ])('waits without callback work when %s', async (_case, isReady, isLoading) => {
     (useServiceLocator as jest.Mock).mockReturnValue({
-      services: isReady ? { firebaseResources: { app } } : null,
+      services: isReady ? { firebaseResources: makeCallbackFirebaseResources() } : null,
       isReady,
     });
     (useAuth as jest.Mock).mockReturnValue({
@@ -2949,6 +3431,7 @@ describe('Strava callback error boundary', () => {
     renderStravaCallback();
 
     expect(await screen.findByText('Connecting your Strava...')).toBeInTheDocument();
+    expect(prepareStravaCallbackAppCheck).not.toHaveBeenCalled();
     expect(stravaExchangeCode).not.toHaveBeenCalled();
   });
 
@@ -2965,6 +3448,7 @@ describe('Strava callback error boundary', () => {
     expect(await screen.findByText('You need to be signed in to connect Strava.'))
       .toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/signed-out-provider-canary|hidden-code|hidden-state/);
+    expect(prepareStravaCallbackAppCheck).not.toHaveBeenCalled();
     expect(stravaExchangeCode).not.toHaveBeenCalled();
   });
 
@@ -2981,6 +3465,7 @@ describe('Strava callback error boundary', () => {
     expect(stravaExchangeCode).not.toHaveBeenCalled();
     expect(screen.getByRole('link', { name: 'Back to account' }))
       .toHaveAttribute('href', '/account');
+    expect(prepareStravaCallbackAppCheck).not.toHaveBeenCalled();
   });
 
   test('stops a missing code before exchange', async () => {
@@ -2989,6 +3474,7 @@ describe('Strava callback error boundary', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Missing authorization code from Strava.',
     );
+    expect(prepareStravaCallbackAppCheck).not.toHaveBeenCalled();
     expect(stravaExchangeCode).not.toHaveBeenCalled();
   });
 
@@ -2999,6 +3485,7 @@ describe('Strava callback error boundary', () => {
     renderStravaCallback(entry);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(STRAVA_CALLBACK_FAILURE);
+    expect(prepareStravaCallbackAppCheck).not.toHaveBeenCalled();
     expect(stravaExchangeCode).not.toHaveBeenCalled();
   });
 

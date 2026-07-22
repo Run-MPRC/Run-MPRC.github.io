@@ -142,13 +142,38 @@ flowchart LR
     Clean -- "Not yet" --> Wait["Wait; no callback check or exchange"]
     Wait -. "Detected replacement failure" .-> Stop["Fixed accessible failure"]
     Clean -- "Yes" --> Checks["Existing sign-in, provider-error, code, and state checks"]
-    Checks --> Exchange["At most one exchange attempt for the same signed-in account and app"]
+    Checks --> Handoff["#443 App Check readiness boundary below"]
+    Handoff --> Exchange["At most one exchange attempt for the same signed-in account and app"]
     Outside["Earlier browser, provider, hosting, or network copies"] -. "Remain outside this boundary" .-> Residual["Back or history is not cleanup proof"]
 ```
 
-Text alternative: the callback captures three selected made-up fields in temporary page memory, replaces the current browser and Router entry with the clean path, and proceeds to the callback checks only after both current locations are clean. Unconfirmed cleanup waits without an exchange. A detected replacement failure shows the fixed stop. Cleaning the current entry does not erase earlier browser or outside copies.
+Text alternative: the callback captures three selected made-up fields in temporary page memory, replaces the current browser and Router entry with the clean path, and proceeds to the callback checks only after both current locations are clean. The separate #443 readiness boundary follows those checks before an exchange. Unconfirmed cleanup waits without an exchange. A detected replacement failure shows the fixed stop. Cleaning the current entry does not erase earlier browser or outside copies.
 
-The source also discards a later same-route callback. After unmount or a signed-in UID, service, Firebase resources, or app change, an obsolete browser result cannot navigate or show success. That does not cancel an exchange that already reached the server or provider; its outcome may still occur and require separate reconciliation. The later #441 boundary below supplies source-only server-issued state, UID/session binding, expiry, and one-use consumption without changing this address-cleanup order. Source, tests, merge, website publication, `runmprc.com` revision verification, Firebase deployment, Strava configuration, production data, and live OAuth behavior remain separate states. Canonical [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) remains open for native App Check enforcement, account and scope policy, refresh concurrency, reconciliation, revoke/audit, IAM/encryption, provider configuration, deployment, and live proof.
+The source also discards a later same-route callback. After unmount or a signed-in UID, service, Firebase resources, or app change, an obsolete browser result cannot navigate or show success. That does not cancel an exchange that already reached the server or provider; its outcome may still occur and require separate reconciliation. The #443 boundary below adds source-only App Check readiness after this cleanup, and the following #441 boundary supplies source-only server-issued state, UID/session binding, expiry, and one-use consumption without changing the cleanup order. Source, tests, merge, website publication, `runmprc.com` revision verification, Firebase deployment, Enterprise provider configuration, Strava configuration, production data, and live OAuth behavior remain separate states. Canonical [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) remains open for native App Check enforcement, account and scope policy, refresh concurrency, reconciliation, revoke/audit, IAM/encryption, provider configuration, deployment, and live proof.
+
+### Strava clean-page App Check handoff — source only, not live
+
+OAUTH-001C1I [#443](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/443) preserves #99's initial App Check suppression for every capability-bearing callback. The Firebase resources remember whether this document began on a normalized Strava callback, including the approved plain, percent-encoded-segment, case-changed, and trailing-slash forms. Only after #335 proves that the current native and React Router paths still identify that callback, both locations have empty query and fragment state, Router page state is `null`, and native history state is absent or the exact matching BrowserRouter index/key/empty-user-state record may the callback ask one narrow Strava-specific method to prepare App Check.
+
+```mermaid
+flowchart LR
+    Initial["Document begins on a recognized Strava callback\ninitial App Check stays suppressed"] --> Clean{"Locations clean, page state null, and native\nRouter record exact with matching key?"}
+    Clean -- "No" --> Wait["Wait or fixed cleanup stop\nno readiness and no exchange"]
+    Clean -- "Yes" --> Ready["Strava-only single flight\ninitialize Enterprise once and await readiness"]
+    Ready -. "Missing key, wrong path, or App Check failure" .-> Stop["Fixed callback failure\nno exchange"]
+    Ready --> Recheck{"Same clean path, account, services,\nresources, app, attempt, and page?"}
+    Recheck -- "Changed or reinjected while mounted" --> Stop
+    Recheck -- "Page closed or unmounted" --> Inert["Inert completion\nno exchange and no stale UI"]
+    Recheck -- "Yes" --> Exchange["One existing exchange\nwith the captured code and state"]
+    Other["Auth, registration, or shop callback"] -. "Not eligible for this method" .-> Unchanged["Existing callback flow unchanged"]
+    Local["Local or test runtime"] -. "App Check remains off" .-> Off["No provider or readiness work"]
+```
+
+Text alternative: a recognized Strava callback keeps initial App Check startup suppressed until both current locations are clean, page state is null, and native history is absent or contains only the matching Router index, key, and empty user state. The Strava-only single-flight method then initializes the existing Enterprise provider at most once and waits for readiness. Only the same clean current account, services, Firebase resources, app, attempt, Router entry, and mounted page may admit one existing exchange. A dirty, wrong, failed, stale, extra-state, or reinjected mounted attempt before that admission uses the fixed stop without an exchange. Closing or unmounting the page makes a pending completion inert without stale UI. Other callback types are not eligible and keep their existing flow; App Check stays off locally and in tests.
+
+The method never receives the callback code or state. It awaits one App Check token-ready result without returning, inspecting, logging, or storing that result or any provider detail. Missing public configuration, Enterprise construction or initialization failure, token-readiness failure, a wrong or dirty current path, or an obsolete mounted callback before exchange admission uses the existing fixed callback failure and sends no exchange. An unmounted pending callback is inert. Concurrent callers share the same readiness attempt, ordinary production pages retain eager Enterprise initialization, and local/test emulator isolation remains unchanged.
+
+App Check initialization cannot be reversed. A later same-document callback reinjection is still scrubbed and discarded under #335; this source rechecks the current locations and lifecycle around readiness but does not erase earlier browser, hosting, provider, or network copies. Once an exchange has been admitted, a later lifecycle or reinjection change cannot cancel server or provider work already started; it only blocks another exchange and prevents an obsolete completion from changing the page, so reconciliation may still be required. The handoff creates no membership, discount, payment, member, or admin authority. This source does not create or configure an Enterprise key or allowed-domain policy, prove a provider-backed token, enable native runtime App Check enforcement, change a Function or Rule, deploy Firebase or the website, contact Strava, inspect production data, or prove live OAuth behavior. Those states remain separate under [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88), ABUSE-001A2, and the protected release issues.
 
 ### Strava server-issued one-use state — source only, not live
 
@@ -160,18 +185,19 @@ flowchart LR
     Begin --> Record["Server-only fixed record: digest, UID, session marker, expiry"]
     Begin --> Provider["Raw challenge travels to Strava in OAuth state"]
     Provider --> Callback["Callback captures code and state, then cleans current address"]
-    Callback --> Exchange["Exchange Function receives code and state"]
+    Callback --> Ready["Client awaits App Check readiness on the clean page"]
+    Ready --> Exchange["Exchange Function receives code and state"]
     Exchange --> Consume{"Transaction consumes one matching, unexpired record?"}
     Consume -- "No" --> Stop["Fixed denial; no provider call or connection write"]
     Consume -- "Yes" --> Delete["Delete challenge before external work"]
     Delete --> Token["Existing validated Strava token exchange and paired local write"]
 ```
 
-Text alternative: a signed-in member receives one short-lived Strava state value while the server retains only its digest and identity/session binding; after the callback address is clean, one transaction deletes the matching record before the existing provider exchange, while every mismatch, expiry, replay, or concurrent loser stops without contacting Strava or changing the connection.
+Text alternative: a signed-in member receives one short-lived Strava state value while the server retains only its digest and identity/session binding; after the callback address is clean and the client-side source awaits App Check readiness, one transaction deletes the matching record before the existing provider exchange, while every mismatch, expiry, replay, or concurrent loser stops without contacting Strava or changing the connection.
 
 The state transition is `absent -> active`, or `active-old -> active-new` when connection is started again, followed by exactly one `active -> consumed` transaction. Missing, malformed, wrong-UID, wrong-session, expired, mismatched, already-consumed, and concurrently lost attempts share a fixed public failure and perform no provider or connection write. A provider or persistence failure after consumption does not restore the challenge; the member must start again. Because there is one fixed per-UID record that is overwritten or deleted, this additive source change needs no backfill or collection migration. Existing Firestore Rules already deny every browser read and write under `members/{uid}/secrets/{secretId}`.
 
-This source does not prove the custom App Check guard is fail-closed in a deployed environment, enable native runtime App Check enforcement, configure or contact Strava, deploy Firebase or the website, inspect production data, or prove live OAuth behavior. The initial capability-bearing callback currently suppresses browser App Check startup, so a separate reviewed clean-page handoff is required before fail-closed exchange enforcement can be called compatible. Those remain separate work under [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88), ABUSE-001A, and the protected release issues.
+This source does not prove the custom App Check guard is fail-closed in a deployed environment, enable native runtime App Check enforcement, configure or contact Strava, deploy Firebase or the website, inspect production data, or prove live OAuth behavior. #443 supplies only the reviewed source/test clean-page readiness handoff while preserving initial callback suppression. Configured Enterprise token evidence, missing/invalid/valid runtime-token proof, native enforcement, provider configuration, protected release, and live verification remain separate work under [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88), ABUSE-001A2, and the protected release issues.
 
 ### Firebase Auth action link — source only, not live
 
