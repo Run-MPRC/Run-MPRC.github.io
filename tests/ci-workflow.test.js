@@ -21,6 +21,10 @@ const JOB_NAME = 'Commerce command journal emulator';
 const DEMO_PROJECT = 'demo-pay002b2-test';
 const OPT_IN = 'REQUIRE_COMMERCE_COMMAND_JOURNAL_EMULATOR';
 const TEST_FILE = 'commerceCommandJournal.emulator.test.js';
+const FIRESTORE_JOB_ID = 'firestore-rules';
+const FIRESTORE_JOB_NAME = 'Firestore security-rules tests';
+const FIRESTORE_DEMO_PROJECT = 'demo-rules-test';
+const JAVA_VERSION = '21';
 const NEVER_RUN = ['$', '{{ false }}'].join('');
 const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const FRONTEND_JOB_ID = 'frontend';
@@ -109,7 +113,7 @@ function ciErrors(workflow) {
     [`name: ${JOB_NAME}`, 'wrong job name'],
     ["node-version: '20'", 'wrong Node version'],
     ["distribution: 'temurin'", 'missing Java distribution'],
-    ["java-version: '17'", 'wrong Java version'],
+    [`java-version: '${JAVA_VERSION}'`, 'wrong Java version'],
     ['npm ci --legacy-peer-deps --ignore-scripts', 'root install is not locked'],
     ['npm --prefix functions ci --ignore-scripts', 'Functions install is not locked'],
     [`${OPT_IN}: '1'`, 'missing explicit opt-in'],
@@ -138,6 +142,41 @@ function ciErrors(workflow) {
   }
   if (/mid-peninsula-running-club|runmprc-97922/.test(block)) {
     errors.push('job names a hosted project');
+  }
+  return errors;
+}
+
+function firestoreRulesErrors(workflow, scripts = packageJson.scripts) {
+  const errors = [];
+  const block = jobBlock(workflow, FIRESTORE_JOB_ID);
+  if (!block) return ['missing Firestore Rules job'];
+
+  const checks = [
+    [`name: ${FIRESTORE_JOB_NAME}`, 'wrong Firestore Rules job name'],
+    ["node-version: '20'", 'wrong Firestore Rules Node version'],
+    ["distribution: 'temurin'", 'missing Firestore Rules Java distribution'],
+    [`java-version: '${JAVA_VERSION}'`, 'wrong Firestore Rules Java version'],
+    ['npm ci --legacy-peer-deps', 'Firestore Rules install is not locked'],
+    ['run: npm run test:rules', 'wrong Firestore Rules command'],
+  ];
+  checks.forEach(([required, message]) => {
+    if (!block.includes(required)) errors.push(message);
+  });
+
+  const exactRulesScript = 'firebase emulators:exec --only firestore '
+    + `--project ${FIRESTORE_DEMO_PROJECT} `
+    + '"npx --no-install jest --config tests/firestore-rules/jest.config.js"';
+  if (scripts?.['test:rules'] !== exactRulesScript) {
+    errors.push('Firestore Rules script is not exact and lockfile-bound');
+  }
+  if (/firebase-tools@|npm install -g/.test(block)) {
+    errors.push('Firestore Rules job installs an uncommitted CLI');
+  }
+  if (/secrets\.|FIREBASE_SERVICE_ACCOUNT|FIREBASE_TOKEN|STRIPE_SECRET/.test(block)) {
+    errors.push('Firestore Rules job receives a secret or cloud credential');
+  }
+  if (/mid-peninsula-running-club|runmprc-97922/.test(block)) {
+    errors.push('Firestore Rules job names a hosted project');
   }
   return errors;
 }
@@ -263,6 +302,7 @@ function releaseErrors(workflow) {
 
 test('journal emulator CI job is exact, isolated, and blocking', () => {
   assert.deepEqual(ciErrors(ciWorkflow), []);
+  assert.deepEqual(firestoreRulesErrors(ciWorkflow), []);
   assert.deepEqual(releaseErrors(releaseWorkflow), []);
 });
 
@@ -472,9 +512,44 @@ test('guard rejects missing, renamed, broadened, or unsafe CI wiring', () => {
         + '        run: >-\n          npx --no-install firebase emulators:exec',
     ),
     ciWorkflow.replace(TEST_FILE, `${TEST_FILE} || true`),
+    ciWorkflow.replace(`java-version: '${JAVA_VERSION}'`, "java-version: '17'"),
   ];
 
   mutations.forEach((mutated) => assert.notDeepEqual(ciErrors(mutated), []));
+});
+
+test('guard rejects unsafe Firestore Rules runtime or lockfile mutations', () => {
+  const firestoreBlock = jobBlock(ciWorkflow, FIRESTORE_JOB_ID);
+  const mutations = [
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      `java-version: '${JAVA_VERSION}'`,
+      "java-version: '17'",
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      "distribution: 'temurin'",
+      "distribution: 'zulu'",
+    )),
+    ciWorkflow.replace(firestoreBlock, firestoreBlock.replace(
+      'run: npm run test:rules',
+      'run: npx firebase-tools@latest emulators:exec',
+    )),
+    ciWorkflow.replace(`  ${FIRESTORE_JOB_ID}:\n`, '  removed-firestore-rules:\n'),
+  ];
+  mutations.forEach((mutated) => {
+    assert.notDeepEqual(firestoreRulesErrors(mutated), []);
+  });
+
+  const scriptMutations = [
+    packageJson.scripts['test:rules'].replace(FIRESTORE_DEMO_PROJECT, 'runmprc-97922'),
+    packageJson.scripts['test:rules'].replace('--only firestore', '--only auth,firestore'),
+    packageJson.scripts['test:rules'].replace('firebase emulators:exec', 'firebase-tools@latest'),
+  ];
+  scriptMutations.forEach((testRules) => {
+    assert.notDeepEqual(
+      firestoreRulesErrors(ciWorkflow, { ...packageJson.scripts, 'test:rules': testRules }),
+      [],
+    );
+  });
 });
 
 test('guard rejects omission from either protected-release recheck', () => {

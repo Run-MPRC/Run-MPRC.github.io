@@ -58,6 +58,16 @@ const EXPECTED_SYSTEMJS_TRANSFORM = Object.freeze({
   resolved: 'https://registry.npmjs.org/@babel/plugin-transform-modules-systemjs/-/plugin-transform-modules-systemjs-7.29.7.tgz',
   integrity: 'sha512-TM2ZcQLoG2/y4HODiStCo10DibYhWhGWAwVv+EQKmG/7GFl0N+AAmUiXOMKM+aiJ9XBJ9AHVZBvTzMnJ2sM3cQ==',
 });
+const EXPECTED_FIREBASE_TOOLS = Object.freeze({
+  version: '15.24.0',
+  resolved: 'https://registry.npmjs.org/firebase-tools/-/firebase-tools-15.24.0.tgz',
+  integrity: 'sha512-2P5qd3O3YD7a7AaA89lt/zgRIgR7FGS0Ye7fW9z/sNt9/b6cbmI1TtQtYDlmJDUOh9nMk+72ll/gu4MlN/qY7Q==',
+  nodeEngine: '>=20.0.0 || >=22.0.0 || >=24.0.0',
+});
+const CRITICAL_VERSION_CEILINGS = Object.freeze({
+  protobufjs: '7.6.2',
+  tar: '7.5.18',
+});
 const EXPECTED_SYSTEMJS_LOCK_CLOSURE = Object.freeze({
   'node_modules/@babel/code-frame': '7.29.7',
   'node_modules/@babel/generator': '7.29.7',
@@ -103,6 +113,76 @@ const YAML_RECURSION_BYTES = (YAML_RECURSION_DEPTH * 2) + 1;
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
+
+function compareNumericVersions(left, right) {
+  const parse = (value) => {
+    assert.match(value, /^\d+\.\d+\.\d+$/, `unexpected non-numeric version ${value}`);
+    return value.split('.').map(Number);
+  };
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      return leftParts[index] < rightParts[index] ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+function lockedPackageEntries(lock, packageName) {
+  const suffix = `/node_modules/${packageName}`;
+  return Object.entries(lock.packages)
+    .filter(([packagePath]) => (
+      packagePath === `node_modules/${packageName}` || packagePath.endsWith(suffix)
+    ))
+    .sort(([left], [right]) => left.localeCompare(right));
+}
+
+test('pins the committed Firebase CLI and excludes its critical package ranges', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+  const rootRecord = lock.packages[''];
+  const cliRecord = lock.packages['node_modules/firebase-tools'];
+
+  assert.equal(packageJson.devDependencies?.['firebase-tools'], EXPECTED_FIREBASE_TOOLS.version);
+  assert.equal(rootRecord?.devDependencies?.['firebase-tools'], EXPECTED_FIREBASE_TOOLS.version);
+  assert.equal(packageJson.dependencies?.['firebase-tools'], undefined);
+  assert.equal(packageJson.optionalDependencies?.['firebase-tools'], undefined);
+  assert.equal(packageJson.peerDependencies?.['firebase-tools'], undefined);
+  assert.equal(packageJson.overrides?.['firebase-tools'], undefined);
+  assert.deepEqual(
+    lockedPackageEntries(lock, 'firebase-tools').map(([packagePath]) => packagePath),
+    ['node_modules/firebase-tools'],
+  );
+  assert.deepEqual(
+    {
+      version: cliRecord?.version,
+      resolved: cliRecord?.resolved,
+      integrity: cliRecord?.integrity,
+      nodeEngine: cliRecord?.engines?.node,
+    },
+    EXPECTED_FIREBASE_TOOLS,
+  );
+  assert.equal(cliRecord?.dev, true);
+
+  const installedCli = readJson(path.join(
+    REPOSITORY,
+    'node_modules/firebase-tools/package.json',
+  ));
+  assert.equal(installedCli.version, EXPECTED_FIREBASE_TOOLS.version);
+  assert.equal(installedCli.engines?.node, EXPECTED_FIREBASE_TOOLS.nodeEngine);
+
+  for (const [packageName, vulnerableCeiling] of Object.entries(CRITICAL_VERSION_CEILINGS)) {
+    const entries = lockedPackageEntries(lock, packageName);
+    assert.ok(entries.length > 0, `${packageName} must remain reviewable in the lockfile`);
+    for (const [packagePath, packageRecord] of entries) {
+      assert.ok(
+        compareNumericVersions(packageRecord.version, vulnerableCeiling) > 0,
+        `${packagePath}@${packageRecord.version} remains in the critical range`,
+      );
+    }
+  }
+});
 
 function lockedFormDataEntries(lock) {
   return Object.entries(lock.packages)
