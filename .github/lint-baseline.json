@@ -17,13 +17,13 @@
     ".ts": 38,
     ".tsx": 26
   },
-  "errorCount": 117,
+  "errorCount": 113,
   "warningCount": 6,
   "errorsByExtension": {
     ".js": 2,
     ".jsx": 26,
     ".ts": 2,
-    ".tsx": 87
+    ".tsx": 83
   },
   "warningsByExtension": {
     ".js": 0,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:56b52a74434e910548d72c741ab21b634274d3cc9c36fe9983d8942b34eebddf",
+  "fingerprint": "sha256:80b91bb22c70f5f0d400703f8d79cda64c7b42ba3e2a33c91f67435d7a8adf52",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -629,19 +629,6 @@
     },
     {
       "file": "src/pages/admin/events/AdminEventRegistrations.tsx",
-      "line": 430,
-      "column": 3,
-      "endLine": 430,
-      "endColumn": 58,
-      "severity": 2,
-      "ruleId": "react-hooks/exhaustive-deps",
-      "message": "Definition for rule 'react-hooks/exhaustive-deps' was not found.",
-      "messageId": null,
-      "nodeType": null,
-      "fatal": false
-    },
-    {
-      "file": "src/pages/admin/events/AdminEventRegistrations.tsx",
       "line": 586,
       "column": 12,
       "endLine": 586,
@@ -716,19 +703,6 @@
       "message": "A form label must be associated with a control.",
       "messageId": null,
       "nodeType": "JSXOpeningElement",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/admin/shop/AdminOrders.tsx",
-      "line": 85,
-      "column": 3,
-      "endLine": 85,
-      "endColumn": 58,
-      "severity": 2,
-      "ruleId": "react-hooks/exhaustive-deps",
-      "message": "Definition for rule 'react-hooks/exhaustive-deps' was not found.",
-      "messageId": null,
-      "nodeType": null,
       "fatal": false
     },
     {
@@ -1119,19 +1093,6 @@
       "message": "Prop spreading is forbidden",
       "messageId": "noSpreading",
       "nodeType": "JSXSpreadAttribute",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/events/EventRegister.tsx",
-      "line": 127,
-      "column": 3,
-      "endLine": 127,
-      "endColumn": 58,
-      "severity": 2,
-      "ruleId": "react-hooks/exhaustive-deps",
-      "message": "Definition for rule 'react-hooks/exhaustive-deps' was not found.",
-      "messageId": null,
-      "nodeType": null,
       "fatal": false
     },
     {
@@ -1626,19 +1587,6 @@
       "message": "`.        ` must be placed on a new line",
       "messageId": "moveToNewLine",
       "nodeType": "JSXText",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/shop/ProductDetail.tsx",
-      "line": 51,
-      "column": 3,
-      "endLine": 51,
-      "endColumn": 58,
-      "severity": 2,
-      "ruleId": "react-hooks/exhaustive-deps",
-      "message": "Definition for rule 'react-hooks/exhaustive-deps' was not found.",
-      "messageId": null,
-      "nodeType": null,
       "fatal": false
     },
     {

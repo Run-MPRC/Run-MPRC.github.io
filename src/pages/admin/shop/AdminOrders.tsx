@@ -82,7 +82,7 @@ function Inner() {
     }
     reload();
     return () => { requestSequence.current += 1; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Firestore changes are the deliberate reload boundary.
   }, [firestore]);
 
   async function run(orderId: string, action: AdminOrderAction, payload?: Record<string, unknown>) {
