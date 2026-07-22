@@ -6,6 +6,7 @@ import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import SEO from '../../components/SEO';
 import { stravaExchangeCode } from '../../services/strava/stravaService';
+import { browserRouterStateIsClean } from '../../services/monitoring/capabilityCallback';
 
 const STRAVA_CALLBACK_FAILURE = 'We could not connect Strava. Please return to My Account and try again.';
 
@@ -24,6 +25,16 @@ type AttemptContext = Readonly<{
   app: object;
 }>;
 
+type CallbackCleanupState = Readonly<{
+  isClean: boolean;
+  key: string;
+  pathname: string;
+}>;
+
+type CallbackCleanupWitness = Readonly<{
+  current: CallbackCleanupState;
+}>;
+
 function readCallbackSnapshot(search: string): CallbackSnapshot {
   try {
     const params = new URLSearchParams(search);
@@ -37,10 +48,27 @@ function readCallbackSnapshot(search: string): CallbackSnapshot {
   }
 }
 
+function cleanCallbackPathname(pathname: string): string {
+  return pathname.replace(/\/{2,}$/, '/');
+}
+
 function nativeAddressIsClean(expectedPathname: string): boolean {
   return window.location.pathname === expectedPathname
     && window.location.search === ''
     && window.location.hash === '';
+}
+
+function callbackCleanupIsCurrent(
+  cleanupWitness: CallbackCleanupWitness,
+  expectedKey: string,
+  expectedPathname: string,
+): boolean {
+  const currentCleanup = cleanupWitness.current;
+  return currentCleanup.isClean
+    && currentCleanup.key === expectedKey
+    && currentCleanup.pathname === expectedPathname
+    && nativeAddressIsClean(expectedPathname)
+    && browserRouterStateIsClean(window.history.state, expectedKey);
 }
 
 function CallbackScreen({
@@ -85,7 +113,13 @@ function CallbackScreen({
   );
 }
 
-function CallbackAttempt({ snapshot }: { snapshot: CallbackSnapshot }) {
+function CallbackAttempt({
+  snapshot,
+  cleanupWitness,
+}: {
+  snapshot: CallbackSnapshot;
+  cleanupWitness: CallbackCleanupWitness;
+}) {
   const { services, isReady } = useServiceLocator();
   const {
     user, isAuthenticated, isLoading,
@@ -156,9 +190,11 @@ function CallbackAttempt({ snapshot }: { snapshot: CallbackSnapshot }) {
     }
     if (services === null || firebaseResources === null || app === null) return;
 
+    const { code, state } = snapshot;
+
     decisionStartedRef.current = true;
 
-    const run = Symbol('strava-callback-exchange');
+    const run = Symbol('strava-callback-app-check-and-exchange');
     runRef.current = run;
     attemptContextRef.current = {
       uid,
@@ -166,40 +202,75 @@ function CallbackAttempt({ snapshot }: { snapshot: CallbackSnapshot }) {
       firebaseResources,
       app,
     };
+    const expectedKey = cleanupWitness.current.key;
+    const expectedPathname = cleanupWitness.current.pathname;
 
-    let exchange: ReturnType<typeof stravaExchangeCode>;
-    try {
-      exchange = stravaExchangeCode(app, snapshot.code, snapshot.state);
-    } catch {
+    const runIsCurrent = () => (
+      mountedRef.current
+      && !attemptInvalidatedRef.current
+      && runRef.current === run
+    );
+
+    const failCurrentRun = () => {
+      if (!runIsCurrent()) return;
       runRef.current = null;
       setStatus('error');
       setMessage(STRAVA_CALLBACK_FAILURE);
+    };
+
+    if (!callbackCleanupIsCurrent(cleanupWitness, expectedKey, expectedPathname)) {
+      failCurrentRun();
       return;
     }
 
-    Promise.resolve(exchange).then(
+    let readiness: ReturnType<
+      typeof firebaseResources.prepareAppCheckAfterStravaCallbackCleanup
+    >;
+    try {
+      readiness = firebaseResources.prepareAppCheckAfterStravaCallbackCleanup();
+    } catch {
+      failCurrentRun();
+      return;
+    }
+
+    Promise.resolve(readiness).then(
       () => {
-        if (
-          !mountedRef.current
-          || attemptInvalidatedRef.current
-          || runRef.current !== run
-        ) return;
-        runRef.current = null;
-        setStatus('done');
+        if (!runIsCurrent()) return;
+        if (!callbackCleanupIsCurrent(cleanupWitness, expectedKey, expectedPathname)) {
+          failCurrentRun();
+          return;
+        }
+
+        let exchange: ReturnType<typeof stravaExchangeCode>;
+        try {
+          exchange = stravaExchangeCode(app, code, state);
+        } catch {
+          failCurrentRun();
+          return;
+        }
+
+        Promise.resolve(exchange).then(
+          () => {
+            if (!runIsCurrent()) return;
+            if (!callbackCleanupIsCurrent(cleanupWitness, expectedKey, expectedPathname)) {
+              failCurrentRun();
+              return;
+            }
+            runRef.current = null;
+            setStatus('done');
+          },
+          () => {
+            failCurrentRun();
+          },
+        );
       },
       () => {
-        if (
-          !mountedRef.current
-          || attemptInvalidatedRef.current
-          || runRef.current !== run
-        ) return;
-        runRef.current = null;
-        setStatus('error');
-        setMessage(STRAVA_CALLBACK_FAILURE);
+        failCurrentRun();
       },
     );
   }, [
     app,
+    cleanupWitness,
     firebaseResources,
     isAuthenticated,
     isLoading,
@@ -232,17 +303,41 @@ function StravaCallback() {
     && nativeAddressIsClean(location.pathname);
   const initiallyCleanRef = useRef(currentLocationIsClean);
   const cleanupCompleteRef = useRef(initiallyCleanRef.current);
+  const cleanLocationKeyRef = useRef<string | null>(
+    initiallyCleanRef.current ? location.key : null,
+  );
   const cleanupFailedRef = useRef(false);
   const cleanupRequestedRef = useRef(false);
   const [cleanupState, setCleanupState] = useState<'pending' | 'clean' | 'failed'>(
     initiallyCleanRef.current ? 'clean' : 'pending',
   );
+  const cleanupWitnessRef = useRef<CallbackCleanupState>({
+    isClean: false,
+    key: location.key,
+    pathname: location.pathname,
+  });
+  cleanupWitnessRef.current = {
+    isClean: cleanupState === 'clean' && currentLocationIsClean,
+    key: location.key,
+    pathname: location.pathname,
+  };
 
   useEffect(() => {
     if (cleanupFailedRef.current) return undefined;
 
     if (currentLocationIsClean) {
+      if (
+        cleanupCompleteRef.current
+        && cleanLocationKeyRef.current !== null
+        && cleanLocationKeyRef.current !== location.key
+      ) {
+        cleanupFailedRef.current = true;
+        snapshotRef.current = null;
+        setCleanupState('failed');
+        return undefined;
+      }
       cleanupCompleteRef.current = true;
+      cleanLocationKeyRef.current = location.key;
       setCleanupState('clean');
       return undefined;
     }
@@ -259,7 +354,7 @@ function StravaCallback() {
     }
 
     const cleanLocation = {
-      pathname: location.pathname,
+      pathname: cleanCallbackPathname(location.pathname),
       search: '',
       hash: '',
     };
@@ -299,6 +394,7 @@ function StravaCallback() {
   }, [
     currentLocationIsClean,
     location.hash,
+    location.key,
     location.pathname,
     location.search,
     location.state,
@@ -312,7 +408,12 @@ function StravaCallback() {
   if (cleanupState !== 'clean' || !currentLocationIsClean || snapshotRef.current === null) {
     return <CallbackScreen status="exchanging" message="" />;
   }
-  return <CallbackAttempt snapshot={snapshotRef.current} />;
+  return (
+    <CallbackAttempt
+      snapshot={snapshotRef.current}
+      cleanupWitness={cleanupWitnessRef}
+    />
+  );
 }
 
 export default StravaCallback;

@@ -1057,7 +1057,7 @@ Officer review steps after the source merge:
 10. Confirm the failure sentence is announced as an urgent screen-reader alert.
 11. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, missing-state, server-rejection, success, and Back-to-account behavior stays in place. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange, and #441 adds the later source-only server state decision. Neither erases earlier browser, provider, hosting, or network copies or completes issue #88.
+**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, missing-state, server-rejection, success, and Back-to-account behavior stays in place. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange, #443 adds source-only App Check readiness after that cleanup, and #441 adds the source-only server state decision. None erases earlier browser, provider, hosting, or network copies or completes issue #88.
 
 **Stop conditions:** any real member or Strava account; a request for a callback URL, authorization code, state value, provider error, private browser history, or screenshot containing private values; a real provider call; a production Firebase or Strava change; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the wording is live.
 
@@ -1118,7 +1118,65 @@ Officer review steps after the source merge:
 
 **Escalation:** contact the platform/security and privacy owners if callback details may have appeared outside the current clean page. Use the private incident path. Do not copy a value into an issue, message, screenshot, or AI tool.
 
-This child keeps canonical issue #88 open and incomplete. The separate #441 procedure below records the later source-only server state boundary. Native App Check enforcement, account and scope policy, refresh concurrency, revoke/audit behavior, IAM/encryption, provider configuration, deployment, and live verification remain separate work.
+This child keeps canonical issue #88 open and incomplete. The #443 procedure below records the later source-only clean-page App Check handoff, and the #441 procedure that follows records the source-only server state boundary. Native App Check enforcement, account and scope policy, refresh concurrency, revoke/audit behavior, IAM/encryption, provider configuration, deployment, and live verification remain separate work.
+
+## Strava App Check handoff after cleanup — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** keep initial App Check startup off while a made-up Strava callback is current, then prepare it only after the current browser and page locations are clean and before one mocked server exchange.
+
+**Approver:** membership lead plus platform/security and privacy owners.
+
+**Prerequisites:** issues [#159](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/159), [#335](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/335), [#441](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/441), and [#443](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/443) must be merged at exact reviewed commits for the complete source review. Use only made-up callbacks and accounts with mocked Firebase and Strava boundaries. Do not use or request a real site key, App Check result, Firebase project, Strava account, callback, code, state, provider response, member record, or production data. A future staged review also requires a named owner to configure and privately verify the approved Enterprise key and allowed domains, a protected backend-first release of the exact Firebase Functions and website revisions, and approved synthetic provider evidence. None of those states is available or authorized by this source issue.
+
+```mermaid
+flowchart LR
+    A["Made-up recognized Strava callback\ninitial App Check remains off"] --> B{"Locations and page state clean, and native\nRouter record exact with matching key?"}
+    B -- "No" --> C["Wait or fixed stop\nno readiness and no exchange"]
+    B -- "Yes" --> D["One Strava-only App Check readiness attempt"]
+    D -. "Missing setup or readiness failure" .-> E["Fixed connection failure\nno exchange"]
+    D --> F{"Same clean account, services, resources,\napp, attempt, and open page?"}
+    F -- "Changed or reinjected while mounted" --> E
+    F -- "Page closed or unmounted" --> I["Inert completion\nno exchange and no stale screen"]
+    F -- "Yes" --> G["One mocked exchange with the\noriginal made-up code and state"]
+    H["Authentication, registration, or shop callback"] -. "Not eligible for this handoff" .-> J["Existing callback flow unchanged"]
+```
+
+Text alternative: initial App Check startup stays off while a made-up Strava callback address or saved page detail is current. After both current locations and page state are clean, and native history is absent or contains only the matching Router index, key, and empty user state, one Strava-only readiness attempt may run. Only the same clean account, services, Firebase resources, app, attempt, Router entry, and open page may admit one mocked exchange. A missing setup, readiness failure, extra saved detail, changed mounted context, or reinjected callback before that point stops with the fixed connection failure and no exchange. Closing the page makes a pending completion inert without changing a stale screen. Authentication, registration, and shop callbacks are not eligible and keep their existing flow.
+
+Officer review steps after the source merge:
+
+1. Keep this procedure marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for issue #443, the reviewed pull request, exact merged commit, and synthetic test results.
+3. Confirm every test uses invented callback and account values with mocked Firebase and Strava boundaries.
+4. Confirm the initial callback starts no Enterprise provider or App Check readiness work while its address or saved page detail remains current.
+5. Confirm the plain, encoded-segment, case-changed, and trailing-slash Strava callback spellings keep that same initial shutdown.
+6. Confirm both the current browser location and page route match the Strava callback and have no query or fragment before readiness starts.
+7. Confirm page state is empty and native history is either absent or contains only the Router index, matching key, and empty user state before readiness starts. Any extra field, accessor, non-plain value, or mismatched key must stop.
+8. Confirm an authentication, registration, or shop callback cannot use this Strava-only handoff.
+9. Confirm one current clean callback initializes the existing Enterprise provider at most once and waits for one readiness result before exchange.
+10. Confirm the source does not give the readiness method the callback code or state and does not inspect, display, return, log, or store an App Check result or provider detail.
+11. Confirm a missing public key, wrong or dirty path, Enterprise construction or initialization failure, or readiness failure shows `We could not connect Strava. Please return to My Account and try again.` and makes no exchange.
+12. Confirm a changed signed-in account, service, Firebase resources, app, callback attempt, route, or Router entry key stops an older mounted readiness attempt; confirm a closed page makes its completion inert.
+13. Confirm a later callback loaded into the same page is cleaned and discarded and does not start another exchange. Record that it cannot cancel server or provider work if the first exchange already started.
+14. Confirm duplicate rendering, rerendering, duplicate completion, and simultaneous readiness requests produce at most one Enterprise initialization, one readiness request, and one exchange.
+15. Confirm one successful current readiness result allows only the original made-up code and state to reach the existing mocked exchange once.
+16. Confirm ordinary production pages keep their existing eager App Check startup and local/test runtimes keep App Check off.
+17. Confirm this handoff creates no membership, dues, discount, payment, member role, or admin authority.
+18. Record source changed, tests passed, code merged, website published, exact `runmprc.com` revision verified, Firebase Functions deployed and read back, Enterprise provider and allowed domains configured, provider-backed token behavior evidenced, Strava configured, production data changed, and live behavior verified as separate results.
+
+**Expected result:** the member screen and fixed connection wording stay the same. Source keeps initial capability-callback App Check startup off, waits until the current native and page locations, page state, and exact Router history wrapper are clean, prepares App Check once for the same current Strava attempt and Router entry, rechecks that context, and then makes the existing mocked exchange once. A cleanup, setup, readiness, saved-state, or mounted lifecycle failure before exchange admission shows the fixed result and makes no exchange. An unmounted completion is inert. Other callback types cannot use this method and keep their existing flow. Once exchange starts, a later change cannot cancel work already at the server or provider; it blocks another exchange and an obsolete screen update, and reconciliation may still be needed. Local/test isolation and ordinary production-page startup remain unchanged. This is source behavior only.
+
+**Stop conditions:** any real site key, App Check result, Firebase project, member or Strava account, callback, code, state, token, provider response, browser-history capture, developer-tools capture, production record, provider request, console configuration, deployment, or live callback; readiness before both locations and saved page state are clean; an exchange before readiness; another callback type resuming App Check; more than one initialization, readiness request, or exchange; a raw or hostile value being inspected or exposed; an obsolete completion changing the page; or a claim that source, tests, merge, preview, or green CI proves provider configuration, enforcement, deployment, or live protection.
+
+**Success proof:** for source completion, record issue #443, the reviewed pull request, exact commit, the old-source ordering failure, green focused Firebase-resources and account-callback tests, relevant full frontend and safety checks, and independent security, privacy, lifecycle, test-quality, and backup-officer reviews. Record source, tests, and merge separately. Record website publication, exact `runmprc.com` verification, Firebase deployment/readback, Enterprise provider configuration, provider-backed token evidence, Strava configuration, production-data action, and live behavior as **not performed** unless each has separate approved evidence. A future staged result does not by itself prove production or live behavior.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After a future approved publication, use the protected website rollback only when the deployed Firebase and App Check policy remains compatible with the replacement revision; otherwise stop and use a reviewed coordinated rollback or safe roll-forward. Never undo by disabling a provider or enforcement setting ad hoc, replaying a callback, changing a member record, or copying a callback or App Check value.
+
+**Escalation:** stop and contact the platform/security and privacy owners. Add the membership lead if a member cannot reconnect. Use the private incident path if callback, App Check, provider, account, or technical detail may have appeared, another exchange may have started, or the released website and Firebase policy may not match. Do not copy the detail into an issue, screenshot, email, message, or AI tool.
+
+This source child changes the browser's control and data order, so the local flow diagram above records it. It adds no data store, server authority, permission, account ownership, provider configuration, or deployment topology; the full system maps remain unchanged.
 
 ## Strava one-use connection check — SOURCE ONLY, NOT LIVE
 
@@ -1128,7 +1186,7 @@ This child keeps canonical issue #88 open and incomplete. The separate #441 proc
 
 **Approver:** membership lead plus platform/security and privacy owners.
 
-**Prerequisites:** issue [#441](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/441) must be merged at one exact reviewed commit. Source review uses only made-up state, account, session, and provider values with mocked Firebase and Strava boundaries. A future staged release requires the separate reviewed clean-page App Check handoff, then the exact begin and exchange Functions deployed and read back before the matching website revision. The current initial callback suppresses browser App Check startup and is not proof of fail-closed compatibility. An approved non-production callback rehearsal is separate provider evidence; it does not by itself prove production or live behavior. A source merge, preview, green workflow, or website-only publication is not enough.
+**Prerequisites:** issue [#441](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/441) must be merged at one exact reviewed commit. Source review uses only made-up state, account, session, and provider values with mocked Firebase and Strava boundaries. A future staged release requires the exact reviewed #443 clean-page App Check handoff, configured Enterprise evidence, and the exact begin and exchange Functions deployed and read back before the matching website revision. Initial callback suppression and #443's source readiness ordering are not proof of fail-closed runtime compatibility. An approved non-production callback rehearsal is separate provider evidence; it does not by itself prove production or live behavior. A source merge, preview, green workflow, or website-only publication is not enough.
 
 ```mermaid
 flowchart LR
@@ -1136,12 +1194,13 @@ flowchart LR
     B --> C["Server stores digest and account-session binding only"]
     B --> D["Strava returns code and challenge"]
     D --> E["Page cleans the current address"]
-    E --> F{"Server consumes exact challenge once?"}
+    E --> I["Page awaits #443 App Check readiness"]
+    I --> F{"Server consumes exact challenge once?"}
     F -- "No, expired, wrong, or repeated" --> G["Fixed stop; try again from My Account"]
     F -- "Yes" --> H["Delete challenge before provider exchange"]
 ```
 
-Text alternative: the server gives the signed-in member one short-lived Strava challenge but stores only its digest and account-session binding; after the page cleans the callback address, the server deletes one exact match before exchange, and every expired, wrong, or repeated attempt stops with the same retry path.
+Text alternative: the server gives the signed-in member one short-lived Strava challenge but stores only its digest and account-session binding; after the page cleans the callback address and awaits the separate #443 source readiness boundary, the server deletes one exact match before exchange, and every expired, wrong, or repeated attempt stops with the same retry path.
 
 Officer review steps after the source merge:
 
@@ -1151,7 +1210,7 @@ Officer review steps after the source merge:
 4. Confirm the begin Function applies its existing App Check guard, then requires a signed-in account and a valid Auth-session marker before writing a challenge.
 5. Confirm the server stores no raw challenge. The retained record contains fixed schema/provider labels, a digest, UID, session marker, issue time, and expiry only. The raw challenge must not be in the database, connection record, logs, screenshots, or issue evidence.
 6. Confirm starting again replaces the earlier challenge for that same website account.
-7. Confirm the callback still removes current address details before it sends the made-up code and state to the server.
+7. Confirm the callback still removes current address details and completes the separate #443 source readiness boundary before it sends the made-up code and state to the server.
 8. Confirm the server transaction checks the same UID and session, the exact digest, and the ten-minute expiry, then deletes the record before any Strava request or connection write. Source tests use a mocked Strava boundary.
 9. Confirm missing, malformed, wrong-account, wrong-session, mismatched, expired, repeated, and simultaneous losing attempts all stop before the provider and connection write.
 10. Confirm two simultaneous made-up callbacks produce at most one provider attempt.

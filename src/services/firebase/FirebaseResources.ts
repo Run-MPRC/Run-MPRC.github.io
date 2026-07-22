@@ -1,6 +1,6 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
 import {
-  AppCheck, initializeAppCheck, ReCaptchaEnterpriseProvider,
+  AppCheck, getToken, initializeAppCheck, ReCaptchaEnterpriseProvider,
 } from 'firebase/app-check';
 import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
 import {
@@ -14,7 +14,11 @@ import {
   getFunctions,
 } from 'firebase/functions';
 
-import hasCapabilityCallbackState from '../monitoring/capabilityCallback';
+import hasCapabilityCallbackState, {
+  browserRouterStateIsClean,
+  isCapabilityCallbackPath,
+  isStravaCapabilityCallbackPath,
+} from '../monitoring/capabilityCallback';
 import {
   clientFailureEvents,
   reportClientFailure,
@@ -23,6 +27,9 @@ import {
 const isLocalRuntime = process.env.NODE_ENV !== 'production';
 const LOCAL_FIREBASE_PROJECT_ID = 'demo-mprc-local';
 const FUNCTION_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const STRAVA_APP_CHECK_PREPARATION_FAILED = (
+  'Strava callback App Check preparation failed.'
+);
 
 const LOCAL_FIREBASE_CONFIG = {
   apiKey: 'demo-api-key',
@@ -46,8 +53,31 @@ const PRODUCTION_FIREBASE_CONFIG = {
 const FIREBASE_CONFIG = isLocalRuntime
   ? LOCAL_FIREBASE_CONFIG
   : PRODUCTION_FIREBASE_CONFIG;
-const initialPageHadCapabilityCallbackState = typeof window !== 'undefined'
+const initialPageHadUrlCapabilityCallbackState = typeof window !== 'undefined'
   && hasCapabilityCallbackState(window.location);
+const initialPagePathWasCapabilityCallback = typeof window !== 'undefined'
+  && isCapabilityCallbackPath(window.location.pathname);
+const initialPageHadCapabilityCallbackState = initialPageHadUrlCapabilityCallbackState
+  || (
+    typeof window !== 'undefined'
+    && initialPagePathWasCapabilityCallback
+    && !browserRouterStateIsClean(window.history.state)
+  );
+const initialPageWasStravaCapabilityCallback = typeof window !== 'undefined'
+  && initialPageHadUrlCapabilityCallbackState
+  && isStravaCapabilityCallbackPath(window.location.pathname);
+
+function currentNativeStravaCallbackIsClean(): boolean {
+  return typeof window !== 'undefined'
+    && isStravaCapabilityCallbackPath(window.location.pathname)
+    && window.location.search === ''
+    && window.location.hash === ''
+    && browserRouterStateIsClean(window.history.state);
+}
+
+function stravaAppCheckPreparationError(): Error {
+  return new Error(STRAVA_APP_CHECK_PREPARATION_FAILED);
+}
 
 class FirebaseResources {
   readonly app: FirebaseApp;
@@ -61,6 +91,12 @@ class FirebaseResources {
   readonly analytics: null = null;
 
   private _appCheck: AppCheck | null = null;
+
+  private _stravaAppCheckPreparation: Promise<void> | null = null;
+
+  private _stravaAppCheckPreparationInvalidated = false;
+
+  private _stravaAppCheckPreparationReady = false;
 
   private static _instance: FirebaseResources | null = null;
 
@@ -80,26 +116,136 @@ class FirebaseResources {
     // App Check has no local Emulator Suite target. Do not initialize a
     // provider or exchange a debug token from development or tests.
     // Its reCAPTCHA Enterprise provider is also an outside script, so do not start it
-    // while an initial OAuth/checkout capability remains in the page URL.
+    // while an initial OAuth/checkout capability remains in the page URL or saved
+    // Router entry.
     if (
       isLocalRuntime
       || initialPageHadCapabilityCallbackState
       || (typeof window !== 'undefined' && hasCapabilityCallbackState(window.location))
     ) return;
 
+    this._appCheck = this.initializeAppCheckProvider();
+  }
+
+  private initializeAppCheckProvider(
+    beforeInitialization?: () => boolean,
+  ): AppCheck | null {
     const siteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
     if (!siteKey) {
       reportClientFailure(clientFailureEvents.appCheckDisabled);
-      return;
+      return null;
     }
     try {
-      this._appCheck = initializeAppCheck(this.app, {
-        provider: new ReCaptchaEnterpriseProvider(siteKey),
+      const provider = new ReCaptchaEnterpriseProvider(siteKey);
+      if (beforeInitialization && !beforeInitialization()) return null;
+      return initializeAppCheck(this.app, {
+        provider,
         isTokenAutoRefreshEnabled: true,
       });
     } catch {
       reportClientFailure(clientFailureEvents.appCheckInitializationFailed);
+      return null;
     }
+  }
+
+  private stravaAppCheckPreparationIsCurrent(): boolean {
+    if (
+      this._stravaAppCheckPreparationInvalidated
+      || !currentNativeStravaCallbackIsClean()
+    ) {
+      this._stravaAppCheckPreparationInvalidated = true;
+      return false;
+    }
+    return true;
+  }
+
+  private async prepareStravaAppCheckOnce(): Promise<void> {
+    // The first public check and this queued check bracket the microtask that
+    // establishes the single flight. Do not initialize after a reinjection.
+    if (!this.stravaAppCheckPreparationIsCurrent()) {
+      throw stravaAppCheckPreparationError();
+    }
+
+    const appCheck = this.initializeAppCheckProvider(
+      () => this.stravaAppCheckPreparationIsCurrent(),
+    );
+    if (appCheck === null) {
+      throw stravaAppCheckPreparationError();
+    }
+    this._appCheck = appCheck;
+
+    if (!this.stravaAppCheckPreparationIsCurrent()) {
+      throw stravaAppCheckPreparationError();
+    }
+
+    let tokenReadiness: ReturnType<typeof getToken>;
+    try {
+      // Readiness is the only result used here. The token value is never
+      // accepted, returned, inspected, logged, or stored by application code.
+      tokenReadiness = Promise.resolve(getToken(appCheck));
+    } catch {
+      reportClientFailure(clientFailureEvents.appCheckInitializationFailed);
+      throw stravaAppCheckPreparationError();
+    }
+
+    if (!this.stravaAppCheckPreparationIsCurrent()) {
+      // The SDK request cannot be cancelled. Attach a value-blind rejection
+      // sink before this preparation stops so a later SDK failure is inert.
+      tokenReadiness.then(() => undefined, () => undefined);
+      throw stravaAppCheckPreparationError();
+    }
+
+    try {
+      await tokenReadiness;
+    } catch {
+      reportClientFailure(clientFailureEvents.appCheckInitializationFailed);
+      throw stravaAppCheckPreparationError();
+    }
+
+    if (!this.stravaAppCheckPreparationIsCurrent()) {
+      throw stravaAppCheckPreparationError();
+    }
+  }
+
+  prepareAppCheckAfterStravaCallbackCleanup(): Promise<void> {
+    // App Check has no local emulator. Its deliberate local/test no-op must
+    // not turn an otherwise valid synthetic callback into a failure.
+    if (isLocalRuntime) return Promise.resolve();
+
+    if (!initialPageWasStravaCapabilityCallback) {
+      this._stravaAppCheckPreparationInvalidated = true;
+      return Promise.reject(stravaAppCheckPreparationError());
+    }
+
+    if (!currentNativeStravaCallbackIsClean()) {
+      this._stravaAppCheckPreparationInvalidated = true;
+      return Promise.reject(stravaAppCheckPreparationError());
+    }
+
+    if (this._stravaAppCheckPreparationInvalidated) {
+      if (
+        this._stravaAppCheckPreparation !== null
+        && !this._stravaAppCheckPreparationReady
+      ) return this._stravaAppCheckPreparation;
+      return Promise.reject(stravaAppCheckPreparationError());
+    }
+
+    if (this._stravaAppCheckPreparation === null) {
+      // Queue the irreversible provider work so the promise is cached before
+      // any provider code can re-enter this method.
+      this._stravaAppCheckPreparation = Promise.resolve()
+        .then(() => this.prepareStravaAppCheckOnce())
+        .then(() => {
+          // The async preparation and this final handler are separate
+          // microtasks. A concurrent dirty observation between them must
+          // poison the flight before it can be marked ready.
+          if (!this.stravaAppCheckPreparationIsCurrent()) {
+            throw stravaAppCheckPreparationError();
+          }
+          this._stravaAppCheckPreparationReady = true;
+        });
+    }
+    return this._stravaAppCheckPreparation;
   }
 
   static getInstance(): FirebaseResources {
