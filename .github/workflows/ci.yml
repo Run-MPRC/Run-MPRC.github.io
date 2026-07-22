@@ -98,7 +98,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
       - name: Install committed root dependencies
         run: npm ci --legacy-peer-deps --ignore-scripts
       - name: Install committed Functions dependencies
@@ -125,7 +125,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
       - run: npm ci --legacy-peer-deps
       - name: Run Firestore rules tests against the emulator
         run: npm run test:rules

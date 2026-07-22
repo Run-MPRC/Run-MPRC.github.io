@@ -91,6 +91,11 @@ const EXPECTED_YAML = Object.freeze({
   integrity: 'sha512-vIYeF1u3CjlhAFekPPAk2h/Kv4T3mAkMox5OymRiJQB0spDP10LHvt+K7G9Ny6NuuMAb25/6n1qyUjAcGNf/AA==',
 });
 const EXPECTED_NESTED_YAML = Object.freeze({
+  'node_modules/firebase-tools/node_modules/yaml': Object.freeze({
+    version: '2.9.0',
+    resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz',
+    integrity: 'sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==',
+  }),
   'node_modules/lint-staged/node_modules/yaml': Object.freeze({
     version: '2.7.1',
     resolved: 'https://registry.npmjs.org/yaml/-/yaml-2.7.1.tgz',
@@ -222,7 +227,7 @@ test('pins every root form-data resolution to the reviewed patched releases', ()
   assert.equal(packageJson.overrides?.['form-data'], undefined);
   assert.equal(
     lock.packages['node_modules/firebase-tools']?.dependencies?.['form-data'],
-    '^4.0.0',
+    '^4.0.1',
   );
   assert.equal(
     lock.packages['node_modules/jest-environment-jsdom/node_modules/jsdom']
@@ -660,9 +665,7 @@ test('pins the sole root yaml 1.x resolution to the patched 1.10.3 release', () 
     || packagePath.endsWith('/node_modules/yaml')
   )).sort();
   assert.deepEqual(lockedPaths, [
-    'node_modules/lint-staged/node_modules/yaml',
-    'node_modules/openapi3-ts/node_modules/yaml',
-    'node_modules/postcss-load-config/node_modules/yaml',
+    ...Object.keys(EXPECTED_NESTED_YAML),
     'node_modules/yaml',
   ]);
 
@@ -689,7 +692,7 @@ test('pins the sole root yaml 1.x resolution to the patched 1.10.3 release', () 
         integrity: nestedRecord.integrity,
       },
       expected,
-      `${packagePath} must remain byte-compatible with the reviewed base`,
+      `${packagePath} must retain its reviewed public-registry identity`,
     );
     assert.equal(nestedRecord.dev, true);
   }
