@@ -871,6 +871,40 @@ Inputs and every nested value are exact plain data objects: missing, extra, symb
 
 This contract does not capture consent events or choose a policy-version order, retention rule, deletion service level, provider behavior, relink policy, or officer approval. It makes no provider call and adds no persistence, migration, Firestore schema or Rules, Auth claim, endpoint, route, interface, package, workflow, or deployment. It is imported by no runtime or Functions index, requires only deterministic `node:util`/`node:crypto` operations and the pure §8.0e classifier, and reads no clock, environment, randomness, network, service SDK, or logger. Parent [#81](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/81) remains open for those boundaries. Source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, outside provider configured, production data migrated, and production behavior verified are separate states; this source contract proves only the first two before merge.
 
+### 8.0j Provider-neutral consent-decision receipts — SOURCE ONLY, UNUSED
+
+MEMBERS-IDENTITY-001G [#447](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/447) defines one unused pure seam between the caller-supplied latest-decision evidence in §8.0d and a future trusted persistence layer. It creates a bounded track head, emits one append-oriented technical grant-or-withdrawal receipt for an exact next command, and projects the current head through the real §8.0d classifier. It does not copy that classifier's active, reaffirmation, withdrawal, or no-decision policy.
+
+```mermaid
+flowchart LR
+    H["Empty or current bounded track head"] --> V{"Valid exact next step?"}
+    C["Exact grant or withdrawal command"] --> V
+    V -- "Malformed, stale, skipped, or conflicting" --> X["One fixed error; no input echo"]
+    V -- "Exact latest retry" --> R["Same canonical frozen receipt and head"]
+    V -- "Valid next decision" --> N["Emit one frozen technical receipt; advance head by one"]
+    N --> H2["Current bounded head"]
+    R --> H2
+    Q["Separate projector call + required policy version"] --> D["§8.0d classification"]
+    H2 --> D
+    R --> Z["grantsAuthority: false"]
+    D --> Z
+    X --> Z
+```
+
+Text alternative: from an empty or current bounded track head and one exact grant-or-withdrawal command, the unused source either treats the exact latest retry as read-only, emits one new frozen technical receipt and advances the head by exactly one revision, or fails through one fixed non-echoing error. In a separate call, the projector combines the current head with a caller-supplied required policy version and asks §8.0d to classify it; all results grant no authority. This source captures and stores nothing and does not prove informed consent, legal compliance, notice delivery, actor authorization, or provider acceptance.
+
+The head is bound to one typed track, subject, and scope reference plus one existing provider enum. It contains a safe-integer revision and either no latest receipt at revision zero or exactly one nested latest receipt at a positive revision. It never holds an unbounded receipt array. Each receipt repeats the exact track binding, names only a typed command and receipt reference, binds the prior receipt reference, carries `granted` or `withdrawn` plus one typed policy-version reference, and hard-codes `grantsAuthority: false`. `none` is the absence of a receipt, not a fabricated event.
+
+Each command carries the exact track binding, fixed `record_consent_decision` type, stable typed command and receipt references, expected revision, expected latest receipt reference, decision, and policy version. An exact retry of the latest command is checked before freshness or revision exhaustion and returns the same canonical frozen head and receipt. A changed latest-command reuse fails. A new command must match the track, current revision, and current latest receipt exactly; the next receipt advances one safe-integer revision and binds that prior receipt. A fresh repeated grant or withdrawal is allowed because this technical contract invents no provider or product no-op policy. Current receipt-reference reuse is rejected; durable uniqueness across receipts no longer visible in the bounded head remains future storage work.
+
+The projector validates the full head and passes the exact provider, subject, scope, latest decision or `none`, latest policy version or `null`, and caller-supplied required policy version to `classifyConsentState`. Policy versions are compared for equality only by §8.0d. No timestamp chooses ordering, and this contract defines no version precedence, policy text, effective date, notice wording, scope meaning, withdrawal service level, or provider behavior.
+
+Every public input and nested receipt is an exact plain data object. A proxy, revoked proxy, accessor, inherited field, symbol, non-enumerable field, extra or missing field, foreign prototype, wrong version, unknown enum, unsafe revision, inconsistent nested binding, or malformed purpose-specific reference fails through one fixed error that never echoes the input. Purpose-specific lowercase-hex reference shapes exclude obvious raw contact, URL, provider-error, token, prose, and human-name values; they are structural bounds, not a semantic privacy or authenticity proof. A trusted server must mint every reference and establish every fact.
+
+This module can reject malformed or internally inconsistent snapshots, but it cannot authenticate a self-consistent rewritten head. It performs no hashing, signing, storage, create-only write, all-history replay check, actor authentication or authorization, notice delivery, provider call, or legal determination. Purpose, access, provider disclosure, retention, deletion, backup, request handling, and public notice remain with owner-blocked #110; provider-specific capture remains #87; legacy disposition remains #113. Any future runtime must preserve receipts separately with trusted authorization and create-only transactional persistence before treating the head as canonical.
+
+The module is imported by no runtime or Functions index. It requires only `node:util` and the pure §8.0d module, reads no clock or environment, calls no Firebase/provider service, stores and logs nothing, and changes no profile, membership, role, claim, provider account, or officer workflow. Parent [#81](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/81) remains open. Source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, outside provider configured, production data migrated, and production behavior verified remain separate states.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.

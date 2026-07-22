@@ -1000,6 +1000,70 @@ Backup-officer source-review steps:
 
 No system-topology map changes are required because this unused contract changes no data movement, permissions, account ownership, or deployment topology.
 
+## Consent-decision receipts — SOURCE ONLY, UNUSED
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** let a backup officer review whether unused source preserves the order of made-up technical grant/withdrawal decisions without treating a receipt as membership or legal proof.
+
+**Approver:** membership lead plus privacy/security and platform owners.
+
+**Prerequisites:** issue [#447](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/447), its reviewed pull request, and exact merge commit are required for source review. The existing consent-state source under [#370](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/370) must remain the only classifier. Use made-up typed references only. Purpose, notice, access, provider disclosure, retention, deletion, backup, request behavior, and public wording remain owner decisions under #110. Provider-specific capture remains #87; legacy disposition remains #113. Actor authorization, trusted capture facts, create-only persistence, durable all-history uniqueness, Firestore Rules, deployment/readback, and live verification are also future work.
+
+A “grant” or “withdrawal” here is only a bounded caller-supplied technical decision value. The receipt is not evidence that a person was informed, authorized, or legally consented.
+
+In this section, a **head** is the small caller-supplied summary of the latest technical decision. A **revision** is its whole-number sequence counter. A **typed reference** is a made-up identifier with a fixed format and no person or provider detail. **Frozen** means the test report shows the returned value cannot be changed in place. The source checks structure relative to the head it receives; it cannot prove that a complete, internally consistent head is genuine or came from the club's canonical records. Trusted authorization and create-only storage are required before any future runtime may rely on it.
+
+```mermaid
+flowchart TD
+    M["Made-up head + made-up grant or withdrawal command"] --> C{"Exact current or latest retry?"}
+    C -- "No" --> S["Fixed safe stop"]
+    C -- "Exact latest retry" --> R["Same made-up receipt and head"]
+    C -- "Valid next decision" --> A["One new technical receipt; head advances once"]
+    A --> H["Current made-up head"]
+    R --> H
+    Q["Separate projector check + made-up required policy version"] --> P["Existing #370 source classifies"]
+    H --> P
+    R --> N["Never grants authority"]
+    P --> N
+    S --> N
+```
+
+Text alternative: using made-up values only, the unused source checks one ordered technical grant or withdrawal decision, treats an exact latest retry as read-only, or advances the bounded head once. In a separate check, a made-up required policy version and the current head go to the existing #370 source for classification. Malformed or conflicting input stops safely. The source does not authenticate the supplied head, ask a person for consent, contact a provider, store a durable history, or prove informed consent, authorization, notice delivery, provider acceptance, legal compliance, or live behavior; it never grants membership or access.
+
+Backup-officer source-review steps:
+
+1. Keep this procedure marked **NOT AVAILABLE YET**.
+2. Obtain the exact #447 issue, reviewed pull request, merge commit, and synthetic test report.
+3. Confirm every example uses made-up typed references with no name, email, phone, account, provider identifier, URL, token, error, policy text, or real decision.
+4. Confirm the same source accepts the four already reviewed provider categories without adding a provider-specific rule.
+5. Confirm an empty made-up head has revision zero and no latest receipt.
+6. Confirm the first made-up grant or withdrawal creates one frozen technical receipt at revision one.
+7. Confirm each later technical receipt advances exactly one revision and names the prior receipt.
+8. Confirm a grant, withdrawal, and later grant remain separate receipts; the earlier made-up values do not change.
+9. Confirm an exact retry of the latest command returns the same frozen head and receipt without adding a decision.
+10. Confirm changed reuse of the latest command ID, a wrong track, stale or skipped revision, wrong latest receipt, unsafe revision, or malformed value stops with one fixed safe error.
+11. Confirm the head contains only the latest receipt, not an ever-growing list. Separately preserved receipts and durable uniqueness remain future storage work.
+12. Confirm a reused older command or receipt ID is not detectable from this bounded head and remains the future create-only storage layer's responsibility.
+13. Confirm a complete but rewritten head can pass structural checks; the source alone cannot prove authenticity or canonical history.
+14. Confirm a separate projector check sends an empty head, current grant, grant under another required policy version, and withdrawal to the real #370 source and gets not consented, active, reaffirmation required, and withdrawn.
+15. Confirm policy versions are compared only for equality; no date, ordering, notice, legal rule, or provider rule is inferred.
+16. Confirm every head, receipt, and result says it grants no authority.
+17. Confirm the source has no actor field, timestamp, notice or policy text, provider call, database action, role or claim change, route, interface, migration, deployment, log, or production record.
+18. End the review without describing the receipt as captured consent, an audit trail, provider acceptance, legal proof, a working member feature, or live behavior.
+
+**Expected result:** relative to one caller-supplied made-up head, the unused synthetic source can advance one technical decision, return an exact latest retry unchanged, stop visible conflicts safely, and separately ask the existing #370 source for the current technical disposition. It does not establish that the supplied head is genuine or complete. Current signup, membership, discounts, email/password, Google, WhatsApp, Strava, officer screens, data stores, provider accounts, and website behavior remain unchanged.
+
+**Stop conditions:** any real person, decision, member, or provider data; policy or notice text; a timestamp presented as legal evidence; a production inspection; a database or provider action; a request to choose access, retention, deletion, withdrawal, capture, or migration policy; missing prerequisite evidence; or any claim that source, tests, a pull request, merge, or green workflow makes the feature live or compliant.
+
+**Success proof:** exact #447 issue, pull request, reviewed merge commit, focused and full test/lint reports, and an automated report showing that no live Function entry point imports the new source. Record website publication, `runmprc.com` verification, Firebase deployment, outside-provider configuration, production-data changes, migration, and live behavior separately as **not performed** for this source-only issue.
+
+**Undo:** before runtime adoption, use one reviewed revert or safe roll-forward for the two unused module/test files and these named documentation sections. No production record repair exists. Any future persistence or provider child must provide its own data-safe rollback.
+
+**Escalation:** membership lead plus privacy/security and platform owners. Use the private incident route if real data, unintended authority, or a provider action appears.
+
+No system-topology map changes are required because this unused contract changes no data movement, permissions, account ownership, or deployment topology.
+
 ## My Account membership truth — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**
