@@ -17,6 +17,7 @@ const { createMerchCheckout } = require('./createMerchCheckout');
 const { lookupOrder } = require('./lookupOrder');
 const { adminOrderAction } = require('./adminOrderAction');
 const {
+  stravaBeginAuthorization,
   stravaExchangeCode,
   stravaFetchStats,
   stravaDisconnect,
@@ -51,6 +52,7 @@ exports.lookupOrder = lookupOrder;
 exports.adminOrderAction = adminOrderAction;
 
 // Strava
+exports.stravaBeginAuthorization = stravaBeginAuthorization;
 exports.stravaExchangeCode = stravaExchangeCode;
 exports.stravaFetchStats = stravaFetchStats;
 exports.stravaDisconnect = stravaDisconnect;

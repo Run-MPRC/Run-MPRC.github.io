@@ -5,6 +5,7 @@ import {
   formatDuration,
   getStravaConnection,
   metersToMiles,
+  stravaBeginAuthorization,
   stravaDisconnect,
   stravaFetchStats,
   StravaConnection,
@@ -14,6 +15,7 @@ import {
 const STRAVA_CONNECTION_FAILURE = 'We could not check your Strava connection right now. Please refresh this page and try again.';
 const STRAVA_ACTIVITY_FAILURE = 'We could not load your Strava activity right now. Please try again later.';
 const STRAVA_DISCONNECT_FAILURE = 'We could not confirm the Strava disconnect. Please refresh this page before trying again.';
+const STRAVA_CONNECT_FAILURE = 'We could not start your Strava connection. Please try again.';
 const objectIdentities = new WeakMap<object, number>();
 let nextObjectIdentity = 1;
 
@@ -115,7 +117,18 @@ function Connected({
   );
 }
 
-function Disconnected({ onConnect }: { onConnect: () => void }) {
+function Disconnected({
+  onConnect,
+  connecting,
+  connectFailed,
+}: {
+  onConnect: () => void;
+  connecting: boolean;
+  connectFailed: boolean;
+}) {
+  let connectLabel = 'Connect Strava';
+  if (connecting) connectLabel = 'Connecting...';
+  else if (connectFailed) connectLabel = 'Try again';
   return (
     <div className="border rounded-lg p-4 bg-gray-50">
       <div className="flex justify-between items-center">
@@ -128,11 +141,22 @@ function Disconnected({ onConnect }: { onConnect: () => void }) {
         <button
           type="button"
           onClick={onConnect}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm"
+          disabled={connecting}
+          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
         >
-          Connect Strava
+          {connectLabel}
         </button>
       </div>
+      {connectFailed && (
+        <p
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="text-sm text-red-600 mt-3"
+        >
+          {STRAVA_CONNECT_FAILURE}
+        </p>
+      )}
     </div>
   );
 }
@@ -153,6 +177,7 @@ type ActivityState =
   | { phase: 'resolved'; stats: StravaStatsResult };
 
 type DisconnectState = 'idle' | 'pending' | 'failed';
+type ConnectState = 'idle' | 'pending' | 'failed';
 
 function StravaAttempt({
   uid,
@@ -166,10 +191,12 @@ function StravaAttempt({
   const [connectionState, setConnectionState] = useState<ConnectionState>({ phase: 'loading' });
   const [activityState, setActivityState] = useState<ActivityState>({ phase: 'idle' });
   const [disconnectState, setDisconnectState] = useState<DisconnectState>('idle');
+  const [connectState, setConnectState] = useState<ConnectState>('idle');
   const lifetimeRunRef = useRef<symbol | null>(null);
   const connectionRunRef = useRef<symbol | null>(null);
   const activityRunRef = useRef<symbol | null>(null);
   const disconnectRunRef = useRef<symbol | null>(null);
+  const connectRunRef = useRef<symbol | null>(null);
 
   useEffect(() => {
     const run = Symbol('strava-lifetime');
@@ -179,6 +206,7 @@ function StravaAttempt({
       connectionRunRef.current = null;
       activityRunRef.current = null;
       disconnectRunRef.current = null;
+      connectRunRef.current = null;
     };
   }, []);
 
@@ -247,15 +275,40 @@ function StravaAttempt({
     };
   }, [app, connectionState]);
 
-  function handleConnect() {
+  async function handleConnect() {
+    if (connectRunRef.current !== null) return;
     const clientId = process.env.REACT_APP_STRAVA_CLIENT_ID;
     if (!clientId) {
       // eslint-disable-next-line no-alert
       alert('Strava is not configured yet. Please contact a club admin.');
       return;
     }
-    const redirectUri = `${window.location.origin}/account/strava/callback`;
-    window.location.href = buildStravaAuthorizeUrl(clientId, redirectUri);
+    const lifetimeRun = lifetimeRunRef.current;
+    if (lifetimeRun === null) return;
+    const connectRun = Symbol('strava-connect');
+    connectRunRef.current = connectRun;
+    setConnectState('pending');
+    try {
+      const challenge = await stravaBeginAuthorization(app);
+      if (
+        lifetimeRunRef.current !== lifetimeRun
+        || connectRunRef.current !== connectRun
+      ) return;
+      const redirectUri = `${window.location.origin}/account/strava/callback`;
+      const authorizationUrl = buildStravaAuthorizeUrl(clientId, redirectUri, challenge);
+      if (
+        lifetimeRunRef.current !== lifetimeRun
+        || connectRunRef.current !== connectRun
+      ) return;
+      window.location.href = authorizationUrl;
+    } catch {
+      if (
+        lifetimeRunRef.current !== lifetimeRun
+        || connectRunRef.current !== connectRun
+      ) return;
+      connectRunRef.current = null;
+      setConnectState('failed');
+    }
   }
 
   async function handleDisconnect() {
@@ -307,7 +360,11 @@ function StravaAttempt({
         />
       )}
       {connectionState.phase === 'disconnected' && (
-        <Disconnected onConnect={handleConnect} />
+        <Disconnected
+          onConnect={handleConnect}
+          connecting={connectState === 'pending'}
+          connectFailed={connectState === 'failed'}
+        />
       )}
       {connectionState.phase === 'unavailable' && (
         <p role="alert" aria-live="assertive" aria-atomic="true" className="text-sm text-red-600">

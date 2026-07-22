@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:f6d14c2fd59a703cf4c69f45f80ea93f02ee33484980f9dd028cb37f149ca671",
+  "fingerprint": "sha256:56b52a74434e910548d72c741ab21b634274d3cc9c36fe9983d8942b34eebddf",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -200,9 +200,9 @@
     },
     {
       "file": "src/pages/account/StravaSection.tsx",
-      "line": 305,
+      "line": 358,
       "column": 11,
-      "endLine": 305,
+      "endLine": 358,
       "endColumn": 42,
       "severity": 2,
       "ruleId": "react/jsx-no-bind",
@@ -213,10 +213,10 @@
     },
     {
       "file": "src/pages/account/StravaSection.tsx",
-      "line": 310,
-      "column": 23,
-      "endLine": 310,
-      "endColumn": 48,
+      "line": 364,
+      "column": 11,
+      "endLine": 364,
+      "endColumn": 36,
       "severity": 2,
       "ruleId": "react/jsx-no-bind",
       "message": "JSX props should not use functions",

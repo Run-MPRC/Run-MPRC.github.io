@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { Timestamp } = require('firebase-admin/firestore');
+const { createHash, randomBytes, timingSafeEqual } = require('node:crypto');
 const { URL: NodeURL } = require('node:url');
 const { types: { isProxy } } = require('node:util');
 const { requireAppCheck } = require('./stripeHelpers');
@@ -11,6 +12,10 @@ const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities'
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
 const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
 const STRAVA_AUTHORIZATION_CODE_MAX_LENGTH = 1_024;
+const STRAVA_OAUTH_STATE_BYTE_LENGTH = 32;
+const STRAVA_OAUTH_STATE_LENGTH = 43;
+const STRAVA_OAUTH_STATE_LIFETIME_SECONDS = 600;
+const STRAVA_OAUTH_STATE_SCHEMA_VERSION = 1;
 const STRAVA_TOKEN_MAX_LENGTH = 2_048;
 const STRAVA_SCOPE_MAX_LENGTH = 1_024;
 const STRAVA_PROFILE_TEXT_MAX_LENGTH = 1_024;
@@ -23,6 +28,8 @@ const STRAVA_LONG_MAX_AS_NUMBER = 9_223_372_036_854_776_000;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
 const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
+const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/u;
 const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5b\x5d-\x7e]+(?: [\x21\x23-\x5b\x5d-\x7e]+)*$/;
 const PROFILE_WHITESPACE_OR_BACKSLASH_PATTERN = /[\s\\]/u;
 const HTTPS_PREFIX_PATTERN = /^https:\/\//iu;
@@ -39,10 +46,15 @@ const numberIsInteger = Number.isInteger;
 const numberIsSafeInteger = Number.isSafeInteger;
 const reflectApply = Reflect.apply;
 const reflectHas = Reflect.has;
+const reflectOwnKeys = Reflect.ownKeys;
 const regexpTest = RegExp.prototype.test;
 const stringCharCodeAt = String.prototype.charCodeAt;
 const INVALID_SELECTED_VALUE = Symbol('invalid-selected-value');
 const MISSING_SELECTED_VALUE = Symbol('missing-selected-value');
+const INVALID_AUTHORIZATION_REQUEST = Symbol('invalid-authorization-request');
+const OAUTH_STATE_CONSUMED = Symbol('oauth-state-consumed');
+const OAUTH_STATE_DENIED = Symbol('oauth-state-denied');
+const OAUTH_STATE_INTERNAL = Symbol('oauth-state-internal');
 
 function stravaAuthorizationError(code) {
   return new functions.https.HttpsError(code, STRAVA_AUTHORIZATION_ERROR_MESSAGE);
@@ -95,6 +107,32 @@ function selectedProviderDataValue(record, key, required) {
   }
 }
 
+function hasExactOwnKeys(record, expectedKeys) {
+  let ownKeys;
+  try {
+    ownKeys = reflectApply(reflectOwnKeys, Reflect, [record]);
+  } catch (_error) {
+    return false;
+  }
+  if (ownKeys.length !== expectedKeys.length) return false;
+  for (let index = 0; index < ownKeys.length; index += 1) {
+    const key = ownKeys[index];
+    let expected = false;
+    for (let expectedIndex = 0; expectedIndex < expectedKeys.length; expectedIndex += 1) {
+      if (key === expectedKeys[expectedIndex]) {
+        expected = true;
+        break;
+      }
+    }
+    if (!expected) return false;
+  }
+  return true;
+}
+
+function isExactPlainRecord(record, expectedKeys) {
+  return isPlainJsonRecord(record) && hasExactOwnKeys(record, expectedKeys);
+}
+
 function isBoundedVisibleAscii(value, maxLength) {
   return typeof value === 'string'
     && value.length > 0
@@ -104,6 +142,143 @@ function isBoundedVisibleAscii(value, maxLength) {
 
 function isPositiveSafeInteger(value) {
   return typeof value === 'number' && numberIsSafeInteger(value) && value > 0;
+}
+
+function snapshotAuthSession(auth) {
+  if (!isPlainJsonRecord(auth)) return null;
+
+  const uid = selectedOwnDataValue(auth, 'uid', true);
+  const token = selectedOwnDataValue(auth, 'token', true);
+  if (
+    typeof uid !== 'string'
+    || uid.length === 0
+    || !isPlainJsonRecord(token)
+  ) {
+    return null;
+  }
+
+  const authTime = selectedOwnDataValue(token, 'auth_time', true);
+  if (!isPositiveSafeInteger(authTime)) return null;
+  return objectFreeze({ uid, authTime });
+}
+
+function requireStravaAuthSession(context) {
+  const auth = context && context.auth;
+  if (!auth) {
+    throw stravaAuthorizationError('unauthenticated');
+  }
+  const session = snapshotAuthSession(auth);
+  if (!session) throw stravaAuthorizationError('unauthenticated');
+  return session;
+}
+
+function currentEpochSeconds() {
+  let nowSeconds;
+  try {
+    nowSeconds = Math.floor(Date.now() / 1_000);
+  } catch (_error) {
+    return null;
+  }
+  return isPositiveSafeInteger(nowSeconds)
+    && nowSeconds <= Number.MAX_SAFE_INTEGER - STRAVA_OAUTH_STATE_LIFETIME_SECONDS
+    ? nowSeconds
+    : null;
+}
+
+function stateDigest(state) {
+  return createHash('sha256').update(state, 'utf8').digest('hex');
+}
+
+function isCanonicalOAuthState(value) {
+  if (
+    typeof value !== 'string'
+    || value.length !== STRAVA_OAUTH_STATE_LENGTH
+    || !patternMatches(BASE64URL_PATTERN, value)
+  ) {
+    return false;
+  }
+  try {
+    const decoded = Buffer.from(value, 'base64url');
+    return decoded.length === STRAVA_OAUTH_STATE_BYTE_LENGTH
+      && decoded.toString('base64url') === value;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isValidAuthorizationCode(code) {
+  return typeof code === 'string'
+    && code.length > 0
+    && code.length <= STRAVA_AUTHORIZATION_CODE_MAX_LENGTH;
+}
+
+function snapshotAuthorizationRequest(data) {
+  if (!isPlainJsonRecord(data)) return INVALID_AUTHORIZATION_REQUEST;
+
+  if (hasExactOwnKeys(data, ['code'])) {
+    const code = selectedOwnDataValue(data, 'code', true);
+    return isValidAuthorizationCode(code)
+      ? OAUTH_STATE_DENIED
+      : INVALID_AUTHORIZATION_REQUEST;
+  }
+  if (!hasExactOwnKeys(data, ['code', 'state'])) return INVALID_AUTHORIZATION_REQUEST;
+
+  const code = selectedOwnDataValue(data, 'code', true);
+  const state = selectedOwnDataValue(data, 'state', true);
+  if (!isCanonicalOAuthState(state)) return OAUTH_STATE_DENIED;
+  if (!isValidAuthorizationCode(code)) return INVALID_AUTHORIZATION_REQUEST;
+  return objectFreeze({ code, state });
+}
+
+function snapshotStoredOAuthState(record) {
+  const keys = [
+    'schemaVersion',
+    'provider',
+    'stateDigest',
+    'uid',
+    'authTime',
+    'issuedAtSeconds',
+    'expiresAtSeconds',
+  ];
+  if (!isExactPlainRecord(record, keys)) return null;
+
+  const schemaVersion = selectedOwnDataValue(record, 'schemaVersion', true);
+  const provider = selectedOwnDataValue(record, 'provider', true);
+  const digest = selectedOwnDataValue(record, 'stateDigest', true);
+  const uid = selectedOwnDataValue(record, 'uid', true);
+  const authTime = selectedOwnDataValue(record, 'authTime', true);
+  const issuedAtSeconds = selectedOwnDataValue(record, 'issuedAtSeconds', true);
+  const expiresAtSeconds = selectedOwnDataValue(record, 'expiresAtSeconds', true);
+  if (
+    schemaVersion !== STRAVA_OAUTH_STATE_SCHEMA_VERSION
+    || provider !== 'strava'
+    || typeof digest !== 'string'
+    || !patternMatches(SHA256_HEX_PATTERN, digest)
+    || typeof uid !== 'string'
+    || uid.length === 0
+    || !isPositiveSafeInteger(authTime)
+    || !isPositiveSafeInteger(issuedAtSeconds)
+    || !isPositiveSafeInteger(expiresAtSeconds)
+    || issuedAtSeconds > Number.MAX_SAFE_INTEGER - STRAVA_OAUTH_STATE_LIFETIME_SECONDS
+    || expiresAtSeconds !== issuedAtSeconds + STRAVA_OAUTH_STATE_LIFETIME_SECONDS
+  ) {
+    return null;
+  }
+  return objectFreeze({
+    digest,
+    uid,
+    authTime,
+    issuedAtSeconds,
+    expiresAtSeconds,
+  });
+}
+
+function stateDigestsMatch(left, right) {
+  try {
+    return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+  } catch (_error) {
+    return false;
+  }
 }
 
 function isNonNegativeSafeInteger(value) {
@@ -528,6 +703,60 @@ function secretDocRef(uid, db = admin.firestore()) {
     .collection('secrets').doc('strava');
 }
 
+function oauthStateDocRef(uid, db = admin.firestore()) {
+  return db
+    .collection('members').doc(uid)
+    .collection('secrets').doc('stravaOAuthState');
+}
+
+async function consumeOAuthState(session, state) {
+  let digest;
+  try {
+    digest = stateDigest(state);
+  } catch (_error) {
+    throw stravaAuthorizationError('internal');
+  }
+  let outcome;
+  try {
+    const db = admin.firestore();
+    const stateRef = oauthStateDocRef(session.uid, db);
+    outcome = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(stateRef);
+      if (!snapshot.exists) return OAUTH_STATE_DENIED;
+
+      let storedRecord;
+      try {
+        storedRecord = snapshot.data();
+      } catch (_error) {
+        return OAUTH_STATE_DENIED;
+      }
+      const stored = snapshotStoredOAuthState(storedRecord);
+      const nowSeconds = currentEpochSeconds();
+      if (nowSeconds === null) return OAUTH_STATE_INTERNAL;
+      if (
+        !stored
+        || stored.uid !== session.uid
+        || stored.authTime !== session.authTime
+        || stored.issuedAtSeconds > nowSeconds
+        || stored.expiresAtSeconds <= nowSeconds
+        || !stateDigestsMatch(stored.digest, digest)
+      ) {
+        return OAUTH_STATE_DENIED;
+      }
+      transaction.delete(stateRef);
+      return OAUTH_STATE_CONSUMED;
+    });
+  } catch (_error) {
+    throw stravaAuthorizationError('internal');
+  }
+  if (outcome === OAUTH_STATE_DENIED) {
+    throw stravaAuthorizationError('permission-denied');
+  }
+  if (outcome !== OAUTH_STATE_CONSUMED) {
+    throw stravaAuthorizationError('internal');
+  }
+}
+
 async function exchangeCode(code) {
   const { clientId, clientSecret } = getStravaCreds();
   let resp;
@@ -617,24 +846,63 @@ async function getFreshAccessToken(uid) {
   return refreshed.accessToken;
 }
 
+exports.stravaBeginAuthorization = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const session = requireStravaAuthSession(context);
+  if (!isExactPlainRecord(data, [])) {
+    throw stravaAuthorizationError('invalid-argument');
+  }
+
+  const issuedAtSeconds = currentEpochSeconds();
+  if (issuedAtSeconds === null) throw stravaAuthorizationError('internal');
+
+  let state;
+  let digest;
+  try {
+    state = randomBytes(STRAVA_OAUTH_STATE_BYTE_LENGTH).toString('base64url');
+    if (!isCanonicalOAuthState(state)) throw new Error('invalid generated state');
+    digest = stateDigest(state);
+  } catch (_error) {
+    throw stravaAuthorizationError('internal');
+  }
+
+  try {
+    await oauthStateDocRef(session.uid).set({
+      schemaVersion: STRAVA_OAUTH_STATE_SCHEMA_VERSION,
+      provider: 'strava',
+      stateDigest: digest,
+      uid: session.uid,
+      authTime: session.authTime,
+      issuedAtSeconds,
+      expiresAtSeconds: issuedAtSeconds + STRAVA_OAUTH_STATE_LIFETIME_SECONDS,
+    });
+  } catch (_error) {
+    throw stravaAuthorizationError('internal');
+  }
+
+  return objectFreeze({
+    state,
+    expiresInSeconds: STRAVA_OAUTH_STATE_LIFETIME_SECONDS,
+  });
+});
+
 exports.stravaExchangeCode = functions
   .runWith({ secrets: ['STRAVA_CLIENT_ID', 'STRAVA_CLIENT_SECRET'] })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
+    const session = requireStravaAuthSession(context);
+    const request = snapshotAuthorizationRequest(data);
+    if (request === OAUTH_STATE_DENIED) {
+      throw stravaAuthorizationError('permission-denied');
     }
-    const { code } = data || {};
-    if (
-      typeof code !== 'string'
-      || code.length === 0
-      || code.length > STRAVA_AUTHORIZATION_CODE_MAX_LENGTH
-    ) {
+    if (request === INVALID_AUTHORIZATION_REQUEST) {
       throw stravaAuthorizationError('invalid-argument');
     }
-    const { uid } = context.auth;
+    const { uid } = session;
 
-    const exchange = await exchangeCode(code);
+    await consumeOAuthState(session, request.state);
+
+    const exchange = await exchangeCode(request.code);
 
     try {
       const db = admin.firestore();
