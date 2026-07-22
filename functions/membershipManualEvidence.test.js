@@ -254,6 +254,41 @@ describe('acceptance by the shipped membership authority reducer', () => {
     });
   });
 
+  test('the projected command can approve an unlinked term before later association', () => {
+    const unlinked = createMembershipAuthority({
+      membershipAuthoritySchemaVersion: 1,
+      membershipId: 'mbr_test_001',
+      commandId: 'cmd_create_001',
+    });
+    const { reducerCommand } = projectManualDuesEvidence(officerCommand({
+      expectedRevision: 1,
+    }));
+
+    const approved = applyMembershipAuthorityCommand(unlinked, reducerCommand);
+    expect(approved.association.state).toBe('unlinked');
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: approved,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('not_entitled');
+
+    const linked = applyMembershipAuthorityCommand(approved, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'associate_account',
+      commandId: 'cmd_link_after_manual_001',
+      expectedRevision: 2,
+      uid: 'uid_test_001',
+    });
+    expect(linked.term).toEqual(approved.term);
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: linked,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('current_member');
+  });
+
   test('the projected command stays an idempotent, replay-safe reducer command', () => {
     const linked = createLinkedRecord();
     const { reducerCommand } = projectManualDuesEvidence(officerCommand());

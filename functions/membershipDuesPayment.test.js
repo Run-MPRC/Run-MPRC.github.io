@@ -792,6 +792,43 @@ describe('the emitted command is accepted by the shipped membership authority re
     });
   });
 
+  test('a verified payment can approve an unlinked term without granting access', () => {
+    const unlinked = createMembershipAuthority({
+      membershipAuthoritySchemaVersion: 1,
+      membershipId: 'mbr_test_001',
+      commandId: 'cmd_create_001',
+    });
+    const { reducerCommand } = classifyVerifiedDuesPayment(
+      expectation({ expectedRevision: 1 }),
+      outcome(),
+    );
+
+    const approved = applyMembershipAuthorityCommand(unlinked, reducerCommand);
+    expect(approved.association.state).toBe('unlinked');
+    expect(approved.term.state).toBe('approved');
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: approved,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('not_entitled');
+
+    const linked = applyMembershipAuthorityCommand(approved, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'associate_account',
+      commandId: 'cmd_link_after_payment_001',
+      expectedRevision: 2,
+      uid: 'uid_test_001',
+    });
+    expect(linked.term).toEqual(approved.term);
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: linked,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('current_member');
+  });
+
   test('re-applying the same emitted command is an idempotent no-op (downstream ordering guard)', () => {
     const linked = linkedRecord();
     const { reducerCommand } = classifyVerifiedDuesPayment(expectation(), outcome());

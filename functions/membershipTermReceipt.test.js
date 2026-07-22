@@ -298,6 +298,42 @@ describe('immutable membership term/evidence receipt ledger contract', () => {
     });
   });
 
+  test('a projected receipt can decide an unlinked term before later association', () => {
+    const unlinked = createMembershipAuthority({
+      membershipAuthoritySchemaVersion: 1,
+      membershipId: 'mbr_test_001',
+      commandId: 'cmd_create_001',
+    });
+    const receipt = createTermEvidenceReceipt(receiptInput());
+    const command = projectTermDecisionCommand(receipt, envelopeInput({
+      expectedRevision: 1,
+    }));
+
+    const approved = applyMembershipAuthorityCommand(unlinked, command);
+    expect(approved.association.state).toBe('unlinked');
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: approved,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('not_entitled');
+
+    const linked = applyMembershipAuthorityCommand(approved, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'associate_account',
+      commandId: 'cmd_link_after_receipt_001',
+      expectedRevision: 2,
+      uid: 'uid_test_001',
+    });
+    expect(linked.term).toEqual(approved.term);
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: linked,
+      uid: 'uid_test_001',
+      asOfMs: TERM_START_MS,
+    }).entitlement).toBe('current_member');
+  });
+
   test('ledger term revisions align with the authority renewal grammar end to end', () => {
     const linked = createLinkedAuthorityRecord();
     const firstReceipt = createTermEvidenceReceipt(receiptInput());

@@ -301,8 +301,8 @@ function readRecord(value) {
   if (lastCommand.commandType === 'create_membership') {
     if (record.revision !== 1 || association.revision !== 0 || term.revision !== 0) fail();
   } else if (lastCommand.commandType === 'associate_account') {
-    if (record.revision !== 2 || association.revision !== 1 || term.revision !== 0) fail();
-  } else if (association.revision !== 1 || term.revision < 1) {
+    if (association.revision !== 1) fail();
+  } else if (term.revision < 1) {
     fail();
   }
 
@@ -436,7 +436,7 @@ function applyMembershipAuthorityCommand(recordInput, commandInput) {
   const nextRevision = record.revision + 1;
 
   if (command.commandType === 'associate_account') {
-    if (record.association.state !== 'unlinked' || record.term.revision !== 0) fail();
+    if (record.association.state !== 'unlinked') fail();
     return freezeRecord({
       ...record,
       revision: nextRevision,
@@ -453,8 +453,7 @@ function applyMembershipAuthorityCommand(recordInput, commandInput) {
     });
   }
 
-  if (record.association.state !== 'linked'
-    || command.termRevision !== record.term.revision + 1) {
+  if (command.termRevision !== record.term.revision + 1) {
     fail();
   }
   return freezeRecord({

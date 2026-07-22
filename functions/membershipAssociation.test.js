@@ -18,6 +18,11 @@ const {
   EntitlementAction,
   classifyMembershipAssociation,
 } = mod;
+const {
+  createMembershipAuthority,
+  applyMembershipAuthorityCommand,
+  deriveMembershipEntitlement,
+} = require('./membershipAuthority');
 
 // ---- fixtures ------------------------------------------------------------
 
@@ -174,6 +179,62 @@ describe('happy-path association', () => {
         entitlementAction: 'derive_membership_claim',
       },
     });
+  });
+
+  test('a future trusted caller can translate an authorized verdict after a term-first decision', () => {
+    const unlinked = createMembershipAuthority({
+      membershipAuthoritySchemaVersion: 1,
+      membershipId: 'mem.2026.001',
+      commandId: 'cmd.create.0001',
+    });
+    const approved = applyMembershipAuthorityCommand(unlinked, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'record_term_decision',
+      commandId: 'cmd.term.0001',
+      expectedRevision: 1,
+      termRevision: 1,
+      termState: 'approved',
+      termId: '2026',
+      startsAtMs: 1_000_000,
+      endsAtMs: 2_000_000,
+      planRef: 'plan.annual.001',
+      evidenceRef: 'evidence.dues.001',
+      policyVersion: 'policy.001',
+    });
+    const association = command();
+    const associationState = state({
+      membership: membership({
+        membershipId: approved.membershipId,
+        term: approved.term.termId,
+        // This is separate trusted evidence. The authority term state does not
+        // itself verify dues and must never be used to infer this prerequisite.
+        duesConfirmed: true,
+        linkState: approved.association.state,
+        linkedUid: approved.association.uid,
+      }),
+    });
+    const verdict = classifyMembershipAssociation(associationState, association);
+    expect(verdict.decision).toBe('associate');
+
+    // The classifier emits no authority command and persists nothing. This models a
+    // future trusted caller only after it binds the verdict to the canonical record
+    // and reads that record's current revision.
+    expect(verdict.next.membershipId).toBe(approved.membershipId);
+    const linked = applyMembershipAuthorityCommand(approved, {
+      membershipAuthoritySchemaVersion: 1,
+      commandType: 'associate_account',
+      commandId: association.commandId,
+      expectedRevision: approved.revision,
+      uid: verdict.next.linkedUid,
+    });
+
+    expect(linked.term).toEqual(approved.term);
+    expect(deriveMembershipEntitlement({
+      membershipAuthoritySchemaVersion: 1,
+      record: linked,
+      uid: verdict.next.linkedUid,
+      asOfMs: 1_000_000,
+    }).entitlement).toBe('current_member');
   });
 
   test('the grant, and its next block, are frozen', () => {
