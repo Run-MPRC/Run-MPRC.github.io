@@ -53,6 +53,28 @@ const EXPECTED_NESTED_PICOMATCH = Object.freeze({
   resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz',
   integrity: 'sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==',
 });
+const EXPECTED_SYSTEMJS_TRANSFORM = Object.freeze({
+  version: '7.29.7',
+  resolved: 'https://registry.npmjs.org/@babel/plugin-transform-modules-systemjs/-/plugin-transform-modules-systemjs-7.29.7.tgz',
+  integrity: 'sha512-TM2ZcQLoG2/y4HODiStCo10DibYhWhGWAwVv+EQKmG/7GFl0N+AAmUiXOMKM+aiJ9XBJ9AHVZBvTzMnJ2sM3cQ==',
+});
+const EXPECTED_SYSTEMJS_LOCK_CLOSURE = Object.freeze({
+  'node_modules/@babel/code-frame': '7.29.7',
+  'node_modules/@babel/generator': '7.29.7',
+  'node_modules/@babel/helper-globals': '7.29.7',
+  'node_modules/@babel/helper-module-imports': '7.29.7',
+  'node_modules/@babel/helper-module-transforms': '7.29.7',
+  'node_modules/@babel/helper-plugin-utils': '7.29.7',
+  'node_modules/@babel/helper-string-parser': '7.29.7',
+  'node_modules/@babel/helper-validator-identifier': '7.29.7',
+  'node_modules/@babel/parser': '7.29.7',
+  'node_modules/@babel/plugin-transform-modules-systemjs': '7.29.7',
+  'node_modules/@babel/template': '7.29.7',
+  'node_modules/@babel/traverse': '7.29.7',
+  'node_modules/@babel/types': '7.29.7',
+  'node_modules/@jridgewell/gen-mapping': '0.3.13',
+  'node_modules/@jridgewell/trace-mapping': '0.3.31',
+});
 const EXPECTED_YAML = Object.freeze({
   version: '1.10.3',
   resolved: 'https://registry.npmjs.org/yaml/-/yaml-1.10.3.tgz',
@@ -451,6 +473,81 @@ test('does not compile inherited POSIX class names into host method text', () =>
   const alpha = picomatch.makeRe('[[:alpha:]]');
   assert.equal(alpha.test('A'), true);
   assert.equal(alpha.test('7'), false);
+});
+
+test('pins the sole SystemJS transform resolution to the reviewed patched chain', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+
+  assert.equal(packageJson.dependencies?.['@babel/plugin-transform-modules-systemjs'], undefined);
+  assert.equal(packageJson.devDependencies?.['@babel/plugin-transform-modules-systemjs'], undefined);
+  assert.equal(packageJson.optionalDependencies?.['@babel/plugin-transform-modules-systemjs'], undefined);
+  assert.equal(packageJson.peerDependencies?.['@babel/plugin-transform-modules-systemjs'], undefined);
+  assert.equal(packageJson.resolutions?.['@babel/plugin-transform-modules-systemjs'], undefined);
+  assert.equal(packageJson.overrides?.['@babel/plugin-transform-modules-systemjs'], undefined);
+
+  const preset = lock.packages['node_modules/@babel/preset-env'];
+  assert.equal(preset?.version, '7.26.9');
+  assert.equal(
+    preset?.dependencies?.['@babel/plugin-transform-modules-systemjs'],
+    '^7.25.9',
+  );
+
+  const lockedPaths = Object.keys(lock.packages).filter((packagePath) => (
+    packagePath === 'node_modules/@babel/plugin-transform-modules-systemjs'
+    || packagePath.endsWith('/node_modules/@babel/plugin-transform-modules-systemjs')
+  ));
+  assert.deepEqual(lockedPaths, ['node_modules/@babel/plugin-transform-modules-systemjs']);
+
+  const transform = lock.packages['node_modules/@babel/plugin-transform-modules-systemjs'];
+  assert.deepEqual(
+    {
+      version: transform?.version,
+      resolved: transform?.resolved,
+      integrity: transform?.integrity,
+    },
+    EXPECTED_SYSTEMJS_TRANSFORM,
+    'the SystemJS transform must retain its reviewed public-registry identity',
+  );
+  assert.notEqual(transform?.dev, true);
+
+  for (const [packagePath, version] of Object.entries(EXPECTED_SYSTEMJS_LOCK_CLOSURE)) {
+    const record = lock.packages[packagePath];
+    assert.equal(record?.version, version, `${packagePath} must retain its reviewed version`);
+    assert.match(record?.resolved ?? '', /^https:\/\/registry\.npmjs\.org\//);
+    assert.match(record?.integrity ?? '', /^sha512-/);
+    assert.notEqual(record?.dev, true);
+  }
+  assert.equal(lock.packages['node_modules/@jridgewell/set-array'], undefined);
+
+  const installed = readJson(path.join(
+    REPOSITORY,
+    'node_modules/@babel/plugin-transform-modules-systemjs/package.json',
+  ));
+  assert.equal(installed.version, EXPECTED_SYSTEMJS_TRANSFORM.version);
+});
+
+test('emits computed syntax for an upstream SystemJS string-export fixture', () => {
+  const babel = require(path.join(REPOSITORY, 'node_modules/@babel/core'));
+  const systemJsTransform = require(path.join(
+    REPOSITORY,
+    'node_modules/@babel/plugin-transform-modules-systemjs',
+  ));
+  const source = [
+    'var foo, bar;',
+    'export {foo as "default exports", bar} from "./other.mjs";',
+    'export * from "./other.mjs";',
+  ].join('\n');
+
+  const output = babel.transformSync(source, {
+    babelrc: false,
+    configFile: false,
+    plugins: [systemJsTransform],
+  }).code;
+
+  assert.match(output, /_exportObj\["default exports"\] = _otherMjs\.foo;/);
+  assert.doesNotMatch(output, /_exportObj\.default exports/);
+  assert.doesNotThrow(() => new Function(output)); // eslint-disable-line no-new-func
 });
 
 test('pins the sole root yaml 1.x resolution to the patched 1.10.3 release', () => {
