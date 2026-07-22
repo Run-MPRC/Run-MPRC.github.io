@@ -1052,12 +1052,12 @@ Officer review steps after the source merge:
 5. Confirm a made-up provider query failure shows `We could not connect Strava. Please return to My Account and try again.`
 6. Confirm a made-up exchange failure shows the same sentence.
 7. Confirm no made-up provider detail appears on the page or in browser console output.
-8. Confirm missing-code and failed-security-check results still stop before an exchange.
+8. Confirm a missing code or state stops in the page before exchange, and a rejected server state uses the same fixed connection-failure result.
 9. Confirm only a successful exchange returns to My Account, and the visible `Back to account` link still works without an exchange.
 10. Confirm the failure sentence is announced as an urgent screen-reader alert.
 11. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, failed-security-check, success, and Back-to-account behavior stays in place. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange. It does not erase earlier browser, provider, hosting, or network copies or complete issue #88.
+**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, missing-state, server-rejection, success, and Back-to-account behavior stays in place. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange, and #441 adds the later source-only server state decision. Neither erases earlier browser, provider, hosting, or network copies or completes issue #88.
 
 **Stop conditions:** any real member or Strava account; a request for a callback URL, authorization code, state value, provider error, private browser history, or screenshot containing private values; a real provider call; a production Firebase or Strava change; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the wording is live.
 
@@ -1118,7 +1118,58 @@ Officer review steps after the source merge:
 
 **Escalation:** contact the platform/security and privacy owners if callback details may have appeared outside the current clean page. Use the private incident path. Do not copy a value into an issue, message, screenshot, or AI tool.
 
-This child keeps canonical issue #88 open and incomplete. Server-issued one-use state, UID/session binding, expiry and replay protection, App Check handoff, account and scope policy, concurrency, revoke/audit behavior, IAM/encryption, provider configuration, deployment, and live verification remain separate work.
+This child keeps canonical issue #88 open and incomplete. The separate #441 procedure below records the later source-only server state boundary. Native App Check enforcement, account and scope policy, refresh concurrency, revoke/audit behavior, IAM/encryption, provider configuration, deployment, and live verification remain separate work.
+
+## Strava one-use connection check — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** make one Strava connection attempt usable only by the same signed-in account session that started it, for ten minutes and one server use.
+
+**Approver:** membership lead plus platform/security and privacy owners.
+
+**Prerequisites:** issue [#441](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/441) must be merged at one exact reviewed commit. Source review uses only made-up state, account, session, and provider values with mocked Firebase and Strava boundaries. A future staged release requires the separate reviewed clean-page App Check handoff, then the exact begin and exchange Functions deployed and read back before the matching website revision. The current initial callback suppresses browser App Check startup and is not proof of fail-closed compatibility. An approved non-production callback rehearsal is separate provider evidence; it does not by itself prove production or live behavior. A source merge, preview, green workflow, or website-only publication is not enough.
+
+```mermaid
+flowchart LR
+    A["Member chooses Connect Strava"] --> B["Server creates one short-lived challenge"]
+    B --> C["Server stores digest and account-session binding only"]
+    B --> D["Strava returns code and challenge"]
+    D --> E["Page cleans the current address"]
+    E --> F{"Server consumes exact challenge once?"}
+    F -- "No, expired, wrong, or repeated" --> G["Fixed stop; try again from My Account"]
+    F -- "Yes" --> H["Delete challenge before provider exchange"]
+```
+
+Text alternative: the server gives the signed-in member one short-lived Strava challenge but stores only its digest and account-session binding; after the page cleans the callback address, the server deletes one exact match before exchange, and every expired, wrong, or repeated attempt stops with the same retry path.
+
+Officer review steps after the source merge:
+
+1. Keep this procedure marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for issue #441, the reviewed pull request, exact merged commit, and synthetic test results.
+3. Confirm the tests use no real member, Firebase project, Strava account, callback, code, state, token, or provider request.
+4. Confirm the begin Function applies its existing App Check guard, then requires a signed-in account and a valid Auth-session marker before writing a challenge.
+5. Confirm the server stores no raw challenge. The retained record contains fixed schema/provider labels, a digest, UID, session marker, issue time, and expiry only. The raw challenge must not be in the database, connection record, logs, screenshots, or issue evidence.
+6. Confirm starting again replaces the earlier challenge for that same website account.
+7. Confirm the callback still removes current address details before it sends the made-up code and state to the server.
+8. Confirm the server transaction checks the same UID and session, the exact digest, and the ten-minute expiry, then deletes the record before any Strava request or connection write. Source tests use a mocked Strava boundary.
+9. Confirm missing, malformed, wrong-account, wrong-session, mismatched, expired, repeated, and simultaneous losing attempts all stop before the provider and connection write.
+10. Confirm two simultaneous made-up callbacks produce at most one provider attempt.
+11. Confirm a provider or database failure after consumption does not restore or reuse the challenge; the member starts again from My Account.
+12. Confirm the Connect button blocks a repeated click while start is pending, navigates only after a valid server result, and shows one plain retry result on failure.
+13. Confirm account, service, or page changes make an older browser completion inert.
+14. Confirm this state creates no membership, payment, discount, member role, or admin authority.
+15. Record source changed, tests passed, merged, Firebase Functions deployed, website published, `runmprc.com` revision verified, Strava configured, production data changed, and live behavior verified as separate results.
+
+**Expected result:** source permits one matching, unexpired challenge to reach the existing exchange path, which is mocked in source tests. Every invalid or repeated attempt receives one fixed failure before provider or connection work. A later start invalidates the earlier challenge. The raw challenge is returned through the server/browser/provider handoff and is never persisted server-side. This is source behavior only until both Functions and the website are released backend-first and separately verified.
+
+**Stop conditions:** any real account, Strava account, callback, code, state, token, browser-history capture, developer-tools capture, production record, provider call, or secret; a raw challenge in storage or logs; more than one provider call for simultaneous use; website publication before both Functions are verified; missing App Check/Auth checks; or a claim that source, tests, merge, preview, or green CI proves live protection.
+
+**Success proof:** for source completion, record issue #441, the reviewed pull request, exact commit, intended old-source failure, green begin/consume/replay/race/browser/callback tests, relevant full checks, and independent security/privacy/officer reviews. For a future staged release, separately record the protected Firebase deployment and readback, matching website publication, exact `runmprc.com` revision, approved non-production Strava configuration, and a made-up callback rehearsal. None of those results alone proves production live behavior. Do not use production data or a real member.
+
+**Undo:** before publication, use one reviewed revert or safe roll-forward. After a future approved release, restore the previous compatible Functions and website revisions together through the protected backend-first rollback, then verify both surfaces separately. Never undo by copying, recreating, or replaying a callback value or editing a member secret record.
+
+**Escalation:** contact the platform/security and privacy owners. Add the membership lead if a member cannot reconnect. Use the private incident path if a callback value, token, or account detail may have appeared outside the protected flow; do not copy it into an issue, message, screenshot, email, or AI tool.
 
 ## Strava connection record pairing — SOURCE ONLY, NOT LIVE
 

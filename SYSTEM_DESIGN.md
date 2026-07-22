@@ -132,23 +132,46 @@ Text alternative: the 404 page temporarily carries the complete return route to 
 
 ### Strava callback current-address cleanup — source only, not live
 
-OAUTH-001C1G [#335](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/335) adds a second boundary after the existing Pages handoff. The Strava callback keeps only its initial `code`, `state`, and provider-error fields in temporary component memory. It replaces the current native browser and React Router entry with the same path, no address details after `?` or `#`, and no saved callback detail before the callback mounts its Auth/service work, verifies state, or starts the existing exchange attempt.
+OAUTH-001C1G [#335](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/335) adds a second boundary after the existing Pages handoff. The Strava callback keeps only its initial `code`, `state`, and provider-error fields in temporary component memory. It replaces the current native browser and React Router entry with the same path, no address details after `?` or `#`, and no saved callback detail before the callback mounts its Auth/service work, checks the required fields, or starts the server exchange attempt.
 
 ```mermaid
 flowchart LR
     Route["Strava callback with made-up address details after ? or #"] --> Capture["Capture three selected fields in temporary page memory"]
     Capture --> Replace["Replace current browser and Router entry with path only"]
     Replace --> Clean{"Both current locations clean?"}
-    Clean -- "Not yet" --> Wait["Wait; no state check or exchange"]
+    Clean -- "Not yet" --> Wait["Wait; no callback check or exchange"]
     Wait -. "Detected replacement failure" .-> Stop["Fixed accessible failure"]
     Clean -- "Yes" --> Checks["Existing sign-in, provider-error, code, and state checks"]
     Checks --> Exchange["At most one exchange attempt for the same signed-in account and app"]
     Outside["Earlier browser, provider, hosting, or network copies"] -. "Remain outside this boundary" .-> Residual["Back or history is not cleanup proof"]
 ```
 
-Text alternative: the callback captures three selected made-up fields in temporary page memory, replaces the current browser and Router entry with the clean path, and proceeds to the existing checks only after both current locations are clean. Unconfirmed cleanup waits without state verification or exchange. A detected replacement failure shows the fixed stop. Cleaning the current entry does not erase earlier browser or outside copies.
+Text alternative: the callback captures three selected made-up fields in temporary page memory, replaces the current browser and Router entry with the clean path, and proceeds to the callback checks only after both current locations are clean. Unconfirmed cleanup waits without an exchange. A detected replacement failure shows the fixed stop. Cleaning the current entry does not erase earlier browser or outside copies.
 
-The source also discards a later same-route callback. After unmount or a signed-in UID, service, Firebase resources, or app change, an obsolete browser result cannot navigate or show success. That does not cancel an exchange that already reached the server or provider; its outcome may still occur and require separate reconciliation. This child does not change the Pages bridge, provider request, server state model, App Check enforcement, scopes, membership, or deployment. Source, tests, merge, website publication, `runmprc.com` revision verification, Firebase deployment, Strava configuration, production data, and live OAuth behavior remain separate states. Canonical [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) remains open for server-issued one-use state, expiry/replay, account and scope policy, concurrency, reconciliation, revoke/audit, IAM/encryption, provider configuration, deployment, and live proof.
+The source also discards a later same-route callback. After unmount or a signed-in UID, service, Firebase resources, or app change, an obsolete browser result cannot navigate or show success. That does not cancel an exchange that already reached the server or provider; its outcome may still occur and require separate reconciliation. The later #441 boundary below supplies source-only server-issued state, UID/session binding, expiry, and one-use consumption without changing this address-cleanup order. Source, tests, merge, website publication, `runmprc.com` revision verification, Firebase deployment, Strava configuration, production data, and live OAuth behavior remain separate states. Canonical [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) remains open for native App Check enforcement, account and scope policy, refresh concurrency, reconciliation, revoke/audit, IAM/encryption, provider configuration, deployment, and live proof.
+
+### Strava server-issued one-use state — source only, not live
+
+OAUTH-001C1H [#441](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/441) replaces browser-generated, `sessionStorage`-authoritative OAuth state with one server-issued challenge. The signed-in website calls `stravaBeginAuthorization`; after the existing App Check and Auth guards, the Function creates 32 random bytes, returns the base64url challenge, and stores only its SHA-256 digest in one fixed server-only `members/{uid}/secrets/stravaOAuthState` record. The record is bound to the exact UID and decoded Firebase Auth `auth_time`, expires after ten minutes, and is overwritten by a later begin request for the same UID.
+
+```mermaid
+flowchart LR
+    Start["Signed-in member chooses Connect Strava"] --> Begin["Begin Function: App Check, Auth, and auth_time"]
+    Begin --> Record["Server-only fixed record: digest, UID, session marker, expiry"]
+    Begin --> Provider["Raw challenge travels to Strava in OAuth state"]
+    Provider --> Callback["Callback captures code and state, then cleans current address"]
+    Callback --> Exchange["Exchange Function receives code and state"]
+    Exchange --> Consume{"Transaction consumes one matching, unexpired record?"}
+    Consume -- "No" --> Stop["Fixed denial; no provider call or connection write"]
+    Consume -- "Yes" --> Delete["Delete challenge before external work"]
+    Delete --> Token["Existing validated Strava token exchange and paired local write"]
+```
+
+Text alternative: a signed-in member receives one short-lived Strava state value while the server retains only its digest and identity/session binding; after the callback address is clean, one transaction deletes the matching record before the existing provider exchange, while every mismatch, expiry, replay, or concurrent loser stops without contacting Strava or changing the connection.
+
+The state transition is `absent -> active`, or `active-old -> active-new` when connection is started again, followed by exactly one `active -> consumed` transaction. Missing, malformed, wrong-UID, wrong-session, expired, mismatched, already-consumed, and concurrently lost attempts share a fixed public failure and perform no provider or connection write. A provider or persistence failure after consumption does not restore the challenge; the member must start again. Because there is one fixed per-UID record that is overwritten or deleted, this additive source change needs no backfill or collection migration. Existing Firestore Rules already deny every browser read and write under `members/{uid}/secrets/{secretId}`.
+
+This source does not prove the custom App Check guard is fail-closed in a deployed environment, enable native runtime App Check enforcement, configure or contact Strava, deploy Firebase or the website, inspect production data, or prove live OAuth behavior. The initial capability-bearing callback currently suppresses browser App Check startup, so a separate reviewed clean-page handoff is required before fail-closed exchange enforcement can be called compatible. Those remain separate work under [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88), ABUSE-001A, and the protected release issues.
 
 ### Firebase Auth action link — source only, not live
 
@@ -302,6 +325,7 @@ All four slices are source boundaries until the exact Rules, Functions, and webs
 | `members/{uid}` | Profile and role mirror | Create-once signup/recovery Functions create phone-free pending profiles; self-service name-only allowlist while #178/#197 pause phone collection; server role operations | Confidential |
 | `members/{uid}/connections/{provider}` | Non-secret connection metadata | Cloud Functions | Confidential |
 | `members/{uid}/secrets/{provider}` | OAuth tokens | Cloud Functions | Restricted secret |
+| `members/{uid}/secrets/stravaOAuthState` | One transient Strava state digest with UID/Auth-session binding and expiry; raw state is never stored | Cloud Functions | Restricted security state |
 | `promoCodes/{id}` | Intended promotion configuration | Admin only | Confidential; currently not integrated into checkout validation |
 | `ratelimits/{bucket}` | Abuse-control counters | Cloud Functions | Confidential operational data |
 | `mail/{id}` | Transactional email outbox | Cloud Functions and email extension | Restricted PII |

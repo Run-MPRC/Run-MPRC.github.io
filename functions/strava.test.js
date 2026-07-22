@@ -29,12 +29,38 @@ jest.mock('firebase-admin', () => {
   const deletes = [];
   const directSetAttempts = [];
   const documents = new Map();
+  const documentVersions = new Map();
   const reads = [];
+  let transactionCommitFailure;
+  let transactionCommitPostApplyFailure;
+  const transactionCommitAttempts = [];
+  const transactionDeleteAttempts = [];
+  const transactionDeleteFailures = new Map();
+  const transactionDeletes = [];
+  const transactionGetFailures = new Map();
+  const transactionReads = [];
+  let transactionBeforeCommitHook;
+  let transactionRetryHook;
+  let transactionRunAttempts = 0;
+  let transactionRunFailure;
   const writeFailures = new Map();
   const writes = [];
 
+  function bumpVersion(path) {
+    documentVersions.set(path, (documentVersions.get(path) || 0) + 1);
+  }
+
+  function applyDelete(path) {
+    documents.delete(path);
+    bumpVersion(path);
+  }
+
   function applyWrite(operation) {
     writes.push(operation);
+    if (operation.options === undefined) {
+      documents.set(operation.path, operation.data);
+      bumpVersion(operation.path);
+    }
   }
 
   function document(path) {
@@ -48,6 +74,7 @@ jest.mock('firebase-admin', () => {
         if (deleteFailures.has(path)) {
           throw deleteFailures.get(path);
         }
+        applyDelete(path);
       },
       get: async () => {
         reads.push(path);
@@ -105,6 +132,66 @@ jest.mock('firebase-admin', () => {
         };
         return batch;
       },
+      runTransaction: async (updateFunction) => {
+        transactionRunAttempts += 1;
+        if (transactionRunFailure) throw transactionRunFailure;
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const readVersions = new Map();
+          const stagedDeletes = [];
+          const transaction = {
+            get: async (ref) => {
+              transactionReads.push(ref.path);
+              if (transactionGetFailures.has(ref.path)) {
+                throw transactionGetFailures.get(ref.path);
+              }
+              const version = documentVersions.get(ref.path) || 0;
+              const exists = documents.has(ref.path);
+              const data = documents.get(ref.path);
+              readVersions.set(ref.path, version);
+              return {
+                exists,
+                data: () => data,
+              };
+            },
+            delete: (ref) => {
+              transactionDeleteAttempts.push(ref.path);
+              if (transactionDeleteFailures.has(ref.path)) {
+                throw transactionDeleteFailures.get(ref.path);
+              }
+              stagedDeletes.push(ref.path);
+              return transaction;
+            },
+          };
+
+          const result = await updateFunction(transaction);
+          transactionCommitAttempts.push([...stagedDeletes]);
+          if (transactionCommitFailure) throw transactionCommitFailure;
+          if (transactionBeforeCommitHook) await transactionBeforeCommitHook();
+
+          let conflicted = false;
+          for (const [path, readVersion] of readVersions) {
+            if ((documentVersions.get(path) || 0) !== readVersion) {
+              conflicted = true;
+              break;
+            }
+          }
+          if (conflicted) {
+            if (transactionRetryHook) await transactionRetryHook();
+            continue;
+          }
+
+          for (const path of stagedDeletes) {
+            transactionDeletes.push(path);
+            applyDelete(path);
+          }
+          if (transactionCommitPostApplyFailure) {
+            throw transactionCommitPostApplyFailure;
+          }
+          return result;
+        }
+        throw new Error('synthetic transaction retry limit');
+      },
       collection: (name) => ({
         doc: (id) => document(`${name}/${id}`),
       }),
@@ -117,7 +204,10 @@ jest.mock('firebase-admin', () => {
       deleteFailures.clear();
       deletes.splice(0, deletes.length);
     },
-    __clearDocuments: () => documents.clear(),
+    __clearDocuments: () => {
+      documents.clear();
+      documentVersions.clear();
+    },
     __clearReads: () => reads.splice(0, reads.length),
     __clearWrites: () => {
       batchCommitFailure = undefined;
@@ -128,6 +218,18 @@ jest.mock('firebase-admin', () => {
       batchSetAttempts.splice(0, batchSetAttempts.length);
       batchSetFailures.clear();
       directSetAttempts.splice(0, directSetAttempts.length);
+      transactionCommitFailure = undefined;
+      transactionCommitPostApplyFailure = undefined;
+      transactionCommitAttempts.splice(0, transactionCommitAttempts.length);
+      transactionDeleteAttempts.splice(0, transactionDeleteAttempts.length);
+      transactionDeleteFailures.clear();
+      transactionDeletes.splice(0, transactionDeletes.length);
+      transactionGetFailures.clear();
+      transactionReads.splice(0, transactionReads.length);
+      transactionBeforeCommitHook = undefined;
+      transactionRetryHook = undefined;
+      transactionRunAttempts = 0;
+      transactionRunFailure = undefined;
       writeFailures.clear();
       writes.splice(0, writes.length);
     },
@@ -138,6 +240,11 @@ jest.mock('firebase-admin', () => {
     __getDirectSetAttempts: () => [...directSetAttempts],
     __getDocument: (path) => documents.get(path),
     __getReads: () => [...reads],
+    __getTransactionCommitAttempts: () => [...transactionCommitAttempts],
+    __getTransactionDeleteAttempts: () => [...transactionDeleteAttempts],
+    __getTransactionDeletes: () => [...transactionDeletes],
+    __getTransactionReads: () => [...transactionReads],
+    __getTransactionRunAttempts: () => transactionRunAttempts,
     __getWrites: () => [...writes],
     __hasDocument: (path) => documents.has(path),
     __setBatchCommitFailure: (error) => {
@@ -151,7 +258,30 @@ jest.mock('firebase-admin', () => {
     },
     __setBatchSetFailure: (path, error) => batchSetFailures.set(path, error),
     __setDeleteFailure: (path, error) => deleteFailures.set(path, error),
-    __setDocument: (path, data) => documents.set(path, data),
+    __removeDocument: (path) => applyDelete(path),
+    __setDocument: (path, data) => {
+      documents.set(path, data);
+      bumpVersion(path);
+    },
+    __setTransactionCommitFailure: (error) => {
+      transactionCommitFailure = error;
+    },
+    __setTransactionCommitPostApplyFailure: (error) => {
+      transactionCommitPostApplyFailure = error;
+    },
+    __setTransactionDeleteFailure: (path, error) => {
+      transactionDeleteFailures.set(path, error);
+    },
+    __setTransactionGetFailure: (path, error) => transactionGetFailures.set(path, error),
+    __setTransactionBeforeCommitHook: (hook) => {
+      transactionBeforeCommitHook = hook;
+    },
+    __setTransactionRetryHook: (hook) => {
+      transactionRetryHook = hook;
+    },
+    __setTransactionRunFailure: (error) => {
+      transactionRunFailure = error;
+    },
     __setWriteFailure: (path, error) => writeFailures.set(path, error),
   };
 });
@@ -172,19 +302,30 @@ jest.mock('./stripeHelpers', () => ({
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
 const { Timestamp } = require('firebase-admin/firestore');
+const { createHash } = require('node:crypto');
 const { requireAppCheck } = require('./stripeHelpers');
-const { stravaDisconnect, stravaExchangeCode, stravaFetchStats } = require('./strava');
+const {
+  stravaBeginAuthorization,
+  stravaDisconnect,
+  stravaExchangeCode,
+  stravaFetchStats,
+} = require('./strava');
 
 const FIXED_AUTHORIZATION_ERROR = 'Strava authorization could not be completed.';
 const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
 const FIXED_DATA_ERROR = 'Strava activity data could not be loaded.';
 const FIXED_DISCONNECT_WARNING = 'strava_disconnect_revoke_failed';
 const GUARDED_FETCH = global.fetch;
+const AUTH_TIME = 1_700_000_000;
 const CONTEXT = Object.freeze({
   app: Object.freeze({ appId: 'synthetic-app-check' }),
-  auth: Object.freeze({ uid: 'synthetic-member-000001' }),
+  auth: Object.freeze({
+    uid: 'synthetic-member-000001',
+    token: Object.freeze({ auth_time: AUTH_TIME }),
+  }),
 });
 const CODE = 'synthetic_authorization_code';
+const STATE = 'A'.repeat(43);
 const MAX_AUTHORIZATION_CODE_LENGTH = 1_024;
 const MAX_TOKEN_LENGTH = 2_048;
 const MAX_SCOPE_LENGTH = 1_024;
@@ -196,6 +337,7 @@ const MAX_ACTIVITY_DATE_LENGTH = 64;
 const MAX_STRAVA_LONG_AS_NUMBER = 9_223_372_036_854_776_000;
 const CONNECTION_PATH = 'members/synthetic-member-000001/connections/strava';
 const SECRET_PATH = 'members/synthetic-member-000001/secrets/strava';
+const STATE_PATH = 'members/synthetic-member-000001/secrets/stravaOAuthState';
 
 function publicError(error) {
   return {
@@ -215,9 +357,294 @@ async function captureFailure(action) {
   throw new Error('Expected Strava request to fail.');
 }
 
+function sha256Hex(value) {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function validOAuthStateRecord({
+  state = STATE,
+  uid = CONTEXT.auth.uid,
+  authTime = AUTH_TIME,
+  issuedAtSeconds = 1_800_000_000,
+  expiresAtSeconds = issuedAtSeconds + 600,
+} = {}) {
+  return {
+    schemaVersion: 1,
+    provider: 'strava',
+    stateDigest: sha256Hex(state),
+    uid,
+    authTime,
+    issuedAtSeconds,
+    expiresAtSeconds,
+  };
+}
+
+describe('Strava authorization challenge creation boundary', () => {
+  let consoleSpies;
+  let dateNowSpy;
+
+  const NOW_SECONDS = 1_800_000_000;
+
+  beforeEach(() => {
+    admin.__clearDeletes();
+    admin.__clearDocuments();
+    admin.__clearReads();
+    admin.__clearWrites();
+    requireAppCheck.mockReset();
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(NOW_SECONDS * 1_000);
+    consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  });
+
+  afterEach(() => {
+    dateNowSpy.mockRestore();
+    consoleSpies.forEach((spy) => spy.mockRestore());
+  });
+
+  function expectNoBeginSideEffects() {
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  test('runs App Check before reading Auth or creating a challenge', async () => {
+    const authRead = jest.fn();
+    const context = { app: CONTEXT.app };
+    Object.defineProperty(context, 'auth', {
+      get: () => {
+        authRead();
+        return CONTEXT.auth;
+      },
+    });
+    const appCheckFailure = new functions.https.HttpsError(
+      'failed-precondition',
+      'synthetic app check rejection',
+    );
+    requireAppCheck.mockImplementationOnce(() => {
+      throw appCheckFailure;
+    });
+
+    await expect(stravaBeginAuthorization({}, context)).rejects.toBe(appCheckFailure);
+
+    expect(requireAppCheck).toHaveBeenCalledWith(context);
+    expect(authRead).not.toHaveBeenCalled();
+    expectNoBeginSideEffects();
+  });
+
+  test('rejects a missing caller before request validation or Firestore', async () => {
+    const error = await captureFailure(() => stravaBeginAuthorization(
+      { unexpected: 'synthetic' },
+      { ...CONTEXT, auth: null },
+    ));
+
+    expect(publicError(error)).toEqual({
+      code: 'unauthenticated',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(requireAppCheck).toHaveBeenCalledTimes(1);
+    expectNoBeginSideEffects();
+  });
+
+  test.each([
+    ['missing', {}],
+    ['own undefined', { auth_time: undefined }],
+    ['null', { auth_time: null }],
+    ['zero', { auth_time: 0 }],
+    ['negative', { auth_time: -1 }],
+    ['fractional', { auth_time: 1.5 }],
+    ['NaN', { auth_time: Number.NaN }],
+    ['infinite', { auth_time: Number.POSITIVE_INFINITY }],
+    ['unsafe', { auth_time: Number.MAX_SAFE_INTEGER + 1 }],
+    ['string', { auth_time: String(AUTH_TIME) }],
+    ['bigint', { auth_time: BigInt(AUTH_TIME) }],
+    ['boxed', { auth_time: Object(AUTH_TIME) }],
+    ['inherited', Object.create({ auth_time: AUTH_TIME })],
+    ['proxied', new Proxy({ auth_time: AUTH_TIME }, {})],
+  ])('rejects %s decoded auth_time before challenge creation', async (_name, token) => {
+    const error = await captureFailure(() => stravaBeginAuthorization({}, {
+      ...CONTEXT,
+      auth: { uid: CONTEXT.auth.uid, token },
+    }));
+
+    expect(publicError(error)).toEqual({
+      code: 'unauthenticated',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expectNoBeginSideEffects();
+  });
+
+  test('does not invoke a decoded auth_time accessor while rejecting it', async () => {
+    const authTimeRead = jest.fn();
+    const token = {};
+    Object.defineProperty(token, 'auth_time', { enumerable: true, get: authTimeRead });
+
+    const error = await captureFailure(() => stravaBeginAuthorization({}, {
+      ...CONTEXT,
+      auth: { uid: CONTEXT.auth.uid, token },
+    }));
+
+    expect(publicError(error)).toEqual({
+      code: 'unauthenticated',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(authTimeRead).not.toHaveBeenCalled();
+    expectNoBeginSideEffects();
+  });
+
+  test.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['an array', []],
+    ['an extra field', { unexpected: true }],
+    ['a custom prototype', Object.create({ inherited: true })],
+    ['a Proxy', new Proxy({}, {})],
+  ])('requires an exact empty request instead of %s', async (_name, data) => {
+    const error = await captureFailure(() => stravaBeginAuthorization(data, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'invalid-argument',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expectNoBeginSideEffects();
+  });
+
+  test.each([
+    ['minimum', 1],
+    ['maximum', Number.MAX_SAFE_INTEGER],
+  ])('accepts the exact positive-safe-integer %s auth_time boundary', async (
+    _name,
+    authTime,
+  ) => {
+    const context = {
+      ...CONTEXT,
+      auth: { uid: CONTEXT.auth.uid, token: { auth_time: authTime } },
+    };
+
+    const result = await stravaBeginAuthorization({}, context);
+
+    expect(result.state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(result.expiresInSeconds).toBe(600);
+    expect(admin.__getDocument(STATE_PATH)).toEqual(expect.objectContaining({ authTime }));
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('stores one digest-only fixed record and returns only the raw challenge and lifetime', async () => {
+    const result = await stravaBeginAuthorization({}, CONTEXT);
+
+    expect(result).toEqual({
+      state: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
+      expiresInSeconds: 600,
+    });
+    expect(Buffer.from(result.state, 'base64url')).toHaveLength(32);
+    const expectedRecord = {
+      schemaVersion: 1,
+      provider: 'strava',
+      stateDigest: sha256Hex(result.state),
+      uid: CONTEXT.auth.uid,
+      authTime: AUTH_TIME,
+      issuedAtSeconds: NOW_SECONDS,
+      expiresAtSeconds: NOW_SECONDS + 600,
+    };
+    expect(admin.__getDirectSetAttempts()).toEqual([{
+      path: STATE_PATH,
+      data: expectedRecord,
+      options: undefined,
+    }]);
+    expect(admin.__getDocument(STATE_PATH)).toEqual(expectedRecord);
+    expect(JSON.stringify(expectedRecord)).not.toContain(result.state);
+    expect(Object.keys(expectedRecord)).toEqual([
+      'schemaVersion',
+      'provider',
+      'stateDigest',
+      'uid',
+      'authTime',
+      'issuedAtSeconds',
+      'expiresAtSeconds',
+    ]);
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('replaces the one prior challenge record for the same UID', async () => {
+    const first = await stravaBeginAuthorization({}, CONTEXT);
+    const second = await stravaBeginAuthorization({}, CONTEXT);
+
+    expect(second.state).not.toBe(first.state);
+    expect(admin.__getDirectSetAttempts()).toHaveLength(2);
+    expect(admin.__getDocument(STATE_PATH)).toEqual({
+      schemaVersion: 1,
+      provider: 'strava',
+      stateDigest: sha256Hex(second.state),
+      uid: CONTEXT.auth.uid,
+      authTime: AUTH_TIME,
+      issuedAtSeconds: NOW_SECONDS,
+      expiresAtSeconds: NOW_SECONDS + 600,
+    });
+    expect(JSON.stringify(admin.__getDocument(STATE_PATH))).not.toContain(first.state);
+    expect(JSON.stringify(admin.__getDocument(STATE_PATH))).not.toContain(second.state);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('maps a Firestore replacement failure to one fixed error without exposing it', async () => {
+    admin.__setWriteFailure(
+      STATE_PATH,
+      new Error('challenge-write-canary raw-state-canary'),
+    );
+
+    const error = await captureFailure(() => stravaBeginAuthorization({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error))).not.toMatch(/challenge-write-canary|raw-state-canary/u);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getWrites()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test.each([
+    ['not-a-number', Number.NaN],
+    ['zero', 0],
+    ['overflow', Number.MAX_SAFE_INTEGER * 1_000],
+    ['non-numeric', BigInt(NOW_SECONDS * 1_000)],
+  ])('maps a %s server clock to one fixed error before challenge creation', async (
+    _name,
+    now,
+  ) => {
+    dateNowSpy.mockReturnValue(now);
+
+    const error = await captureFailure(() => stravaBeginAuthorization({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expectNoBeginSideEffects();
+  });
+});
+
 describe('Strava authorization exchange failure boundary', () => {
   let fetchMock;
   let consoleSpies;
+  let dateNowSpy;
+
+  const NOW_SECONDS = 1_800_000_000;
 
   beforeEach(() => {
     process.env.STRAVA_CLIENT_ID = 'strava_client_test';
@@ -228,6 +655,11 @@ describe('Strava authorization exchange failure boundary', () => {
     admin.__clearWrites();
     Timestamp.now.mockClear();
     requireAppCheck.mockReset();
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(NOW_SECONDS * 1_000);
+    admin.__setDocument(STATE_PATH, validOAuthStateRecord({
+      issuedAtSeconds: NOW_SECONDS - 1,
+      expiresAtSeconds: NOW_SECONDS + 599,
+    }));
     fetchMock = jest.fn();
     global.fetch = fetchMock;
     consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
@@ -236,6 +668,7 @@ describe('Strava authorization exchange failure boundary', () => {
 
   afterEach(() => {
     global.fetch = GUARDED_FETCH;
+    dateNowSpy.mockRestore();
     consoleSpies.forEach((spy) => spy.mockRestore());
     delete process.env.STRAVA_CLIENT_ID;
     delete process.env.STRAVA_CLIENT_SECRET;
@@ -328,7 +761,10 @@ describe('Strava authorization exchange failure boundary', () => {
     configure(failure);
     const json = mockSuccessfulExchange();
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
     const exposed = publicError(error);
 
     expect(exposed).toEqual({
@@ -347,13 +783,18 @@ describe('Strava authorization exchange failure boundary', () => {
     expect(admin.__getDeletes()).toEqual([]);
     expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
     expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
 
   async function expectInvalidSuccessfulResponse(response) {
     const json = mockExchangeResponse(response);
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
 
     expect(publicError(error)).toEqual({
       code: 'internal',
@@ -363,6 +804,8 @@ describe('Strava authorization exchange failure boundary', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledTimes(1);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
     expectNoSideEffects();
   }
 
@@ -377,6 +820,7 @@ describe('Strava authorization exchange failure boundary', () => {
 
     await expect(stravaExchangeCode({
       code: 'x'.repeat(MAX_AUTHORIZATION_CODE_LENGTH + 1),
+      state: STATE,
     }, CONTEXT)).rejects.toBe(appCheckFailure);
 
     expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
@@ -387,6 +831,7 @@ describe('Strava authorization exchange failure boundary', () => {
   test('rejects a missing caller before code validation, provider exchange, or Firestore', async () => {
     await expect(stravaExchangeCode({
       code: 'x'.repeat(MAX_AUTHORIZATION_CODE_LENGTH + 1),
+      state: STATE,
     }, { ...CONTEXT, auth: null }))
       .rejects.toMatchObject({ code: 'unauthenticated' });
 
@@ -399,7 +844,7 @@ describe('Strava authorization exchange failure boundary', () => {
     delete process.env.STRAVA_CLIENT_ID;
     delete process.env.STRAVA_CLIENT_SECRET;
 
-    const error = await captureFailure(() => stravaExchangeCode({}, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({ state: STATE }, CONTEXT));
 
     expect(publicError(error)).toEqual({
       code: 'invalid-argument',
@@ -410,6 +855,445 @@ describe('Strava authorization exchange failure boundary', () => {
     expect(requireAppCheck).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
     expectNoSideEffects();
+  });
+
+  test('rejects exchange before provider access when no server challenge exists', async () => {
+    mockSuccessfulExchange();
+    admin.__removeDocument(STATE_PATH);
+
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSideEffects();
+  });
+
+  test.each([
+    ['missing token', undefined],
+    ['missing auth_time', {}],
+    ['zero auth_time', { auth_time: 0 }],
+    ['fractional auth_time', { auth_time: 1.5 }],
+    ['unsafe auth_time', { auth_time: Number.MAX_SAFE_INTEGER + 1 }],
+    ['string auth_time', { auth_time: String(AUTH_TIME) }],
+  ])('rejects %s after Auth and before request validation or Firestore', async (
+    _name,
+    token,
+  ) => {
+    const error = await captureFailure(() => stravaExchangeCode(
+      { unexpected: 'synthetic' },
+      { ...CONTEXT, auth: { uid: CONTEXT.auth.uid, token } },
+    ));
+
+    expect(publicError(error)).toEqual({
+      code: 'unauthenticated',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSideEffects();
+  });
+
+  test.each([
+    ['undefined root', undefined],
+    ['null root', null],
+    ['array root', [CODE, STATE]],
+    ['missing code', { state: STATE }],
+    ['extra field', { code: CODE, state: STATE, unexpected: true }],
+    ['custom prototype', Object.assign(Object.create({ inherited: true }), {
+      code: CODE,
+      state: STATE,
+    })],
+    ['Proxy root', new Proxy({ code: CODE, state: STATE }, {})],
+  ])('rejects an inexact authorization request with %s before Firestore', async (
+    _name,
+    data,
+  ) => {
+    const error = await captureFailure(() => stravaExchangeCode(data, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'invalid-argument',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSideEffects();
+  });
+
+  test.each([
+    ['missing', { code: CODE }],
+    ['own undefined', { code: CODE, state: undefined }],
+    ['null', { code: CODE, state: null }],
+    ['empty', { code: CODE, state: '' }],
+    ['short', { code: CODE, state: 'A'.repeat(42) }],
+    ['long', { code: CODE, state: 'A'.repeat(44) }],
+    ['non-base64url', { code: CODE, state: `${'A'.repeat(42)}+` }],
+    ['padded', { code: CODE, state: `${'A'.repeat(42)}=` }],
+    ['non-canonical trailing bits', { code: CODE, state: 'B'.repeat(43) }],
+    ['boxed', { code: CODE, state: Object(STATE) }],
+  ])('returns one fixed denial for %s state before any transaction or provider access', async (
+    _name,
+    data,
+  ) => {
+    delete process.env.STRAVA_CLIENT_ID;
+    delete process.env.STRAVA_CLIENT_SECRET;
+
+    const error = await captureFailure(() => stravaExchangeCode(data, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSideEffects();
+  });
+
+  test('returns the fixed state denial without invoking a state accessor', async () => {
+    const stateRead = jest.fn();
+    const data = { code: CODE };
+    Object.defineProperty(data, 'state', { enumerable: true, get: stateRead });
+
+    const error = await captureFailure(() => stravaExchangeCode(data, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(stateRead).not.toHaveBeenCalled();
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSideEffects();
+  });
+
+  test('consumes valid state before missing provider credentials and never restores it', async () => {
+    delete process.env.STRAVA_CLIENT_ID;
+    delete process.env.STRAVA_CLIENT_SECRET;
+
+    const credentialFailure = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(credentialFailure)).toEqual({
+      code: 'failed-precondition',
+      message: 'Strava credentials not configured',
+      details: undefined,
+      cause: undefined,
+    });
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDirectSetAttempts()).toEqual([]);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+
+    process.env.STRAVA_CLIENT_ID = 'strava_client_test';
+    process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
+    const replay = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(replay)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDirectSetAttempts()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('does not invoke request accessors while rejecting them', async () => {
+    const codeRead = jest.fn();
+    const data = { state: STATE };
+    Object.defineProperty(data, 'code', { enumerable: true, get: codeRead });
+
+    const error = await captureFailure(() => stravaExchangeCode(data, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'invalid-argument',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(codeRead).not.toHaveBeenCalled();
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSideEffects();
+  });
+
+  async function expectStoredStateDenial(record, context = CONTEXT, state = STATE) {
+    admin.__setDocument(STATE_PATH, record);
+    delete process.env.STRAVA_CLIENT_ID;
+    delete process.env.STRAVA_CLIENT_SECRET;
+
+    const error = await captureFailure(() => stravaExchangeCode({ code: CODE, state }, context));
+
+    expect(publicError(error)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getTransactionRunAttempts()).toBe(1);
+    expect(admin.__getTransactionReads()).toEqual([STATE_PATH]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+    expect(admin.__getTransactionDeletes()).toEqual([]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getDocument(STATE_PATH)).toBe(record);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  test.each([
+    ['undefined root', undefined],
+    ['null root', null],
+    ['primitive root', true],
+    ['array root', []],
+    ['null-prototype root', Object.create(null)],
+    ['custom-prototype root', Object.create({ inherited: true })],
+    ['Proxy root', new Proxy(validOAuthStateRecord(), {})],
+    ['missing field', (() => {
+      const record = validOAuthStateRecord();
+      delete record.provider;
+      return record;
+    })()],
+    ['extra field', { ...validOAuthStateRecord(), unexpected: true }],
+    ['wrong schema version', { ...validOAuthStateRecord(), schemaVersion: 2 }],
+    ['wrong provider', { ...validOAuthStateRecord(), provider: 'other' }],
+    ['short digest', { ...validOAuthStateRecord(), stateDigest: 'a'.repeat(63) }],
+    ['uppercase digest', {
+      ...validOAuthStateRecord(),
+      stateDigest: sha256Hex(STATE).toUpperCase(),
+    }],
+    ['zero auth time', { ...validOAuthStateRecord(), authTime: 0 }],
+    ['zero issued time', {
+      ...validOAuthStateRecord(),
+      issuedAtSeconds: 0,
+      expiresAtSeconds: 600,
+    }],
+    ['non-ten-minute lifetime', {
+      ...validOAuthStateRecord(),
+      expiresAtSeconds: 1_800_000_601,
+    }],
+  ])('rejects malformed stored OAuth state with %s before provider access', async (
+    _name,
+    record,
+  ) => {
+    await expectStoredStateDenial(record);
+  });
+
+  test('does not invoke a stored digest accessor while rejecting the record', async () => {
+    const digestRead = jest.fn();
+    const record = validOAuthStateRecord();
+    Object.defineProperty(record, 'stateDigest', {
+      enumerable: true,
+      get: digestRead,
+    });
+
+    await expectStoredStateDenial(record);
+
+    expect(digestRead).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['wrong stored UID', validOAuthStateRecord({ uid: 'synthetic-other-member' }), CONTEXT],
+    ['wrong Auth session', validOAuthStateRecord({ authTime: AUTH_TIME + 1 }), CONTEXT],
+    ['mismatched digest', validOAuthStateRecord({ state: 'E'.repeat(43) }), CONTEXT],
+  ])('rejects %s before credentials or provider access', async (_name, record, context) => {
+    await expectStoredStateDenial(record, context);
+  });
+
+  test('rejects a state stored only under a different caller UID', async () => {
+    const otherUid = 'synthetic-member-000002';
+    const otherContext = {
+      ...CONTEXT,
+      auth: { uid: otherUid, token: { auth_time: AUTH_TIME } },
+    };
+    const otherStatePath = `members/${otherUid}/secrets/stravaOAuthState`;
+
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, otherContext));
+
+    expect(publicError(error)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(admin.__getTransactionReads()).toEqual([otherStatePath]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getWrites()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('rejects at the exact expiry boundary and retains the unusable record', async () => {
+    const record = validOAuthStateRecord({
+      issuedAtSeconds: NOW_SECONDS - 600,
+      expiresAtSeconds: NOW_SECONDS,
+    });
+
+    await expectStoredStateDenial(record);
+  });
+
+  test('accepts one second before expiry and consumes before provider access', async () => {
+    admin.__setDocument(STATE_PATH, validOAuthStateRecord({
+      issuedAtSeconds: NOW_SECONDS - 599,
+      expiresAtSeconds: NOW_SECONDS + 1,
+    }));
+    mockSuccessfulExchange();
+
+    const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
+
+    expect(result).toEqual({ ok: true, athleteId: 123456 });
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('consumes once so a replay is denied before a second provider exchange', async () => {
+    mockSuccessfulExchange();
+
+    await expect(stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT))
+      .resolves.toEqual({ ok: true, athleteId: 123456 });
+    const replay = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(replay)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('allows exactly one concurrent consumer to reach the provider', async () => {
+    mockSuccessfulExchange();
+
+    const outcomes = await Promise.allSettled([
+      stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT),
+      stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT),
+    ]);
+
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    const rejected = outcomes.find(({ status }) => status === 'rejected');
+    expect(publicError(rejected.reason)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getTransactionRunAttempts()).toBe(2);
+    expect(admin.__getTransactionReads()).toEqual([STATE_PATH, STATE_PATH, STATE_PATH]);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('rechecks expiry when Firestore retries after a conflicting write', async () => {
+    const record = validOAuthStateRecord({
+      issuedAtSeconds: NOW_SECONDS - 599,
+      expiresAtSeconds: NOW_SECONDS + 1,
+    });
+    admin.__setDocument(STATE_PATH, record);
+    let introduceConflict = true;
+    admin.__setTransactionBeforeCommitHook(() => {
+      if (!introduceConflict) return;
+      introduceConflict = false;
+      admin.__setDocument(STATE_PATH, record);
+    });
+    admin.__setTransactionRetryHook(() => {
+      dateNowSpy.mockReturnValue((NOW_SECONDS + 1) * 1_000);
+    });
+    mockSuccessfulExchange();
+
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'permission-denied',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getTransactionReads()).toEqual([STATE_PATH, STATE_PATH]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([STATE_PATH]);
+    expect(admin.__getTransactionDeletes()).toEqual([]);
+    expect(admin.__getDocument(STATE_PATH)).toBe(record);
+    expect(Date.now).toHaveBeenCalledTimes(2);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test.each([
+    ['transaction start', (failure) => admin.__setTransactionRunFailure(failure), false],
+    ['transaction read', (failure) => admin.__setTransactionGetFailure(STATE_PATH, failure), false],
+    ['transaction delete staging', (failure) => (
+      admin.__setTransactionDeleteFailure(STATE_PATH, failure)
+    ), false],
+    ['transaction commit', (failure) => admin.__setTransactionCommitFailure(failure), false],
+    ['transaction acknowledgement', (failure) => (
+      admin.__setTransactionCommitPostApplyFailure(failure)
+    ), true],
+  ])('maps a %s failure to one fixed error and never reaches the provider', async (
+    _name,
+    configure,
+    consumed,
+  ) => {
+    const failure = new Error('transaction-canary raw-state-canary');
+    configure(failure);
+
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(JSON.stringify(publicError(error))).not.toMatch(/transaction-canary|raw-state-canary/u);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__hasDocument(STATE_PATH)).toBe(!consumed);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 
   test.each([
@@ -428,7 +1312,10 @@ describe('Strava authorization exchange failure boundary', () => {
     delete process.env.STRAVA_CLIENT_ID;
     delete process.env.STRAVA_CLIENT_SECRET;
 
-    const error = await captureFailure(() => stravaExchangeCode({ code }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code,
+      state: STATE,
+    }, CONTEXT));
 
     expect(publicError(error)).toEqual({
       code: 'invalid-argument',
@@ -445,6 +1332,7 @@ describe('Strava authorization exchange failure boundary', () => {
 
     const error = await captureFailure(() => stravaExchangeCode({
       code: 'x'.repeat(MAX_AUTHORIZATION_CODE_LENGTH + 1),
+      state: STATE,
     }, CONTEXT));
 
     expect(publicError(error)).toEqual({
@@ -463,6 +1351,7 @@ describe('Strava authorization exchange failure boundary', () => {
 
     const error = await captureFailure(() => stravaExchangeCode({
       code: 'x'.repeat(MAX_AUTHORIZATION_CODE_LENGTH + 1),
+      state: STATE,
     }, CONTEXT));
 
     expect(publicError(error)).toEqual({
@@ -482,7 +1371,7 @@ describe('Strava authorization exchange failure boundary', () => {
   ])('preserves an admitted %s code-unit-for-code-unit', async (_case, code) => {
     mockSuccessfulExchange();
 
-    const result = await stravaExchangeCode({ code }, CONTEXT);
+    const result = await stravaExchangeCode({ code, state: STATE }, CONTEXT);
 
     expect(result).toEqual({ ok: true, athleteId: 123456 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -504,7 +1393,10 @@ describe('Strava authorization exchange failure boundary', () => {
       json,
     });
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
 
     expect(publicError(error)).toEqual({
       code: 'invalid-argument',
@@ -526,7 +1418,10 @@ describe('Strava authorization exchange failure boundary', () => {
       { providerBody: 'provider-body-canary' },
     ));
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
 
     expect(publicError(error)).toEqual({
       code: 'unavailable',
@@ -536,6 +1431,8 @@ describe('Strava authorization exchange failure boundary', () => {
     });
     expect(JSON.stringify(publicError(error)))
       .not.toMatch(/transport-canary|provider\.example|secret-canary|provider-body-canary/i);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
     expectNoSideEffects();
   });
 
@@ -545,7 +1442,10 @@ describe('Strava authorization exchange failure boundary', () => {
     );
     fetchMock.mockResolvedValue({ ok: true, json });
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
 
     expect(publicError(error)).toEqual({
       code: 'unavailable',
@@ -615,7 +1515,10 @@ describe('Strava authorization exchange failure boundary', () => {
       });
       mockExchangeResponse(response);
 
-      const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+      const error = await captureFailure(() => stravaExchangeCode({
+        code: CODE,
+        state: STATE,
+      }, CONTEXT));
 
       expect(publicError(error)).toEqual({
         code: 'unavailable',
@@ -697,7 +1600,7 @@ describe('Strava authorization exchange failure boundary', () => {
       else response.scope = scope;
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(admin.__getWrites()[0].data.scope).toBeNull();
@@ -833,7 +1736,7 @@ describe('Strava authorization exchange failure boundary', () => {
 
       try {
         mockExchangeResponse(response);
-        const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+        const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
         expect(result).toEqual({ ok: true, athleteId: 123456 });
         expect(admin.__getWrites()[1].data.firstName).toBeNull();
@@ -885,7 +1788,7 @@ describe('Strava authorization exchange failure boundary', () => {
       else response.athlete[providerField] = value;
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(admin.__getWrites()[1].data[documentField]).toBeNull();
@@ -902,7 +1805,7 @@ describe('Strava authorization exchange failure boundary', () => {
       response.athlete.profile = 'https://例え.example/athlete/%E2%98%83?size=large#profile';
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(admin.__getWrites()[0].data.scope).toBe(response.scope);
@@ -927,7 +1830,7 @@ describe('Strava authorization exchange failure boundary', () => {
         + 'p'.repeat(MAX_PROFILE_URL_LENGTH - profilePrefix.length);
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(admin.__getWrites()[0].data).toMatchObject({
@@ -949,7 +1852,7 @@ describe('Strava authorization exchange failure boundary', () => {
       Object.freeze(response);
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(admin.__getWrites()).toHaveLength(2);
@@ -973,7 +1876,7 @@ describe('Strava authorization exchange failure boundary', () => {
       });
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(admin.__getWrites()[0].data.access_token).toBe('access_token_test');
@@ -1002,7 +1905,7 @@ describe('Strava authorization exchange failure boundary', () => {
       });
       mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
       expect(unknownGetter).not.toHaveBeenCalled();
@@ -1053,7 +1956,10 @@ describe('Strava authorization exchange failure boundary', () => {
     admin.__setWriteFailure(CONNECTION_PATH, failure);
     const json = mockSuccessfulExchange();
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
     const exposed = publicError(error);
     const expectedWrites = expectedExchangeWrites();
 
@@ -1090,7 +1996,10 @@ describe('Strava authorization exchange failure boundary', () => {
     admin.__setBatchCommitPostApplyFailure(failure);
     const json = mockSuccessfulExchange();
 
-    const error = await captureFailure(() => stravaExchangeCode({ code: CODE }, CONTEXT));
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
     const exposed = publicError(error);
     const expectedWrites = expectedExchangeWrites();
 
@@ -1118,7 +2027,7 @@ describe('Strava authorization exchange failure boundary', () => {
   test('preserves the successful server-only exchange, writes, and minimal result', async () => {
     const json = mockSuccessfulExchange();
 
-    const result = await stravaExchangeCode({ code: CODE }, CONTEXT);
+    const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
     expect(result).toEqual({ ok: true, athleteId: 123456 });
     expect(requireAppCheck.mock.invocationCallOrder[0])

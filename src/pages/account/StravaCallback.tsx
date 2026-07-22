@@ -5,7 +5,7 @@ import {
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import { useAuth } from '../../services/hooks/useAuth';
 import SEO from '../../components/SEO';
-import { stravaExchangeCode, verifyStravaState } from '../../services/strava/stravaService';
+import { stravaExchangeCode } from '../../services/strava/stravaService';
 
 const STRAVA_CALLBACK_FAILURE = 'We could not connect Strava. Please return to My Account and try again.';
 
@@ -148,20 +148,15 @@ function CallbackAttempt({ snapshot }: { snapshot: CallbackSnapshot }) {
       setMessage('Missing authorization code from Strava.');
       return;
     }
+    if (!snapshot.state) {
+      decisionStartedRef.current = true;
+      setStatus('error');
+      setMessage(STRAVA_CALLBACK_FAILURE);
+      return;
+    }
     if (services === null || firebaseResources === null || app === null) return;
 
     decisionStartedRef.current = true;
-    try {
-      if (!verifyStravaState(snapshot.state)) {
-        setStatus('error');
-        setMessage('Security check failed (state mismatch). Please try connecting again.');
-        return;
-      }
-    } catch {
-      setStatus('error');
-      setMessage('Security check failed (state mismatch). Please try connecting again.');
-      return;
-    }
 
     const run = Symbol('strava-callback-exchange');
     runRef.current = run;
@@ -174,7 +169,7 @@ function CallbackAttempt({ snapshot }: { snapshot: CallbackSnapshot }) {
 
     let exchange: ReturnType<typeof stravaExchangeCode>;
     try {
-      exchange = stravaExchangeCode(app, snapshot.code);
+      exchange = stravaExchangeCode(app, snapshot.code, snapshot.state);
     } catch {
       runRef.current = null;
       setStatus('error');
