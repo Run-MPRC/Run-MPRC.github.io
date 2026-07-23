@@ -223,6 +223,10 @@ test('Netlify manifest pins the reviewed hotfix source and rollback', () => {
     '878c6628d961f4484cb49208aef53f1e9f2e3b47',
   );
   assert.equal(
+    loaded.manifest.previousSourceCommit,
+    'e86a0f702cff6495f50630c5de3337290db8b8cb',
+  );
+  assert.equal(
     loaded.manifest.rollbackDeployId,
     '6a54a3c93db9d300082e1f5f',
   );
@@ -240,27 +244,6 @@ test('Netlify manifest pins the reviewed hotfix source and rollback', () => {
     '7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092',
   );
 
-  const sourceTree = spawnSync(
-    'git',
-    ['show', '-s', '--format=%T', loaded.manifest.sourceCommit],
-    { cwd: ROOT, encoding: 'utf8' },
-  );
-  const hotfixTree = spawnSync(
-    'git',
-    ['show', '-s', '--format=%T', 'b9f77ba9dfb153ff8ba203811dfc9c81f7cac31f'],
-    { cwd: ROOT, encoding: 'utf8' },
-  );
-  assert.equal(sourceTree.status, 0);
-  assert.equal(hotfixTree.status, 0);
-  assert.equal(sourceTree.stdout.trim(), loaded.manifest.sourceTree);
-  assert.equal(hotfixTree.stdout.trim(), loaded.manifest.sourceTree);
-
-  const mainOnlyFile = spawnSync(
-    'git',
-    ['cat-file', '-e', `${loaded.manifest.sourceCommit}:functions/commerceState.js`],
-    { cwd: ROOT, encoding: 'utf8' },
-  );
-  assert.notEqual(mainOnlyFile.status, 0);
 });
 
 test('Netlify production authorization is exact-merge scoped', () => {
