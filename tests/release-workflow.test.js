@@ -205,10 +205,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the reviewed hotfix source and rollback', () => {
+test('Netlify manifest pins the reviewed hotfix source and is paused', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(loaded.manifest.issueNumber, 457);
   assert.equal(
     loaded.manifest.expectedProductionParent,
@@ -250,6 +250,7 @@ test('Netlify production authorization is exact-merge scoped', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
   const { manifest } = loaded;
+  const activeManifest = { ...manifest, active: true };
   const mergeCommit = {
     sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     head: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -269,7 +270,7 @@ test('Netlify production authorization is exact-merge scoped', () => {
     evaluateProductionRelease({
       commit: mergeCommit,
       env: environment,
-      manifest,
+      manifest: activeManifest,
     }),
     { ok: true, reason: 'release_authorized' },
   );
@@ -304,7 +305,7 @@ test('Netlify production authorization is exact-merge scoped', () => {
     assert.equal(
       evaluateProductionRelease({
         ...failure,
-        manifest,
+        manifest: activeManifest,
       }).ok,
       false,
     );
@@ -313,7 +314,7 @@ test('Netlify production authorization is exact-merge scoped', () => {
     evaluateProductionRelease({
       commit: mergeCommit,
       env: environment,
-      manifest: { ...manifest, active: false },
+      manifest,
     }).ok,
     false,
   );
@@ -342,6 +343,7 @@ test('Netlify production authorization survives a shallow merge checkout and blo
 
     runGit(source, ['switch', '-c', 'release']);
     const manifest = JSON.parse(fs.readFileSync(NETLIFY_MANIFEST_PATH, 'utf8'));
+    manifest.active = true;
     manifest.expectedProductionParent = base;
     fs.mkdirSync(path.join(source, 'config'));
     fs.writeFileSync(
@@ -459,7 +461,7 @@ test('Netlify manifest file rejects duplicate-key or noncanonical JSON', () => {
     fs.writeFileSync(
       duplicatePath,
       canonical.replace(
-        '  "active": true,',
+        /  "active": (?:true|false),/,
         '  "active": false,\n  "active": true,',
       ),
     );

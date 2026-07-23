@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-UX-001A-2026-07-22",
   "issueNumber": 457,
   "previewBranch": "codex/issue-457-netlify-release",
