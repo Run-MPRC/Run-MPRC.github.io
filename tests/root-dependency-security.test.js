@@ -64,6 +64,53 @@ const EXPECTED_FIREBASE_TOOLS = Object.freeze({
   integrity: 'sha512-2P5qd3O3YD7a7AaA89lt/zgRIgR7FGS0Ye7fW9z/sNt9/b6cbmI1TtQtYDlmJDUOh9nMk+72ll/gu4MlN/qY7Q==',
   nodeEngine: '>=20.0.0 || >=22.0.0 || >=24.0.0',
 });
+const EXPECTED_BRACE_EXPANSION_RELEASES = Object.freeze({
+  1: Object.freeze({
+    version: '1.1.16',
+    resolved: 'https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.16.tgz',
+    integrity: 'sha512-IDw48K2/2kRkg9LdJxurvq3lV3aBgq0REY89duEqFRthjlPdXHKMj7EnQOXVckxzgisinf3nHfrcE2FufFLXMw==',
+    dependencies: Object.freeze({
+      'balanced-match': '^1.0.0',
+      'concat-map': '0.0.1',
+    }),
+    nodeEngine: undefined,
+  }),
+  2: Object.freeze({
+    version: '2.1.2',
+    resolved: 'https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.2.tgz',
+    integrity: 'sha512-w5JZcKgdhDOgOwm8H+KgbosopHMuGcl6qbulwjtz3SM7I7P3yW1eAjzMPLrIE+NQ9vjgANKHWeMHnrT0OXW1oA==',
+    dependencies: Object.freeze({
+      'balanced-match': '^1.0.0',
+    }),
+    nodeEngine: undefined,
+  }),
+  5: Object.freeze({
+    version: '5.0.7',
+    resolved: 'https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.7.tgz',
+    integrity: 'sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==',
+    dependencies: Object.freeze({
+      'balanced-match': '^4.0.2',
+    }),
+    nodeEngine: '18 || 20 || >=22',
+  }),
+});
+const EXPECTED_BRACE_EXPANSION_PATHS = Object.freeze({
+  'node_modules/@eslint/eslintrc/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/@humanwhocodes/config-array/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/brace-expansion': Object.freeze({ major: 2, dev: true }),
+  'node_modules/eslint-plugin-import/node_modules/brace-expansion': Object.freeze({ major: 1, dev: false }),
+  'node_modules/eslint-plugin-jsx-a11y/node_modules/brace-expansion': Object.freeze({ major: 1, dev: false }),
+  'node_modules/eslint-plugin-react/node_modules/brace-expansion': Object.freeze({ major: 1, dev: false }),
+  'node_modules/eslint/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/firebase-tools/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/firebase-tools/node_modules/glob/node_modules/brace-expansion': Object.freeze({ major: 2, dev: true }),
+  'node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/glob/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/jake/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/minimatch/node_modules/brace-expansion': Object.freeze({ major: 5, dev: true }),
+  'node_modules/recursive-readdir/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+  'node_modules/test-exclude/node_modules/brace-expansion': Object.freeze({ major: 1, dev: true }),
+});
 const CRITICAL_VERSION_CEILINGS = Object.freeze({
   protobufjs: '7.6.2',
   tar: '7.5.18',
@@ -186,6 +233,124 @@ test('pins the committed Firebase CLI and excludes its critical package ranges',
         `${packagePath}@${packageRecord.version} remains in the critical range`,
       );
     }
+  }
+});
+
+test('pins every brace-expansion family to its reviewed maintained release', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+  const rootRecord = lock.packages[''];
+
+  for (const field of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+    'resolutions',
+    'overrides',
+  ]) {
+    assert.equal(packageJson[field]?.['brace-expansion'], undefined);
+    assert.equal(rootRecord?.[field]?.['brace-expansion'], undefined);
+  }
+
+  const entries = lockedPackageEntries(lock, 'brace-expansion');
+  assert.deepEqual(
+    entries.map(([packagePath]) => packagePath),
+    Object.keys(EXPECTED_BRACE_EXPANSION_PATHS),
+  );
+
+  for (const [packagePath, packageRecord] of entries) {
+    const expectedPath = EXPECTED_BRACE_EXPANSION_PATHS[packagePath];
+    const expectedRelease = EXPECTED_BRACE_EXPANSION_RELEASES[expectedPath.major];
+
+    assert.equal(Number(packageRecord.version.split('.')[0]), expectedPath.major);
+    assert.equal(packageRecord.dev === true, expectedPath.dev);
+    assert.deepEqual(
+      {
+        version: packageRecord.version,
+        resolved: packageRecord.resolved,
+        integrity: packageRecord.integrity,
+        dependencies: packageRecord.dependencies,
+        nodeEngine: packageRecord.engines?.node,
+      },
+      expectedRelease,
+      `${packagePath} must retain its reviewed public-registry identity and shape`,
+    );
+
+    const installedPackage = readJson(path.join(REPOSITORY, packagePath, 'package.json'));
+    assert.equal(installedPackage.version, expectedRelease.version);
+  }
+
+  const admittedRangesByMinimatchVersion = Object.freeze({
+    '3.1.2': '^1.1.7',
+    '3.1.5': '^1.1.7',
+    '5.1.6': '^2.0.1',
+    '5.1.9': '^2.0.1',
+    '6.2.3': '^2.0.1',
+    '9.0.5': '^2.0.1',
+    '9.0.9': '^2.0.2',
+    '10.2.5': '^5.0.5',
+  });
+  const consumers = Object.entries(lock.packages)
+    .filter(([, packageRecord]) => packageRecord?.dependencies?.['brace-expansion'])
+    .sort(([left], [right]) => left.localeCompare(right));
+  assert.equal(consumers.length, 22);
+  for (const [consumerPath, consumerRecord] of consumers) {
+    assert.equal(
+      consumerRecord.dependencies['brace-expansion'],
+      admittedRangesByMinimatchVersion[consumerRecord.version],
+      `${consumerPath} must keep its reviewed compatible brace-expansion range`,
+    );
+  }
+});
+
+test('bounds non-expanding brace handling without changing ordinary expansion', async (t) => {
+  const representatives = [
+    Object.freeze({
+      packagePath: 'node_modules/eslint-plugin-import/node_modules/brace-expansion',
+      groups: 5_000,
+      timeout: 5_000,
+    }),
+    Object.freeze({
+      packagePath: 'node_modules/minimatch/node_modules/brace-expansion',
+      groups: 30,
+      timeout: 1_000,
+    }),
+  ];
+
+  for (const { packagePath, groups, timeout } of representatives) {
+    await t.test(packagePath, () => {
+      const installedPath = path.join(REPOSITORY, packagePath);
+      const script = `
+        const packageApi = require(${JSON.stringify(installedPath)});
+        const expand = typeof packageApi === 'function' ? packageApi : packageApi.expand;
+        const nonExpanding = Array.from({ length: ${groups} }, () => '{}').join(',');
+        process.stdout.write(JSON.stringify({
+          nonExpanding: expand(nonExpanding),
+          sequence: expand('a{1..3}b'),
+          options: expand('x{a,b}y'),
+        }));
+      `;
+      const result = spawnSync(process.execPath, ['-e', script], {
+        encoding: 'utf8',
+        timeout,
+      });
+
+      assert.equal(
+        result.error,
+        undefined,
+        `${packagePath} must complete the bounded regression before the timeout`,
+      );
+      assert.equal(result.signal, null);
+      assert.equal(result.status, 0, result.stderr);
+
+      const nonExpanding = Array.from({ length: groups }, () => '{}').join(',');
+      assert.deepEqual(JSON.parse(result.stdout), {
+        nonExpanding: [nonExpanding],
+        sequence: ['a1b', 'a2b', 'a3b'],
+        options: ['xay', 'xby'],
+      });
+    });
   }
 });
 
