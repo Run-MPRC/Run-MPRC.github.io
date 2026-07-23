@@ -51,6 +51,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - The backend uses a short-lived cloud identity when #133 configures it. The website job receives public browser values only.
 - The Firebase CLI comes from the committed lockfile. The release does not install `latest`.
 - Source checked on 2026-07-22 pins the internal Firebase CLI to 15.24.0, and its emulator checks use Java 21. Officers do not install or run either tool; the platform maintainer owns them. This source change does not alter the release diagram or prove that Firebase was deployed. The provider and live-host facts below were not reverified for this tooling update.
+- Source checked on 2026-07-22 also pins every root brace-expansion dependency family to its reviewed maintained release. This is internal dependency evidence only. Officers do not install packages, run audit commands, or resolve dependency warnings; the platform maintainer owns those tasks. The separate minimatch finding remains open. This source change does not publish a website, deploy Firebase, change a provider, or prove live behavior.
 - A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
 - The `staging` option deliberately stops before deployment until #113/#133 name one exact approved staging Firebase project. A future staging release remains backend-only until a separate staging browser configuration and host exist.
 - `runmprc.com` is served by Netlify, not GitHub Pages.
