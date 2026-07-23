@@ -3,7 +3,7 @@
   "active": true,
   "releaseId": "WEB-UX-001A-2026-07-22",
   "issueNumber": 457,
-  "previewBranch": "codex/issue-457-netlify-release",
+  "previewBranch": "codex/issue-457-netlify-release-final",
   "expectedProductionParent": "491cc22d80de1faae1960bd63c80ce62e648397b",
   "sourceRepository": "https://github.com/Run-MPRC/Run-MPRC.github.io.git",
   "sourceRef": "refs/heads/codex/netlify-source-457-header",

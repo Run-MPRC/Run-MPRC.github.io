@@ -236,7 +236,7 @@ test('Netlify manifest pins the reviewed hotfix source and rollback', () => {
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-457-netlify-release',
+    'codex/issue-457-netlify-release-final',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 60);
   assert.equal(
