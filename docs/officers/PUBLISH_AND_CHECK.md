@@ -10,7 +10,7 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. Issue #457 has one temporary, platform-maintainer-only web release pinned to one reviewed source commit, tree, and artifact digest; it cannot deploy Firebase or authorize commerce, and it must be disabled and have its release source retired after dated live verification. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
+**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. Issue #457 completed one platform-maintainer-only web release pinned to one reviewed source commit, tree, and artifact digest. Netlify deploy `6a61c544171ea80008307623` was verified on 2026-07-22 America/Los_Angeles; its manifest is inactive and its release source is retired. The exact rollback source remains. This did not deploy Firebase or authorize commerce. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
 ## The release gate
 
@@ -56,7 +56,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
-- Ordinary Git-triggered Netlify production builds are paused. The active #457 manifest permits only one exact-parent merge and one pinned source/artifact. Build hooks bypass Netlify's ignore check, so the production wrapper separately rejects build-hook metadata and every wrong commit or inactive manifest. A duplicate attempt of the armed merge can build the same artifact until the maintainer deletes its release-specific source ref.
+- Ordinary Git-triggered Netlify production builds are paused. The #457 manifest is inactive, and its retired release source makes a duplicate attempt of the historical armed merge fail during source fetch. Build hooks bypass Netlify's ignore check, so the production wrapper separately rejects build-hook metadata and every wrong commit or inactive manifest.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 - CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
@@ -118,6 +118,8 @@ If a member or officer sees **Server configuration is unavailable**:
 ## Temporary #457 Netlify web release
 
 **Purpose:** publish only the already reviewed Events, Shop, and My Account header tree without publishing the unrelated application work now on `main`.
+
+**Completed status:** production deploy `6a61c544171ea80008307623`, trigger commit `4f67e6cafb975a3f985fefc67f094b3a37526702`, and the public marker were verified on 2026-07-22 America/Los_Angeles at 1280px desktop and 390px phone widths. Events and Shop showed their images and readable headings below the navigation. Signed-out `/account` redirected to the readable image-backed Login page. Firebase and outside providers were unchanged. The release source was then retired; this procedure is retained as dated evidence, not as an available release button.
 
 **Approver:** Dave Liu as platform owner. This is not an officer-operated control.
 

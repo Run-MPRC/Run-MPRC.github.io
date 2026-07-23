@@ -59,7 +59,7 @@ flowchart TD
     Rules --> Functions["Deploy and verify named Functions"]
     Functions --> Pages["Pages branch without Netlify's domain claim"]
     Main -. "Ordinary Git production build paused" .-> Netlify
-    Main -. "Temporary #457 exact parent" .-> WebGate{"Pinned source and artifact match?"}
+    Main -. "Inactive #457 manifest" .-> WebGate{"Manifest active and release source present?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> Netlify
     Netlify["Netlify — current live host; reusable protected publication unavailable"] --> Live["runmprc.com"]
@@ -67,7 +67,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify, while temporary #457 can publish only its pinned frontend artifact; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify, and completed #457 is inactive with its release source retired; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 

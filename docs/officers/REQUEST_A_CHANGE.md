@@ -34,7 +34,7 @@ Have one of these ready:
 
 If you open GitHub yourself, use the [canonical repository on `main`](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main), then select **Issues**. `main` is now the repository default. Do not use the legacy `dev` branch as the source for a new request.
 
-The GitHub release is manual. A `main` merge runs checks but does not publish the GitHub Pages copy or deploy Firebase. Ordinary Git-triggered Netlify production builds are paused by repository configuration. Issue #457 temporarily permits only its exact-parent, exact-artifact web release; Netlify provider settings remain separately unverified. Stop and escalate any other publication.
+The GitHub release is manual. A `main` merge runs checks but does not publish the GitHub Pages copy or deploy Firebase. Ordinary Git-triggered Netlify production builds are paused by repository configuration. Issue #457 completed its one exact-parent, exact-artifact web release; its manifest is inactive and its release source is retired. Netlify provider settings remain separately unverified. Stop and escalate any other publication.
 
 ## If you cannot open an AI assistant
 
