@@ -8,6 +8,9 @@
 | Issue | A tracked request describing one problem or result. |
 | Branch | A separate working copy used to prepare one change safely. |
 | Commit | A named snapshot of source changes. It helps identify exactly which version was built. |
+| Manifest | A small reviewed record naming exactly which source and built result one temporary release may use. |
+| Source tree | The exact set and contents of files in one commit, identified by a Git hash. |
+| Provenance marker | A public read-only file that identifies which reviewed source and built result a website deploy contains. |
 | Pull request | A review page showing a proposed change before it joins the main version. |
 | Review | A person or review agent checks the change for mistakes and risk. |
 | Merge | GitHub accepts an approved pull request into `main`. This does not always mean the change is live. |

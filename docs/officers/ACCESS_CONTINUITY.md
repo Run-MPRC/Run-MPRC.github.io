@@ -84,7 +84,7 @@ For each system, record only:
 10. Confirm a normal merge does not start the GitHub release.
 11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
-13. Confirm Netlify Git-triggered production builds remain paused until a protected live-host path exists.
+13. Confirm ordinary Netlify Git-triggered production builds remain paused. While #457 is active, confirm only its exact-parent, exact-artifact merge can publish and that the maintainer will disable it and retire its source after verification.
 14. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
 15. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
 

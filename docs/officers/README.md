@@ -63,7 +63,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 Never shorten several of these states to “done.”
 
-Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
+Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. Issue #457 has one temporary platform-maintainer-only, exact-artifact web release; it is not a general officer control and must be disabled and have its release source retired after verification. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
 
 The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures the environment approvers and short-lived cloud identity. Missing authority stops the release with a red failure before Firebase or website publication.
 

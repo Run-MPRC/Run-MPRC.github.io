@@ -1,14 +1,32 @@
 [build]
   command = "npm run build"
   publish = "build"
-  # Git-triggered production publication is paused until WEB-001 records the
-  # Netlify owners, protected trigger, exact commit, and rollback path.
+  # Preview builds use the checked-out preview tree. Production is fail-closed
+  # except for the exact merge authorized by a reviewed release manifest.
   ignore = "node ./scripts/netlify-ignore-build.js"
 
 [build.environment]
   NODE_VERSION = "20"
-  NPM_FLAGS = "--legacy-peer-deps"
+  NPM_FLAGS = "--legacy-peer-deps --ignore-scripts"
   DISABLE_ESLINT_PLUGIN = "true"
+
+[context.production]
+  # This wrapper archives and verifies the pinned hotfix tree; it never builds
+  # the accumulated application tree from the triggering main merge.
+  command = "node ./scripts/netlify-release-build.js"
+
+[context.deploy-preview]
+  # The #457 release-control PR builds the same pinned artifact as production.
+  # Other previews retain the ordinary checked-out preview build.
+  command = "node ./scripts/netlify-release-build.js --preview"
+
+[[headers]]
+  for = "/.well-known/run-mprc-release.json"
+
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+    Content-Type = "application/json; charset=utf-8"
+    X-Content-Type-Options = "nosniff"
 
 [[redirects]]
   from = "/*"
