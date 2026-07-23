@@ -10,7 +10,7 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Live Netlify publication status:** **NOT AVAILABLE YET.** Git-triggered production builds are paused by repository configuration. The Netlify owner, build hooks, manual trigger, exact-commit proof, and rollback path remain unverified provider work. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
+**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. Issue #457 has one temporary, platform-maintainer-only web release pinned to one reviewed source commit, tree, and artifact digest; it cannot deploy Firebase or authorize commerce, and it must be disabled and have its release source retired after dated live verification. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
 ## The release gate
 
@@ -56,7 +56,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
-- Git-triggered Netlify production builds are paused. Netlify build hooks are not controlled by that repository rule and remain unverified.
+- Ordinary Git-triggered Netlify production builds are paused. The active #457 manifest permits only one exact-parent merge and one pinned source/artifact. Build hooks bypass Netlify's ignore check, so the production wrapper separately rejects build-hook metadata and every wrong commit or inactive manifest. A duplicate attempt of the armed merge can build the same artifact until the maintainer deletes its release-specific source ref.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 - CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
@@ -112,8 +112,58 @@ If a member or officer sees **Server configuration is unavailable**:
 3. Wait for that commit's CI jobs.
 4. Confirm all five named jobs are green again: Frontend, Functions, commerce command journal, test artifact scrubber, and Firestore Rules.
 5. Mark the result **merged — not released**.
-6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from the merge.
-7. If Netlify unexpectedly publishes the merge, stop and treat it as a hosting incident.
+6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from the merge unless it is the explicitly armed #457 web-only release.
+7. For any other merge, if Netlify unexpectedly publishes, stop and treat it as a hosting incident.
+
+## Temporary #457 Netlify web release
+
+**Purpose:** publish only the already reviewed Events, Shop, and My Account header tree without publishing the unrelated application work now on `main`.
+
+**Approver:** Dave Liu as platform owner. This is not an officer-operated control.
+
+**Prerequisites:** issue #457 approval; green checks; a successful pinned Netlify Deploy Preview; exact source commit `ed1b0833f25822cee80c99ded8753722b5608a3f`; exact source tree `878c6628d961f4484cb49208aef53f1e9f2e3b47`; exact 60-file artifact digest `7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092`; prior live deploy `6a54a3c93db9d300082e1f5f`; release source `codex/netlify-source-457-header`; rollback source `codex/netlify-source-457-rollback`; a prepared manifest-disable pull request; a reviewed exact Git rollback projection; and no other `main` merge until verification ends. The current identity cannot click Netlify's atomic restore, so a Netlify team owner is preferred for fast rollback and the exact Git projection is the available fallback.
+
+```mermaid
+flowchart TD
+    Preview["Build pinned release preview"] --> PreviewCheck{"Source and artifact marker match?"}
+    PreviewCheck -- "No" --> Stop["Stop — keep prior deploy live"]
+    PreviewCheck -- "Yes" --> Merge["Merge the reviewed #457 release control"]
+    Merge --> Parent{"Exact main parent and production context?"}
+    Parent -- "No" --> Stop["Stop — keep prior deploy live"]
+    Parent -- "Yes" --> Source{"Pinned source and artifact match?"}
+    Source -- "No" --> Stop
+    Source -- "Yes" --> Build["Build only the pinned frontend artifact"]
+    Build --> Proof["Publish provenance marker and Netlify deploy"]
+    Proof --> Check{"Public phone and desktop checks pass?"}
+    Check -- "No" --> Rollback["Team owner restores prior deploy, or merge exact Git rollback"]
+    Check -- "Yes" --> Disable["Disable manifest and retire release source"]
+```
+
+In words: the release preview and production must contain the same pinned frontend artifact; only the exact #457 merge may publish it; then the maintainer checks the live site and retires the exception, or a Netlify team owner restores the prior deploy, with the prepared exact Git rollback as fallback.
+
+1. Confirm the release pull request targets `main` and contains the exact active manifest.
+2. Confirm another reviewer approved the source, gate, tests, and officer wording.
+3. Open the release Deploy Preview's `/.well-known/run-mprc-release.json`. Confirm its source commit, source tree, file count, and artifact digest exactly match the prerequisites.
+4. Stay signed out and check the three public routes in that pinned preview. Do not register, buy, sign in, or submit a form.
+5. Confirm the manifest-disable pull request and exact previous-source rollback projection are ready.
+6. Confirm `main` is still the exact parent named in the manifest.
+7. Merge with a merge commit. Do not squash or rebase this release.
+8. Watch the Netlify production attempt. Stop if its trigger commit is not that merge.
+9. Open the live `/.well-known/run-mprc-release.json`. Confirm its source commit, tree, count, and digest equal the preview and prerequisites. Do not copy private logs or settings.
+10. Stay signed out. Check `/events`, `/shop`, and `/account` at phone and normal computer sizes. Do not register, buy, sign in, or submit a form.
+11. Confirm the pages have an image, one readable page title, and no title hidden behind the navigation.
+12. Record the deploy URL, trigger commit, source commit/tree, public marker, date, browser sizes, and result.
+13. If all checks pass, merge the manifest-disable pull request, confirm Netlify skips it without replacing the verified deploy, delete `codex/netlify-source-457-header`, and verify that release source no longer exists.
+
+**Expected result:** Netlify serves the pinned #457 frontend tree, the public marker proves its source, the three page headers are readable, Firebase and production data are unchanged, and later ordinary merges remain paused.
+
+**Stop conditions:** stop if the pinned preview is missing; `main` advanced; any hash, digest, count, ref, context, branch, or marker differs; Netlify builds the accumulated `main` application; neither a Netlify team owner nor the reviewed Git rollback projection is available; another production attempt starts; a page asks for private data; or any public check fails.
+
+**Success proof:** keep the public deploy link and marker, exact hashes, check date, phone/desktop sizes, and a redacted public screenshot. Keep settings, logs, credentials, and member data out of public evidence.
+
+**Undo:** if nothing published, leave the prior deploy live. If the wrong result published, ask a Netlify team owner to restore deploy `6a54a3c93db9d300082e1f5f`. If that owner is unavailable, set the prepared rollback manifest's expected parent to the release merge, verify its preview still pins previous source `e86a0f702cff6495f50630c5de3337290db8b8cb`, and merge that exact rollback projection. Disabling the source manifest prevents builds of later `main` commits but does not roll back an already published deploy; deleting the release-specific source ref makes a later rebuild of the old release commit fail its fetch.
+
+**Escalation:** platform owner first; website/content owner second. Escalate to the security owner if private data or an unexpected application version appears.
 
 ## Before a protected release — NOT AVAILABLE YET
 
@@ -150,7 +200,7 @@ Do not use this section until #133 records that both GitHub environments are pro
 ## Verify every affected surface
 
 1. Record whether the GitHub Pages branch published and whether provider readback shows its old `runmprc.com` claim is gone.
-2. Ask the Netlify owner which commit, if any, Netlify published.
+2. Ask the Netlify owner which commit, if any, Netlify published. For #457, also read the public `/.well-known/run-mprc-release.json` marker and verify its source commit/tree.
 3. Open [runmprc.com](https://runmprc.com) in a private window.
 4. Visit the exact changed public page.
 5. Check one phone-sized view.
