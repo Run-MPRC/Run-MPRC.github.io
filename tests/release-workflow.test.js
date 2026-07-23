@@ -173,7 +173,7 @@ test('frontend preparation and publication receive no cloud identity', () => {
   assert.equal(fs.existsSync(PUBLIC_CNAME_PATH), false);
 });
 
-test('Netlify production is a pinned one-release build while previews remain available', () => {
+test('Netlify production is an exact-artifact release while previews remain available', () => {
   assert.match(
     netlifyConfig,
     /ignore = "node \.\/scripts\/netlify-ignore-build\.js"/,
