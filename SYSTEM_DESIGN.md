@@ -910,6 +910,30 @@ This module can reject malformed or internally inconsistent snapshots, but it ca
 
 The module is imported by no runtime or Functions index. It requires only `node:util` and the pure §8.0d module, reads no clock or environment, calls no Firebase/provider service, stores and logs nothing, and changes no profile, membership, role, claim, provider account, or officer workflow. Parent [#81](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/81) remains open. Source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, outside provider configured, production data migrated, and production behavior verified remain separate states.
 
+### 8.0k Google sign-in failure outcome classifier — SOURCE ONLY, UNUSED
+
+AUTH-006B [#471](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/471) adds one fixed-output named export to the existing browser Identity module for a future Google sign-in interface. Given one already-caught unknown value, `classifyGoogleSignInFailure` inspects only the descriptor for an own data-property `code` and returns one fixed string: `cancelled` for an exact closed-popup code, `popup_blocked` for an exact blocked-popup code, `account_collision` for an exact different-credential code, or `unavailable` for every other ordinary value or an inspection failure.
+
+```mermaid
+flowchart LR
+    E["Already-caught unknown value"] --> C{"Own data-property code is one exact supported value?"}
+    P["JavaScript Proxy trap may run or fabricate a descriptor"] --> C
+    C -- "Closed popup" --> Q["cancelled"]
+    C -- "Blocked popup" --> B["popup_blocked"]
+    C -- "Different credential" --> A["account_collision"]
+    C -- "Missing, malformed, inspection throws, or any other code" --> U["unavailable"]
+    Q --> N["Classifier itself adds no provider call, account action, navigation, storage, log, or authority"]
+    B --> N
+    A --> N
+    U --> N
+```
+
+Text alternative: descriptor inspection of an already-caught value becomes one fixed quiet-cancellation, blocked-popup, different-credential, or unavailable label; the classifier itself adds no provider, account, navigation, storage, logging, or authority action, while a JavaScript Proxy may run its descriptor trap or a trap-returned descriptor getter, perform side effects, or fabricate the inspected code before that fixed classification.
+
+For ordinary values, the classifier rejects primitives and arrays, ignores inherited codes, never invokes a `code` accessor or coercion hook, and catches descriptor-inspection failures including revoked proxies. JavaScript browsers provide no reliable general Proxy detector: `Object.getOwnPropertyDescriptor` may invoke a nonthrowing Proxy trap, and JavaScript descriptor normalization may invoke getters on the trap's returned descriptor before the classifier receives it. Those mechanisms may perform their own side effects or fabricate one supported code. The classifier therefore provides no hostile-object purity guarantee. Even a fabricated code can produce only one fixed display label; it cannot enter provider, account, membership, pricing, payment, or role authority, and a future caller must never treat the label as provider evidence or permission to retry or link. The classifier itself never reads or returns an error message, email, custom provider data, credential, token, user, or raw error and has no logger, persistence, navigation, or retry dependency. `account_collision` is only a future generic recovery signal; it does not prove which account exists, authorize linking, retain the pending credential, or implement [#82](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/82).
+
+The named export has no caller. This slice adds no Google provider construction, popup or redirect invocation, credential extraction, account creation or linking, Login control, service method, Firebase Function, Rule, schema, provider configuration, or deployment. Existing email/password and Auth-state behavior remains unchanged. Parent [#109](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/109) and its #81/#82 dependencies remain open. Source change, tests, merge, website publication, Firebase deployment, Google provider configuration, account behavior, and production verification are separate states; this source-only classifier proves none of the external or live states.
+
 ### 8.1 Paid race registration
 
 PAY-001B1 [#219](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/219) adds only the browser projection and first two server validation steps below. The website sends the active field set and omits volunteer tier. The callable preserves the opaque event ID, accepts an exact bounded envelope before Firestore, matches answers against the admitted selected server fields, and encodes callback values. It does not add the target request ID, snapshot, transaction, reservation, idempotent Session saga, safe confirmation capability, deployment, or live proof.

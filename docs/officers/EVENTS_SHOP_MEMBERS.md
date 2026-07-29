@@ -1903,6 +1903,54 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
+## Event sign-in return path — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** let an anonymous visitor who chooses the member-price **Sign in** link on Event details or Race registration return to that same website address after a successful sign-in, without treating the address or sign-in provider as membership, price, discount, payment, registration, or officer authority.
+
+**Approver:** events lead plus membership lead and platform/security owner.
+
+**Prerequisites:** issue [#96](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/96) must remain the one check that accepts a return address only when it stays on this website. Issue [#469](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/469) must have a reviewed pull request, exact commit, and green tests of the real website pages using made-up data. Calling the navigation live also requires an approved protected website publication and exact-revision evidence. Use no real account, member, event, offer, discount, registration, waiver, payment, or provider data. Google sign-in and provider configuration remain separate work under [#109](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/109).
+
+```mermaid
+flowchart LR
+    Event["Made-up Event details or Race registration address"] --> Link["Anonymous member-price Sign in"]
+    Link --> Login["Login carries the complete website address during the current browser visit"]
+    Login --> Safe{"Existing website-address check accepts return?"}
+    Safe -- "Yes, after successful sign-in" --> Event
+    Safe -- "Missing or unsafe" --> Account["Account fallback"]
+    Login -. "Does not preserve" .-> Form["Registration answers or waiver choice"]
+    Safe -. "Does not grant" .-> Authority["Membership, offer, price, payment, registration, or admin authority"]
+```
+
+Text alternative: the source-only member-price links carry a made-up Event details or Race registration address, including text after `?` or `#`, through Login during the current browser visit; after successful sign-in the existing website-address check returns to that accepted address or uses Account when it is missing or unsafe, while form answers and club or financial authority never travel with it.
+
+Officer review steps after the source merge:
+
+1. Keep the event sign-in return path marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #469 issue, reviewed pull request, commit, and made-up-data test results.
+3. Confirm the tests of the real website pages use only made-up event names, made-up text after `?` or `#`, simulated event lookups, and simulated account services.
+4. Confirm the Event details member-price link carries its exact current address, including text after `?` or `#`, to Login.
+5. Confirm the Race registration member-price link carries its exact current address, including text after `?` or `#`, to Login.
+6. Confirm the existing #96 tests accept only returns that stay on this website, keep safe text after `?` or `#`, and use `/account` for missing or malformed addresses, outside addresses, addresses beginning with two slashes, backslashes, or hidden nonprinting characters.
+7. Confirm signed-in made-up members keep the existing event details, registration link, and member-price display without another sign-in prompt.
+8. Confirm no return address is written to Firestore, a custom claim, analytics, a log, or an outside provider. The address exists only during the current browser visit for this source flow.
+9. Confirm no real or protected value appears in a test address. A discount code, private location, contact detail, waiver answer, token, or payment value never belongs after `?` or `#` in an address.
+10. Confirm only the address returns. Registration form answers, waiver choice, and an in-progress submission do not survive leaving the page.
+11. Confirm account creation remains unchanged. The tested success path is the existing email/password sign-in; Google sign-in, collision-safe linking, membership authority, and provider setup remain unavailable.
+12. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Google provider, account, event, registration, payment, and live return behavior as separate results.
+
+**Expected result:** the reviewed source sends the current Event details or Race registration address, including text after `?` or `#`, through the current browser visit when the anonymous visitor chooses the member-price Sign in link. Login continues to apply the one existing website-address check immediately before returning after a successful sign-in. A missing or unsafe address keeps the `/account` fallback. Signed-in member-price behavior stays unchanged. Only the address returns; no form or waiver state is restored. This source slice neither adds Google sign-in nor protects event or offer content.
+
+**Stop conditions:** any real account, member, event, offer, code, private location, registration, runner, contact, waiver, payment, provider, endpoint, credential, or production data; a request to place a protected value in a website address; a test against production authentication; a return target outside the same website; a second website-address check; a return address in analytics, logs, Firestore, claims, or provider traffic; an assertion that registration answers or waiver state survive; or a claim that source, tests, merge, preview, or a green workflow proves the return flow, Google sign-in, membership, or protected Events are live.
+
+**Success proof:** for source completion, record the exact #469 issue, reviewed pull request and commit, two intended old-source failures, the green Event detail and Race registration return tests, the unchanged signed-in tests, the complete #96 website-address safety tests, relevant full checks, and independent security and officer-continuity reviews. A signed-out public read-only check after an approved website publication may prove that each member-price link reaches Login, but end-to-end production return remains unverified until an approved isolated made-up-account sign-in check proves it on the exact revision. Record Firebase deployment, Google provider configuration, production account use, event or registration changes, payments, and live protected content as **not performed** unless separate evidence proves them.
+
+**Undo:** before publication, use one reviewed frontend and guide revert or safe roll-forward. After an approved publication, use the protected website release path and verify the replacement revision. Do not undo by changing an account, membership, event, offer, registration, waiver, payment, database record, permission, source document, or provider setting.
+
+**Escalation:** events lead plus membership lead and platform/security owner. Add the privacy owner if a protected value appeared in an address, browser history, analytics, log, screenshot, issue, email, or AI tool. Add the treasurer if registration or payment state might have changed. Do not copy the protected value into the escalation record.
+
 ## Public event-registration page load failure privacy — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**

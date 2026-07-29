@@ -780,6 +780,85 @@ describe('public Event-detail load failure boundary', () => {
     expect(getEventBySlug).toHaveBeenCalledTimes(1);
   });
 
+  test('preserves the exact event-detail query and hash for sign-in return', async () => {
+    const signIn = jest.fn().mockResolvedValue({
+      user: { uid: 'synthetic-account', email: 'account@example.test' },
+    });
+    useServiceLocator.mockReturnValue({
+      services: {
+        firebaseResources: { firestore },
+        identityService: {
+          signIn,
+          register: jest.fn(),
+          sendPasswordReset: jest.fn(),
+        },
+      },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValue(
+      makeEvent('synthetic-event', 'Synthetic Club Event'),
+    );
+    const returnPath = '/events/synthetic-event?source=calendar#member-price';
+    window.history.pushState({}, '', returnPath);
+
+    render(<App />);
+
+    const signInLink = await screen.findByRole('link', { name: 'sign in' });
+    expect(signInLink).toHaveAttribute('href', '/login');
+    fireEvent.click(signInLink);
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Sign in' }))
+      .toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'account@example.test' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'synthetic-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Synthetic Club Event',
+    })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/events/synthetic-event');
+    expect(window.location.search).toBe('?source=calendar');
+    expect(window.location.hash).toBe('#member-price');
+    expect(signIn).toHaveBeenCalledWith('account@example.test', 'synthetic-password');
+    expect(signIn).toHaveBeenCalledTimes(1);
+    expect(getEventBySlug).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(track.mock.calls)).not.toContain('source=calendar');
+    expect(JSON.stringify(track.mock.calls)).not.toContain('member-price');
+  });
+
+  test('keeps the authenticated event-detail price and navigation unchanged', async () => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-member', email: 'member@example.test' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: false,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    getEventBySlug.mockResolvedValueOnce(
+      makeEvent('synthetic-event', 'Synthetic Member Event'),
+    );
+
+    renderPublicEventDetail();
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Synthetic Member Event',
+    })).toBeInTheDocument();
+    expect(screen.getByText('$10.00')).toBeInTheDocument();
+    expect(screen.getByText('$15.00')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' }))
+      .toHaveAttribute('href', '/events/synthetic-event/register');
+    expect(screen.queryByRole('link', { name: 'sign in' })).not.toBeInTheDocument();
+  });
+
   test('clears a prior lookup failure when the current slug succeeds', async () => {
     getEventBySlug
       .mockRejectedValueOnce(new Error('prior-event-failure-canary'))
@@ -1018,6 +1097,93 @@ describe('public Event-registration load failure boundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(getEventBySlug).toHaveBeenCalledWith(firestore, 'synthetic-event');
     expect(getEventBySlug).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the exact event-registration query and hash for sign-in return', async () => {
+    const signIn = jest.fn().mockResolvedValue({
+      user: { uid: 'synthetic-account', email: 'account@example.test' },
+    });
+    useServiceLocator.mockReturnValue({
+      services: {
+        firebaseResources: { firestore },
+        identityService: {
+          signIn,
+          register: jest.fn(),
+          sendPasswordReset: jest.fn(),
+        },
+      },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValue(
+      makeRegistrationEvent('synthetic-event', 'Synthetic Registration Event'),
+    );
+    const returnPath = '/events/synthetic-event/register?tier=member#price';
+    window.history.pushState({}, '', returnPath);
+
+    render(<App />);
+
+    const memberPricePrompt = await screen.findByText((_content, element) => (
+      element?.tagName === 'P'
+      && element.textContent?.includes('Are you a member?')
+    ));
+    const signInLink = within(memberPricePrompt.closest('p')).getByRole(
+      'link',
+      { name: 'Sign in' },
+    );
+    expect(signInLink).toHaveAttribute('href', '/login');
+    fireEvent.click(signInLink);
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Sign in' }))
+      .toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'account@example.test' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'synthetic-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/events/synthetic-event/register');
+    expect(window.location.search).toBe('?tier=member');
+    expect(window.location.hash).toBe('#price');
+    expect(signIn).toHaveBeenCalledWith('account@example.test', 'synthetic-password');
+    expect(signIn).toHaveBeenCalledTimes(1);
+    expect(getEventBySlug).toHaveBeenCalledTimes(2);
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('keeps the authenticated event-registration member price unchanged', async () => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-member', email: 'member@example.test' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: false,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    getEventBySlug.mockResolvedValueOnce(
+      makeRegistrationEvent('synthetic-event', 'Synthetic Member Registration'),
+    );
+
+    renderPublicEventRegister();
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Member Registration',
+    })).toBeInTheDocument();
+    expect(screen.getByText('$10.00')).toBeInTheDocument();
+    expect(screen.getByText('(member)')).toBeInTheDocument();
+    expect(screen.queryByText((_content, element) => (
+      element?.tagName === 'P'
+      && element.textContent?.includes('Are you a member?')
+    ))).not.toBeInTheDocument();
+    expect(track).not.toHaveBeenCalled();
   });
 
   test('clears a prior lookup failure when the current registration slug succeeds', async () => {

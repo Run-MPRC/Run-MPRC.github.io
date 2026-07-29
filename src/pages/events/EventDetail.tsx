@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 import {
@@ -10,6 +15,7 @@ import {
 import { Event } from '../../types/events';
 import { useAuth } from '../../services/hooks/useAuth';
 import { track, events as analyticsEvents } from '../../services/analytics/analytics';
+import { getLocationReturnPath } from '../login/loginReturnPath';
 
 function PriceRow({ label, cents }: { label: string; cents?: number }) {
   if (typeof cents !== 'number' || cents < 0) return null;
@@ -23,6 +29,7 @@ function PriceRow({ label, cents }: { label: string; cents?: number }) {
 
 function EventDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
   const { services, isReady } = useServiceLocator();
   const { isMember, isAuthenticated } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
@@ -181,7 +188,11 @@ function EventDetail() {
             <p className="text-xs text-gray-600 mt-2">
               Members:
               {' '}
-              <Link to="/login" className="text-blue-600 hover:underline">
+              <Link
+                to="/login"
+                state={{ from: getLocationReturnPath(location) }}
+                className="text-blue-600 hover:underline"
+              >
                 sign in
               </Link>
               {' '}
