@@ -399,3 +399,46 @@ class IdentityService {
 }
 
 export default IdentityService;
+
+export type GoogleSignInFailureOutcome =
+  | 'cancelled'
+  | 'popup_blocked'
+  | 'account_collision'
+  | 'unavailable';
+
+// AUTH-006B source-only boundary. This classifies one already-caught value for
+// a future UI. It does not construct a provider, start sign-in, retain a
+// credential, link an account, navigate, log, or grant authority.
+export function classifyGoogleSignInFailure(
+  error: unknown,
+): GoogleSignInFailureOutcome {
+  if (error === null || typeof error !== 'object') {
+    return 'unavailable';
+  }
+
+  try {
+    if (Array.isArray(error)) return 'unavailable';
+    const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
+
+    if (
+      !codeDescriptor
+      || !Object.prototype.hasOwnProperty.call(codeDescriptor, 'value')
+      || typeof codeDescriptor.value !== 'string'
+    ) {
+      return 'unavailable';
+    }
+
+    switch (codeDescriptor.value) {
+      case 'auth/popup-closed-by-user':
+        return 'cancelled';
+      case 'auth/popup-blocked':
+        return 'popup_blocked';
+      case 'auth/account-exists-with-different-credential':
+        return 'account_collision';
+      default:
+        return 'unavailable';
+    }
+  } catch {
+    return 'unavailable';
+  }
+}
