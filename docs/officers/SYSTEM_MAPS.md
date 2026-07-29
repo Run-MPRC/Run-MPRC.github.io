@@ -14,7 +14,7 @@ flowchart TD
     Events --> Calendar["Calendar"]
     Events --> Event["Event details"]
     Event --> Registration["Race registration — not approved for live payments"]
-    Site --> Shop["Shop — not approved for live payments"]
+    Site -. "after approved publication" .-> Shop["Shop pickup catalog — SOURCE ONLY, NOT LIVE; no online ordering"]
     Site --> Committee["Committee"]
     Site --> Contact["Contact Us"]
     Site --> Account["Login and Account"]
@@ -23,13 +23,17 @@ flowchart TD
     Account --> Admin["Restricted /admin pages — direct link"]
 ```
 
-In words: public information, account/admin pages, and unfinished commerce screens share one website; seeing a screen does not mean it is approved for live use.
+In words: public information, account/admin pages, and unfinished commerce
+screens share one website; the Shop pickup catalog is source-only until an
+approved publication and exact live revision check, it creates no order or
+payment, and seeing any screen does not mean it is approved for live commerce.
 
 ## Where information lives
 
 ```mermaid
 flowchart LR
-    Public["Public text and photos in GitHub"] --> Build["Website build"]
+    Public["Current public text and photos in GitHub"] --> Build["Website build"]
+    Pickup["Pickup catalog in GitHub — SOURCE ONLY, NOT LIVE"] -. "after approved publication" .-> Build
     Build --> Visitor["Website visitor"]
     Officer["Authorized officer"] --> Admin["Restricted admin pages"]
     Visitor --> Auth["Firebase login"]
@@ -40,7 +44,11 @@ flowchart LR
     Functions -. "future live commerce only" .-> Stripe["Stripe"]
 ```
 
-In words: public content comes from GitHub; private accounts and operational records use Firebase; Google Forms are separate; Stripe must remain test-only until approved.
+In words: current public content comes from GitHub; the display-only pickup
+catalog is source-only until an approved publication and exact live revision
+check, it creates no operational record, private accounts and other operational
+records use Firebase, Google Forms are separate, and Stripe must remain
+test-only until approved.
 
 ## How a change reaches people through the protected gate
 
