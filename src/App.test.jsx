@@ -246,7 +246,6 @@ test('renders the Auth action route and removes its query and fragment before us
   expect(window.location.hash).toBe('');
 });
 
-const SHOP_LOAD_FAILURE = 'We could not load the shop right now. Please try again later.';
 const PRODUCT_LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
 const SHOP_CHECKOUT_FAILURE = 'We could not confirm checkout. Do not try again. Contact MPRC for help.';
 const EVENTS_LOAD_FAILURE = 'Error: We could not load events right now. Please try again later.';
@@ -3217,97 +3216,88 @@ describe('DATA-001A2 purchase confirmation attempt isolation', () => {
   });
 });
 
-describe('public Shop catalog failure boundary', () => {
+describe('display-only in-person Shop catalog', () => {
+  let originalFetch;
+
   beforeEach(() => {
+    originalFetch = global.fetch;
+    global.fetch = jest.fn();
     useServiceLocator.mockReturnValue({
       services: { firebaseResources: { firestore } },
       isReady: true,
     });
-    listActiveProducts.mockResolvedValue([]);
+    listActiveProducts.mockResolvedValue([{
+      id: 'synthetic-online-product',
+      slug: 'synthetic-online-product',
+      title: 'Synthetic Online Product',
+      imageUrl: '',
+      priceCents: 9999,
+      status: 'active',
+    }]);
   });
 
   afterEach(() => {
+    if (originalFetch === undefined) delete global.fetch;
+    else global.fetch = originalFetch;
     jest.restoreAllMocks();
   });
 
-  test('replaces rejected catalog details with one fixed accessible result', async () => {
-    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
-      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
-    listActiveProducts.mockRejectedValueOnce(Object.assign(
-      new Error('shop-provider-private-canary member@example.test'),
-      {
-        code: 'firestore/shop-provider-private-canary',
-        endpoint: 'https://provider.example.test/?token=secret-canary',
-      },
-    ));
-
+  test('shows the approved Hat and Jacket prices with pickup and payment instructions', async () => {
     renderPublicShop();
 
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toBe(SHOP_LOAD_FAILURE);
-    expect(alert).toHaveAttribute('aria-live', 'assertive');
-    expect(alert).toHaveAttribute('aria-atomic', 'true');
-    expect(document.body).not.toHaveTextContent(
-      /shop-provider-private-canary|member@example\.test|provider\.example|secret-canary/i,
-    );
-    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-    expect(screen.queryByText('No items available right now. Check back soon.'))
-      .not.toBeInTheDocument();
-    expect(listActiveProducts).toHaveBeenCalledWith(firestore);
-    expect(listActiveProducts).toHaveBeenCalledTimes(1);
-    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
-  });
+    const expectedDescription = [
+      'Mid-Peninsula Running Club hat and jacket prices. ',
+      'Check availability with the Treasurer for in-person pickup at a club run; ',
+      'no online ordering.',
+    ].join('');
+    const catalog = screen.getByRole('region', { name: 'In-person club merchandise' });
+    const cards = within(catalog).getAllByRole('article');
+    expect(cards).toHaveLength(2);
 
-  test('does not inspect or log a hostile catalog rejection', async () => {
-    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
-      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
-    const messageGetter = jest.fn(() => {
-      throw new Error('shop-message-getter-canary');
+    const hat = within(catalog).getByRole('article', { name: 'MPRC Hat' });
+    expect(within(hat).getByRole('heading', { name: 'MPRC Hat' })).toBeInTheDocument();
+    expect(within(hat).getByText('$10.00')).toBeInTheDocument();
+
+    const jacket = within(catalog).getByRole('article', { name: 'MPRC Jacket' });
+    expect(within(jacket).getByRole('heading', { name: 'MPRC Jacket' })).toBeInTheDocument();
+    expect(within(jacket).getByText('$25.00')).toBeInTheDocument();
+
+    cards.forEach((card) => {
+      expect(within(card).getByText(
+        'Check availability with the Treasurer at a club run. Pickup is in person. If payment is still due, pay the Treasurer by cash or Venmo.',
+      )).toBeInTheDocument();
     });
-    listActiveProducts.mockRejectedValueOnce(
-      Object.defineProperty({}, 'message', {
-        configurable: true,
-        get: messageGetter,
-      }),
-    );
-
-    renderPublicShop();
-
-    expect((await screen.findByRole('alert')).textContent).toBe(SHOP_LOAD_FAILURE);
-    expect(messageGetter).not.toHaveBeenCalled();
-    expect(document.body).not.toHaveTextContent('shop-message-getter-canary');
-    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    expect(within(catalog).getByText(
+      'These items are not sold through this page.',
+    )).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toContain('MPRC Shop'));
+    expect(document.head.querySelector('meta[name="description"]'))
+      .toHaveAttribute('content', expectedDescription);
+    expect(document.head.querySelector('meta[property="og:description"]'))
+      .toHaveAttribute('content', expectedDescription);
+    expect(document.head.querySelector('link[rel="canonical"]'))
+      .toHaveAttribute('href', 'https://runmprc.com/shop');
   });
 
-  test('preserves the existing empty catalog result', async () => {
+  test('offers no checkout controls and makes no catalog or provider request', () => {
     renderPublicShop();
 
-    expect(await screen.findByText('No items available right now. Check back soon.'))
-      .toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(listActiveProducts).toHaveBeenCalledWith(firestore);
-    expect(listActiveProducts).toHaveBeenCalledTimes(1);
-  });
-
-  test('preserves the existing successful product projection', async () => {
-    listActiveProducts.mockResolvedValueOnce([{
-      id: 'synthetic-product',
-      slug: 'synthetic-club-shirt',
-      title: 'Synthetic Club Shirt',
-      imageUrl: '',
-      priceCents: 2500,
-      status: 'active',
-    }]);
-
-    renderPublicShop();
-
-    expect(await screen.findByRole('link', { name: /Synthetic Club Shirt/ }))
-      .toHaveAttribute('href', '/shop/synthetic-club-shirt');
-    expect(screen.getByText('$25.00')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(listActiveProducts).toHaveBeenCalledWith(firestore);
-    expect(listActiveProducts).toHaveBeenCalledTimes(1);
+    const catalog = screen.getByRole('region', { name: 'In-person club merchandise' });
+    expect(within(catalog).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('radio')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('listbox')).not.toBeInTheDocument();
+    expect(within(catalog).queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(catalog.querySelector('a, button, form, input, select, textarea')).toBeNull();
+    expect(useServiceLocator).not.toHaveBeenCalled();
+    expect(listActiveProducts).not.toHaveBeenCalled();
+    expect(getProductBySlug).not.toHaveBeenCalled();
+    expect(createMerchCheckout).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
 

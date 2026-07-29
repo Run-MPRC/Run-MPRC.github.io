@@ -55,6 +55,94 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 If any proof is missing, report the change as **not live**.
 
+## In-person Shop catalog — SOURCE ONLY, NOT LIVE
+
+**Status:** **NOT AVAILABLE YET** until issue
+[#466](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/466) is merged, the
+website is published through an approved path, and the exact
+`runmprc.com/shop` revision is verified.
+
+**Purpose:** show the approved MPRC Hat at $10.00 and MPRC Jacket at $25.00
+without taking an order or payment online.
+
+**Approver:** shop lead plus treasurer and communications/platform owner.
+
+**Prerequisites:** a claimed #466 issue, its reviewed pull request and exact
+commit, approval of both prices and the cash/Venmo wording, an approved website
+publication, and a backup officer who can review the result without a terminal.
+Use [Review, Merge, Release, and Check a Change](./PUBLISH_AND_CHECK.md). The
+platform owner must give the backup officer the named release record and exact
+commit; the backup officer does not run a command to discover them.
+
+```mermaid
+flowchart LR
+    Review["Reviewed GitHub catalog"] --> Build["Website build"]
+    Build --> Shop["/shop pickup catalog"]
+    Shop --> Run["Runner checks availability at a club run"]
+    Run --> Treasurer["Treasurer handles pickup and any cash or Venmo payment"]
+    Shop -. "No order, payment, inventory, or ledger record" .-> Backend["Website backend"]
+```
+
+In words: reviewed public catalog text reaches `/shop`; the runner then checks
+availability and completes pickup and any payment with the Treasurer at a club
+run, while the page creates no backend record.
+
+Officer steps:
+
+1. Keep online Shop ordering and checkout unavailable.
+2. Obtain the named release record and exact commit from the platform owner.
+3. Open [runmprc.com/shop](https://runmprc.com/shop) only after that exact
+   website revision is known.
+4. Confirm the page shows `MPRC Hat` and `$10.00`.
+5. Confirm the page shows `MPRC Jacket` and `$25.00`.
+6. Confirm both items say to check availability with the Treasurer at a club
+   run.
+7. Confirm both items say pickup is in person.
+8. Confirm both items say an amount still due may be paid to the Treasurer by
+   cash or Venmo.
+9. Confirm the page has no order form, reservation, checkout button, payment
+   link, Venmo handle, or inventory promise.
+10. Request any later item, price, or wording change through one reviewed issue
+   and pull request. Do not edit Firebase or a payment provider.
+11. Record the website publication and dated `runmprc.com/shop` check
+    separately from source and test results.
+
+**Expected result:** `/shop` is a two-item information page. It collects no
+buyer information and creates no order, payment, inventory, ledger,
+fulfillment, or receipt record. It is not proof that an item is available or
+that a person has paid.
+
+**Stop conditions:** any order or payment control; a payment address or private
+account detail; a promise of availability; a request to mark a person paid in
+the browser, Firebase, Stripe, or a spreadsheet; an unknown website revision;
+or any claim that source, tests, merge, or a green workflow proves the page is
+published.
+
+**Success proof:** exact #466 pull request and merge commit; intended
+old-source test failures; green focused and full frontend checks; a reviewed
+system map; approved website publication; and a dated exact-revision check of
+`runmprc.com/shop`. Record the actual result for the website, Firebase,
+Functions, payment provider, production data, and live behavior separately.
+This source slice requires no Firebase, Function, or provider change. If a
+release reports one, stop and investigate instead of pre-filling “not
+performed.”
+
+**Undo:** before publication, use one reviewed frontend revert or safe
+roll-forward. After publication, use the same approved website release path and
+verify the replacement revision. Do not undo by editing a product, order,
+payment, ledger, member account, Firebase record, spreadsheet, or provider
+setting.
+
+**Escalation:** shop lead plus treasurer and communications/platform owner. Add
+the privacy/security owner if buyer, payment, account, or ledger details appear.
+Use a private incident path for sensitive details; never paste them into an
+issue, screenshot, email, message, or AI tool.
+
+Catalog editing in the website and an officer payment ledger are **NOT
+AVAILABLE YET**. The club mailbox is not an authorization boundary. Future
+officer access must use individually attributable accounts, scoped server-side
+permissions, and an audit trail.
+
 ## New-account verification message — SOURCE ONLY, NOT LIVE
 
 **Purpose:** tell a member whether the account exists and whether the email service accepted the verification request.
@@ -1537,39 +1625,63 @@ Officer review steps after the source merge:
 
 No full-system map changes are required because services, permissions, and publication paths are unchanged. The diagram above shows which account may appear and when an older result must stop.
 
-## Public Shop catalog failure privacy — SOURCE ONLY, NOT LIVE
+## Public Shop catalog database-load path — RETIRED BY #466
 
-**Status: NOT AVAILABLE YET**
+**Status:** **NOT AVAILABLE YET**. Issue
+[#466](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/466) removes this
+path from target source. An older published revision may still contain it until
+the exact #466 revision is published and verified.
 
-**Purpose:** give any public Shop visitor one plain next step when the product list cannot load, without showing a database, provider, account, or technical error.
+**Purpose:** prevent an officer from following the old database-catalog failure
+procedure after `/shop` becomes a static pickup catalog.
 
-**Approver:** communications lead plus platform/security owner.
+**Approver:** communications lead plus shop lead and platform/security owner.
 
-**Prerequisites:** issue [#254](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/254) must be merged for source review. Calling the sentence live also requires a protected website publication and an exact revision check on `runmprc.com/shop`. This source change does not deploy Firebase, change database permissions, contact an outside provider, use production data, or prove live behavior.
+**Prerequisites:** the platform owner supplies the named release record, exact
+website revision, #466 merge/publication state, and named green focused test
+result. No production failure is forced.
 
-Officer review steps after the source merge:
+Officer steps:
 
-1. Keep the public Shop failure sentence marked **NOT AVAILABLE YET**.
-2. Ask the platform owner for the exact #254 issue, pull request, merged commit, and synthetic frontend test result.
-3. Confirm the tests use only a made-up catalog, made-up product, and mocked database result.
-4. Confirm a made-up catalog rejection shows `We could not load the shop right now. Please try again later.`
-5. Confirm the loading sentence stops and the empty-catalog sentence does not appear for that failure.
-6. Confirm no made-up database, provider, account, endpoint, or technical detail appears on the page or in browser console output.
-7. Confirm a hostile rejected value is not inspected.
-8. Confirm a genuinely empty made-up catalog and a successful made-up product still use their existing displays.
-9. Record website publication, `runmprc.com/shop`, Firebase, provider, production-data, and live-behavior evidence as separate results.
+1. Obtain the named release record, exact revision, and green focused test
+   result from the platform owner. Do not use a terminal or browser developer
+   tools.
+2. Check whether the exact #466 website revision is published.
+3. If it is not published, report the old `/shop` behavior as unapproved and
+   stop. Do not force a database failure or start checkout.
+4. If it is published, use **In-person Shop catalog — SOURCE ONLY, NOT LIVE**
+   above.
+5. Visually confirm the page has no loading, empty-catalog, database-error, or
+   checkout control.
+6. Confirm the named focused test proves the page makes no catalog or provider
+   request.
+7. Record the actual website, Firebase, provider, and production-data results
+   separately.
 
-**Expected result:** the reviewed source uses one fixed retry-later sentence for a catalog rejection. It does not inspect, display, or log the rejected value. The failure is announced as an alert, while successful and genuinely empty catalogs remain unchanged.
+**Expected result:** the #466 catalog has no loading, empty, or database-error
+state because it reads no product list. Direct legacy product routes remain a
+separate unapproved prototype.
 
-**Stop conditions:** any real member, customer, order, or product data; a request for a database or provider error, account detail, private endpoint, or screenshot containing private values; a production Firebase or provider change; a raw detail on the page or in the console; or a claim that source, tests, merge, or a green workflow proves the sentence is live.
+**Stop conditions:** an unknown revision, real customer/order/product data, a
+forced production error, a checkout attempt, a database/provider change, or a
+claim that a merge or green workflow proves the new catalog is published.
 
-**Success proof:** for source completion, record the exact #254 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic tests, relevant full checks, and independent privacy review. For live availability, separately record the approved website publication, published revision, and a dated `runmprc.com/shop` check that uses no private or production data. Record Firebase deployment, database-permission changes, provider configuration, and production-data actions as **not performed** for this frontend-only change.
+**Success proof:** exact #466 merge and website revision; green test proving no
+catalog/provider request; dated `runmprc.com/shop` verification; and separate
+actual results for Firebase deployment, provider configuration, and
+production-data actions. Issue #466 requires none of those actions. If a
+release reports one, stop and investigate.
 
-**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com/shop`. Do not undo by changing a product, order, member account, database record, permission, or provider setting.
+**Undo:** use one reviewed frontend revert or safe roll-forward through the
+approved website release path. Do not restore or repair the old path by editing
+Firebase, a product, an order, an account, or a provider.
 
-**Escalation:** communications lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, provider, account, endpoint, or technical detail appeared. Do not copy the detail into an issue, message, screenshot, email, or AI tool.
+**Escalation:** communications lead plus shop lead and platform/security owner.
+Add the privacy owner and use the private incident path if any customer,
+account, database, provider, or payment detail appears.
 
-No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
+The updated catalog data flow is shown near the top of this guide and in
+[Simple System Maps](./SYSTEM_MAPS.md).
 
 ## Public product-detail load failure privacy — SOURCE ONLY, NOT LIVE
 

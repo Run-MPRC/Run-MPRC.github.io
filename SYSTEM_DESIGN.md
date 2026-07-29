@@ -978,6 +978,24 @@ The same server validation and Firestore transaction are used, but no Stripe cal
 
 ### 8.3 Merchandise purchase
 
+Issue [#466](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/466) prepares
+a separate display-only pickup catalog for `/shop`. The catalog is **SOURCE
+ONLY, NOT LIVE** until its exact revision is merged, published through an
+approved website path, and verified on `runmprc.com/shop`. Its two
+source-controlled entries are an MPRC Hat for $10.00 and an MPRC Jacket for
+$25.00. The page tells the visitor to check availability with the Treasurer at
+a club run, pick up in person, and pay any amount still due by cash or Venmo. It
+does not read Firestore, call a Function or payment provider, collect buyer
+data, reserve
+stock, create an order, or prove payment or fulfillment. The older prototype
+product-detail and purchase-callback routes remain in source for compatibility
+but are not linked from this catalog and are not approved for live commerce.
+Source changed, tests passed, code merged, website published, and
+`runmprc.com/shop` verified remain separate states.
+
+The following is still the target online-commerce design and is **NOT AVAILABLE
+YET**:
+
 Merchandise uses the same checkout saga but reserves a specific SKU/variant. Stripe shipping collection is copied into the order only after a verified paid event. Payment status and fulfillment status remain separate. A paid order may be `unfulfilled`, `packed`, `shipped`, `delivered`, `cancelled`, or `returned` without corrupting the payment ledger.
 
 ### 8.4 Refund

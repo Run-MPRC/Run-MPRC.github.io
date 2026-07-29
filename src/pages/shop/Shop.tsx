@@ -1,78 +1,88 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React from 'react';
 import SEO from '../../components/SEO';
 import Header from '../../components/Header';
 import HeaderImage from '../../images/home/mprc_home.jpg';
-import { useServiceLocator } from '../../services/ServiceLocatorContext';
-import { Product } from '../../types/shop';
-import { listActiveProducts, formatPrice } from '../../services/shop/shopService';
+
+const PICKUP_PAYMENT_INSTRUCTIONS = [
+  'Check availability with the Treasurer at a club run. ',
+  'Pickup is in person. ',
+  'If payment is still due, pay the Treasurer by cash or Venmo.',
+].join('');
+
+const PICKUP_SHOP_ITEMS = Object.freeze([
+  Object.freeze({
+    id: 'mprc-hat',
+    title: 'MPRC Hat',
+    priceCents: 1000,
+  }),
+  Object.freeze({
+    id: 'mprc-jacket',
+    title: 'MPRC Jacket',
+    priceCents: 2500,
+  }),
+]);
+
+const priceFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
 
 function Shop() {
-  const { services, isReady } = useServiceLocator();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isReady || !services) return;
-    listActiveProducts(services.firebaseResources.firestore)
-      .then((ps) => { setProducts(ps); setLoading(false); })
-      .catch(() => { setError('We could not load the shop right now. Please try again later.'); setLoading(false); });
-  }, [services, isReady]);
-
   return (
     <>
       <SEO
         title="MPRC Shop"
-        description="Mid-Peninsula Running Club merchandise: shirts, hats, and gear"
+        description="Mid-Peninsula Running Club hat and jacket prices. Check availability with the Treasurer for in-person pickup at a club run; no online ordering."
         url="https://runmprc.com/shop"
         canonicalUrl="https://runmprc.com/shop"
       />
       <Header title="MPRC Shop" image={HeaderImage}>
-        Club merchandise and gear for the MPRC community.
+        Club merchandise for in-person pickup at a club run.
       </Header>
       <div className="container mx-auto p-4 max-w-5xl">
-        <h2 className="text-2xl font-bold mb-4">Available merchandise</h2>
-        {loading && <p className="text-gray-500">Loading...</p>}
-        {error && <p role="alert" aria-live="assertive" aria-atomic="true" className="text-red-500">{error}</p>}
-        {!loading && !error && products.length === 0 && (
-          <p className="text-gray-600">No items available right now. Check back soon.</p>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {products.map((p) => {
-            const soldOut = p.status === 'sold_out';
-            return (
-              <Link
-                key={p.id}
-                to={`/shop/${p.slug}`}
-                className="border rounded-lg overflow-hidden hover:shadow-md transition"
-              >
-                <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
-                  {p.imageUrl
-                    ? (
-                      <img
-                        src={p.imageUrl}
-                        alt={p.title}
-                        className="w-full h-full object-cover"
-                      />
-                    )
-                    : <span className="text-gray-400 text-sm">No image</span>}
-                </div>
-                <div className="p-3">
-                  <div className="font-semibold">{p.title}</div>
-                  <div className="flex justify-between items-baseline mt-1">
-                    <span className="text-lg font-bold">
-                      {formatPrice(p.priceCents)}
-                    </span>
-                    {soldOut && (
-                      <span className="text-xs text-red-600 font-semibold">Sold out</span>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        <section
+          aria-labelledby="pickup-shop-heading"
+          className="mt-8 mb-12"
+        >
+          <div className="max-w-3xl mb-8">
+            <h2 id="pickup-shop-heading" className="text-2xl font-bold mb-3">
+              In-person club merchandise
+            </h2>
+            <p className="text-lg font-semibold text-gray-100 mb-2">
+              These items are not sold through this page.
+            </p>
+            <p className="text-gray-200">
+              Ask the Treasurer about current availability when you attend a
+              club run.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {PICKUP_SHOP_ITEMS.map((item) => {
+              const headingId = `${item.id}-heading`;
+
+              return (
+                <article
+                  key={item.id}
+                  aria-labelledby={headingId}
+                  className="card text-left"
+                >
+                  <p className="text-sm font-semibold uppercase tracking-wide text-gray-200 mb-3">
+                    In-person pickup
+                  </p>
+                  <h3 id={headingId} className="text-2xl font-bold mb-3">
+                    {item.title}
+                  </h3>
+                  <p className="text-3xl font-bold text-white mb-5">
+                    {priceFormatter.format(item.priceCents / 100)}
+                  </p>
+                  <p className="text-gray-100">
+                    {PICKUP_PAYMENT_INSTRUCTIONS}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </>
   );
