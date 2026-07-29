@@ -4,7 +4,12 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import SEO from '../../components/SEO';
 import {
@@ -19,6 +24,7 @@ import { track, events as analyticsEvents } from '../../services/analytics/analy
 import buildRaceCheckoutRequest, {
   customValuesAfterSignupTypeChange,
 } from './raceCheckoutRequest';
+import { getLocationReturnPath } from '../login/loginReturnPath';
 
 const SUBMIT_FAILURE = 'We could not confirm your registration. Do not try again. Contact MPRC for help.';
 type PriceTier = 'member' | 'nonMember' | 'earlyBird';
@@ -101,6 +107,7 @@ function CustomFieldInput({
 
 function EventRegister() {
   const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { services, isReady } = useServiceLocator();
   const { user, isMember, isAuthenticated } = useAuth();
@@ -321,7 +328,13 @@ function EventRegister() {
               <p className="text-xs text-gray-700 mt-2">
                 Are you a member?
                 {' '}
-                <Link to="/login" className="text-blue-600 underline">Sign in</Link>
+                <Link
+                  to="/login"
+                  state={{ from: getLocationReturnPath(location) }}
+                  className="text-blue-600 underline"
+                >
+                  Sign in
+                </Link>
                 {' '}
                 for the member price.
               </p>
