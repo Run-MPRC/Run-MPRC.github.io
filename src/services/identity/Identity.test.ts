@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 export {};
 
 const mockCreateUserWithEmailAndPassword = jest.fn();
@@ -17,6 +20,7 @@ const mockOnAuthStateChanged = jest.fn((
 });
 const mockReportClientFailure = jest.fn();
 const mockSendEmailVerification = jest.fn();
+const mockSendPasswordResetEmail = jest.fn();
 const mockSignInWithEmailAndPassword = jest.fn();
 const mockSignOut = jest.fn();
 const { deserialize, serialize } = require('v8');
@@ -31,7 +35,7 @@ jest.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: mockCreateUserWithEmailAndPassword,
   onAuthStateChanged: mockOnAuthStateChanged,
   sendEmailVerification: mockSendEmailVerification,
-  sendPasswordResetEmail: jest.fn(),
+  sendPasswordResetEmail: mockSendPasswordResetEmail,
   signInWithEmailAndPassword: mockSignInWithEmailAndPassword,
   signOut: mockSignOut,
 }));
@@ -44,6 +48,7 @@ jest.mock('../monitoring/clientDiagnostics', () => ({
 }));
 
 const {
+  classifyGoogleSignInFailure,
   default: IdentityService,
   projectUserRoleFromTokenClaims,
 } = require('./Identity');
@@ -625,6 +630,300 @@ describe('Identity browser role projection', () => {
       expect(throwingSubscriber).toHaveBeenCalledTimes(1);
       expect(listener.mock.calls).toEqual([[null]]);
     });
+  });
+});
+
+describe('Google sign-in failure classification source boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test.each([
+    ['auth/popup-closed-by-user', 'cancelled'],
+    ['auth/popup-blocked', 'popup_blocked'],
+    ['auth/account-exists-with-different-credential', 'account_collision'],
+  ])('maps exact provider code %s to fixed outcome %s', (code, outcome) => {
+    const input = Object.freeze({
+      code,
+      credential: 'private-credential-canary',
+      customData: Object.freeze({ email: 'private-account@example.test' }),
+      message: 'private-provider-message-canary',
+    });
+
+    expect(classifyGoogleSignInFailure(input)).toBe(outcome);
+    expect(JSON.stringify(classifyGoogleSignInFailure(input)))
+      .not.toMatch(/private|credential|example/);
+  });
+
+  test.each([
+    undefined,
+    null,
+    true,
+    1,
+    'auth/popup-blocked',
+    [],
+    Object.assign([], { code: 'auth/popup-blocked' }),
+    {},
+    { code: null },
+    { code: 1 },
+    { code: '' },
+    { code: 'AUTH/POPUP-BLOCKED' },
+    { code: 'auth/popup-blocked ' },
+    { code: ' auth/popup-blocked' },
+    { code: 'auth/popup-blocked\u0000' },
+    { code: 'auth/cancelled-popup-request' },
+    { code: 'auth/operation-not-allowed' },
+    { code: 'auth/unauthorized-domain' },
+    { code: 'auth/network-request-failed' },
+    { code: 'auth/internal-error' },
+    { code: 'auth/unknown-private-canary' },
+  ])('maps unsupported or malformed value %# to unavailable', (input) => {
+    expect(classifyGoogleSignInFailure(input)).toBe('unavailable');
+  });
+
+  test('does not read inherited or accessor-backed codes', () => {
+    const inherited = Object.create({ code: 'auth/popup-blocked' });
+    const codeGetter = jest.fn(() => 'auth/popup-blocked');
+    const accessorBacked = {};
+    Object.defineProperty(accessorBacked, 'code', {
+      enumerable: true,
+      get: codeGetter,
+    });
+
+    expect(classifyGoogleSignInFailure(inherited)).toBe('unavailable');
+    expect(classifyGoogleSignInFailure(accessorBacked)).toBe('unavailable');
+    expect(codeGetter).not.toHaveBeenCalled();
+  });
+
+  test('does not coerce an object-valued code', () => {
+    const toPrimitive = jest.fn(() => {
+      throw new Error('private-primitive-canary');
+    });
+    const toString = jest.fn(() => {
+      throw new Error('private-string-canary');
+    });
+    const valueOf = jest.fn(() => {
+      throw new Error('private-value-canary');
+    });
+
+    expect(classifyGoogleSignInFailure({
+      code: {
+        [Symbol.toPrimitive]: toPrimitive,
+        toString,
+        valueOf,
+      },
+    })).toBe('unavailable');
+    expect(toPrimitive).not.toHaveBeenCalled();
+    expect(toString).not.toHaveBeenCalled();
+    expect(valueOf).not.toHaveBeenCalled();
+  });
+
+  test('fails closed when a hostile object blocks descriptor inspection', () => {
+    const hostile = new Proxy(
+      { code: 'auth/popup-blocked' },
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error('private-proxy-trap-canary');
+        },
+      },
+    );
+
+    expect(classifyGoogleSignInFailure(hostile)).toBe('unavailable');
+  });
+
+  test('limits a nonthrowing Proxy-fabricated code to one fixed label', () => {
+    const descriptorTrap = jest.fn(() => ({
+      configurable: true,
+      enumerable: true,
+      value: 'auth/popup-blocked',
+      writable: true,
+    }));
+    const fabricated = new Proxy({}, {
+      getOwnPropertyDescriptor: descriptorTrap,
+    });
+
+    expect(classifyGoogleSignInFailure(fabricated)).toBe('popup_blocked');
+    expect(descriptorTrap).toHaveBeenCalledTimes(1);
+  });
+
+  test('documents that Proxy descriptor normalization can invoke a getter', () => {
+    const descriptorValueGetter = jest.fn(() => 'auth/popup-blocked');
+    const fabricated = new Proxy({}, {
+      getOwnPropertyDescriptor: () => {
+        const descriptor = {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+        };
+        Object.defineProperty(descriptor, 'value', {
+          enumerable: true,
+          get: descriptorValueGetter,
+        });
+        return descriptor;
+      },
+    });
+
+    expect(classifyGoogleSignInFailure(fabricated)).toBe('popup_blocked');
+    expect(descriptorValueGetter).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns unavailable if a Proxy corrupts later descriptor validation', () => {
+    const originalHasOwnProperty = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'hasOwnProperty',
+    );
+    expect(originalHasOwnProperty).toBeDefined();
+    const hostile = new Proxy(
+      { code: 'auth/popup-blocked' },
+      {
+        getOwnPropertyDescriptor(target, key) {
+          Reflect.defineProperty(Object.prototype, 'hasOwnProperty', {
+            ...originalHasOwnProperty,
+            value: () => {
+              throw new Error('private-mutated-intrinsic-canary');
+            },
+          });
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      },
+    );
+    let result: unknown;
+
+    try {
+      result = classifyGoogleSignInFailure(hostile);
+    } finally {
+      if (originalHasOwnProperty) {
+        Reflect.defineProperty(
+          Object.prototype,
+          'hasOwnProperty',
+          originalHasOwnProperty,
+        );
+      }
+    }
+
+    expect(result).toBe('unavailable');
+  });
+
+  test('fails closed for a revoked proxy', () => {
+    const { proxy, revoke } = Proxy.revocable(
+      { code: 'auth/popup-blocked' },
+      {},
+    );
+    revoke();
+
+    expect(classifyGoogleSignInFailure(proxy)).toBe('unavailable');
+  });
+
+  test('returns only a fixed outcome without reading details or logging', () => {
+    const detailGetters: jest.Mock[] = [];
+    const symbolCanary = Symbol('private-symbol-canary');
+    const detailedInput = (code: string) => {
+      const input = {
+        code,
+        [symbolCanary]: 'private-symbol-value-canary',
+      };
+      ['message', 'customData', 'credential', 'user'].forEach((key) => {
+        const getter = jest.fn(() => `private-${key}-canary`);
+        detailGetters.push(getter);
+        Object.defineProperty(input, key, {
+          enumerable: true,
+          get: getter,
+        });
+      });
+      return input;
+    };
+    const consoleSpies = [
+      jest.spyOn(console, 'debug').mockImplementation(() => undefined),
+      jest.spyOn(console, 'info').mockImplementation(() => undefined),
+      jest.spyOn(console, 'log').mockImplementation(() => undefined),
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined),
+      jest.spyOn(console, 'error').mockImplementation(() => undefined),
+    ];
+
+    try {
+      expect([
+        classifyGoogleSignInFailure(detailedInput(
+          'auth/popup-closed-by-user',
+        )),
+        classifyGoogleSignInFailure(detailedInput('auth/popup-blocked')),
+        classifyGoogleSignInFailure(detailedInput(
+          'auth/account-exists-with-different-credential',
+        )),
+        classifyGoogleSignInFailure(detailedInput(
+          'auth/unknown-private-canary',
+        )),
+      ]).toEqual([
+        'cancelled',
+        'popup_blocked',
+        'account_collision',
+        'unavailable',
+      ]);
+      detailGetters.forEach((getter) => expect(getter).not.toHaveBeenCalled());
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(mockReportClientFailure).not.toHaveBeenCalled();
+    } finally {
+      consoleSpies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
+  test('classifier boundary has no provider, account, linking, or token API', () => {
+    const source = readFileSync(join(__dirname, 'Identity.ts'), 'utf8');
+    const boundaryMarker = 'export type GoogleSignInFailureOutcome';
+    const boundaryStart = source.indexOf(boundaryMarker);
+
+    expect(boundaryStart).toBeGreaterThanOrEqual(0);
+    const boundary = source.slice(boundaryStart);
+
+    [
+      'GoogleAuthProvider',
+      'OAuthProvider',
+      'google.com',
+      'signInWithPopup',
+      'signInWithRedirect',
+      'signInWithCredential',
+      'getRedirectResult',
+      'linkWithPopup',
+      'linkWithRedirect',
+      'linkWithCredential',
+      'reauthenticateWithPopup',
+      'reauthenticateWithRedirect',
+      'reauthenticateWithCredential',
+      'credentialFromResult',
+      'credentialFromError',
+      'accessToken',
+      'getIdToken',
+      'applyActionCode',
+      'checkActionCode',
+      'createUserWithEmailAndPassword',
+      'deleteUser',
+      'onAuthStateChanged',
+      'sendEmailVerification',
+      'sendPasswordResetEmail',
+      'signInWithEmailAndPassword',
+      'signOut',
+      'updateEmail',
+      'updatePassword',
+    ].forEach((forbiddenApi) => {
+      expect(boundary).not.toContain(forbiddenApi);
+    });
+
+    expect(boundary).not.toContain('firebase/auth');
+    [
+      { code: 'auth/popup-closed-by-user' },
+      { code: 'auth/popup-blocked' },
+      { code: 'auth/account-exists-with-different-credential' },
+      { code: 'auth/unknown-private-canary' },
+      undefined,
+    ].forEach((input) => classifyGoogleSignInFailure(input));
+    expect(mockApplyActionCode).not.toHaveBeenCalled();
+    expect(mockCheckActionCode).not.toHaveBeenCalled();
+    expect(mockCreateUserWithEmailAndPassword).not.toHaveBeenCalled();
+    expect(mockOnAuthStateChanged).not.toHaveBeenCalled();
+    expect(mockSendEmailVerification).not.toHaveBeenCalled();
+    expect(mockSendPasswordResetEmail).not.toHaveBeenCalled();
+    expect(mockSignInWithEmailAndPassword).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(mockReportClientFailure).not.toHaveBeenCalled();
   });
 });
 
