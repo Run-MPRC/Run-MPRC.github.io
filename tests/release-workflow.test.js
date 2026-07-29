@@ -205,26 +205,26 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the reviewed hotfix source and is paused', () => {
+test('Netlify manifest pins the reviewed rollback source', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, false);
+  assert.equal(loaded.manifest.active, true);
   assert.equal(loaded.manifest.issueNumber, 457);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    '491cc22d80de1faae1960bd63c80ce62e648397b',
+    'a70545760510ed5e6575919eac9b8111e97f927f',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    'ed1b0833f25822cee80c99ded8753722b5608a3f',
+    'e86a0f702cff6495f50630c5de3337290db8b8cb',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    '878c6628d961f4484cb49208aef53f1e9f2e3b47',
+    '149627cdf65e1ebd34f6586200469ce330dca358',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    'e86a0f702cff6495f50630c5de3337290db8b8cb',
+    'ed1b0833f25822cee80c99ded8753722b5608a3f',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
@@ -232,16 +232,16 @@ test('Netlify manifest pins the reviewed hotfix source and is paused', () => {
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-457-header',
+    'refs/heads/codex/netlify-source-457-rollback',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-457-netlify-release',
+    'codex/issue-457-netlify-rollback',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 60);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    '7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092',
+    '72d690a7d1faa5b707fc10ce3c50387d31f7c4745df4d21453c90d4a2a84ebe4',
   );
 
 });
@@ -314,7 +314,7 @@ test('Netlify production authorization is exact-merge scoped', () => {
     evaluateProductionRelease({
       commit: mergeCommit,
       env: environment,
-      manifest,
+      manifest: { ...manifest, active: false },
     }).ok,
     false,
   );

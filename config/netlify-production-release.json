@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "active": false,
-  "releaseId": "WEB-UX-001A-2026-07-22",
+  "active": true,
+  "releaseId": "WEB-UX-001A-ROLLBACK-2026-07-22",
   "issueNumber": 457,
-  "previewBranch": "codex/issue-457-netlify-release",
-  "expectedProductionParent": "491cc22d80de1faae1960bd63c80ce62e648397b",
+  "previewBranch": "codex/issue-457-netlify-rollback",
+  "expectedProductionParent": "a70545760510ed5e6575919eac9b8111e97f927f",
   "sourceRepository": "https://github.com/Run-MPRC/Run-MPRC.github.io.git",
-  "sourceRef": "refs/heads/codex/netlify-source-457-header",
-  "sourceCommit": "ed1b0833f25822cee80c99ded8753722b5608a3f",
-  "sourceTree": "878c6628d961f4484cb49208aef53f1e9f2e3b47",
-  "previousSourceCommit": "e86a0f702cff6495f50630c5de3337290db8b8cb",
+  "sourceRef": "refs/heads/codex/netlify-source-457-rollback",
+  "sourceCommit": "e86a0f702cff6495f50630c5de3337290db8b8cb",
+  "sourceTree": "149627cdf65e1ebd34f6586200469ce330dca358",
+  "previousSourceCommit": "ed1b0833f25822cee80c99ded8753722b5608a3f",
   "rollbackDeployId": "6a54a3c93db9d300082e1f5f",
   "expectedSiteFileCount": 60,
-  "expectedSiteFilesSha256": "7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092"
+  "expectedSiteFilesSha256": "72d690a7d1faa5b707fc10ce3c50387d31f7c4745df4d21453c90d4a2a84ebe4"
 }
