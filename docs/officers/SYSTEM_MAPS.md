@@ -42,6 +42,22 @@ flowchart LR
 
 In words: public content comes from GitHub; private accounts and operational records use Firebase; Google Forms are separate; Stripe must remain test-only until approved.
 
+## Event sign-in return — SOURCE ONLY, NOT LIVE
+
+```mermaid
+flowchart LR
+    Detail["Event details address"] --> DetailLink["Member-price Sign in"]
+    Register["Race registration address"] --> RegisterLink["Member-price Sign in"]
+    DetailLink --> Login["Login carries the complete website address"]
+    RegisterLink --> Login
+    Login --> Check{"Existing website-address check accepts it?"}
+    Check -- "Yes, after successful sign-in" --> Return["Return to the same event address"]
+    Check -- "Missing or unsafe" --> Account["Account"]
+    Check -. "Does not grant" .-> Authority["Membership, offer, price, payment, registration, or admin access"]
+```
+
+In words: the source-only member-price links carry the complete Event details or Race registration address through Login during the current browser visit, return there after successful sign-in only when the existing website-address check accepts it, use Account when it is missing or unsafe, and grant no club or financial authority.
+
 ## How a change reaches people through the protected gate
 
 ```mermaid
