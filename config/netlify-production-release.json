@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "active": false,
-  "releaseId": "WEB-UX-001A-2026-07-22",
-  "issueNumber": 457,
-  "previewBranch": "codex/issue-457-netlify-release",
-  "expectedProductionParent": "491cc22d80de1faae1960bd63c80ce62e648397b",
+  "active": true,
+  "releaseId": "WEB-002A-2026-07-30",
+  "issueNumber": 473,
+  "previewBranch": "codex/issue-473-netlify-release",
+  "expectedProductionParent": "52fd426662c3d814044aa55eb6104ea1464a5bc6",
   "sourceRepository": "https://github.com/Run-MPRC/Run-MPRC.github.io.git",
-  "sourceRef": "refs/heads/codex/netlify-source-457-header",
-  "sourceCommit": "ed1b0833f25822cee80c99ded8753722b5608a3f",
-  "sourceTree": "878c6628d961f4484cb49208aef53f1e9f2e3b47",
-  "previousSourceCommit": "e86a0f702cff6495f50630c5de3337290db8b8cb",
-  "rollbackDeployId": "6a54a3c93db9d300082e1f5f",
-  "expectedSiteFileCount": 60,
-  "expectedSiteFilesSha256": "7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092"
+  "sourceRef": "refs/heads/codex/netlify-source-473-shop-events-auth",
+  "sourceCommit": "094af1096ed8721597561cd59bf695d4c4a9d210",
+  "sourceTree": "d12fd7660beaaddac5e952fe950dc6ad6bbdf68f",
+  "previousSourceCommit": "4f67e6cafb975a3f985fefc67f094b3a37526702",
+  "rollbackDeployId": "6a61c544171ea80008307623",
+  "expectedSiteFileCount": 59,
+  "expectedSiteFilesSha256": "72f16455fb67b0f00408ed867b69543c94395fb28aaa11cb2d490383de1aed01"
 }
