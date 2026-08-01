@@ -1,5 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import React, { useLayoutEffect } from 'react';
+import { act, render } from '@testing-library/react';
+import ServiceLocatorContext from '../ServiceLocatorContext';
+import type { ServiceLocatorContextValue } from '../ServiceLocatorContext';
+import { useAuth } from '../hooks/useAuth';
+import type { UseAuthResult } from '../hooks/useAuth';
+import type { AuthStateCallback, AuthUser } from './Identity';
 
 export {};
 
@@ -1211,5 +1218,236 @@ describe('Identity email verification action', () => {
     expect(JSON.stringify(consoleSpies.flatMap((spy) => spy.mock.calls)))
       .not.toMatch(/unknown-private|synthetic-member|unknown-code/);
     consoleSpies.forEach((spy) => spy.mockRestore());
+  });
+});
+
+describe('AUTH-006E useAuth identity-context isolation', () => {
+  type HookIdentityService = NonNullable<
+    ServiceLocatorContextValue['services']
+  >['identityService'];
+
+  interface IdentityHarness {
+    listeners: AuthStateCallback[];
+    service: HookIdentityService;
+    setCurrentUser: (user: AuthUser | null) => void;
+    unsubscribes: jest.Mock[];
+  }
+
+  interface AuthCommit {
+    context: string;
+    isAdmin: boolean;
+    isAuthenticated: boolean;
+    isLoading: boolean;
+    isMember: boolean;
+    user: AuthUser | null;
+  }
+
+  function projectedUser(uid: string, role: AuthUser['role']): AuthUser {
+    return {
+      email: `${uid}@example.test`,
+      role,
+      uid,
+    };
+  }
+
+  function createIdentityHarness(initialUser: AuthUser | null): IdentityHarness {
+    let currentUser = initialUser;
+    const listeners: AuthStateCallback[] = [];
+    const unsubscribes: jest.Mock[] = [];
+    const service = {
+      get currentUser() {
+        return currentUser;
+      },
+      onAuthStateChanged: jest.fn((callback: AuthStateCallback) => {
+        listeners.push(callback);
+        const unsubscribe = jest.fn();
+        unsubscribes.push(unsubscribe);
+        return unsubscribe;
+      }),
+      register: jest.fn(),
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+    } as unknown as HookIdentityService;
+
+    return {
+      listeners,
+      service,
+      setCurrentUser(user) {
+        currentUser = user;
+      },
+      unsubscribes,
+    };
+  }
+
+  function readyLocator(
+    identityService: HookIdentityService,
+  ): ServiceLocatorContextValue {
+    return {
+      isReady: true,
+      services: {
+        firebaseResources: {},
+        identityService,
+      },
+    } as unknown as ServiceLocatorContextValue;
+  }
+
+  function AuthProbe({
+    commits,
+    context,
+  }: {
+    commits: AuthCommit[];
+    context: string;
+  }) {
+    const auth: UseAuthResult = useAuth();
+    useLayoutEffect(() => {
+      commits.push({
+        context,
+        isAdmin: auth.isAdmin,
+        isAuthenticated: auth.isAuthenticated,
+        isLoading: auth.isLoading,
+        isMember: auth.isMember,
+        user: auth.user,
+      });
+    });
+    return null;
+  }
+
+  function authTree(
+    locator: ServiceLocatorContextValue,
+    context: string,
+    commits: AuthCommit[],
+  ) {
+    return React.createElement(
+      ServiceLocatorContext.Provider,
+      { value: locator },
+      React.createElement(AuthProbe, { commits, context }),
+    );
+  }
+
+  function lastCommit(commits: AuthCommit[]): AuthCommit {
+    const commit = commits[commits.length - 1];
+    if (!commit) throw new Error('missing synthetic auth commit');
+    return commit;
+  }
+
+  function expectUnprivileged(commit: AuthCommit, loading: boolean): void {
+    expect(commit).toMatchObject({
+      isAdmin: false,
+      isAuthenticated: false,
+      isLoading: loading,
+      isMember: false,
+      user: null,
+    });
+  }
+
+  test('never commits service A admin state under signed-out service B', () => {
+    const serviceA = createIdentityHarness(projectedUser('admin-a', 'admin'));
+    const serviceB = createIdentityHarness(null);
+    const commits: AuthCommit[] = [];
+    const view = render(authTree(readyLocator(serviceA.service), 'A', commits));
+
+    expect(lastCommit(commits)).toMatchObject({
+      context: 'A',
+      isAdmin: true,
+      isAuthenticated: true,
+      isLoading: false,
+      isMember: true,
+      user: projectedUser('admin-a', 'admin'),
+    });
+
+    const firstBCommit = commits.length;
+    view.rerender(authTree(readyLocator(serviceB.service), 'B', commits));
+    const bCommits = commits.slice(firstBCommit);
+
+    expect(bCommits.length).toBeGreaterThanOrEqual(2);
+    expectUnprivileged(bCommits[0], true);
+    bCommits.forEach((commit) => {
+      expect(commit.context).toBe('B');
+      expect(commit.user).toBeNull();
+      expect(commit.isAuthenticated).toBe(false);
+      expect(commit.isMember).toBe(false);
+      expect(commit.isAdmin).toBe(false);
+    });
+    expectUnprivileged(lastCommit(bCommits), false);
+  });
+
+  test('ignores a retained service A callback after service B settles', () => {
+    const serviceA = createIdentityHarness(projectedUser('member-a', 'member'));
+    const serviceB = createIdentityHarness(null);
+    const commits: AuthCommit[] = [];
+    const view = render(authTree(readyLocator(serviceA.service), 'A', commits));
+    const retainedAListener = serviceA.listeners[0];
+
+    view.rerender(authTree(readyLocator(serviceB.service), 'B', commits));
+    expectUnprivileged(lastCommit(commits), false);
+    expect(serviceA.unsubscribes[0]).toHaveBeenCalledTimes(1);
+    const settledCommitCount = commits.length;
+
+    act(() => {
+      retainedAListener(projectedUser('stale-admin-a', 'admin'));
+    });
+
+    expect(commits).toHaveLength(settledCommitCount);
+    expectUnprivileged(lastCommit(commits), false);
+  });
+
+  test('treats A after an unavailable context as a new generation', () => {
+    const serviceA = createIdentityHarness(projectedUser('old-admin-a', 'admin'));
+    const commits: AuthCommit[] = [];
+    const locatorA = readyLocator(serviceA.service);
+    const view = render(authTree(locatorA, 'A1', commits));
+    const firstGenerationListener = serviceA.listeners[0];
+
+    view.rerender(authTree({ isReady: false, services: null }, 'unavailable', commits));
+    expectUnprivileged(lastCommit(commits), true);
+    serviceA.setCurrentUser(null);
+
+    const firstA3Commit = commits.length;
+    view.rerender(authTree(locatorA, 'A3', commits));
+    const a3Commits = commits.slice(firstA3Commit);
+    expectUnprivileged(a3Commits[0], true);
+    expectUnprivileged(lastCommit(a3Commits), false);
+    expect(serviceA.listeners).toHaveLength(2);
+
+    const settledCommitCount = commits.length;
+    act(() => {
+      firstGenerationListener(projectedUser('stale-admin-a', 'admin'));
+    });
+    expect(commits).toHaveLength(settledCommitCount);
+    expectUnprivileged(lastCommit(commits), false);
+
+    act(() => {
+      serviceA.listeners[1](projectedUser('current-member-a', 'member'));
+    });
+    expect(lastCommit(commits)).toMatchObject({
+      context: 'A3',
+      isAdmin: false,
+      isAuthenticated: true,
+      isLoading: false,
+      isMember: true,
+      user: projectedUser('current-member-a', 'member'),
+    });
+  });
+
+  test('keeps one subscription for an equivalent wrapper with the same service', () => {
+    const serviceA = createIdentityHarness(projectedUser('member-a', 'member'));
+    const commits: AuthCommit[] = [];
+    const locatorA1 = readyLocator(serviceA.service);
+    const locatorA2 = readyLocator(serviceA.service);
+    const view = render(authTree(locatorA1, 'A1', commits));
+
+    expect(serviceA.listeners).toHaveLength(1);
+    view.rerender(authTree(locatorA2, 'A2', commits));
+
+    expect(lastCommit(commits)).toMatchObject({
+      context: 'A2',
+      isAdmin: false,
+      isAuthenticated: true,
+      isLoading: false,
+      isMember: true,
+      user: projectedUser('member-a', 'member'),
+    });
+    expect(serviceA.listeners).toHaveLength(1);
+    expect(serviceA.unsubscribes[0]).not.toHaveBeenCalled();
   });
 });
