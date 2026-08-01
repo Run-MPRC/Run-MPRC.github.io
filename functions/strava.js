@@ -225,7 +225,9 @@ function requireStravaAuthSession(context) {
 function currentEpochSeconds() {
   let nowSeconds;
   try {
-    nowSeconds = Math.floor(Date.now() / 1_000);
+    const nowMilliseconds = Date.now();
+    if (!isPositiveSafeInteger(nowMilliseconds)) return null;
+    nowSeconds = Math.floor(nowMilliseconds / 1_000);
   } catch (_error) {
     return null;
   }
@@ -891,7 +893,8 @@ async function getFreshAccessToken(uid) {
   if (!stored) {
     throw stravaRefreshError('internal');
   }
-  const nowSec = Math.floor(Date.now() / 1000);
+  const nowSec = currentEpochSeconds();
+  if (nowSec === null) throw stravaRefreshError('internal');
   if (stored.expiresAt - nowSec > 60) {
     return stored.accessToken;
   }
