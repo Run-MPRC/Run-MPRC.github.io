@@ -55,7 +55,15 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
 
   const events = {};
   await Promise.all(eventIds.map(async (eid) => {
-    const ev = await db.collection('events').doc(eid).get();
+    let ev;
+    try {
+      ev = await db.collection('events').doc(eid).get();
+    } catch {
+      throw new functions.https.HttpsError(
+        'unavailable',
+        'Registration data could not be loaded.',
+      );
+    }
     if (ev.exists) {
       const e = ev.data();
       events[eid] = {
