@@ -134,6 +134,10 @@ function isExactPlainRecord(record, expectedKeys) {
   return isPlainJsonRecord(record) && hasExactOwnKeys(record, expectedKeys);
 }
 
+function isValidStravaDisconnectRequest(data) {
+  return isExactPlainRecord(data, []);
+}
+
 function isBoundedVisibleAscii(value, maxLength) {
   return typeof value === 'string'
     && value.length > 0
@@ -1015,7 +1019,7 @@ exports.stravaDisconnect = functions
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
     }
-    if (!isExactPlainRecord(data, [])) {
+    if (!isValidStravaDisconnectRequest(data)) {
       throw new functions.https.HttpsError(
         'invalid-argument',
         STRAVA_DISCONNECT_REQUEST_ERROR_MESSAGE,

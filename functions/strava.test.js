@@ -4632,6 +4632,7 @@ describe('Strava activity data failure boundary', () => {
 describe('Strava disconnect failure log boundary', () => {
   let fetchMock;
   let consoleSpies;
+  let dateNowSpy;
 
   beforeEach(() => {
     admin.__clearDeletes();
@@ -4640,6 +4641,7 @@ describe('Strava disconnect failure log boundary', () => {
     admin.__clearWrites();
     requireAppCheck.mockReset();
     Timestamp.now.mockClear();
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     fetchMock = jest.fn();
     global.fetch = fetchMock;
     consoleSpies = Object.fromEntries(
@@ -4653,6 +4655,7 @@ describe('Strava disconnect failure log boundary', () => {
 
   afterEach(() => {
     global.fetch = GUARDED_FETCH;
+    dateNowSpy.mockRestore();
     Object.values(consoleSpies).forEach((spy) => spy.mockRestore());
   });
 
@@ -4673,7 +4676,20 @@ describe('Strava disconnect failure log boundary', () => {
     Object.values(consoleSpies).forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
 
+  function expectNoDisconnectSideEffects() {
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(dateNowSpy).not.toHaveBeenCalled();
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    expectNoLogs();
+  }
+
   async function expectRejectedDisconnectRequest(data) {
+    seedAccessToken('synthetic_disconnect_request_boundary_token');
+    fetchMock.mockRejectedValue(new Error('disconnect-request provider canary'));
+
     const rejection = await captureFailure(() => stravaDisconnect(data, CONTEXT));
 
     expect(publicError(rejection)).toEqual({
@@ -4684,12 +4700,7 @@ describe('Strava disconnect failure log boundary', () => {
     });
     expect(requireAppCheck).toHaveBeenCalledTimes(1);
     expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
-    expect(Timestamp.now).not.toHaveBeenCalled();
-    expect(admin.__getReads()).toEqual([]);
-    expect(admin.__getDeletes()).toEqual([]);
-    expect(admin.__getWrites()).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expectNoLogs();
+    expectNoDisconnectSideEffects();
   }
 
   async function expectRejectedStoredSecret(secret) {
@@ -4733,10 +4744,7 @@ describe('Strava disconnect failure log boundary', () => {
     expect(requireAppCheck).toHaveBeenCalledWith(context);
     expect(authGetter).not.toHaveBeenCalled();
     Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
-    expect(admin.__getReads()).toEqual([]);
-    expect(admin.__getDeletes()).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expectNoLogs();
+    expectNoDisconnectSideEffects();
   });
 
   test('rejects a missing caller before Firestore, provider access, or deletion', async () => {
@@ -4762,10 +4770,7 @@ describe('Strava disconnect failure log boundary', () => {
 
     expect(requireAppCheck).toHaveBeenCalledTimes(1);
     Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
-    expect(admin.__getReads()).toEqual([]);
-    expect(admin.__getDeletes()).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expectNoLogs();
+    expectNoDisconnectSideEffects();
   });
 
   describe('request validation before side effects', () => {
@@ -4817,6 +4822,9 @@ describe('Strava disconnect failure log boundary', () => {
         }),
         getPrototypeOf: jest.fn(() => {
           throw new Error('disconnect-request-canary prototype trap');
+        }),
+        has: jest.fn(() => {
+          throw new Error('disconnect-request-canary has trap');
         }),
         ownKeys: jest.fn(() => {
           throw new Error('disconnect-request-canary ownKeys trap');
