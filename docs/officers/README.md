@@ -63,7 +63,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 Never shorten several of these states to “done.”
 
-Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. An overbroad #473 artifact was published and rolled back on 2026-08-01. Production again uses exact source `ed1b0833`. Issue #473 now prepares one platform-maintainer-only replacement containing only the static Shop and fixed Events/Calendar failure messages. It is **PENDING REVIEW AND RELEASE**, not a reusable officer control. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
+Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. An overbroad #473 artifact was published and rolled back on 2026-08-01. The bounded replacement is now live as deploy `6a6dc9ea588b0c0008036312`: Shop is the static pickup catalog, and Events/Calendar show a fixed retry-later notice instead of a raw provider error. Event records remain unavailable. The temporary manifest is inactive again; this was not a reusable officer control. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
 
 The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures the environment approvers and short-lived cloud identity. Missing authority stops the release with a red failure before Firebase or website publication.
 
