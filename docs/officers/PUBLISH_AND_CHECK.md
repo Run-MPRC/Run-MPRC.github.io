@@ -117,11 +117,11 @@ If a member or officer sees **Server configuration is unavailable**:
 
 ## Temporary #473 Netlify web release — PENDING REVIEW AND RELEASE
 
-**Purpose:** publish only the exact merged $10 Hat/$25 Jacket pickup catalog, Event sign-in return behavior, and unused Google failure-label helper without publishing or configuring any backend or outside provider.
+**Purpose:** publish only the exact merged $10 Hat/$25 Jacket pickup catalog and Event sign-in return behavior without publishing or configuring any backend or outside provider. The pinned source also contains reviewed Google failure-label source, but #472 proved that helper is absent from the optimized executable website bundles.
 
 **Approver:** Dave Liu as platform owner. This is not an officer-operated control.
 
-**Prerequisites:** approved issue #473; green exact-head checks; successful pinned Deploy Preview; source commit `094af1096ed8721597561cd59bf695d4c4a9d210`; source tree `d12fd7660beaaddac5e952fe950dc6ad6bbdf68f`; 59-file digest `72f16455fb67b0f00408ed867b69543c94395fb28aaa11cb2d490383de1aed01`; exact first parent `52fd426662c3d814044aa55eb6104ea1464a5bc6`; prior production deploy `6a61c544171ea80008307623`; release source `codex/netlify-source-473-shop-events-auth`; a prepared manifest-disable change; a named public observer; and no other `main` merge until verification finishes.
+**Prerequisites:** approved issue #473; green exact-head checks; successful pinned Deploy Preview; source commit `094af1096ed8721597561cd59bf695d4c4a9d210`; source tree `d12fd7660beaaddac5e952fe950dc6ad6bbdf68f`; 59-file digest `72f16455fb67b0f00408ed867b69543c94395fb28aaa11cb2d490383de1aed01`; exact first parent `52fd426662c3d814044aa55eb6104ea1464a5bc6`; prior production deploy `6a61c544171ea80008307623`; prior artifact source `ed1b0833f25822cee80c99ded8753722b5608a3f`, tree `878c6628d961f4484cb49208aef53f1e9f2e3b47`, 60 files, and digest `7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092`; dedicated release source `codex/netlify-source-473-shop-events-auth` pinned by exact commit and tree; dedicated rollback source `codex/netlify-source-473-rollback` pinned to that prior artifact source; a prepared manifest-disable change; a prepared exact Git rollback projection; a named public observer; and no other `main` merge until verification finishes.
 
 ```mermaid
 flowchart TD
@@ -140,25 +140,30 @@ In words: the exact #473 preview must match the pinned source and artifact; only
 
 1. Confirm the release pull request targets `main`.
 2. Confirm its head and all required checks are current and green.
-3. Open its public marker and compare every prerequisite value.
-4. Stay signed out and check `/shop`, `/events`, and `/login` in the preview.
-5. Confirm the manifest-disable change and rollback target are ready.
-6. Confirm `main` is still exact commit `52fd426662c3d814044aa55eb6104ea1464a5bc6`.
-7. Merge with a merge commit. Do not squash or rebase.
-8. Confirm the production attempt uses that exact merge.
-9. Read the live public marker and compare every value to the preview.
-10. Stay signed out and check `/shop`, `/events`, and `/login` at phone and computer widths. Do not sign in, register, buy, or submit a form.
-11. Confirm the Shop shows the $10 Hat and $25 Jacket, Treasurer pickup, cash, and Venmo.
-12. Record the deploy, control/source commits, tree, count, digest, check time, and result.
-13. If every check passes, disable the manifest, confirm that later production builds skip, retire the release source, and verify it is absent.
+3. Open its public marker. Confirm its control commit is the exact pull-request head. Compare its source commit, tree, previous source, rollback deploy, file count, and digest with the prerequisites.
+4. Stay signed out. Open `/shop`, `/events`, and `/login` in the preview.
+5. Confirm `/shop/mprc-hat` and `/events/calendar` each return HTTP 200 without a redirect loop.
+6. Confirm the marker response uses HTTPS, `Cache-Control: no-store`, JSON content type, `X-Content-Type-Options: nosniff`, and HSTS. Confirm the preview has `X-Robots-Tag: noindex`.
+7. Open `/robots.txt`. Confirm it returns HTTP 200 and still disallows `/admin` and `/login`.
+8. Ask the platform owner to check the browser error console on the three preview pages. Stop for any new release error.
+9. Confirm the prepared manifest-disable change and the exact prior-artifact Git rollback projection are ready.
+10. Confirm `main` is still exact commit `52fd426662c3d814044aa55eb6104ea1464a5bc6`.
+11. Merge with a merge commit. Do not squash or rebase.
+12. Confirm the production attempt uses that exact merge.
+13. Read the live public marker. Confirm its control commit is the exact two-parent merge. Compare the stable source, tree, previous-source, rollback, count, and digest fields with the preview and prerequisites. The preview and live control commits must differ.
+14. Stay signed out. Check `/shop`, `/events`, and `/login` at phone and computer widths. Do not sign in, register, buy, or submit a form.
+15. Repeat the HTTP-200 deep-route, marker-header, `/robots.txt`, and browser-console checks against `runmprc.com`.
+16. Confirm the Shop shows the $10 Hat and $25 Jacket, Treasurer pickup, cash, and Venmo.
+17. Record the deploy, control/source commits, tree, count, digest, route/header/robots/console results, check time, and result.
+18. If every check passes, disable the manifest, confirm that later production builds skip, retire the release source, and verify it is absent.
 
 **Expected result:** Netlify serves the exact pinned artifact; its public marker proves provenance; the approved Shop catalog and Event sign-in return source are present; Firebase, providers, accounts, protected offers, officer editing, and production data are unchanged.
 
-**Stop conditions:** stop if `main` advances; a hash, ref, count, digest, parent, context, marker, or page differs; the preview is missing; rollback is unavailable; another production attempt starts; a public check asks for private data; or any check fails.
+**Stop conditions:** stop if `main` advances; a hash, ref, count, digest, parent, context, marker, or page differs; the preview is missing; rollback is unavailable; a deep route is not HTTP 200; a required header or robots rule is missing; the browser console shows a new release error; another production attempt starts; a public check asks for private data; or any check fails.
 
-**Success proof:** keep the public deploy and marker links, exact hashes, check time, two viewport sizes, and one redacted public screenshot. Keep settings, logs, credentials, member data, and promo values out of public evidence.
+**Success proof:** keep the public deploy and marker links, exact hashes, check time, two viewport sizes, deep-route status, bounded header and robots results, browser-console result, and one redacted public screenshot. Keep settings, logs, credentials, member data, and promo values out of public evidence.
 
-**Undo:** if nothing publishes, leave deploy `6a61c544171ea80008307623` live. If the wrong result publishes, ask the Netlify team owner to restore that deploy. If atomic restore is unavailable, prepare and review an exact-parent Git rollback pinned to previous source `4f67e6cafb975a3f985fefc67f094b3a37526702`; rerun its exact preview before merging. Disabling the manifest alone is not rollback.
+**Undo:** if nothing publishes, leave deploy `6a61c544171ea80008307623` live. If the wrong result publishes, ask the Netlify team owner to restore that deploy. If atomic restore is unavailable, prepare and review an exact-parent Git rollback pinned to previous artifact source `ed1b0833f25822cee80c99ded8753722b5608a3f` and tree `878c6628d961f4484cb49208aef53f1e9f2e3b47`; rerun its exact preview before merging. Disabling the manifest alone is not rollback.
 
 **Escalation:** platform owner first; website/content owner second; security owner if private data or an unexpected application version appears.
 

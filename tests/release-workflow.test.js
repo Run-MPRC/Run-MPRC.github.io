@@ -27,6 +27,7 @@ const {
 } = require('../scripts/netlify-release-policy');
 const {
   buildEnvironment,
+  releaseMarkerPayload,
 } = require('../scripts/netlify-release-build');
 
 const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
@@ -225,7 +226,7 @@ test('Netlify manifest pins the reviewed merged website source and is armed', ()
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    '4f67e6cafb975a3f985fefc67f094b3a37526702',
+    'ed1b0833f25822cee80c99ded8753722b5608a3f',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
@@ -243,6 +244,41 @@ test('Netlify manifest pins the reviewed merged website source and is armed', ()
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
     '72f16455fb67b0f00408ed867b69543c94395fb28aaa11cb2d490383de1aed01',
+  );
+});
+
+test('Netlify preview and production markers separate control from stable provenance', () => {
+  const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
+  assert.equal(loaded.ok, true);
+  const artifact = Object.freeze({
+    fileCount: loaded.manifest.expectedSiteFileCount,
+    sha256: loaded.manifest.expectedSiteFilesSha256,
+  });
+  const previewControl = 'a'.repeat(40);
+  const productionControl = 'b'.repeat(40);
+  const preview = releaseMarkerPayload(
+    loaded.manifest,
+    previewControl,
+    artifact,
+  );
+  const production = releaseMarkerPayload(
+    loaded.manifest,
+    productionControl,
+    artifact,
+  );
+
+  assert.equal(preview.controlCommit, previewControl);
+  assert.equal(production.controlCommit, productionControl);
+  assert.notEqual(preview.controlCommit, production.controlCommit);
+  const { controlCommit: previewDynamic, ...previewStable } = preview;
+  const { controlCommit: productionDynamic, ...productionStable } = production;
+  assert.equal(previewDynamic, previewControl);
+  assert.equal(productionDynamic, productionControl);
+  assert.deepEqual(previewStable, productionStable);
+  assert.equal(previewStable.sourceCommit, loaded.manifest.sourceCommit);
+  assert.equal(
+    previewStable.previousSourceCommit,
+    loaded.manifest.previousSourceCommit,
   );
 });
 
@@ -283,6 +319,14 @@ test('Netlify production authorization is exact-merge scoped', () => {
       env: { ...environment, INCOMING_HOOK_TITLE: 'unverified-hook' },
       commit: mergeCommit,
     },
+    {
+      env: { ...environment, INCOMING_HOOK_URL: 'https://example.test/hook' },
+      commit: mergeCommit,
+    },
+    {
+      env: { ...environment, INCOMING_HOOK_BODY: 'unverified-body' },
+      commit: mergeCommit,
+    },
     { env: { ...environment, COMMIT_REF: 'd'.repeat(40) }, commit: mergeCommit },
     { env: environment, commit: { ...mergeCommit, head: 'd'.repeat(40) } },
     { env: environment, commit: { ...mergeCommit, parents: [] } },
@@ -298,6 +342,27 @@ test('Netlify production authorization is exact-merge scoped', () => {
       commit: {
         ...mergeCommit,
         parents: [manifest.expectedProductionParent],
+      },
+    },
+    {
+      env: environment,
+      commit: {
+        ...mergeCommit,
+        parents: [
+          manifest.expectedProductionParent,
+          manifest.expectedProductionParent,
+        ],
+      },
+    },
+    {
+      env: environment,
+      commit: {
+        ...mergeCommit,
+        parents: [
+          manifest.expectedProductionParent,
+          mergeCommit.parents[1],
+          'e'.repeat(40),
+        ],
       },
     },
   ];

@@ -197,6 +197,21 @@ function verifyAndDigestArtifact(directory) {
   });
 }
 
+function releaseMarkerPayload(manifest, controlCommit, artifact) {
+  return Object.freeze({
+    schemaVersion: 1,
+    releaseId: manifest.releaseId,
+    issueNumber: manifest.issueNumber,
+    controlCommit,
+    sourceCommit: manifest.sourceCommit,
+    sourceTree: manifest.sourceTree,
+    previousSourceCommit: manifest.previousSourceCommit,
+    rollbackDeployId: manifest.rollbackDeployId,
+    siteFileCount: artifact.fileCount,
+    siteFilesSha256: artifact.sha256,
+  });
+}
+
 function publishArtifact(sourceBuild, manifest, controlCommit) {
   const artifact = verifyAndDigestArtifact(sourceBuild);
   if (artifact.fileCount !== manifest.expectedSiteFileCount
@@ -211,18 +226,11 @@ function publishArtifact(sourceBuild, manifest, controlCommit) {
   fs.mkdirSync(path.dirname(RELEASE_MARKER), { recursive: true });
   fs.writeFileSync(
     RELEASE_MARKER,
-    `${JSON.stringify({
-      schemaVersion: 1,
-      releaseId: manifest.releaseId,
-      issueNumber: manifest.issueNumber,
-      controlCommit,
-      sourceCommit: manifest.sourceCommit,
-      sourceTree: manifest.sourceTree,
-      previousSourceCommit: manifest.previousSourceCommit,
-      rollbackDeployId: manifest.rollbackDeployId,
-      siteFileCount: artifact.fileCount,
-      siteFilesSha256: artifact.sha256,
-    }, null, 2)}\n`,
+    `${JSON.stringify(
+      releaseMarkerPayload(manifest, controlCommit, artifact),
+      null,
+      2,
+    )}\n`,
     { encoding: 'utf8', mode: 0o644 },
   );
   return artifact;
@@ -303,6 +311,7 @@ module.exports = {
   buildEnvironment,
   fetchAndVerifySource,
   publishArtifact,
+  releaseMarkerPayload,
   safeBaseEnvironment,
   verifyAndDigestArtifact,
 };

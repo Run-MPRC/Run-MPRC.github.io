@@ -9,7 +9,7 @@
   "sourceRef": "refs/heads/codex/netlify-source-473-shop-events-auth",
   "sourceCommit": "094af1096ed8721597561cd59bf695d4c4a9d210",
   "sourceTree": "d12fd7660beaaddac5e952fe950dc6ad6bbdf68f",
-  "previousSourceCommit": "4f67e6cafb975a3f985fefc67f094b3a37526702",
+  "previousSourceCommit": "ed1b0833f25822cee80c99ded8753722b5608a3f",
   "rollbackDeployId": "6a61c544171ea80008307623",
   "expectedSiteFileCount": 59,
   "expectedSiteFilesSha256": "72f16455fb67b0f00408ed867b69543c94395fb28aaa11cb2d490383de1aed01"
