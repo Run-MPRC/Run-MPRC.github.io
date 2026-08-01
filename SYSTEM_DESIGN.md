@@ -107,13 +107,13 @@ flowchart TD
     Verify -- "No" --> Stop
     Verify -- "Yes" --> Pages["Publish Pages branch without a CNAME"]
     Merge -. "Ordinary Git production build paused" .-> Netlify["Netlify / runmprc.com\nreusable protected publication not available"]
-    Merge -. "Exact active #473 manifest" .-> WebGate{"Exact parent, source, tree, and artifact match?"}
+    Merge -. "Completed #473 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> WebOnly["Publish pinned web-only artifact"]
     WebOnly --> Netlify
 ```
 
-Text alternative: ordinary merges run CI and do not publish Netlify; only the exact temporary #473 parent/source/tree/artifact may publish its pinned web-only result, while the separate protected workflow still requires approval and verified Firebase before publishing its Pages copy.
+Text alternative: ordinary merges run CI and do not publish Netlify; the completed #473 exception is inactive, while the separate protected workflow still requires approval and verified Firebase before publishing its Pages copy.
 
 ### GitHub Pages callback handoff
 
