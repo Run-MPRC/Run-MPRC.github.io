@@ -31,6 +31,8 @@ jest.mock('firebase-admin', () => {
   const deleteFailures = new Map();
   const deletes = [];
   const directSetAttempts = [];
+  const directSetPostApplyFailures = new Map();
+  const documentReferenceFailures = new Map();
   const documents = new Map();
   const documentVersions = new Map();
   const readFailures = new Map();
@@ -69,6 +71,9 @@ jest.mock('firebase-admin', () => {
   }
 
   function document(path) {
+    if (documentReferenceFailures.has(path)) {
+      throw documentReferenceFailures.get(path);
+    }
     return {
       path,
       collection: (name) => ({
@@ -103,6 +108,16 @@ jest.mock('firebase-admin', () => {
           throw writeFailures.get(path);
         }
         applyWrite(operation);
+        if (directSetPostApplyFailures.has(path)) {
+          if (options && options.merge === true) {
+            documents.set(path, {
+              ...(documents.get(path) || {}),
+              ...data,
+            });
+            bumpVersion(path);
+          }
+          throw directSetPostApplyFailures.get(path);
+        }
       },
     };
   }
@@ -236,6 +251,7 @@ jest.mock('firebase-admin', () => {
       documentVersions.clear();
     },
     __clearReads: () => {
+      documentReferenceFailures.clear();
       readFailures.clear();
       readSnapshots.clear();
       reads.splice(0, reads.length);
@@ -252,6 +268,7 @@ jest.mock('firebase-admin', () => {
       batchSetAttempts.splice(0, batchSetAttempts.length);
       batchSetFailures.clear();
       directSetAttempts.splice(0, directSetAttempts.length);
+      directSetPostApplyFailures.clear();
       transactionCommitFailure = undefined;
       transactionCommitPostApplyFailure = undefined;
       transactionCommitAttempts.splice(0, transactionCommitAttempts.length);
@@ -295,6 +312,12 @@ jest.mock('firebase-admin', () => {
     __setBatchDeleteFailure: (path, error) => batchDeleteFailures.set(path, error),
     __setBatchSetFailure: (path, error) => batchSetFailures.set(path, error),
     __setDeleteFailure: (path, error) => deleteFailures.set(path, error),
+    __setDirectSetPostApplyFailure: (path, error) => {
+      directSetPostApplyFailures.set(path, error);
+    },
+    __setDocumentReferenceFailure: (path, error) => {
+      documentReferenceFailures.set(path, error);
+    },
     __removeDocument: (path) => applyDelete(path),
     __setDocument: (path, data) => {
       documents.set(path, data);
@@ -2765,6 +2788,162 @@ describe('Strava token refresh failure boundary', () => {
 
       expectFixedReadFailure(rejection, probes);
       expect(data).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('OAUTH-001A1E refreshed-secret persistence boundary', () => {
+    function hostilePersistenceFailure() {
+      const probes = [
+        jest.fn(() => {
+          throw new Error('refresh-persistence-cause-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('refresh-persistence-details-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('refresh-persistence-json-getter-canary');
+        }),
+      ];
+      const failure = new Error(
+        'refresh-persistence-canary path=users/private/stravaSecret token=synthetic-token',
+      );
+      Object.defineProperties(failure, {
+        cause: { configurable: true, enumerable: true, get: probes[0] },
+        details: { configurable: true, enumerable: true, get: probes[1] },
+        toJSON: { configurable: true, enumerable: true, get: probes[2] },
+      });
+      return { failure, probes };
+    }
+
+    function expectedRefreshWrite() {
+      return {
+        path: SECRET_PATH,
+        data: {
+          access_token: 'refreshed_access_token_test',
+          refresh_token: 'refreshed_refresh_token_test',
+          expires_at: 1_900_000_000,
+          updatedAt: expect.any(Object),
+        },
+        options: { merge: true },
+      };
+    }
+
+    function expectFixedPersistenceFailure(rejection, probes) {
+      const exposed = publicError(rejection);
+      expect(exposed).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify({ exposed, logs: consoleSpies.map((spy) => spy.mock.calls) }))
+        .not.toMatch(
+          /refresh-persistence-canary|users\/private|stravaSecret|synthetic-token|getter-canary/i,
+        );
+      probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+      expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.strava.com/api/v3/oauth/token',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: 'strava_client_test',
+            client_secret: 'strava_secret_test',
+            refresh_token: 'synthetic_refresh_token_test',
+            grant_type: 'refresh_token',
+          }),
+        },
+      );
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchSetAttempts()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    }
+
+    test('maps a timestamp failure before the secret set to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      Timestamp.now.mockImplementationOnce(() => {
+        throw failure;
+      });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps a secret-reference failure after refresh validation to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      const json = jest.fn().mockImplementation(async () => {
+        admin.__setDocumentReferenceFailure(SECRET_PATH, failure);
+        return validRefreshResponse();
+      });
+      fetchMock.mockResolvedValueOnce({ ok: true, json });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps a pre-apply secret-set rejection to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setWriteFailure(SECRET_PATH, failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      expect(admin.__getDirectSetAttempts()).toEqual([expectedRefreshWrite()]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps an acknowledgement loss to fixed internal and makes no downstream call', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setDirectSetPostApplyFailure(SECRET_PATH, failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      const expectedWrite = expectedRefreshWrite();
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      expect(admin.__getDirectSetAttempts()).toEqual([expectedWrite]);
+      expect(admin.__getWrites()).toEqual([expectedWrite]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toEqual({
+        ...EXPIRED_SECRET,
+        access_token: 'refreshed_access_token_test',
+        refresh_token: 'refreshed_refresh_token_test',
+        expires_at: 1_900_000_000,
+        updatedAt: expect.any(Object),
+      });
     });
   });
 

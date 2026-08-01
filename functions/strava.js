@@ -896,12 +896,18 @@ async function getFreshAccessToken(uid) {
     return stored.accessToken;
   }
   const refreshed = await refreshToken(stored.refreshToken);
-  await secretDocRef(uid).set({
-    access_token: refreshed.accessToken,
-    refresh_token: refreshed.refreshToken,
-    expires_at: refreshed.expiresAt,
-    updatedAt: Timestamp.now(),
-  }, { merge: true });
+  try {
+    const secretRef = secretDocRef(uid);
+    const updatedAt = Timestamp.now();
+    await secretRef.set({
+      access_token: refreshed.accessToken,
+      refresh_token: refreshed.refreshToken,
+      expires_at: refreshed.expiresAt,
+      updatedAt,
+    }, { merge: true });
+  } catch (_error) {
+    throw stravaRefreshError('internal');
+  }
   return refreshed.accessToken;
 }
 
