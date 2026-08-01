@@ -19,6 +19,20 @@ const NETLIFY_MANIFEST_PATH = path.join(
 );
 const GITIGNORE_PATH = path.join(ROOT, '.gitignore');
 const PUBLIC_CNAME_PATH = path.join(ROOT, 'public/CNAME');
+const FINAL_RELEASE_TRUTH_PATHS = [
+  'IMPLEMENTATION_PLAN.md',
+  'OFFICER_START_HERE.md',
+  'OPERATIONS_RUNBOOK.md',
+  'README.md',
+  'SECURITY.md',
+  'SYSTEM_DESIGN.md',
+  'docs/officers/ACCESS_CONTINUITY.md',
+  'docs/officers/EVENTS_SHOP_MEMBERS.md',
+  'docs/officers/PUBLISH_AND_CHECK.md',
+  'docs/officers/README.md',
+  'docs/officers/REQUEST_A_CHANGE.md',
+  'docs/officers/SYSTEM_MAPS.md',
+];
 const {
   authorizeProductionRelease,
   evaluateProductionRelease,
@@ -34,6 +48,12 @@ const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
 const netlifyConfig = fs.readFileSync(NETLIFY_CONFIG_PATH, 'utf8');
 const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
+const finalReleaseTruth = new Map(
+  FINAL_RELEASE_TRUTH_PATHS.map((relativePath) => [
+    relativePath,
+    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
+  ]),
+);
 
 function runNetlifyGate(context) {
   const env = { ...process.env };
@@ -245,6 +265,129 @@ test('Netlify manifest retains the bounded containment provenance and is paused'
     loaded.manifest.expectedSiteFilesSha256,
     '07b10c7d5ff176a1ad893d7549b07042312df35f4a4126e8765824ca94eaefb8',
   );
+});
+
+test('paused #473 authority agrees with the final incident and live record', () => {
+  assert.match(
+    netlifyConfig,
+    /temporary production release manifest is inactive/i,
+  );
+  assert.match(
+    netlifyConfig,
+    /Deploy Previews use[\s\S]{0,20}ordinary checked-out preview tree/i,
+  );
+  assert.doesNotMatch(
+    netlifyConfig,
+    /(?:active release-control PR|still verifies the pinned artifact)/i,
+  );
+
+  const expectedTruth = new Map([
+    [
+      'IMPLEMENTATION_PLAN.md',
+      /bounded replacement \[#473\][^\n]*deploy `6a6dc9ea588b0c0008036312`[^\n]*manifest is inactive again/i,
+    ],
+    [
+      'OFFICER_START_HERE.md',
+      /bounded replacement is now live as Netlify deploy `6a6dc9ea588b0c0008036312`[^\n]*manifest is inactive again/i,
+    ],
+    [
+      'OPERATIONS_RUNBOOK.md',
+      /WEB-002A \[#473\][^\n]*completed[^\n]*9ad6837756cdd409d296009fde5082eeeae5c059[^\n]*6a6dc9ea588b0c0008036312[^\n]*cb6a8f0a418fc14b448bce5ded71d68520415c92[^\n]*6a6dcdd47bc81e000859a249/i,
+    ],
+    [
+      'README.md',
+      /bounded replacement deploy `6a6dc9ea588b0c0008036312`[^\n]*temporary manifest is inactive again/i,
+    ],
+    [
+      'SECURITY.md',
+      /Bounded replacement \[#473\][^\n]*6a6dc9ea588b0c0008036312[^\n]*Final control `cb6a8f0`[^\n]*6a6dcdd47bc81e000859a249/i,
+    ],
+    [
+      'SYSTEM_DESIGN.md',
+      /used one bounded replacement exception[^\n]*6a6dc9ea588b0c0008036312[^\n]*manifest is inactive again/i,
+    ],
+    [
+      'docs/officers/ACCESS_CONTINUITY.md',
+      /temporary #473 release is complete[^\n]*manifest is inactive[^\n]*release source is absent/i,
+    ],
+    [
+      'docs/officers/EVENTS_SHOP_MEMBERS.md',
+      /In-person Shop catalog — LIVE[\s\S]*Public Events-list load failure privacy — LIVE FRONTEND CONTAINMENT[\s\S]*Public Events-calendar load failure privacy — LIVE FRONTEND CONTAINMENT/i,
+    ],
+    [
+      'docs/officers/PUBLISH_AND_CHECK.md',
+      /Temporary #473 permissions-containment release — COMPLETED 2026-08-01[\s\S]*cb6a8f0a418fc14b448bce5ded71d68520415c92[\s\S]*6a6dcdd47bc81e000859a249/i,
+    ],
+    [
+      'docs/officers/README.md',
+      /bounded replacement is now live as deploy `6a6dc9ea588b0c0008036312`[^\n]*manifest is inactive again/i,
+    ],
+    [
+      'docs/officers/REQUEST_A_CHANGE.md',
+      /bounded replacement is live[^\n]*temporary manifest is inactive again/i,
+    ],
+    [
+      'docs/officers/SYSTEM_MAPS.md',
+      /Completed #473 exact release; manifest inactive/i,
+    ],
+  ]);
+
+  finalReleaseTruth.forEach((contents, relativePath) => {
+    assert.match(
+      contents,
+      expectedTruth.get(relativePath),
+      `${relativePath} must describe final #473 authority and availability`,
+    );
+    [
+      /PENDING #473 RELEASE/i,
+      /Temporary #473 permissions-containment release — PENDING REVIEW AND RELEASE/i,
+      /Issue #473 now prepares a replacement/i,
+      /#473's narrower replacement is \*\*NOT AVAILABLE YET\*\*/i,
+    ].forEach((staleClaim) => {
+      assert.doesNotMatch(
+        contents,
+        staleClaim,
+        `${relativePath} must not retain rollback-era #473 status`,
+      );
+    });
+  });
+
+  const canonicalRecords = [
+    finalReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
+    finalReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
+  ];
+  [
+    '40728ff6141e34a279b70cc41d983c22ac5f0daa',
+    '6a6dc0167fbe68000816b448',
+    '1099ee8e6fdb81141fd9460de175b6d854cbcfdd',
+    '6a6dc219a8136300081811db',
+    'dee79511b6e371329aa129139729e112e7a51aad',
+    '6a6dc35767a4ef000877e74b',
+    '9ad6837756cdd409d296009fde5082eeeae5c059',
+    '6a6dc9ea588b0c0008036312',
+    'cb6a8f0a418fc14b448bce5ded71d68520415c92',
+    '6a6dcdd47bc81e000859a249',
+    '30696264830',
+  ].forEach((identifier) => {
+    canonicalRecords.forEach((record) => {
+      assert.match(record, new RegExp(identifier));
+    });
+  });
+
+  const eventsAndShop = finalReleaseTruth.get(
+    'docs/officers/EVENTS_SHOP_MEMBERS.md',
+  );
+  assert.match(eventsAndShop, /MPRC Hat at \$10\.00/);
+  assert.match(eventsAndShop, /MPRC Jacket at \$25\.00/);
+  assert.match(
+    eventsAndShop,
+    /Error: We could not load events right now\. Please try again later\./,
+  );
+  assert.match(
+    eventsAndShop,
+    /We could not load events right now\. Please try again later\./,
+  );
+  assert.match(eventsAndShop, /event records remain unavailable/i);
 });
 
 test('Netlify preview and production markers separate control from stable provenance', () => {
