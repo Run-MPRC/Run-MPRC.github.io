@@ -25,6 +25,7 @@ function ProductDetail() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const checkoutSubmitStartedRef = useRef(false);
   const outcomeUnknownRef = useRef(false);
 
   const [firstName, setFirstName] = useState('');
@@ -72,9 +73,10 @@ function ProductDetail() {
 
   async function handleBuy(e: React.FormEvent) {
     e.preventDefault();
-    if (outcomeUnknownRef.current) return;
+    if (checkoutSubmitStartedRef.current || outcomeUnknownRef.current) return;
     setError(null);
     if (!product) return;
+    checkoutSubmitStartedRef.current = true;
     setSubmitting(true);
     try {
       const result = await createMerchCheckout(
