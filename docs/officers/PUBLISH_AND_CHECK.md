@@ -61,6 +61,35 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - Live race signup, merchandise payments, and refunds remain unavailable.
 - CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
+### Netlify release-build failure output — SOURCE ONLY, NOT LIVE
+
+**Purpose:** confirm that the final source wrapper reports a failed release preparation with one fixed code. The code does not say why preparation failed. It does not prove that Netlify published anything.
+
+**Approver:** platform owner plus security reviewer. This is not an officer-operated release control.
+
+**Prerequisites:** issue #582; one exact pull request and commit; synthetic tests with made-up canaries; the inactive temporary Netlify manifest; a reviewed undo; and confirmation that nobody ran a production release or contacted a provider to test this source change.
+
+1. Ask the platform maintainer for the exact issue, pull request, and commit.
+2. Confirm the failure tests used only made-up values.
+3. Confirm each synthetic failure stopped before release or provider work.
+4. Read the redacted test summary.
+5. Confirm the wrapper's complete stderr line is `netlify_release_build_failed`.
+6. Confirm the subprocess exit was unsuccessful.
+7. Confirm no thrown message, stack, path, URL, token-shaped canary, or trap canary appeared.
+8. Confirm the full artifact-safety and release-workflow checks passed.
+9. Confirm review found the existing cleanup and successful evidence line unchanged.
+10. Record source, tests, merge, Netlify publication, website publication, `runmprc.com` verification, Firebase, provider, production data, and live behavior as separate states.
+
+**Expected result:** the outer wrapper does not read or echo its caught value. The fixed code means only that preparation failed. Child commands still write their own output, so this check does not prove that the complete Netlify build log is safe.
+
+**Stop conditions:** stop if anyone asks for a real credential, private provider value, production run, or raw log. Stop if output contains a thrown value, stack, path, URL, token-shaped value, or private data. Stop if anyone calls the whole build log sanitized or treats the fixed code as publication proof.
+
+**Success proof:** keep the old-source failure summary, green synthetic subprocess results, complete artifact-safety and release-workflow results, reviewed commit, and separate statements for every delivery state. State plainly that Netlify, the website, `runmprc.com`, Firebase, outside providers, production data, and live behavior were not changed or verified unless each has separate dated proof.
+
+**Undo:** use one reviewed revert or safe roll-forward pull request. Never restore raw caught-error logging. Never rerun production only to discover the cause.
+
+**Escalation:** contact the platform and security owners. If an earlier log may contain a sensitive value, use the private incident path. Do not copy the value into GitHub, a screenshot, email, or an AI tool.
+
 ### Commerce server safety gate — SOURCE ONLY, NOT DEPLOYED
 
 Issue [#149](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/149) adds a source-code check for the server environment, website address, Stripe test/live mode, and server-key mode. It does not configure Firebase or Stripe. It does not make payments available.

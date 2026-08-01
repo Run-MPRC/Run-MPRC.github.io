@@ -9,6 +9,10 @@ const test = require('node:test');
 const REPOSITORY = path.resolve(__dirname, '..');
 const SCANNER = path.join(REPOSITORY, '.github/scripts/scan-test-artifacts.mjs');
 const SITEMAP_GENERATOR = path.join(REPOSITORY, 'scripts/generate-sitemap.js');
+const NETLIFY_RELEASE_BUILDER = path.join(
+  REPOSITORY,
+  'scripts/netlify-release-build.js',
+);
 const CI_PATH = path.join(REPOSITORY, '.github/workflows/ci.yml');
 const RELEASE_PATH = path.join(REPOSITORY, '.github/workflows/deploy.yml');
 const ciWorkflow = fs.readFileSync(CI_PATH, 'utf8');
@@ -139,6 +143,31 @@ function runSitemapGenerator(fixture, environment = {}) {
   delete env.SITE_ORIGIN;
   Object.assign(env, environment);
   return spawnSync(process.execPath, [fixture.script], {
+    cwd: fixture.root,
+    encoding: 'utf8',
+    env,
+  });
+}
+
+function makeNetlifyReleaseBuilderFixture(loadManifestBody) {
+  const { root } = makeArtifactRoot('netlify-release-builder-fixture');
+  const script = path.join(root, 'scripts/netlify-release-build.js');
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  fs.copyFileSync(NETLIFY_RELEASE_BUILDER, script);
+  writeArtifact(
+    root,
+    'scripts/netlify-release-policy.js',
+    `'use strict';\nmodule.exports = {\n  authorizeProductionRelease() {\n`
+      + `    throw new Error('unused synthetic authorization');\n  },\n`
+      + `  loadManifest() {\n${loadManifestBody}\n  },\n};\n`,
+  );
+  return { root, script };
+}
+
+function runNetlifyReleaseBuilder(fixture) {
+  const env = { ...process.env };
+  delete env.NETLIFY;
+  return spawnSync(process.execPath, [fixture.script, '--local'], {
     cwd: fixture.root,
     encoding: 'utf8',
     env,
@@ -403,6 +432,67 @@ test('WEB-PRIVACY-001Y sitemap failures expose only fixed log codes', async (t) 
     assert.doesNotMatch(result.stderr, new RegExp(pathCanary, 'u'));
     assert.doesNotMatch(result.stderr, /ENOENT|Error:|generate-sitemap\.js/iu);
   });
+});
+
+test('WEB-PRIVACY-001AA release-wrapper caught failures use one fixed code', async (t) => {
+  const fixedFailure = 'netlify_release_build_failed\n';
+  const pathCanary = '/synthetic/private/netlify-release-path-canary';
+  const tokenCanary = ['s', 'k', '_', 'live', '_', 'N'.repeat(24)].join('');
+  const messageCanary = `${pathCanary} ${tokenCanary}`;
+  const stackCanary = 'netlify-release-stack-canary';
+  const getterCanary = 'netlify-release-message-getter-canary';
+  const proxyCanary = 'netlify-release-prototype-trap-canary';
+  const cases = [
+    {
+      name: 'ordinary Error messages and stacks stay private',
+      body: [
+        `    const error = new Error(${JSON.stringify(messageCanary)});`,
+        `    error.stack = ${JSON.stringify(stackCanary)};`,
+        '    throw error;',
+      ].join('\n'),
+      canaries: [pathCanary, tokenCanary, stackCanary],
+    },
+    {
+      name: 'hostile message accessors are not invoked',
+      body: [
+        "    const error = new Error('synthetic');",
+        "    Object.defineProperty(error, 'message', {",
+        '      get() {',
+        `        throw new Error(${JSON.stringify(getterCanary)});`,
+        '      },',
+        '    });',
+        '    throw error;',
+      ].join('\n'),
+      canaries: [getterCanary],
+    },
+    {
+      name: 'hostile prototype traps are not invoked',
+      body: [
+        '    throw new Proxy({}, {',
+        '      getPrototypeOf() {',
+        `        throw new Error(${JSON.stringify(proxyCanary)});`,
+        '      },',
+        '    });',
+      ].join('\n'),
+      canaries: [proxyCanary],
+    },
+  ];
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, () => {
+      const fixture = makeNetlifyReleaseBuilderFixture(scenario.body);
+      const result = runNetlifyReleaseBuilder(fixture);
+
+      assert.equal(result.error, undefined);
+      assert.equal(result.signal, null);
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.equal(result.stderr, fixedFailure);
+      scenario.canaries.forEach((canary) => {
+        assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, new RegExp(canary, 'u'));
+      });
+    });
+  }
 });
 
 test('safe synthetic nested reports pass and source outside explicit roots is ignored', () => {
