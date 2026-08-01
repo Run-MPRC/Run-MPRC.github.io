@@ -94,20 +94,32 @@ describe('SUPPLY-001D12 Functions brace-expansion containment', () => {
       resolved: PATCHED_BRACE_EXPANSION_URL,
       integrity: PATCHED_BRACE_EXPANSION_INTEGRITY,
       dev: true,
-      dependencies: {
-        'balanced-match': '^1.0.0',
-        'concat-map': '0.0.1',
-      },
+    });
+    expect(entries[0][1].dependencies).toEqual({
+      'balanced-match': '^1.0.0',
+      'concat-map': '0.0.1',
     });
 
-    expect(lock.packages['node_modules/minimatch']).toMatchObject({
+    const consumers = Object.entries(lock.packages)
+      .filter(([, packageRecord]) => (
+        packageRecord?.dependencies?.['brace-expansion'] !== undefined
+      ));
+    expect(consumers).toHaveLength(1);
+    expect(consumers[0][0]).toBe('node_modules/minimatch');
+    expect(consumers[0][1]).toMatchObject({
       version: '3.1.5',
       dev: true,
-      dependencies: {
-        'brace-expansion': '^1.1.7',
-      },
     });
-    expect(require('brace-expansion/package.json').version)
+    expect(consumers[0][1].dependencies).toEqual({
+      'brace-expansion': '^1.1.7',
+    });
+
+    const installedPackagePath = require.resolve('brace-expansion/package.json');
+    const minimatchPackagePath = require.resolve('minimatch/package.json');
+    expect(require.resolve('brace-expansion/package.json', {
+      paths: [path.dirname(minimatchPackagePath)],
+    })).toBe(installedPackagePath);
+    expect(readJson(installedPackagePath).version)
       .toBe(PATCHED_BRACE_EXPANSION_VERSION);
   });
 
