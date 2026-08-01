@@ -55,14 +55,13 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 If any proof is missing, report the change as **not live**.
 
-## In-person Shop catalog — PENDING #473 RELEASE
+## In-person Shop catalog — LIVE
 
-**Status:** source from issue [#466](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/466)
-is included in the bounded [#473](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/473)
-release candidate. It is **NOT LIVE** until that exact website artifact is
-published and `runmprc.com/shop` is verified. The same candidate replaces raw
-Events and Calendar provider errors with a fixed retry-later notice. It does
-not restore event records; that requires a separate protected Firebase repair.
+**Status:** the bounded [#473](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/473)
+artifact is live as Netlify deploy `6a6dc9ea588b0c0008036312`. Its public marker
+and `runmprc.com/shop` were verified on 2026-08-01. The page creates no online
+order or payment. The same artifact contains Events/Calendar error display;
+event records remain unavailable until a separate protected Firebase repair.
 
 **Purpose:** show the approved MPRC Hat at $10.00 and MPRC Jacket at $25.00
 without taking an order or payment online.
@@ -1764,9 +1763,9 @@ Officer review steps after the source merge:
 
 **Escalation:** communications lead plus platform/security owner. Add the treasurer and use the private incident path if a live request may have reached checkout. Add the privacy owner if any failure-supplied contact value or any provider, endpoint, token-shaped, or technical detail appeared outside the retained made-up form inputs. Do not copy the detail into an issue, message, screenshot, email, or AI tool.
 
-## Public Events-list load failure privacy — SOURCE ONLY, NOT LIVE
+## Public Events-list load failure privacy — LIVE FRONTEND CONTAINMENT
 
-**Status: NOT AVAILABLE YET**
+**Status: LIVE. EVENT RECORDS REMAIN UNAVAILABLE.** Exact deploy `6a6dc9ea588b0c0008036312` was checked on 2026-08-01. Firebase and event records were unchanged.
 
 **Purpose:** give any public Events visitor one plain next step when the event list cannot load, without showing a database, provider, account, endpoint, or technical error.
 
@@ -1776,7 +1775,7 @@ Officer review steps after the source merge:
 
 Officer review steps after the source merge:
 
-1. Keep the public Events-list failure sentence marked **NOT AVAILABLE YET**.
+1. Confirm the platform owner names deploy `6a6dc9ea588b0c0008036312` before using this procedure.
 2. Ask the platform owner for the exact #258 issue, pull request, merged commit, and synthetic frontend test result.
 3. Confirm the tests use only a made-up event, mocked event subscription, and mocked database reference.
 4. Confirm a made-up subscription rejection announces `Error: We could not load events right now. Please try again later.` as an alert.
@@ -1798,9 +1797,9 @@ Officer review steps after the source merge:
 
 No system diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged.
 
-## Public Events-calendar load failure privacy — SOURCE ONLY, NOT LIVE
+## Public Events-calendar load failure privacy — LIVE FRONTEND CONTAINMENT
 
-**Status: NOT AVAILABLE YET**
+**Status: LIVE. EVENT RECORDS REMAIN UNAVAILABLE.** Exact deploy `6a6dc9ea588b0c0008036312` was checked on 2026-08-01. Firebase and event records were unchanged.
 
 **Purpose:** give a visitor to the public Events calendar one plain next step when calendar data cannot load, without showing a database, provider, account, endpoint, or technical error.
 
@@ -1810,7 +1809,7 @@ No system diagram changes for this source slice because page structure, data mov
 
 Officer review steps after the source merge:
 
-1. Keep the public Events-calendar failure sentence marked **NOT AVAILABLE YET**.
+1. Confirm the platform owner names deploy `6a6dc9ea588b0c0008036312` before using this procedure.
 2. Ask the platform owner for the exact #260 issue, pull request, merged commit, and synthetic frontend test result.
 3. Confirm the tests use only a made-up event, mocked event subscription, and mocked database reference.
 4. Confirm a made-up subscription rejection shows exactly `We could not load events right now. Please try again later.` in one alert that assistive technology reads immediately as a complete sentence.

@@ -14,7 +14,7 @@ flowchart TD
     Events --> Calendar["Calendar"]
     Events --> Event["Event details"]
     Event --> Registration["Race registration — not approved for live payments"]
-    Site -. "after approved publication" .-> Shop["Shop pickup catalog — SOURCE ONLY, NOT LIVE; no online ordering"]
+    Site --> Shop["Shop pickup catalog — LIVE; no online ordering"]
     Site --> Committee["Committee"]
     Site --> Contact["Contact Us"]
     Site --> Account["Login and Account"]
@@ -24,8 +24,7 @@ flowchart TD
 ```
 
 In words: public information, account/admin pages, and unfinished commerce
-screens share one website; the Shop pickup catalog is source-only until an
-approved publication and exact live revision check, it creates no order or
+screens share one website; the live Shop pickup catalog creates no order or
 payment, and seeing any screen does not mean it is approved for live commerce.
 
 ## Where information lives
@@ -33,7 +32,7 @@ payment, and seeing any screen does not mean it is approved for live commerce.
 ```mermaid
 flowchart LR
     Public["Current public text and photos in GitHub"] --> Build["Website build"]
-    Pickup["Pickup catalog in GitHub — SOURCE ONLY, NOT LIVE"] -. "after approved publication" .-> Build
+    Pickup["Reviewed pickup catalog in GitHub"] --> Build
     Build --> Visitor["Website visitor"]
     Officer["Authorized officer"] --> Admin["Restricted admin pages"]
     Visitor --> Auth["Firebase login"]
@@ -45,8 +44,7 @@ flowchart LR
 ```
 
 In words: current public content comes from GitHub; the display-only pickup
-catalog is source-only until an approved publication and exact live revision
-check, it creates no operational record, private accounts and other operational
+catalog is live and creates no operational record, private accounts and other operational
 records use Firebase, Google Forms are separate, and Stripe must remain
 test-only until approved.
 
@@ -83,7 +81,7 @@ flowchart TD
     Rules --> Functions["Deploy and verify named Functions"]
     Functions --> Pages["Pages branch without Netlify's domain claim"]
     Main -. "Ordinary Git production build paused" .-> Netlify
-    Main -. "Exact temporary #473 manifest" .-> WebGate{"Exact parent, approved live delta, source, tree, and artifact match?"}
+    Main -. "Completed #473 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> Netlify
     Netlify["Netlify — current live host; reusable protected publication unavailable"] --> Live["runmprc.com"]
@@ -91,7 +89,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify, while only the exact temporary #473 parent and approved live-artifact delta may do so; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify and the completed #473 exception is inactive; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 
