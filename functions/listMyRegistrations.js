@@ -40,7 +40,14 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
   }
 
   const results = new Map();
-  byUid.forEach((d) => results.set(d.ref.path, sanitize(d)));
+  try {
+    byUid.forEach((d) => results.set(d.ref.path, sanitize(d)));
+  } catch {
+    throw new functions.https.HttpsError(
+      'unavailable',
+      'Registration data could not be loaded.',
+    );
+  }
 
   const eventIds = Array.from(new Set(
     Array.from(results.values()).map((r) => r.eventId).filter(Boolean),

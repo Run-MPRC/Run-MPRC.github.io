@@ -39,6 +39,7 @@ jest.mock('firebase-admin', () => {
   let eventReads = [];
   let registrationQueryFailure = null;
   let registrationQueryStages = [];
+  let registrationSnapshotFailure = null;
 
   function enterRegistrationQueryStage(stage) {
     registrationQueryStages.push(stage);
@@ -54,6 +55,9 @@ jest.mock('firebase-admin', () => {
   function registrationSnapshot(records) {
     return {
       forEach(callback) {
+        if (registrationSnapshotFailure !== null) {
+          throw registrationSnapshotFailure;
+        }
         records.forEach(callback);
       },
     };
@@ -105,12 +109,16 @@ jest.mock('firebase-admin', () => {
       enterRegistrationQueryStage('firestore');
       return firestoreApi;
     }),
+    __eventCollectionCalls: () => firestoreApi.collection.mock.calls.length,
     __eventReads: () => [...eventReads],
     __failRegistrationQueryAt: (stage, value) => {
       registrationQueryFailure = { stage, value };
     },
     __queries: () => queries.map((query) => ({ ...query })),
     __registrationQueryStages: () => [...registrationQueryStages],
+    __failRegistrationSnapshot: (value) => {
+      registrationSnapshotFailure = value;
+    },
     __reset: () => {
       registrations = [];
       events = new Map();
@@ -118,6 +126,7 @@ jest.mock('firebase-admin', () => {
       eventReads = [];
       registrationQueryFailure = null;
       registrationQueryStages = [];
+      registrationSnapshotFailure = null;
       firestoreApi.collectionGroup.mockClear();
       firestoreApi.collection.mockClear();
     },
@@ -570,6 +579,142 @@ describe('DATA-001A5 registration query failure boundary', () => {
       },
       queries: expectedQueries,
       queryStages: expectedStages,
+      rawFailureEscaped: false,
+    });
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.firestore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DATA-001A6 registration snapshot-processing failure boundary', () => {
+  beforeEach(() => {
+    admin.__reset();
+    admin.firestore.mockClear();
+    firebaseFunctions.__resetLoggerCalls();
+    requireAppCheck.mockReset();
+  });
+
+  test.each([
+    ['forEach', 1],
+    ['ref.path', 1],
+    ['data', 2],
+    ['status', 2],
+  ])('maps a hostile %s failure to one fixed result', async (
+    stage,
+    expectedFailingDataCalls,
+  ) => {
+    let hostileReads = 0;
+    const hostileFailureTarget = Object.create(null);
+    Object.defineProperty(hostileFailureTarget, inspect.custom, {
+      value: () => {
+        hostileReads += 1;
+        throw new Error('hostile snapshot failure formatter was inspected');
+      },
+    });
+    const hostileFailure = new Proxy(hostileFailureTarget, {
+      get() {
+        hostileReads += 1;
+        throw new Error('hostile snapshot failure getter was inspected');
+      },
+      getOwnPropertyDescriptor() {
+        hostileReads += 1;
+        throw new Error('hostile snapshot failure descriptor was inspected');
+      },
+      ownKeys() {
+        hostileReads += 1;
+        throw new Error('hostile snapshot failure keys were inspected');
+      },
+    });
+    const failingDocument = registrationDocument({
+      eventId: 'must-not-read-failing-event',
+      id: 'must-fail-projection',
+    });
+    const failingRecord = failingDocument.data();
+    failingDocument.data.mockClear();
+    const laterDocument = registrationDocument({
+      eventId: 'must-not-read-later-event',
+      id: 'must-not-project-later-registration',
+    });
+
+    if (stage === 'forEach') {
+      admin.__failRegistrationSnapshot(hostileFailure);
+    } else if (stage === 'ref.path') {
+      Object.defineProperty(failingDocument.ref, 'path', {
+        get: () => {
+          throw hostileFailure;
+        },
+      });
+    } else if (stage === 'data') {
+      failingDocument.data
+        .mockImplementationOnce(() => failingRecord)
+        .mockImplementationOnce(() => {
+          throw hostileFailure;
+        });
+    } else {
+      Object.defineProperty(failingRecord, 'status', {
+        get: () => {
+          throw hostileFailure;
+        },
+      });
+    }
+
+    admin.__seedRegistrations([failingDocument, laterDocument]);
+    const logSpies = ['debug', 'error', 'info', 'log', 'warn'].map((method) => (
+      jest.spyOn(console, method).mockImplementation(() => {})
+    ));
+
+    let caught;
+    let logCalls;
+    try {
+      try {
+        await listMyRegistrations({}, CONTEXT);
+      } catch (error) {
+        caught = error;
+      }
+    } finally {
+      logCalls = logSpies.map((spy) => spy.mock.calls.length);
+      logSpies.forEach((spy) => spy.mockRestore());
+    }
+    const rawFailureEscaped = caught === hostileFailure;
+    const publicFailure = rawFailureEscaped ? null : {
+      causeAbsent: caught?.cause === undefined,
+      code: caught?.code,
+      detailsAbsent: caught?.details === undefined,
+      message: caught?.message,
+    };
+
+    expect({
+      eventCollectionCalls: admin.__eventCollectionCalls(),
+      eventReads: admin.__eventReads(),
+      failingDataCalls: failingDocument.data.mock.calls.length,
+      functionLoggerCalls: firebaseFunctions.__loggerCalls(),
+      hostileReads,
+      laterDataCalls: laterDocument.data.mock.calls.length,
+      logCalls,
+      publicFailure,
+      queries: admin.__queries(),
+      queryStages: admin.__registrationQueryStages(),
+      rawFailureEscaped,
+    }).toEqual({
+      eventCollectionCalls: 0,
+      eventReads: [],
+      failingDataCalls: expectedFailingDataCalls,
+      functionLoggerCalls: 0,
+      hostileReads: 0,
+      laterDataCalls: 1,
+      logCalls: [0, 0, 0, 0, 0],
+      publicFailure: {
+        causeAbsent: true,
+        code: 'unavailable',
+        detailsAbsent: true,
+        message: 'Registration data could not be loaded.',
+      },
+      queries: [{
+        field: 'uid',
+        operator: '==',
+        value: CONTEXT.auth.uid,
+      }],
+      queryStages: ['firestore', 'collectionGroup', 'where', 'get'],
       rawFailureEscaped: false,
     });
     expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
