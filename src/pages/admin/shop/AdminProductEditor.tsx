@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, {
+  useEffect, useLayoutEffect, useRef, useState,
+} from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import SEO from '../../../components/SEO';
 import AdminGuard from '../AdminGuard';
@@ -30,11 +32,21 @@ const EMPTY: FormState = {
 };
 
 const LOAD_FAILURE = 'We could not load this product right now. Please try again later.';
+const SAVE_PENDING = 'Product save in progress. Do not start another save.';
+const SAVE_UNKNOWN = 'We could not confirm that product save. Do not repeat it. Stop and contact the shop lead, treasurer, and platform owner.';
 
 interface ProductLoadOutcome {
   firestore: unknown;
   slug: string;
-  status: 'loading' | 'resolved' | 'unavailable';
+  status: 'loading' | 'resolved' | 'missing' | 'unavailable';
+}
+
+interface ProductSaveOutcome {
+  firestore: unknown;
+  routeSlug: string | null;
+  adminUid: string;
+  requestId: number;
+  status: 'pending' | 'unknown';
 }
 
 function Inner() {
@@ -43,20 +55,61 @@ function Inner() {
   const navigate = useNavigate();
   const { services, isReady } = useServiceLocator();
   const { user } = useAuth();
+  const adminUid = user?.uid || null;
   const firestore = isReady && services
     ? services.firebaseResources.firestore
     : null;
 
   const [form, setForm] = useState<FormState>(EMPTY);
   const [loadOutcome, setLoadOutcome] = useState<ProductLoadOutcome | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveOutcome, setSaveOutcome] = useState<ProductSaveOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const saveSequence = useRef(0);
+  const saveRequestBlocked = useRef(false);
+  const mounted = useRef(true);
+  const saveContext = useRef({
+    firestore,
+    routeSlug: routeSlug ?? null,
+    adminUid,
+  });
+  saveContext.current = {
+    firestore,
+    routeSlug: routeSlug ?? null,
+    adminUid,
+  };
 
   let currentLoadStatus: ProductLoadOutcome['status'] = 'loading';
   if (!isEdit) currentLoadStatus = 'resolved';
   else if (loadOutcome?.firestore === firestore && loadOutcome.slug === routeSlug) {
     currentLoadStatus = loadOutcome.status;
   }
+  const currentSaveOutcome = saveOutcome?.firestore === firestore
+    && saveOutcome.routeSlug === (routeSlug ?? null)
+    && saveOutcome.adminUid === adminUid
+    && saveOutcome.requestId === saveSequence.current
+    ? saveOutcome
+    : null;
+  const savePending = currentSaveOutcome?.status === 'pending';
+  const saveUnknown = currentSaveOutcome?.status === 'unknown';
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      saveSequence.current += 1;
+      saveRequestBlocked.current = true;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    saveSequence.current += 1;
+    saveRequestBlocked.current = false;
+    setSaveOutcome(null);
+    return () => {
+      saveSequence.current += 1;
+      saveRequestBlocked.current = true;
+    };
+  }, [firestore, routeSlug, adminUid]);
 
   useEffect(() => {
     if (!isEdit || !firestore || !routeSlug) return () => undefined;
@@ -70,19 +123,21 @@ function Inner() {
     getProductBySlug(firestore, routeSlug)
       .then((p) => {
         if (!active) return;
-        if (!p) { setError('Product not found'); }
-        else {
-          setForm({
-            slug: p.slug,
-            title: p.title,
-            description: p.description,
-            priceDollars: (p.priceCents / 100).toFixed(2),
-            imageUrl: p.imageUrl || '',
-            sizes: (p.sizes || []).join(', '),
-            colors: (p.colors || []).join(', '),
-            status: p.status,
-          });
+        if (!p) {
+          setError('Product not found');
+          setLoadOutcome({ ...outcomeKey, status: 'missing' });
+          return;
         }
+        setForm({
+          slug: p.slug,
+          title: p.title,
+          description: p.description,
+          priceDollars: (p.priceCents / 100).toFixed(2),
+          imageUrl: p.imageUrl || '',
+          sizes: (p.sizes || []).join(', '),
+          colors: (p.colors || []).join(', '),
+          status: p.status,
+        });
         setLoadOutcome({ ...outcomeKey, status: 'resolved' });
       })
       .catch(() => {
@@ -99,6 +154,8 @@ function Inner() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (saveRequestBlocked.current) return;
+    if (isEdit && currentLoadStatus !== 'resolved') return;
     setError(null);
     if (!form.title.trim()) { setError('Title required'); return; }
     if (!form.slug.trim() || !/^[a-z0-9-]+$/.test(form.slug)) {
@@ -110,7 +167,6 @@ function Inner() {
       setError('Invalid price');
       return;
     }
-    setSaving(true);
     const input = {
       slug: form.slug,
       title: form.title.trim(),
@@ -121,18 +177,48 @@ function Inner() {
       colors: form.colors.split(',').map((s) => s.trim()).filter(Boolean),
       status: form.status,
     };
+
+    const actionFirestore = firestore;
+    const actionRouteSlug = routeSlug ?? null;
+    const actionAdminUid = adminUid;
+    if (
+      !actionFirestore
+      || !actionAdminUid
+      || (isEdit && currentLoadStatus !== 'resolved')
+      || saveContext.current.firestore !== actionFirestore
+      || saveContext.current.routeSlug !== actionRouteSlug
+      || saveContext.current.adminUid !== actionAdminUid
+    ) return;
+
+    const requestId = saveSequence.current + 1;
+    saveSequence.current = requestId;
+    saveRequestBlocked.current = true;
+    const outcomeKey = {
+      firestore: actionFirestore,
+      routeSlug: actionRouteSlug,
+      adminUid: actionAdminUid,
+      requestId,
+    };
+    const isCurrentSave = () => mounted.current
+      && saveSequence.current === requestId
+      && saveContext.current.firestore === actionFirestore
+      && saveContext.current.routeSlug === actionRouteSlug
+      && saveContext.current.adminUid === actionAdminUid;
+
+    setSaveOutcome({ ...outcomeKey, status: 'pending' });
     try {
       if (isEdit) {
-        await updateProduct(services!.firebaseResources.firestore, routeSlug!, input);
+        await updateProduct(actionFirestore, routeSlug!, input);
       } else {
-        await createProduct(services!.firebaseResources.firestore, input, user?.uid || 'admin');
+        await createProduct(actionFirestore, input, actionAdminUid);
       }
-      navigate('/admin/products');
-    } catch (err: any) {
-      setError(err?.message || 'Save failed');
-    } finally {
-      setSaving(false);
+    } catch {
+      if (!isCurrentSave()) return;
+      setSaveOutcome({ ...outcomeKey, status: 'unknown' });
+      return;
     }
+    if (!isCurrentSave()) return;
+    navigate('/admin/products');
   }
 
   if (currentLoadStatus === 'loading') {
@@ -155,6 +241,27 @@ function Inner() {
             aria-atomic="true"
           >
             {LOAD_FAILURE}
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  if (savePending || saveUnknown) {
+    return (
+      <>
+        <SEO title={savePending ? 'Saving product' : 'Product save result'} noindex />
+        <div className="container mx-auto p-4 max-w-2xl">
+          <h1 className="text-2xl font-bold">
+            {savePending ? 'Product save in progress' : 'Product save result unknown'}
+          </h1>
+          <p
+            className={savePending ? 'text-gray-600 text-sm mt-4' : 'text-red-600 text-sm mt-4'}
+            role={savePending ? 'status' : 'alert'}
+            aria-live={savePending ? 'polite' : 'assertive'}
+            aria-atomic="true"
+          >
+            {savePending ? SAVE_PENDING : SAVE_UNKNOWN}
           </p>
         </div>
       </>
@@ -265,15 +372,24 @@ function Inner() {
             />
           </label>
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && (
+            <p
+              className="text-red-600 text-sm"
+              role={error === 'Product not found' ? undefined : 'alert'}
+              aria-live={error === 'Product not found' ? undefined : 'assertive'}
+              aria-atomic={error === 'Product not found' ? undefined : 'true'}
+            >
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3">
             <button
               type="submit"
-              disabled={saving}
+              disabled={savePending || !firestore || !adminUid}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold px-6 py-2 rounded"
             >
-              {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create product'}
+              {savePending ? 'Saving...' : isEdit ? 'Save changes' : 'Create product'}
             </button>
             <Link to="/admin/products" className="border px-6 py-2 rounded hover:bg-gray-50">
               Cancel
