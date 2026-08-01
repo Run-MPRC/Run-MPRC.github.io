@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
 import { useServiceLocator } from '../../../services/ServiceLocatorContext';
@@ -8,6 +8,24 @@ import { listAllEvents } from '../../../services/events/adminService';
 import { formatEventDate, formatPrice } from '../../../services/events/eventsService';
 
 const LOAD_FAILURE = 'We could not load events right now. Please try again later.';
+const firestoreIdentities = new WeakMap<object, number>();
+let nextFirestoreIdentity = 1;
+
+function getFirestoreIdentity(value: object | null): number {
+  if (value === null) return 0;
+  const existing = firestoreIdentities.get(value);
+  if (existing !== undefined) return existing;
+  const identity = nextFirestoreIdentity;
+  nextFirestoreIdentity += 1;
+  firestoreIdentities.set(value, identity);
+  return identity;
+}
+
+interface EventsLoadOutcome {
+  firestore: unknown;
+  status: 'loading' | 'resolved' | 'unavailable';
+  events: Event[];
+}
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -23,31 +41,48 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function Inner() {
-  const { services, isReady } = useServiceLocator();
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type EventsFirestore = Parameters<typeof listAllEvents>[0];
+
+function EventsAttempt({ firestore }: { firestore: EventsFirestore | null }) {
+  const currentFirestoreRef = useRef(firestore);
+  currentFirestoreRef.current = firestore;
+  const requestSequence = useRef(0);
+  const [loadOutcome, setLoadOutcome] = useState<EventsLoadOutcome | null>(null);
+
+  const currentOutcome = loadOutcome?.firestore === firestore ? loadOutcome : null;
+  const currentStatus = currentOutcome?.status ?? 'loading';
+  const events = currentOutcome?.status === 'resolved' ? currentOutcome.events : [];
+  const loading = currentStatus === 'loading';
+  const error = currentStatus === 'unavailable' ? LOAD_FAILURE : null;
 
   useEffect(() => {
-    if (!isReady || !services) return undefined;
-    let active = true;
-    setLoading(true);
-    setError(null);
-    listAllEvents(services.firebaseResources.firestore)
-      .then((evs) => {
-        if (!active) return;
-        setEvents(evs);
-        setError(null);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setError(LOAD_FAILURE);
-        setLoading(false);
-      });
-    return () => { active = false; };
-  }, [services, isReady]);
+    if (!firestore) {
+      requestSequence.current += 1;
+      return () => undefined;
+    }
+
+    const requestFirestore = firestore;
+    requestSequence.current += 1;
+    const requestId = requestSequence.current;
+    const outcomeKey = { firestore: requestFirestore };
+    setLoadOutcome({ ...outcomeKey, status: 'loading', events: [] });
+
+    async function load() {
+      try {
+        const all = await listAllEvents(requestFirestore);
+        if (requestId !== requestSequence.current
+          || currentFirestoreRef.current !== requestFirestore) return;
+        setLoadOutcome({ ...outcomeKey, status: 'resolved', events: all });
+      } catch {
+        if (requestId !== requestSequence.current
+          || currentFirestoreRef.current !== requestFirestore) return;
+        setLoadOutcome({ ...outcomeKey, status: 'unavailable', events: [] });
+      }
+    }
+
+    load();
+    return () => { requestSequence.current += 1; };
+  }, [firestore]);
 
   return (
     <>
@@ -136,6 +171,20 @@ function Inner() {
         )}
       </div>
     </>
+  );
+}
+
+function Inner() {
+  const { services, isReady } = useServiceLocator();
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
+
+  return (
+    <EventsAttempt
+      key={getFirestoreIdentity(firestore)}
+      firestore={firestore}
+    />
   );
 }
 
