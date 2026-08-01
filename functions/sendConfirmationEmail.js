@@ -15,6 +15,29 @@ const { loadServerConfig } = require('./serverConfig');
 
 const CONFIRMED_STATUSES = new Set(['paid', 'comp']);
 
+function escapeHtml(value) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return '';
+    }
+  });
+}
+
+function encodePathSegment(value) {
+  if (typeof value !== 'string') return '';
+  try {
+    return encodeURIComponent(value);
+  } catch {
+    return '';
+  }
+}
+
 function moneyUsd(cents) {
   return `$${((cents || 0) / 100).toFixed(2)}`;
 }
@@ -29,19 +52,25 @@ function eventDate(ts) {
 
 function buildEmail({ reg, event, siteOrigin }) {
   const slug = event.slug || reg.eventId;
+  const eventUrl = `${siteOrigin}/events/${encodePathSegment(slug)}`;
+  const eventTitleHtml = escapeHtml(event.title);
+  const firstNameHtml = escapeHtml(reg.runner?.firstName);
+  const eventDateHtml = escapeHtml(eventDate(event.startAt));
+  const eventLocationHtml = escapeHtml(event.location);
+  const registrationIdHtml = escapeHtml(reg.id);
   const receiptLine = reg.priceTier === 'comp'
     ? '<p>Your registration is comped — thanks for supporting MPRC!</p>'
     : `<p>Amount paid: <strong>${moneyUsd(reg.amountCents)}</strong></p>`;
   const html = `
     <div style="font-family:system-ui,Arial,sans-serif;max-width:560px;margin:0 auto;color:#111">
-      <h2>You're registered for ${event.title}</h2>
-      <p>Hi ${reg.runner?.firstName || ''},</p>
-      <p>Your registration for <strong>${event.title}</strong> is confirmed.</p>
-      <p><strong>When:</strong> ${eventDate(event.startAt)}<br/>
-      <strong>Where:</strong> ${event.location || ''}</p>
+      <h2>You're registered for ${eventTitleHtml}</h2>
+      <p>Hi ${firstNameHtml},</p>
+      <p>Your registration for <strong>${eventTitleHtml}</strong> is confirmed.</p>
+      <p><strong>When:</strong> ${eventDateHtml}<br/>
+      <strong>Where:</strong> ${eventLocationHtml}</p>
       ${receiptLine}
-      <p>Registration ID: <code>${reg.id || ''}</code></p>
-      <p><a href="${siteOrigin}/events/${slug}">Event page</a></p>
+      <p>Registration ID: <code>${registrationIdHtml}</code></p>
+      <p><a href="${escapeHtml(eventUrl)}">Event page</a></p>
       <hr/>
       <p style="color:#666;font-size:12px">Mid-Peninsula Running Club · runmprc.com</p>
     </div>
@@ -52,7 +81,7 @@ function buildEmail({ reg, event, siteOrigin }) {
     `Where: ${event.location || ''}`,
     reg.priceTier === 'comp' ? 'Your registration is comped.' : `Amount paid: ${moneyUsd(reg.amountCents)}`,
     `Registration ID: ${reg.id || ''}`,
-    `${siteOrigin}/events/${slug}`,
+    eventUrl,
   ].join('\n\n');
   return { html, text };
 }

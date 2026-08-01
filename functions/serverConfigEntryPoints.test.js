@@ -69,25 +69,31 @@ function setValidTestConfig() {
   ].join('_');
 }
 
-function qualifyingUpdateChange() {
+function confirmationRegistration(overrides = {}) {
+  const { runner = {}, ...registration } = overrides;
+  return {
+    status: 'paid',
+    ...registration,
+    runner: {
+      email: 'runner@example.test',
+      ...runner,
+    },
+  };
+}
+
+function qualifyingUpdateChange(overrides = {}) {
   return {
     before: { data: () => ({ status: 'pending' }) },
     after: {
-      data: () => ({
-        status: 'paid',
-        runner: { email: 'runner@example.test' },
-      }),
+      data: () => confirmationRegistration(overrides),
       ref: { update: mockMarkerUpdate },
     },
   };
 }
 
-function qualifyingCreateSnapshot() {
+function qualifyingCreateSnapshot(overrides = {}) {
   return {
-    data: () => ({
-      status: 'paid',
-      runner: { email: 'runner@example.test' },
-    }),
+    data: () => confirmationRegistration(overrides),
     ref: { update: mockMarkerUpdate },
   };
 }
@@ -212,6 +218,9 @@ describe('server configuration entry-point guards', () => {
     expect(mockMailAdd).toHaveBeenCalledWith(expect.objectContaining({
       to: 'runner@example.test',
       message: expect.objectContaining({
+        html: expect.stringContaining(
+          'href="https://runmprc.test/events/synthetic-race"',
+        ),
         text: expect.stringContaining(
           'https://runmprc.test/events/synthetic-race',
         ),
@@ -219,6 +228,115 @@ describe('server configuration entry-point guards', () => {
     }));
     expect(mockMarkerUpdate).toHaveBeenCalledTimes(1);
     expect(mockStripeConstructor).not.toHaveBeenCalled();
+  });
+
+  describe('MAIL-001A1 hostile confirmation HTML', () => {
+    const hostileTitle = 'Race </h2><a href="https://attacker.example.test/title">title-canary</a> & "quoted"';
+    const hostileFirstName = 'Runner <img src=x onerror="runner-canary"> & \'quoted\'';
+    const hostileLocation = 'Park <svg onload="location-canary"> & \'quoted\'';
+    const hostileRegistrationId = 'reg/"><img src=x onerror="id-canary">';
+    const hostileSlug = 'race/../?next="><a href="https://attacker.example.test/slug">&part=1';
+
+    test.each([
+      ['update', 'sendConfirmationEmail', qualifyingUpdateChange],
+      ['create', 'sendConfirmationEmailOnCreate', qualifyingCreateSnapshot],
+    ])('escapes record-derived HTML on the %s trigger', async (
+      _name,
+      exportName,
+      inputFactory,
+    ) => {
+      mockEventGet.mockResolvedValueOnce({
+        exists: true,
+        id: 'hostile-event',
+        data: () => ({
+          location: hostileLocation,
+          slug: hostileSlug,
+          title: hostileTitle,
+        }),
+      });
+      const emailFunctions = require('./sendConfirmationEmail');
+
+      await emailFunctions[exportName](
+        inputFactory({
+          runner: {
+            firstName: hostileFirstName,
+          },
+        }),
+        {
+          params: {
+            eventId: 'hostile-event',
+            regId: hostileRegistrationId,
+          },
+        },
+      );
+
+      expect(mockMailAdd).toHaveBeenCalledTimes(1);
+      const queuedMail = mockMailAdd.mock.calls[0][0];
+      const { html, subject, text } = queuedMail.message;
+      const encodedSlug = encodeURIComponent(hostileSlug);
+
+      expect(html).toContain(
+        'Runner &lt;img src=x onerror=&quot;runner-canary&quot;&gt; &amp; &#39;quoted&#39;',
+      );
+      expect(html).toContain(
+        'Race &lt;/h2&gt;&lt;a href=&quot;https://attacker.example.test/title&quot;&gt;title-canary&lt;/a&gt; &amp; &quot;quoted&quot;',
+      );
+      expect(html).toContain(
+        'Park &lt;svg onload=&quot;location-canary&quot;&gt; &amp; &#39;quoted&#39;',
+      );
+      expect(html).toContain(
+        'reg/&quot;&gt;&lt;img src=x onerror=&quot;id-canary&quot;&gt;',
+      );
+      expect(html).toContain(
+        `href="https://runmprc.test/events/${encodedSlug}"`,
+      );
+      expect(html).not.toMatch(/<(?:img|svg)\b/i);
+      expect(html).not.toContain('<a href="https://attacker.example.test/');
+      expect(html.match(/<a href=/g)).toHaveLength(1);
+
+      expect(subject).toBe(`Registration confirmed — ${hostileTitle}`);
+      expect(text).toContain(hostileTitle);
+      expect(text).toContain(hostileLocation);
+      expect(text).toContain(`https://runmprc.test/events/${encodedSlug}`);
+      expect(queuedMail.to).toBe('runner@example.test');
+      expect(mockMailAdd.mock.invocationCallOrder[0])
+        .toBeLessThan(mockMarkerUpdate.mock.invocationCallOrder[0]);
+      expect(mockMarkerUpdate).toHaveBeenCalledTimes(1);
+      expect(mockStripeConstructor).not.toHaveBeenCalled();
+    });
+
+    test('uses a fixed safe link when a stored slug cannot be URI encoded', async () => {
+      const malformedSlug = 'synthetic-unpaired-surrogate-\ud800';
+      mockEventGet.mockResolvedValueOnce({
+        exists: true,
+        id: 'malformed-slug-event',
+        data: () => ({
+          location: 'Synthetic Park',
+          slug: malformedSlug,
+          title: 'Synthetic Race',
+        }),
+      });
+      const { sendConfirmationEmailOnCreate } = require('./sendConfirmationEmail');
+
+      await sendConfirmationEmailOnCreate(
+        qualifyingCreateSnapshot({ runner: { firstName: 'Synthetic Runner' } }),
+        {
+          params: {
+            eventId: 'malformed-slug-event',
+            regId: 'malformed-slug-registration',
+          },
+        },
+      );
+
+      const queuedMail = mockMailAdd.mock.calls[0][0];
+      expect(queuedMail.message.html).toContain(
+        '<a href="https://runmprc.test/events/">Event page</a>',
+      );
+      expect(queuedMail.message.text).toContain('https://runmprc.test/events/');
+      expect(queuedMail.message.html).not.toContain(malformedSlug);
+      expect(queuedMail.message.text).not.toContain(malformedSlug);
+      expect(mockMarkerUpdate).toHaveBeenCalledTimes(1);
+    });
   });
 
   test('cached Stripe client never bypasses a later configuration failure', () => {
