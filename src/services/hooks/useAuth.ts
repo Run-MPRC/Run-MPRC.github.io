@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useServiceLocator } from '../ServiceLocatorContext';
-import { AuthUser, RegistrationResult } from '../identity/Identity';
+import type { AuthUser, RegistrationResult } from '../identity/Identity';
 
 export interface UseAuthResult {
   user: AuthUser | null;
@@ -13,30 +13,53 @@ export interface UseAuthResult {
   register: (email: string, password: string) => Promise<RegistrationResult>;
 }
 
+interface AuthSnapshot {
+  contextToken: symbol | null;
+  isLoading: boolean;
+  user: AuthUser | null;
+}
+
 export function useAuth(): UseAuthResult {
   const { services, isReady } = useServiceLocator();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const identityService = isReady && services ? services.identityService : null;
+  const contextToken = useMemo(() => Symbol('auth-context'), [identityService]);
+  const [authSnapshot, setAuthSnapshot] = useState<AuthSnapshot>({
+    contextToken: null,
+    isLoading: true,
+    user: null,
+  });
 
   useEffect(() => {
-    if (!isReady || !services) {
+    if (!identityService) {
       return undefined;
     }
 
-    const { identityService } = services;
+    let active = true;
+    const publishUser = (authUser: AuthUser | null) => {
+      if (!active) return;
+      setAuthSnapshot({
+        contextToken,
+        isLoading: false,
+        user: authUser,
+      });
+    };
 
     // Set initial user state
-    setUser(identityService.currentUser);
-    setIsLoading(false);
+    publishUser(identityService.currentUser);
 
     // Subscribe to auth state changes
-    const unsubscribe = identityService.onAuthStateChanged((authUser: AuthUser | null) => {
-      setUser(authUser);
-      setIsLoading(false);
-    });
+    const unsubscribe = identityService.onAuthStateChanged(publishUser);
 
-    return unsubscribe;
-  }, [services, isReady]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [contextToken, identityService]);
+
+  const snapshotIsCurrent = identityService !== null
+    && authSnapshot.contextToken === contextToken;
+  const user = snapshotIsCurrent ? authSnapshot.user : null;
+  const isLoading = !snapshotIsCurrent || authSnapshot.isLoading;
 
   const signIn = async (email: string, password: string): Promise<void> => {
     if (!services) {
@@ -64,7 +87,7 @@ export function useAuth(): UseAuthResult {
 
   return {
     user,
-    isLoading: !isReady || isLoading,
+    isLoading,
     isAuthenticated: user !== null,
     isMember: user?.role === 'member' || user?.role === 'admin',
     isAdmin: user?.role === 'admin',
