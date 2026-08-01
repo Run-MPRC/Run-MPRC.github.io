@@ -269,6 +269,39 @@ node --test tests/test-artifact-safety.test.js
 
 The frontend Jest command is a dependable local baseline and hosted CI runs it as the blocking `Run frontend Jest tests` step under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124). Hosted CI also runs the separate Node SPA suite as `Run SPA callback safety tests` under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126). CI-001B3 [#167](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/167) adds the blocking `Commerce command journal emulator` job. That job uses exact demo project `demo-pay002b2-test`, Firestore only, an explicit opt-in, and the focused transaction suite. CI-001B4 [#186](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/186) merged through [PR #189](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/189) as `bec7d5e365eacb418563a172029f241f660d9768`. It adds the named blocking `Run non-mutating frontend lint` step using the checker directly, before application tests can change its process environment. Its trusted prefix pins the hosted runner, read-only job permission, credential-free checkout, Node 20 setup, install with lifecycle scripts disabled, lint, and the immediately following clean check. With MEMBERS-DIRECTORY-001B [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506), the checker covers 118 frontend files: 12 JS, 34 JSX, 42 TS, and 30 TSX. The lint process disables the repository-wide `eslint-plugin-only-warn` hook so the original configured severities remain visible. CI-001B4A [#227](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/227) removes one reviewed `arrow-body-style` record, CI-001B4B [#239](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/239) removes one stale `AdminMembers` unknown-rule suppression record, and PAY-004C1 [#359](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/359) removes one prompt warning plus two label-association errors with the unsafe reusable-link controls. Reviewed functional changes in [PR #391](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/391) and [PR #392](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/392) add three TypeScript files and retire four TSX errors. CI-001B4C [#449](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/449) replaces exactly four stale `react-hooks/exhaustive-deps` directives with ordinary comments on the same lines and changes no executable code. MEMBERS-CONTENT-001B [#492](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/492) removes one finding-free dormant JSX file, #505 adds four finding-free TypeScript/TSX files, and #506 adds four more finding-free TypeScript/TSX files, leaving 113 configured errors and 6 warnings. This is accepted debt, not a clean-lint claim. Any finding added, removed, moved, or changed must be understood and the exact record updated in the same reviewed pull request; a fatal parser, configuration, or unexpected process failure always stops with one fixed diagnostic. Never regenerate the baseline only to make a check green. The clean-checkout step compares tracked files with `HEAD` and rejects non-ignored untracked files. Ignored dependency and build paths are outside this proof. The original #186 PR run `29291402007` and post-merge run `29291515653` passed the install, lint, clean, test, workflow-validation, build, Functions, Rules, commerce, and artifact jobs; each later focused issue records its separate source and hosted evidence. These runs prove source execution only: branch protection, production publication, Firebase, Stripe, and provider state remain unchanged. TEST-001A2 [#177](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/177) adds the exact `Test artifact scrubber` job. It deliberately creates bounded synthetic output and proves that the dependency-free scanner accepts reserved examples, rejects the documented recognizable sensitive patterns with fixed messages, ignores source outside an explicit output root, and protects both release job lists. Current CI uploads no test report. Later report-producing work must scan its explicit output before upload. A green scrubber proves only that this deliberate source test ran. It is not a general data-loss-prevention guarantee or proof that an unknown or newly obfuscated sensitive value is absent, that an artifact was uploaded, that all runtime logs are safe, or that Firebase, Stripe, the website, or another provider changed. The manual-release source invariants remain under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). Protected environment/OIDC configuration, actual staged/live deployment, branch-required-check configuration, and controlled Netlify publication remain **NOT AVAILABLE YET** under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105), [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133), [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136), and WEB-001.
 
+### CI-001B5 Functions job credential boundary — SOURCE ONLY
+
+**Purpose:** keep the hosted Functions install, lint, and tests on an explicitly read-only repository token without leaving the checkout credential available to later Git commands.
+
+**Approver:** platform or security reviewer. **Prerequisites:** one pull request containing only the named Functions-job workflow hunk, its parsed-workflow tests, and this current-truth section; no secret or real project is required.
+
+```mermaid
+flowchart LR
+    A["GitHub creates the Functions job token"] --> B{"Only repository contents read?"}
+    B -- "No" --> C["Stop the review"]
+    B -- "Yes" --> D["Checkout reads the source"]
+    D --> E["Do not store checkout credentials for later steps"]
+    E --> F["Install, lint, and test Functions source"]
+```
+
+Text alternative: the Functions job may use a contents-read token to check out source, but it does not store that credential for the later install, lint, and test steps; any broader authority stops review.
+
+Review steps:
+
+1. Confirm the Functions job declares only `permissions: contents: read`.
+2. Confirm its first and only checkout step is `actions/checkout@v6` with primitive boolean `persist-credentials: false`.
+3. Confirm no workflow-wide permission, write scope, second checkout, job secret, skipped step, or swallowed failure was added.
+4. Run the separately named CI-001B5 parsed-workflow tests.
+5. Confirm the existing Functions lint and full test commands still pass without adding a repository or environment secret.
+
+**Expected result:** checkout can read the reviewed source, and the later Functions commands have no checkout-configured authenticated Git path. On 2026-08-01, the separate repository-settings readback also reported default workflow permissions `read` and pull-request approval `false`. That dated readback is point-in-time external evidence, not a source guarantee and not a settings change.
+
+**Stop conditions:** stop if the job inherits its permission scope, requests a write or extra scope, omits the credential setting, uses `true` or string `"false"`, adds another checkout, receives a secret, changes an action or command, or if settings readback differs from the recorded value.
+
+**Success proof:** record the exact source commit, pull request and merge commit, focused parsed-workflow result, all hosted CI job results, and a dated settings readback as separate facts. A merge and green CI do not publish or verify the website or `runmprc.com`, deploy Firebase, configure an outside provider, mutate production data, or verify live behavior. Record each applicable outcome separately.
+
+**Undo:** open a small reviewed pull request that reverts the exact source hunk. Do not restore inherited permissions, persisted credentials, a write scope, or a secret to make a job pass. **Escalation:** platform owner first, then the security owner if unexpected authority or credential output appears.
+
 ### Firestore Rules
 
 ```bash

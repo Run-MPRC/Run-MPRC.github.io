@@ -33,6 +33,7 @@ const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const FRONTEND_JOB_ID = 'frontend';
 const FRONTEND_JOB_NAME = 'Frontend lint + build';
 const FRONTEND_RUNNER = 'ubuntu-latest';
+const FUNCTIONS_JOB_ID = 'functions';
 const LINT_STEP_NAME = 'Run non-mutating frontend lint';
 const LINT_COMMAND = 'node .github/scripts/check-frontend-lint.cjs';
 const CLEAN_STEP_NAME = 'Verify frontend lint left the checkout unchanged';
@@ -372,6 +373,41 @@ function frontendLintErrors(workflow, scripts = packageJson.scripts) {
   return errors;
 }
 
+function functionsJobCredentialErrors(workflow) {
+  const parsed = parseWorkflow(workflow);
+  if (!isPlainObject(parsed) || !isPlainObject(parsed.jobs)) {
+    return ['workflow YAML is invalid'];
+  }
+
+  const errors = [];
+  if (Object.prototype.hasOwnProperty.call(parsed, 'permissions')) {
+    errors.push('workflow-wide permissions are forbidden');
+  }
+  const job = parsed.jobs[FUNCTIONS_JOB_ID];
+  if (!isPlainObject(job) || !Array.isArray(job.steps)) {
+    return errors.concat('Functions job is invalid');
+  }
+  if (!util.isDeepStrictEqual(job.permissions, { contents: 'read' })) {
+    errors.push('Functions job permissions are not exact');
+  }
+
+  const expectedCheckout = {
+    uses: 'actions/checkout@v6',
+    with: { 'persist-credentials': false },
+  };
+  const checkoutSteps = job.steps.filter((step) => (
+    isPlainObject(step)
+      && typeof step.uses === 'string'
+      && step.uses.startsWith('actions/checkout@')
+  ));
+  if (checkoutSteps.length !== 1
+    || !util.isDeepStrictEqual(checkoutSteps[0], expectedCheckout)
+    || !util.isDeepStrictEqual(job.steps[0], expectedCheckout)) {
+    errors.push('Functions checkout credential boundary is not exact');
+  }
+  return errors;
+}
+
 function releaseErrors(workflow) {
   const errors = [];
   const requiredName = `"${JOB_NAME}"`;
@@ -390,6 +426,72 @@ test('journal emulator CI job is exact, isolated, and blocking', () => {
   assert.deepEqual(ciErrors(ciWorkflow), []);
   assert.deepEqual(firestoreRulesErrors(ciWorkflow), []);
   assert.deepEqual(releaseErrors(releaseWorkflow), []);
+});
+
+test('CI-001B5 keeps the Functions job token read-only and out of later Git commands', () => {
+  assert.deepEqual(functionsJobCredentialErrors(ciWorkflow), []);
+});
+
+test('CI-001B5 guard rejects Functions token or checkout credential weakening', () => {
+  const protectedFixture = `jobs:
+  functions:
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+      - run: npm test
+`;
+  assert.deepEqual(functionsJobCredentialErrors(protectedFixture), []);
+
+  const functionsBlock = jobBlock(protectedFixture, FUNCTIONS_JOB_ID);
+  const mutateFunctions = (mutate) => protectedFixture.replace(
+    functionsBlock,
+    mutate(functionsBlock),
+  );
+  const permissionBlock = '    permissions:\n      contents: read\n';
+  const checkoutBlock = '      - uses: actions/checkout@v6\n'
+    + '        with:\n'
+    + '          persist-credentials: false\n';
+  const mutations = [
+    mutateFunctions((block) => block.replace(permissionBlock, '')),
+    mutateFunctions((block) => block.replace('contents: read', 'contents: write')),
+    mutateFunctions((block) => block.replace(
+      '      contents: read\n',
+      '      contents: read\n      issues: write\n',
+    )),
+    mutateFunctions((block) => block.replace(checkoutBlock, '      - uses: actions/checkout@v6\n')),
+    mutateFunctions((block) => block.replace('persist-credentials: false', 'persist-credentials: true')),
+    mutateFunctions((block) => block.replace(
+      'persist-credentials: false',
+      "persist-credentials: 'false'",
+    )),
+    mutateFunctions((block) => block.replace('actions/checkout@v6', 'actions/checkout@v5')),
+    mutateFunctions((block) => block.replace(
+      '          persist-credentials: false\n',
+      '          persist-credentials: false\n          token: synthetic-token\n',
+    )),
+    mutateFunctions((block) => block.replace(
+      '      - uses: actions/setup-node@v6\n',
+      '      - uses: actions/checkout@v6\n      - uses: actions/setup-node@v6\n',
+    )),
+    mutateFunctions((block) => block.replace(
+      permissionBlock,
+      permissionBlock + permissionBlock,
+    )),
+    protectedFixture.replace('jobs:\n', 'jobs:\n  malformed: [\n'),
+    protectedFixture.replace(
+      'jobs:\n',
+      'permissions:\n  contents: write\njobs:\n',
+    ),
+  ];
+
+  mutations.forEach((mutated) => {
+    assert.notEqual(mutated, protectedFixture);
+    assert.notDeepEqual(functionsJobCredentialErrors(mutated), []);
+  });
 });
 
 test('frontend lint covers every source extension without mutating or swallowing failures', async () => {
