@@ -25,10 +25,19 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
   }
   const { uid } = context.auth;
 
-  const db = admin.firestore();
-  const byUid = await db.collectionGroup('registrations')
-    .where('uid', '==', uid)
-    .get();
+  let db;
+  let byUid;
+  try {
+    db = admin.firestore();
+    byUid = await db.collectionGroup('registrations')
+      .where('uid', '==', uid)
+      .get();
+  } catch {
+    throw new functions.https.HttpsError(
+      'unavailable',
+      'Registration data could not be loaded.',
+    );
+  }
 
   const results = new Map();
   byUid.forEach((d) => results.set(d.ref.path, sanitize(d)));

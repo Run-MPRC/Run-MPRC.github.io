@@ -1,16 +1,30 @@
+const { inspect } = require('node:util');
+
 jest.mock('firebase-functions', () => {
+  let loggerCalls = 0;
+
   class HttpsError extends Error {
-    constructor(code, message) {
+    constructor(code, message, details) {
       super(message);
       this.code = code;
+      this.details = details;
     }
   }
 
   return {
+    __loggerCalls: () => loggerCalls,
+    __resetLoggerCalls: () => {
+      loggerCalls = 0;
+    },
     https: {
       HttpsError,
       onCall: (handler) => handler,
     },
+    logger: new Proxy(Object.create(null), {
+      get: () => () => {
+        loggerCalls += 1;
+      },
+    }),
   };
 });
 
@@ -23,6 +37,15 @@ jest.mock('firebase-admin', () => {
   let events = new Map();
   let queries = [];
   let eventReads = [];
+  let registrationQueryFailure = null;
+  let registrationQueryStages = [];
+
+  function enterRegistrationQueryStage(stage) {
+    registrationQueryStages.push(stage);
+    if (registrationQueryFailure?.stage === stage) {
+      throw registrationQueryFailure.value;
+    }
+  }
 
   function fieldValue(record, field) {
     return field.split('.').reduce((value, key) => value?.[key], record);
@@ -38,19 +61,24 @@ jest.mock('firebase-admin', () => {
 
   const firestoreApi = {
     collectionGroup: jest.fn((name) => {
+      enterRegistrationQueryStage('collectionGroup');
       if (name !== 'registrations') {
         throw new Error(`Unexpected collection group: ${name}`);
       }
       return {
         where: jest.fn((field, operator, value) => {
+          enterRegistrationQueryStage('where');
           queries.push({ field, operator, value });
           return {
-            get: jest.fn(async () => registrationSnapshot(
-              registrations.filter((document) => (
-                operator === '=='
-                && fieldValue(document.data(), field) === value
-              )),
-            )),
+            get: jest.fn(async () => {
+              enterRegistrationQueryStage('get');
+              return registrationSnapshot(
+                registrations.filter((document) => (
+                  operator === '=='
+                  && fieldValue(document.data(), field) === value
+                )),
+              );
+            }),
           };
         }),
       };
@@ -73,14 +101,23 @@ jest.mock('firebase-admin', () => {
   };
 
   return {
-    firestore: jest.fn(() => firestoreApi),
+    firestore: jest.fn(() => {
+      enterRegistrationQueryStage('firestore');
+      return firestoreApi;
+    }),
     __eventReads: () => [...eventReads],
+    __failRegistrationQueryAt: (stage, value) => {
+      registrationQueryFailure = { stage, value };
+    },
     __queries: () => queries.map((query) => ({ ...query })),
+    __registrationQueryStages: () => [...registrationQueryStages],
     __reset: () => {
       registrations = [];
       events = new Map();
       queries = [];
       eventReads = [];
+      registrationQueryFailure = null;
+      registrationQueryStages = [];
       firestoreApi.collectionGroup.mockClear();
       firestoreApi.collection.mockClear();
     },
@@ -94,6 +131,7 @@ jest.mock('firebase-admin', () => {
 });
 
 const admin = require('firebase-admin');
+const firebaseFunctions = require('firebase-functions');
 const { requireAppCheck } = require('./stripeHelpers');
 const { listMyRegistrations } = require('./listMyRegistrations');
 
@@ -142,6 +180,7 @@ describe('My Account registration UID ownership', () => {
   beforeEach(() => {
     admin.__reset();
     admin.firestore.mockClear();
+    firebaseFunctions.__resetLoggerCalls();
     requireAppCheck.mockReset();
   });
 
@@ -430,5 +469,110 @@ describe('My Account registration UID ownership', () => {
       registrations: [],
     });
     expect(admin.__eventReads()).toEqual([]);
+  });
+});
+
+describe('DATA-001A5 registration query failure boundary', () => {
+  beforeEach(() => {
+    admin.__reset();
+    admin.firestore.mockClear();
+    firebaseFunctions.__resetLoggerCalls();
+    requireAppCheck.mockReset();
+  });
+
+  test.each([
+    ['firestore', ['firestore'], []],
+    ['collectionGroup', ['firestore', 'collectionGroup'], []],
+    ['where', ['firestore', 'collectionGroup', 'where'], []],
+    ['get', ['firestore', 'collectionGroup', 'where', 'get'], [{
+      field: 'uid',
+      operator: '==',
+      value: CONTEXT.auth.uid,
+    }]],
+  ])('maps a hostile %s failure to one fixed result', async (
+    stage,
+    expectedStages,
+    expectedQueries,
+  ) => {
+    let hostileReads = 0;
+    const hostileFailureTarget = Object.create(null);
+    Object.defineProperty(hostileFailureTarget, inspect.custom, {
+      value: () => {
+        hostileReads += 1;
+        throw new Error('hostile query failure formatter was inspected');
+      },
+    });
+    const hostileFailure = new Proxy(hostileFailureTarget, {
+      get() {
+        hostileReads += 1;
+        throw new Error('hostile query failure getter was inspected');
+      },
+      getOwnPropertyDescriptor() {
+        hostileReads += 1;
+        throw new Error('hostile query failure descriptor was inspected');
+      },
+      ownKeys() {
+        hostileReads += 1;
+        throw new Error('hostile query failure keys were inspected');
+      },
+    });
+    const document = registrationDocument({
+      eventId: 'must-not-read-event',
+      id: 'must-not-project-registration',
+    });
+    admin.__seedRegistrations([document]);
+    admin.__failRegistrationQueryAt(stage, hostileFailure);
+    const logSpies = ['debug', 'error', 'info', 'log', 'warn'].map((method) => (
+      jest.spyOn(console, method).mockImplementation(() => {})
+    ));
+
+    let caught;
+    let logCalls;
+    try {
+      try {
+        await listMyRegistrations({}, CONTEXT);
+      } catch (error) {
+        caught = error;
+      }
+    } finally {
+      logCalls = logSpies.map((spy) => spy.mock.calls.length);
+      logSpies.forEach((spy) => spy.mockRestore());
+    }
+    const rawFailureEscaped = caught === hostileFailure;
+    const publicFailure = rawFailureEscaped ? null : {
+      causeAbsent: caught?.cause === undefined,
+      code: caught?.code,
+      detailsAbsent: caught?.details === undefined,
+      message: caught?.message,
+    };
+
+    expect({
+      dataReads: document.data.mock.calls.length,
+      eventReads: admin.__eventReads(),
+      functionLoggerCalls: firebaseFunctions.__loggerCalls(),
+      hostileReads,
+      logCalls,
+      publicFailure,
+      queries: admin.__queries(),
+      queryStages: admin.__registrationQueryStages(),
+      rawFailureEscaped,
+    }).toEqual({
+      dataReads: 0,
+      eventReads: [],
+      functionLoggerCalls: 0,
+      hostileReads: 0,
+      logCalls: [0, 0, 0, 0, 0],
+      publicFailure: {
+        causeAbsent: true,
+        code: 'unavailable',
+        detailsAbsent: true,
+        message: 'Registration data could not be loaded.',
+      },
+      queries: expectedQueries,
+      queryStages: expectedStages,
+      rawFailureEscaped: false,
+    });
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.firestore).toHaveBeenCalledTimes(1);
   });
 });
