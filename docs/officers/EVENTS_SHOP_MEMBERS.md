@@ -2320,48 +2320,58 @@ Until that issue closes, request event/product changes through [Request a change
 
 **Status: NOT AVAILABLE YET**
 
-**Purpose:** give an officer one plain instruction when the Admin Products list cannot load, without showing a Firebase, database, provider, account, endpoint, token-shaped, or technical detail and without falsely saying that the catalog is empty.
+**Purpose:** give an officer one plain instruction when the Admin Products list cannot load, without showing a Firebase, database, provider, account, endpoint, token-shaped, or technical detail, without falsely saying that the catalog is empty, and without showing a result left over from an earlier database or readiness state.
 
 **Approver:** shop lead plus platform/security and privacy owners. Add the treasurer before any future live commerce-admin review.
 
-**Prerequisites:** issue [#277](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/277) must be merged for source review. Use only a mocked admin identity, mocked database reference, made-up product, and mocked rejected list lookup. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply: this slice does not approve the screen, role, permissions, backup, preview, rollback, product editing, publication, checkout, or production use. It does not deploy Firebase, change database permissions or product records, contact Stripe or another provider, use production data, or prove live behavior.
+**Prerequisites:** issues [#277](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/277) and [#498](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/498) must be merged for source review. Use only a mocked admin identity, mocked database references, made-up products, mocked readiness changes, and mocked fulfilled or rejected list lookups. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply: these slices do not approve the screen, role, permissions, backup, preview, rollback, product editing, publication, checkout, or production use. They do not deploy Firebase, change database permissions or product records, contact Stripe or another provider, use production data, or prove live behavior.
 
 ```mermaid
 flowchart LR
-    A["Made-up Admin Products route"] --> B["Mocked product-list lookup"]
+    A["Made-up Admin Products route"] --> B["Current mocked database lookup"]
     B -- "Fulfilled empty" --> C["Existing No products yet state"]
     B -- "Fulfilled with products" --> D["Existing product table"]
     B -- "Rejected" --> E["Fixed alert; no empty state or table"]
+    F["Database or readiness changes"] --> G["Immediate loading state; old results hidden"]
+    G --> B
+    H["Older result or result received after leaving"] -. "Ignored" .-> I["No page change; current result stays or page stays closed"]
 ```
 
-In words: only a successful mocked lookup may show the existing empty catalog or product table. A mocked rejection shows one fixed alert while keeping the Products heading and navigation; it does not turn an unknown result into an empty catalog.
+In words: only a successful lookup for the current mocked database may show the existing empty catalog or product table. A mocked rejection shows one fixed alert while keeping the Products heading and navigation; it does not turn an unknown result into an empty catalog. A database or readiness change hides the earlier result immediately, and an older result or a result received after leaving the page cannot settle the page.
 
 Officer review steps after the source merge:
 
 1. Keep the Admin product-list failure sentence and the complete Admin Products screen marked **NOT AVAILABLE YET**.
-2. Ask the platform owner for the exact #277 issue, reviewed pull request, merged commit, and synthetic frontend test result.
-3. Confirm the tests use only a made-up admin identity, mocked database reference, made-up product, and mocked lookup. Do not use a real officer account or product record.
+2. Ask the platform owner for the exact #277 and #498 issues, reviewed pull requests, merged commits, and synthetic frontend test results.
+3. Confirm the tests use only a made-up admin identity, mocked database references, made-up products, mocked readiness changes, and mocked lookups. Do not use a real officer account or product record.
 4. Confirm a mocked rejection shows exactly `We could not load products right now. Please try again later.`
 5. Confirm assistive technology receives the complete sentence immediately as one alert.
 6. Confirm no made-up rejection-only email, database, Firebase, provider, account, endpoint, token-shaped, or technical detail appears on the page, in analytics, or in five browser console methods.
 7. Confirm a hostile rejected value is not inspected and its throwing `message` property is never touched.
 8. Confirm the rejected lookup ends loading and shows neither **No products yet** nor a product table.
 9. Confirm the **Products** heading and existing **Orders** and **New product** links remain available without following either link.
-10. Confirm the mocked lookup receives the same mocked database reference exactly once.
+10. Confirm each current mocked lookup receives its matching mocked database reference exactly once.
 11. Confirm a successful mocked empty list still shows **No products yet**, and a successful made-up product still shows its existing title, price, status, and edit link.
-12. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider, product-record, production-data, admin-screen approval, and live-behavior evidence as separate results.
+12. Confirm giving the page the same ready mocked database again does not start another lookup when only its surrounding test setup object is replaced.
+13. Confirm a not-ready page with a mocked database and a ready page without a mocked database both stay in loading and start no lookup.
+14. Confirm a changed database hides the earlier empty result, product table, or failure immediately.
+15. Confirm loss of readiness hides the earlier empty result, product table, or failure immediately.
+16. Confirm readiness recovery starts one new lookup for the current database and never briefly shows the earlier result, including when the exact same database returns.
+17. Confirm an older success or hostile rejection cannot replace a newer result.
+18. Confirm a success or hostile rejection received after leaving the page causes no page change and is not inspected.
+19. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider, product-record, production-data, admin-screen approval, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source discards the complete rejected value without binding or inspecting it and shows one fixed accessible retry-later sentence. A failure is not treated as an empty or populated catalog. The Products heading and navigation remain, while genuine successful empty and populated results keep their existing displays. This does not authorize an officer to open or use the Admin Products screen live.
+**Expected result:** the reviewed source discards the complete rejected value without binding or inspecting it and shows one fixed accessible retry-later sentence. A failure is not treated as an empty or populated catalog. Only the current ready database may supply the displayed result; database and readiness changes hide older results immediately, and an older result or a result received after leaving the page causes no change. Replacing only the surrounding test setup object does not repeat a lookup for the same ready database. The Products heading and navigation remain, while genuine successful empty and populated results keep their existing displays. This does not authorize an officer to open or use the Admin Products screen live.
 
-**Stop conditions:** any real officer, member, product, price, inventory, order, checkout, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; the false empty state or a product table after rejection; an attempted product/admin write; a Firebase, Rules, provider, or permission change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or Admin screen is live.
+**Stop conditions:** any real officer, member, product, price, inventory, order, checkout, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; the false empty state or a product table after rejection; an earlier catalog result visible after the database or readiness changes; an obsolete result settling the page; an attempted product/admin write; a Firebase, Rules, provider, or permission change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or Admin screen is live.
 
-**Success proof:** for source completion, record the exact #277 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic actual-route tests, relevant full checks, and independent privacy, accessibility, and officer-continuity reviews. The safe review path stops at source and synthetic tests because the Admin screen is not approved for officer use. Live availability requires a later separately approved Admin-screen release and dated exact-revision verification after every prerequisite above is complete. Record website publication, `runmprc.com`, Firebase deployment, database-permission changes, provider configuration, product-record changes, production-data actions, and live behavior as **not performed** for this frontend-only slice unless separate evidence proves otherwise.
+**Success proof:** for source completion, record the exact #277 and #498 issues, reviewed pull requests, merged commits, intended old-source failures, green synthetic actual-route tests, relevant full checks, and independent privacy, accessibility, lifecycle, and officer-continuity reviews. The safe review path stops at source and synthetic tests because the Admin screen is not approved for officer use. Live availability requires a later separately approved Admin-screen release and dated exact-revision verification after every prerequisite above is complete. Record website publication, `runmprc.com`, Firebase deployment, database-permission changes, provider configuration, product-record changes, production-data actions, and live behavior as **not performed** for these frontend-only slices unless separate evidence proves otherwise.
 
 **Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After any later approved publication, use the same protected website release path and verify the replacement revision. Do not undo by changing or deleting a product, order, payment, officer account, permission, database record, source document, or provider setting.
 
 **Escalation:** shop lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, Firebase, provider, account, product, order, payment, endpoint, token-shaped, or technical detail appeared. Add the treasurer if a commerce or payment state might be involved. Do not copy private details into an issue, message, screenshot, email, or AI tool.
 
-No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected failure display.
+No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the corrected failure display and current mocked lookup lifecycle.
 
 ### Admin Product editor load failure privacy — SOURCE ONLY, NOT LIVE
 
