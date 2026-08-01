@@ -27,6 +27,7 @@ const STRAVA_ACTIVITY_DATE_MAX_LENGTH = 64;
 const STRAVA_LONG_MAX_AS_NUMBER = 9_223_372_036_854_776_000;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
+const STRAVA_DISCONNECT_REQUEST_ERROR_MESSAGE = 'Strava disconnect request is invalid.';
 const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/u;
@@ -131,6 +132,10 @@ function hasExactOwnKeys(record, expectedKeys) {
 
 function isExactPlainRecord(record, expectedKeys) {
   return isPlainJsonRecord(record) && hasExactOwnKeys(record, expectedKeys);
+}
+
+function isValidStravaDisconnectRequest(data) {
+  return isExactPlainRecord(data, []);
 }
 
 function isBoundedVisibleAscii(value, maxLength) {
@@ -1013,6 +1018,12 @@ exports.stravaDisconnect = functions
     requireAppCheck(context);
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
+    }
+    if (!isValidStravaDisconnectRequest(data)) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        STRAVA_DISCONNECT_REQUEST_ERROR_MESSAGE,
+      );
     }
     const { uid } = context.auth;
     const secretSnap = await secretDocRef(uid).get();

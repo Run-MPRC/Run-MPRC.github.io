@@ -144,8 +144,11 @@ export async function stravaFetchStats(app: FirebaseApp): Promise<StravaStatsRes
 
 export async function stravaDisconnect(app: FirebaseApp): Promise<{ ok: boolean }> {
   const functions = getFunctions(app);
-  const callable = httpsCallable<void, { ok: boolean }>(functions, 'stravaDisconnect');
-  const result = await callable();
+  const callable = httpsCallable<Record<string, never>, { ok: boolean }>(
+    functions,
+    'stravaDisconnect',
+  );
+  const result = await callable({});
   return result.data;
 }
 

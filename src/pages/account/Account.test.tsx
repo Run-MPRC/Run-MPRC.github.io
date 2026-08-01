@@ -1434,6 +1434,31 @@ describe('Strava authorization service boundary', () => {
   });
 });
 
+describe('Strava disconnect empty-request service contract', () => {
+  const functions = { name: 'synthetic-functions' };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getFunctions as jest.Mock).mockReturnValue(functions);
+  });
+
+  test('sends one exact empty request and preserves the callable result', async () => {
+    const callable = jest.fn().mockResolvedValue({ data: { ok: true } });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .resolves.toEqual({ ok: true });
+
+    expect(getFunctions).toHaveBeenCalledWith(app);
+    expect(httpsCallable).toHaveBeenCalledWith(functions, 'stravaDisconnect');
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(callable.mock.calls[0]).toHaveLength(1);
+    const [request] = callable.mock.calls[0];
+    expect(Object.getPrototypeOf(request)).toBe(Object.prototype);
+    expect(Reflect.ownKeys(request)).toEqual([]);
+  });
+});
+
 describe('Strava authorization start browser boundary', () => {
   const originalClientId = process.env.REACT_APP_STRAVA_CLIENT_ID;
   let locationRecorder: ReturnType<typeof installStravaLocationRecorder> | null;
