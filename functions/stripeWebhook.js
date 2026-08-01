@@ -14,6 +14,7 @@ const {
 } = require('./serverConfig');
 
 const LEDGER_RETENTION_DAYS = 90;
+const FIRESTORE_TIMESTAMP_MAX_SECONDS = 253_402_300_799;
 const CHECKOUT_EVENT_TYPES = new Set([
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
@@ -32,6 +33,13 @@ const DISPUTE_EVENT_TYPES = new Set([
   'charge.dispute.updated',
   'charge.dispute.closed',
 ]);
+
+function isValidDisputeEventCreated(value) {
+  return Number.isSafeInteger(value)
+    && value >= 0
+    && value <= FIRESTORE_TIMESTAMP_MAX_SECONDS;
+}
+
 const DISPUTE_TERMINAL_STATUSES = new Set(['won', 'lost', 'warning_closed']);
 const DISPUTE_STATUSES = new Set([
   'needs_response',
@@ -157,6 +165,14 @@ function validateEventAdmission(event, expectedLivemode) {
   }
   const schemaValidation = validateMetadataSchemaVersion(event, expectedLivemode);
   if (!schemaValidation.ok) return schemaValidation;
+  if (DISPUTE_EVENT_TYPES.has(event.type)
+    && !isValidDisputeEventCreated(event.created)) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'invalid_event_created',
+    };
+  }
   return modeValidation;
 }
 
@@ -1216,9 +1232,6 @@ function disputeTransition({ event, dispute, target, record }) {
   if (!isCompatibleDisputeStatus(event.type, disputeStatus)) {
     return reviewTransition({ target, event, reason: 'invalid_dispute_status' });
   }
-  if (!Number.isSafeInteger(event.created) || event.created < 0) {
-    return reviewTransition({ target, event, reason: 'invalid_event_created' });
-  }
   const existingDisputes = record.stripeDisputes || {};
   const eventCreated = event.created;
   const existingEventCreated = nonNegativeInteger(existingDispute?.lastEventCreated);
@@ -1389,12 +1402,15 @@ function providerBindingCanBeRecorded(event, record, result) {
 
 function ledgerData(event, target, result, ownership) {
   const now = Date.now();
+  const unusableDisputeEventCreated = DISPUTE_EVENT_TYPES.has(event.type)
+    && !isValidDisputeEventCreated(event.created);
   return {
     eventId: event.id,
     type: event.type,
     objectId: objectId(event.data?.object) || null,
     livemode: event.livemode === true,
-    stripeCreatedAt: Number.isSafeInteger(event.created)
+    stripeCreatedAt: !unusableDisputeEventCreated
+      && Number.isSafeInteger(event.created)
       ? Timestamp.fromMillis(event.created * 1000)
       : null,
     status: 'processed',
