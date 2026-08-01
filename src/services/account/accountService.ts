@@ -85,12 +85,6 @@ export interface MyRegistrationSummary {
   priceTier: string;
   amountCents: number;
   currency: string;
-  runner: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    shirtSize: string | null;
-  };
   createdAt: Timestamp | null;
   paidAt: Timestamp | null;
   refundedAt: Timestamp | null;

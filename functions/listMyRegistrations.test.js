@@ -223,12 +223,6 @@ describe('My Account registration UID ownership', () => {
         expect.objectContaining({
           eventId: 'event-newer',
           id: 'registration-newer',
-          runner: {
-            email: 'runner@example.test',
-            firstName: 'Synthetic',
-            lastName: 'Runner',
-            shirtSize: 'synthetic-size',
-          },
         }),
         expect.objectContaining({
           eventId: 'event-older',
@@ -244,6 +238,84 @@ describe('My Account registration UID ownership', () => {
     expect(admin.__eventReads().sort()).toEqual(['event-newer', 'event-older']);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('not-projected');
+  });
+
+  test('DATA-001A4 does not read or return unused runner details', async () => {
+    const runnerCanaries = {
+      email: 'unused-runner-email@example.test',
+      firstName: 'UnusedRunnerFirstCanary',
+      lastName: 'UnusedRunnerLastCanary',
+      shirtSize: 'UnusedRunnerSizeCanary',
+    };
+    let runnerReads = 0;
+    const document = registrationDocument({
+      createdSeconds: 1_800_000_030,
+      eventId: 'privacy-event',
+      id: 'privacy-registration',
+    });
+    const record = document.data();
+    Object.defineProperty(record, 'runner', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        runnerReads += 1;
+        return runnerCanaries;
+      },
+    });
+    document.data.mockClear();
+    admin.__seedRegistrations([document]);
+    admin.__seedEvent('privacy-event', {
+      location: 'Synthetic Privacy Park',
+      slug: 'privacy-event',
+      startAt: { _seconds: 1_900_000_030 },
+      title: 'Synthetic Privacy Event',
+    });
+
+    const result = await listMyRegistrations({}, CONTEXT);
+    const serialized = JSON.stringify(result);
+
+    expect({
+      hasRunner: Object.prototype.hasOwnProperty.call(
+        result.registrations[0],
+        'runner',
+      ),
+      runnerReads,
+      serializedRunnerCanaries: Object.values(runnerCanaries)
+        .filter((canary) => serialized.includes(canary)),
+    }).toEqual({
+      hasRunner: false,
+      runnerReads: 0,
+      serializedRunnerCanaries: [],
+    });
+    expect(result).toEqual({
+      events: {
+        'privacy-event': {
+          id: 'privacy-event',
+          location: 'Synthetic Privacy Park',
+          slug: 'privacy-event',
+          startAt: { _seconds: 1_900_000_030 },
+          title: 'Synthetic Privacy Event',
+        },
+      },
+      registrations: [{
+        amountCents: 2500,
+        cancelledAt: null,
+        createdAt: { _seconds: 1_800_000_030 },
+        currency: 'usd',
+        eventId: 'privacy-event',
+        id: 'privacy-registration',
+        paidAt: { _seconds: 1_800_000_040 },
+        priceTier: 'nonMember',
+        refundedAt: null,
+        status: 'paid',
+      }],
+    });
+    expect(admin.__queries()).toEqual([{
+      field: 'uid',
+      operator: '==',
+      value: CONTEXT.auth.uid,
+    }]);
+    expect(admin.__eventReads()).toEqual(['privacy-event']);
   });
 
   test.each([
