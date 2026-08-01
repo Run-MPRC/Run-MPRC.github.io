@@ -513,6 +513,437 @@ describe('Account profile recovery', () => {
     expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
   });
 
+  describe('AUTH-006F profile-save context isolation', () => {
+    const userB = {
+      uid: 'synthetic-user-b',
+      email: 'member-b@example.test',
+      role: 'unverified' as const,
+    };
+    const appB = { name: 'synthetic-app-b' };
+    const firestoreB = { name: 'synthetic-firestore-b' };
+    const identityServiceA = { signOut, resendVerificationEmail };
+    const identityServiceB = {
+      signOut: jest.fn(),
+      resendVerificationEmail: jest.fn(),
+    };
+    const servicesA = {
+      firebaseResources: { app, firestore },
+      identityService: identityServiceA,
+    };
+    const servicesB = {
+      firebaseResources: { app: appB, firestore: firestoreB },
+      identityService: identityServiceB,
+    };
+    const profileB = {
+      ...PROFILE,
+      uid: userB.uid,
+      email: userB.email,
+      fullName: 'Current Account B',
+    };
+    const privateRegistrations = {
+      registrations: [{
+        amountCents: 4321,
+        cancelledAt: null,
+        createdAt: null,
+        currency: 'usd',
+        eventId: 'old-account-private-event',
+        id: 'old-account-private-registration',
+        paidAt: null,
+        priceTier: 'synthetic-tier',
+        refundedAt: null,
+        runner: {
+          email: 'old-account-runner@example.test',
+          firstName: 'Old',
+          lastName: 'Account Runner',
+          shirtSize: null,
+        },
+        status: 'paid',
+      }],
+      events: {
+        'old-account-private-event': {
+          id: 'old-account-private-event',
+          location: 'Old Account Private Location',
+          slug: 'old-account-private-event',
+          startAt: {
+            toDate: () => new Date('2099-01-01T12:00:00Z'),
+            toMillis: () => new Date('2099-01-01T12:00:00Z').getTime(),
+          },
+          title: 'Old Account Private Race',
+        },
+      },
+    };
+
+    function useAccountServices(services: typeof servicesA | null) {
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services,
+        isReady: Boolean(services),
+      });
+    }
+
+    async function startSave(fullName: string, expectedWrites = 1) {
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByLabelText('Full name'), {
+        target: { value: fullName },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(updateMyProfile).toHaveBeenCalledTimes(expectedWrites));
+    }
+
+    test('never commits old private data after a Firestore-only change', async () => {
+      const replacementProfile = accountDeferred<typeof PROFILE>();
+      useAccountServices(servicesA);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockReturnValueOnce(replacementProfile.promise);
+      (listMyRegistrations as jest.Mock).mockResolvedValue(privateRegistrations);
+      const commits: string[] = [];
+      const onCommit = (text: string) => commits.push(text);
+      const view = render(<AccountCommitProbe onCommit={onCommit} />);
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      expect(await screen.findByText('Old Account Private Race')).toBeInTheDocument();
+      commits.length = 0;
+      useAccountServices({
+        firebaseResources: { app, firestore: firestoreB },
+        identityService: identityServiceA,
+      });
+
+      await act(async () => view.rerender(
+        <AccountCommitProbe onCommit={onCommit} />,
+      ));
+
+      expect(commits.length).toBeGreaterThan(0);
+      expect(commits.join(' ')).toContain('Loading profile...');
+      expect(commits.join(' ')).not.toMatch(
+        /Synthetic Member|member@example\.com|Old Account Private Race|\$43\.21/,
+      );
+      expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+    });
+
+    test('never recommits old private data after unavailable and same-context return', async () => {
+      const restoredProfile = accountDeferred<typeof PROFILE>();
+      useAccountServices(servicesA);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockReturnValueOnce(restoredProfile.promise);
+      (listMyRegistrations as jest.Mock).mockResolvedValue(privateRegistrations);
+      const commits: string[] = [];
+      const onCommit = (text: string) => commits.push(text);
+      const view = render(<AccountCommitProbe onCommit={onCommit} />);
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      expect(await screen.findByText('Old Account Private Race')).toBeInTheDocument();
+      useAccountServices(null);
+      await act(async () => view.rerender(
+        <AccountCommitProbe onCommit={onCommit} />,
+      ));
+      expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+
+      commits.length = 0;
+      useAccountServices(servicesA);
+      await act(async () => view.rerender(
+        <AccountCommitProbe onCommit={onCommit} />,
+      ));
+
+      expect(commits.length).toBeGreaterThan(0);
+      expect(commits.join(' ')).toContain('Loading profile...');
+      expect(commits.join(' ')).not.toMatch(
+        /Synthetic Member|member@example\.com|Old Account Private Race|\$43\.21/,
+      );
+      expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+    });
+
+    test.each([
+      [
+        'UID',
+        servicesA,
+        userB,
+      ],
+      [
+        'Firebase app',
+        {
+          firebaseResources: { app: appB, firestore },
+          identityService: identityServiceA,
+        },
+        USER,
+      ],
+      [
+        'Firestore service',
+        {
+          firebaseResources: { app, firestore: firestoreB },
+          identityService: identityServiceA,
+        },
+        USER,
+      ],
+      [
+        'Identity service',
+        {
+          firebaseResources: { app, firestore },
+          identityService: identityServiceB,
+        },
+        USER,
+      ],
+    ])('does not read or show an old result after a %s-only change', async (
+      transition,
+      nextServices,
+      nextUser,
+    ) => {
+      const oldUpdate = accountDeferred<void>();
+      const currentProfile = {
+        ...PROFILE,
+        uid: nextUser.uid,
+        email: nextUser.email,
+        fullName: `Current After ${transition}`,
+      };
+      const staleProfile = {
+        ...PROFILE,
+        fullName: `Old Private Result After ${transition}`,
+      };
+      useAccountServices(servicesA);
+      (updateMyProfile as jest.Mock).mockReturnValueOnce(oldUpdate.promise);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(currentProfile)
+        .mockResolvedValueOnce(staleProfile);
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      await startSave('Old Account Pending Edit');
+      expect(updateMyProfile).toHaveBeenCalledWith(
+        firestore,
+        USER.uid,
+        { fullName: 'Old Account Pending Edit' },
+      );
+
+      useAccountServices(nextServices);
+      view.rerender(accountView(nextUser));
+      expect(await screen.findByText(currentProfile.fullName)).toBeInTheDocument();
+
+      await act(async () => oldUpdate.resolve());
+
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(currentProfile.fullName)).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(staleProfile.fullName);
+      expect(document.body).not.toHaveTextContent('Old Account Pending Edit');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    test('keeps a save current across a new wrapper with the same resources', async () => {
+      const update = accountDeferred<void>();
+      const savedProfile = {
+        ...PROFILE,
+        fullName: 'Saved Through Equivalent Wrapper',
+      };
+      const secondSavedProfile = {
+        ...PROFILE,
+        fullName: 'Saved Through Deliberate Second Attempt',
+      };
+      useAccountServices(servicesA);
+      (updateMyProfile as jest.Mock).mockReturnValueOnce(update.promise);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(savedProfile)
+        .mockResolvedValueOnce(secondSavedProfile);
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      await startSave(savedProfile.fullName);
+      useAccountServices({
+        ...servicesA,
+        firebaseResources: { ...servicesA.firebaseResources },
+      });
+      view.rerender(accountView());
+      await waitFor(() => expect(getMyProfile).toHaveBeenCalledTimes(2));
+
+      await act(async () => update.resolve());
+
+      expect(await screen.findByText(savedProfile.fullName)).toBeInTheDocument();
+      expect(getMyProfile).toHaveBeenCalledTimes(3);
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled();
+
+      await startSave(secondSavedProfile.fullName, 2);
+
+      expect(await screen.findByText(secondSavedProfile.fullName)).toBeInTheDocument();
+      expect(getMyProfile).toHaveBeenCalledTimes(4);
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled();
+    });
+
+    test('ignores an old confirmation read that settles after context changes', async () => {
+      const oldConfirmation = accountDeferred<typeof PROFILE>();
+      const staleProfile = {
+        ...PROFILE,
+        fullName: 'Old Confirmation Private Result',
+      };
+      useAccountServices(servicesA);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockReturnValueOnce(oldConfirmation.promise)
+        .mockResolvedValueOnce(profileB);
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      await startSave('Old Confirmation Pending Edit');
+      await waitFor(() => expect(getMyProfile).toHaveBeenCalledTimes(2));
+
+      useAccountServices(servicesB);
+      view.rerender(accountView(userB));
+      expect(await screen.findByText(profileB.fullName)).toBeInTheDocument();
+
+      await act(async () => oldConfirmation.resolve(staleProfile));
+
+      expect(getMyProfile).toHaveBeenCalledTimes(3);
+      expect(screen.getByText(profileB.fullName)).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(staleProfile.fullName);
+      expect(document.body).not.toHaveTextContent('Old Confirmation Pending Edit');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    test('keeps an old rejection inert after the new account is ready', async () => {
+      const oldUpdate = accountDeferred<void>();
+      useAccountServices(servicesA);
+      (updateMyProfile as jest.Mock).mockReturnValueOnce(oldUpdate.promise);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(profileB);
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      await startSave('Old Account Rejected Edit');
+      useAccountServices(servicesB);
+      view.rerender(accountView(userB));
+      expect(await screen.findByText(profileB.fullName)).toBeInTheDocument();
+
+      await act(async () => oldUpdate.reject(
+        new Error('old-profile-rejection-canary@example.test'),
+      ));
+
+      expect(screen.getByText(profileB.fullName)).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(/old-profile-rejection-canary/i);
+    });
+
+    test('does not let an old completion unlock or replace a newer save', async () => {
+      const oldUpdate = accountDeferred<void>();
+      const currentUpdate = accountDeferred<void>();
+      const savedProfileB = {
+        ...profileB,
+        fullName: 'Saved Account B',
+      };
+      let accountAReads = 0;
+      let accountBReads = 0;
+      useAccountServices(servicesA);
+      (updateMyProfile as jest.Mock)
+        .mockReturnValueOnce(oldUpdate.promise)
+        .mockReturnValueOnce(currentUpdate.promise);
+      (getMyProfile as jest.Mock).mockImplementation(async (database, uid) => {
+        if (database === firestore && uid === USER.uid) {
+          accountAReads += 1;
+          return accountAReads === 1
+            ? PROFILE
+            : { ...PROFILE, fullName: 'Obsolete Account A' };
+        }
+        if (database === firestoreB && uid === userB.uid) {
+          accountBReads += 1;
+          return accountBReads === 1 ? profileB : savedProfileB;
+        }
+        throw new Error('Unexpected synthetic profile context.');
+      });
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      await startSave('Pending Account A');
+      useAccountServices(servicesB);
+      view.rerender(accountView(userB));
+      expect(await screen.findByText(profileB.fullName)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      const currentInput = screen.getByLabelText('Full name');
+      const currentSave = screen.getByRole('button', { name: 'Save' });
+      expect(currentInput).toBeEnabled();
+      expect(currentSave).toBeEnabled();
+      fireEvent.change(currentInput, { target: { value: savedProfileB.fullName } });
+      fireEvent.click(currentSave);
+      await waitFor(() => expect(updateMyProfile).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+
+      await act(async () => oldUpdate.resolve());
+
+      expect(accountAReads).toBe(1);
+      expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+      expect(screen.getByLabelText('Full name')).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      expect(document.body).not.toHaveTextContent('Obsolete Account A');
+
+      await act(async () => currentUpdate.resolve());
+
+      expect(await screen.findByText(savedProfileB.fullName)).toBeInTheDocument();
+      expect(accountBReads).toBe(2);
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled();
+    });
+
+    test('invalidates an old generation across unavailable and same-context return', async () => {
+      const oldUpdate = accountDeferred<void>();
+      const restoredProfile = {
+        ...PROFILE,
+        fullName: 'Restored Current Account',
+      };
+      const staleProfile = {
+        ...PROFILE,
+        fullName: 'First Generation Private Result',
+      };
+      useAccountServices(servicesA);
+      (updateMyProfile as jest.Mock).mockReturnValueOnce(oldUpdate.promise);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(restoredProfile)
+        .mockResolvedValueOnce(staleProfile);
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      await startSave('First Generation Pending Edit');
+      useAccountServices(null);
+      view.rerender(accountView());
+      expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+
+      useAccountServices(servicesA);
+      view.rerender(accountView());
+      expect(await screen.findByText(restoredProfile.fullName)).toBeInTheDocument();
+
+      await act(async () => oldUpdate.resolve());
+
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(restoredProfile.fullName)).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(staleProfile.fullName);
+    });
+
+    test('starts one write for rapid repeats and makes unmounted completion inert', async () => {
+      const update = accountDeferred<void>();
+      useAccountServices(servicesA);
+      (updateMyProfile as jest.Mock).mockReturnValue(update.promise);
+      (getMyProfile as jest.Mock).mockResolvedValueOnce(PROFILE);
+      const view = renderAccount();
+
+      expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByLabelText('Full name'), {
+        target: { value: 'One Attempt Profile' },
+      });
+      const save = screen.getByRole('button', { name: 'Save' });
+      await act(async () => {
+        fireEvent.click(save);
+        fireEvent.click(save);
+        await Promise.resolve();
+      });
+
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      view.unmount();
+      await act(async () => update.resolve());
+
+      expect(getMyProfile).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test('reports request acceptance without claiming delivery and blocks rapid repeats', async () => {
     let finishRequest: (() => void) | undefined;
     resendVerificationEmail.mockImplementationOnce(() => new Promise<void>((resolve) => {

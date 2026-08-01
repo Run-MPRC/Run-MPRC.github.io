@@ -260,22 +260,40 @@ export function AccountContent({
   const [regsError, setRegsError] = useState<string | null>(null);
   const identityService = services?.identityService || null;
   const firebaseApp = services?.firebaseResources.app || null;
+  const firebaseFirestore = services?.firebaseResources.firestore || null;
   type AccountContext = {
     firebaseApp: typeof firebaseApp;
     identityService: typeof identityService;
     uid: string;
   };
+  type ProfileServiceContext = AccountContext & {
+    firebaseFirestore: typeof firebaseFirestore;
+  };
+  type ProfileDataContext = ProfileServiceContext & {
+    generation: number;
+  };
+  type ProfileSaveAttempt = ProfileDataContext & { attemptId: number };
   type SignOutOutcome = AccountContext & {
     attemptId: number;
     attemptNumber: 1 | 2;
     generation: number;
     status: 'pending' | 'retry' | 'terminal';
   };
-  const [profileContext, setProfileContext] = useState<AccountContext | null>(null);
+  const [profileContext, setProfileContext] = useState<ProfileDataContext | null>(null);
   const [registrationsContext, setRegistrationsContext] = useState<
-    AccountContext | null
+    ProfileDataContext | null
   >(null);
   const [signOutOutcome, setSignOutOutcome] = useState<SignOutOutcome | null>(null);
+  const profileSaveAttemptIdRef = useRef(0);
+  const profileSaveBlockedRef = useRef(false);
+  const profileContextGenerationRef = useRef(0);
+  const profileContextMountedRef = useRef(false);
+  const currentProfileContextRef = useRef<ProfileServiceContext>({
+    firebaseApp,
+    firebaseFirestore,
+    identityService,
+    uid: user.uid,
+  });
   const signOutAttemptIdRef = useRef(0);
   const signOutAttemptsRef = useRef(0);
   const signOutBlockedRef = useRef(false);
@@ -286,6 +304,27 @@ export function AccountContent({
     identityService,
     uid: user.uid,
   });
+
+  useLayoutEffect(() => {
+    currentProfileContextRef.current = {
+      firebaseApp,
+      firebaseFirestore,
+      identityService,
+      uid: user.uid,
+    };
+    profileContextMountedRef.current = true;
+    profileContextGenerationRef.current += 1;
+    profileSaveBlockedRef.current = false;
+    setSaving(false);
+    setEditing(false);
+    setSaveError(null);
+
+    return () => {
+      profileContextMountedRef.current = false;
+      profileContextGenerationRef.current += 1;
+      profileSaveBlockedRef.current = true;
+    };
+  }, [firebaseApp, firebaseFirestore, identityService, user.uid]);
 
   useLayoutEffect(() => {
     currentSignOutContextRef.current = {
@@ -311,8 +350,10 @@ export function AccountContent({
     const activeServices = services;
     const loadContext = {
       firebaseApp: activeServices.firebaseResources.app,
+      firebaseFirestore: activeServices.firebaseResources.firestore,
       identityService: activeServices.identityService,
       uid: user.uid,
+      generation: profileContextGenerationRef.current,
     };
     let active = true;
 
@@ -352,8 +393,10 @@ export function AccountContent({
     if (!services || profileState !== 'ready') return undefined;
     const loadContext = {
       firebaseApp: services.firebaseResources.app,
+      firebaseFirestore: services.firebaseResources.firestore,
       identityService: services.identityService,
       uid: user.uid,
+      generation: profileContextGenerationRef.current,
     };
     let active = true;
     setRegsData(null);
@@ -376,6 +419,17 @@ export function AccountContent({
     return () => { active = false; };
   }, [services, profileState, user.uid]);
 
+  function isCurrentProfileSave(attempt: ProfileSaveAttempt) {
+    const currentContext = currentProfileContextRef.current;
+    return profileContextMountedRef.current
+      && profileContextGenerationRef.current === attempt.generation
+      && profileSaveAttemptIdRef.current === attempt.attemptId
+      && currentContext.firebaseApp === attempt.firebaseApp
+      && currentContext.firebaseFirestore === attempt.firebaseFirestore
+      && currentContext.identityService === attempt.identityService
+      && currentContext.uid === attempt.uid;
+  }
+
   async function handleSave() {
     if (!services) return;
     const validation = validateMemberProfileFields({ fullName });
@@ -383,15 +437,41 @@ export function AccountContent({
       setSaveError(validation.message);
       return;
     }
+    const saveContext = {
+      firebaseApp: services.firebaseResources.app,
+      firebaseFirestore: services.firebaseResources.firestore,
+      identityService: services.identityService,
+      uid: user.uid,
+    };
+    const currentContext = currentProfileContextRef.current;
+    if (
+      profileSaveBlockedRef.current
+      || !profileContextMountedRef.current
+      || currentContext.firebaseApp !== saveContext.firebaseApp
+      || currentContext.firebaseFirestore !== saveContext.firebaseFirestore
+      || currentContext.identityService !== saveContext.identityService
+      || currentContext.uid !== saveContext.uid
+    ) return;
+
+    profileSaveBlockedRef.current = true;
+    const attemptId = profileSaveAttemptIdRef.current + 1;
+    profileSaveAttemptIdRef.current = attemptId;
+    const attempt = {
+      ...saveContext,
+      attemptId,
+      generation: profileContextGenerationRef.current,
+    };
     setSaving(true);
     setSaveError(null);
     try {
       await updateMyProfile(
-        services.firebaseResources.firestore,
-        user.uid,
+        attempt.firebaseFirestore,
+        attempt.uid,
         validation.fields,
       );
-      const fresh = await getMyProfile(services.firebaseResources.firestore, user.uid);
+      if (!isCurrentProfileSave(attempt)) return;
+      const fresh = await getMyProfile(attempt.firebaseFirestore, attempt.uid);
+      if (!isCurrentProfileSave(attempt)) return;
       if (!fresh) throw new Error('Profile unavailable after save.');
       setProfile(fresh);
       setFullName(fresh.fullName || '');
@@ -399,13 +479,17 @@ export function AccountContent({
       setProfileState('ready');
       setEditing(false);
     } catch {
+      if (!isCurrentProfileSave(attempt)) return;
       setProfile(null);
       setEditing(false);
       setSaveError(null);
       setProfileError(PROFILE_CHANGE_UNCONFIRMED_MESSAGE);
       setProfileState('unavailable');
     } finally {
-      setSaving(false);
+      if (isCurrentProfileSave(attempt)) {
+        profileSaveBlockedRef.current = false;
+        setSaving(false);
+      }
     }
   }
 
@@ -474,11 +558,15 @@ export function AccountContent({
   const profileBelongsToCurrentContext = profileContext
     && profileContext.uid === user.uid
     && profileContext.identityService === identityService
-    && profileContext.firebaseApp === firebaseApp;
+    && profileContext.firebaseApp === firebaseApp
+    && profileContext.firebaseFirestore === firebaseFirestore
+    && profileContext.generation === profileContextGenerationRef.current;
   const registrationsBelongToCurrentContext = registrationsContext
     && registrationsContext.uid === user.uid
     && registrationsContext.identityService === identityService
-    && registrationsContext.firebaseApp === firebaseApp;
+    && registrationsContext.firebaseApp === firebaseApp
+    && registrationsContext.firebaseFirestore === firebaseFirestore
+    && registrationsContext.generation === profileContextGenerationRef.current;
 
   if (currentSignOutOutcome) {
     const isRetry = currentSignOutOutcome.status === 'retry';
