@@ -2,12 +2,12 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { Timestamp } = require('firebase-admin/firestore');
 const { createHash, randomBytes, timingSafeEqual } = require('node:crypto');
-const { URL: NodeURL } = require('node:url');
+const { URL: NodeURL, URLSearchParams: NodeURLSearchParams } = require('node:url');
 const { types: { isProxy } } = require('node:util');
 const { requireAppCheck } = require('./stripeHelpers');
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
-const STRAVA_DEAUTH_URL = 'https://www.strava.com/oauth/deauthorize';
+const STRAVA_REVOKE_URL = 'https://www.strava.com/oauth/revoke';
 const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities';
 const STRAVA_STATS_URL = (id) => `https://www.strava.com/api/v3/athletes/${id}/stats`;
 const STRAVA_AUTHORIZATION_ERROR_MESSAGE = 'Strava authorization could not be completed.';
@@ -1083,9 +1083,21 @@ exports.stravaDisconnect = functions
       if (accessToken) {
         let revokeResponse;
         try {
-          revokeResponse = await fetch(STRAVA_DEAUTH_URL, {
+          const { clientId, clientSecret } = getStravaCreds();
+          const basicCredentials = Buffer
+            .from(`${clientId}:${clientSecret}`, 'utf8')
+            .toString('base64');
+          const body = new NodeURLSearchParams([
+            ['token', accessToken],
+            ['token_type_hint', 'access_token'],
+          ]).toString();
+          revokeResponse = await fetch(STRAVA_REVOKE_URL, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
+            headers: {
+              Authorization: `Basic ${basicCredentials}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body,
           });
         } catch (_error) {
           console.warn('strava_disconnect_revoke_failed');
