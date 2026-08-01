@@ -8,11 +8,8 @@ const { fireEvent, render, screen } = require('@testing-library/react');
 
 const mockCaptureException = jest.fn();
 const mockCreateUserWithEmailAndPassword = jest.fn();
-const mockDoc = jest.fn();
-const mockGetDoc = jest.fn();
 const mockOnAuthStateChanged = jest.fn(() => jest.fn());
 const mockSendEmailVerification = jest.fn();
-const mockUseServiceLocator = jest.fn();
 
 jest.mock('./sentry', () => ({
   captureException: mockCaptureException,
@@ -25,16 +22,7 @@ jest.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: jest.fn(),
   signOut: jest.fn(),
 }));
-jest.mock('firebase/firestore', () => ({
-  doc: mockDoc,
-  getDoc: mockGetDoc,
-}));
-jest.mock('../ServiceLocatorContext', () => ({
-  useServiceLocator: mockUseServiceLocator,
-}));
-
 const ErrorBoundary = require('../../components/ErrorBoundary').default;
-const MembersOnly = require('../../components/MembersOnly').default;
 const IdentityService = require('../identity/Identity').default;
 const {
   clientFailureEvents,
@@ -144,11 +132,6 @@ describe('client diagnostic privacy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockOnAuthStateChanged.mockReturnValue(jest.fn());
-    mockDoc.mockReturnValue({ path: 'members_only/synthetic' });
-    mockUseServiceLocator.mockReturnValue({
-      isReady: true,
-      services: { firebaseResources: { firestore: { name: 'synthetic-firestore' } } },
-    });
   });
 
   afterAll(() => {
@@ -391,30 +374,6 @@ describe('client diagnostic privacy', () => {
     expect(mockSendEmailVerification).toHaveBeenCalledWith(credential.user);
     expect(consoleWarn).toHaveBeenCalledWith(
       '[MPRC client] email_verification_failed',
-    );
-    const serializedConsole = JSON.stringify(consoleWarn.mock.calls);
-    canaries.forEach((canary) => expect(serializedConsole).not.toContain(canary));
-  });
-
-  test('members-only fetch failure completes loading without logging Firestore data', async () => {
-    const canaries = [
-      'members-only-member@example.test',
-      'firestore-provider-response-canary',
-      'https://runmprc.com/private?token=members-only-token#details',
-    ];
-    mockGetDoc.mockRejectedValueOnce(Object.assign(new Error(canaries.join(' ')), {
-      response: canaries[1],
-      url: canaries[2],
-    }));
-
-    render(React.createElement(MembersOnly, {
-      dataKey: 'discounts',
-      style: {},
-    }));
-
-    expect(await screen.findByText(/Failed to fetch data/)).toBeInTheDocument();
-    expect(consoleWarn).toHaveBeenCalledWith(
-      '[MPRC client] members_only_fetch_failed',
     );
     const serializedConsole = JSON.stringify(consoleWarn.mock.calls);
     canaries.forEach((canary) => expect(serializedConsole).not.toContain(canary));

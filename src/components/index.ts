@@ -19,6 +19,5 @@ export { default as SectionHead } from './SectionHead';
 // Utility Components
 export { default as SEO } from './SEO';
 export { default as ScrollToTop } from './ScrollToTop';
-export { default as MembersOnly } from './MembersOnly';
 export { default as Card } from './Card';
 export { default as ObfuscatedEmail } from './ObfuscatedEmail';

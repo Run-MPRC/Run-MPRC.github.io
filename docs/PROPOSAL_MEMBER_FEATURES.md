@@ -18,7 +18,7 @@ This document outlines options for implementing newsletter subscriptions and enh
 | Login/Register UI | ✅ Basic | `src/pages/login/LoginForm.jsx` |
 | Role-based access | ✅ Implemented | Custom claims: `admin`, `member`, `unverified` |
 | Firestore rules | ✅ Configured | `firestore.rules` |
-| MembersOnly component | ✅ Implemented | `src/components/MembersOnly.jsx` |
+| Members-only discounts UI | ⚠️ Not available yet | The unrouted legacy raw-HTML renderer was retired under [#492](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/492); the structured access contract is source-only under [#413](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/413), and the route/data migration remains [#83](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/83) |
 | Cloud Functions | ✅ Deployed | `functions/signup.js`, `functions/updatemembers.js` |
 | useAuth hook | ✅ Implemented | `src/services/hooks/useAuth.ts` |
 

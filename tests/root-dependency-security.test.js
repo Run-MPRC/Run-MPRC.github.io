@@ -9,6 +9,32 @@ const test = require('node:test');
 const REPOSITORY = path.resolve(__dirname, '..');
 const PACKAGE_PATH = path.join(REPOSITORY, 'package.json');
 const LOCK_PATH = path.join(REPOSITORY, 'package-lock.json');
+const MEMBERS_ONLY_COMPONENT_PATH = path.join(
+  REPOSITORY,
+  'src',
+  'components',
+  'MembersOnly.jsx',
+);
+const COMPONENT_INDEX_PATH = path.join(
+  REPOSITORY,
+  'src',
+  'components',
+  'index.ts',
+);
+const RETIRED_MEMBERS_RENDERER_LOCK_PATHS = Object.freeze([
+  'node_modules/dom-serializer',
+  'node_modules/dom-serializer/node_modules/entities',
+  'node_modules/domhandler',
+  'node_modules/domutils',
+  'node_modules/entities',
+  'node_modules/html-dom-parser',
+  'node_modules/html-react-parser',
+  'node_modules/htmlparser2',
+  'node_modules/inline-style-parser',
+  'node_modules/react-property',
+  'node_modules/style-to-js',
+  'node_modules/style-to-object',
+]);
 
 const EXPECTED_FORM_DATA = Object.freeze({
   'node_modules/form-data': Object.freeze({
@@ -189,6 +215,48 @@ function lockedPackageEntries(lock, packageName) {
     ))
     .sort(([left], [right]) => left.localeCompare(right));
 }
+
+test('MEMBERS-CONTENT-001B retires the dormant stored-HTML renderer closure', () => {
+  const packageJson = readJson(PACKAGE_PATH);
+  const lock = readJson(LOCK_PATH);
+  const rootRecord = lock.packages[''];
+
+  for (const field of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+    'resolutions',
+    'overrides',
+  ]) {
+    assert.equal(packageJson[field]?.['html-react-parser'], undefined);
+    assert.equal(rootRecord?.[field]?.['html-react-parser'], undefined);
+  }
+
+  assert.deepEqual(lockedPackageEntries(lock, 'html-react-parser'), []);
+  for (const packagePath of RETIRED_MEMBERS_RENDERER_LOCK_PATHS) {
+    assert.equal(
+      lock.packages[packagePath],
+      undefined,
+      `${packagePath} must not remain in the root lockfile`,
+    );
+    assert.equal(
+      fs.existsSync(path.join(REPOSITORY, packagePath)),
+      false,
+      `${packagePath} must not remain installed`,
+    );
+  }
+
+  const retainedDomElementType = lock.packages['node_modules/domelementtype'];
+  assert.equal(retainedDomElementType?.version, '2.3.0');
+  assert.equal(retainedDomElementType?.dev, true);
+
+  assert.equal(fs.existsSync(MEMBERS_ONLY_COMPONENT_PATH), false);
+  assert.doesNotMatch(
+    fs.readFileSync(COMPONENT_INDEX_PATH, 'utf8'),
+    /(?:MembersOnly|html-react-parser)/,
+  );
+});
 
 test('pins the committed Firebase CLI and excludes its critical package ranges', () => {
   const packageJson = readJson(PACKAGE_PATH);

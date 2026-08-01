@@ -10,10 +10,10 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 111,
+  "scannedFileCount": 110,
   "scannedFilesByExtension": {
     ".js": 12,
-    ".jsx": 35,
+    ".jsx": 34,
     ".ts": 38,
     ".tsx": 26
   },
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:1db452d0a6f65603e949b9ed3ce31a2ee349dbc55f395274261b1213e0468fb7",
+  "fingerprint": "sha256:adbc2386c27c28cc2f7aa95013dcefd6bea2eacd54e975c53751a37d5240bf14",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -44,7 +44,6 @@
     "src/components/Header.jsx",
     "src/components/ImageCarousel.jsx",
     "src/components/MainHeader.jsx",
-    "src/components/MembersOnly.jsx",
     "src/components/MetaText.jsx",
     "src/components/Navbar.jsx",
     "src/components/ObfuscatedEmail.jsx",
