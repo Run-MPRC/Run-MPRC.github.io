@@ -347,3 +347,223 @@ describe('SUPPLY-001D13 Functions body-parser limit enforcement', () => {
     },
   );
 });
+
+describe('SUPPLY-001D14 Functions js-yaml merge containment', () => {
+  const patchedVersion3 = '3.15.1';
+  const patchedUrl3 =
+    'https://registry.npmjs.org/js-yaml/-/js-yaml-3.15.1.tgz';
+  const patchedIntegrity3 =
+    'sha512-S99WuO3HlhO3XN41EtYUNl9zzXjoJx7QvmipxsJVxtCBT0YHEFy+iOJhjSvrmV12nYhWpZaM8lPHkJm0yUMbag==';
+  const patchedVersion4 = '4.3.1';
+  const patchedUrl4 =
+    'https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.1.tgz';
+  const patchedIntegrity4 =
+    'sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==';
+  const nestedPackagePath =
+    'node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml';
+  const rootPackagePath = 'node_modules/js-yaml';
+  const mergeSource = [
+    'base: &base { one: 1 }',
+    'middle: &middle { <<: *base, two: 2 }',
+    'result: { <<: *middle, three: 3 }',
+  ].join('\n');
+  const orderedMapSource = [
+    'ordered: !!omap',
+    '  - alpha: 1',
+    '  - beta: 2',
+    '  - gamma: 3',
+  ].join('\n');
+
+  function installedVariants() {
+    const nycPackagePath =
+      require.resolve('@istanbuljs/load-nyc-config/package.json');
+    const nestedSearchPaths = [path.dirname(nycPackagePath)];
+
+    return [
+      {
+        label: 'legacy 3.x safeLoad',
+        loaderName: 'safeLoad',
+        modulePath: require.resolve('js-yaml', {paths: nestedSearchPaths}),
+        packageJsonPath: require.resolve('js-yaml/package.json', {
+          paths: nestedSearchPaths,
+        }),
+      },
+      {
+        label: 'legacy 4.x load',
+        loaderName: 'load',
+        modulePath: require.resolve('js-yaml'),
+        packageJsonPath: require.resolve('js-yaml/package.json'),
+      },
+    ];
+  }
+
+  test('pins both development-only copies through unchanged parent ranges', () => {
+    const packageJson = readJson(PACKAGE_PATH);
+    const lock = readJson(LOCK_PATH);
+    const rootRecord = lock.packages[''];
+    const entries = Object.entries(lock.packages)
+      .filter(([packagePath]) => (
+        packagePath === rootPackagePath
+        || packagePath.endsWith('/node_modules/js-yaml')
+      ));
+
+    for (const field of [
+      'dependencies',
+      'devDependencies',
+      'optionalDependencies',
+      'peerDependencies',
+      'resolutions',
+      'overrides',
+    ]) {
+      expect(packageJson[field]?.['js-yaml']).toBeUndefined();
+      expect(rootRecord?.[field]?.['js-yaml']).toBeUndefined();
+    }
+
+    expect(entries.map(([packagePath]) => packagePath).sort()).toEqual([
+      nestedPackagePath,
+      rootPackagePath,
+    ]);
+    expect(lock.packages[nestedPackagePath]).toMatchObject({
+      version: patchedVersion3,
+      resolved: patchedUrl3,
+      integrity: patchedIntegrity3,
+      dev: true,
+      license: 'MIT',
+    });
+    expect(lock.packages[nestedPackagePath].dependencies).toEqual({
+      argparse: '^1.0.7',
+      esprima: '^4.0.0',
+    });
+    expect(lock.packages[nestedPackagePath].bin).toEqual({
+      'js-yaml': 'bin/js-yaml.js',
+    });
+    expect(lock.packages[rootPackagePath]).toMatchObject({
+      version: patchedVersion4,
+      resolved: patchedUrl4,
+      integrity: patchedIntegrity4,
+      dev: true,
+      license: 'MIT',
+    });
+    expect(lock.packages[rootPackagePath].dependencies).toEqual({
+      argparse: '^2.0.1',
+    });
+    expect(lock.packages[rootPackagePath].bin).toEqual({
+      'js-yaml': 'bin/js-yaml.js',
+    });
+
+    const consumers = Object.entries(lock.packages)
+      .filter(([, packageRecord]) => (
+        packageRecord?.dependencies?.['js-yaml'] !== undefined
+      ))
+      .map(([packagePath, packageRecord]) => ({
+        packagePath,
+        version: packageRecord.version,
+        dev: packageRecord.dev,
+        range: packageRecord.dependencies['js-yaml'],
+      }))
+      .sort((left, right) => left.packagePath.localeCompare(right.packagePath));
+    expect(consumers).toEqual([
+      {
+        packagePath: 'node_modules/@eslint/eslintrc',
+        version: '2.1.4',
+        dev: true,
+        range: '^4.1.0',
+      },
+      {
+        packagePath: 'node_modules/@istanbuljs/load-nyc-config',
+        version: '1.1.0',
+        dev: true,
+        range: '^3.13.1',
+      },
+      {
+        packagePath: 'node_modules/eslint',
+        version: '8.57.1',
+        dev: true,
+        range: '^4.1.0',
+      },
+    ]);
+
+    const variants = installedVariants();
+    expect(path.relative(FUNCTIONS_ROOT, variants[0].packageJsonPath))
+      .toBe(`${nestedPackagePath}/package.json`);
+    expect(path.relative(FUNCTIONS_ROOT, variants[1].packageJsonPath))
+      .toBe(`${rootPackagePath}/package.json`);
+    expect(readJson(variants[0].packageJsonPath).version)
+      .toBe(patchedVersion3);
+    expect(readJson(variants[1].packageJsonPath).version)
+      .toBe(patchedVersion4);
+  });
+
+  test.each([
+    ['legacy 3.x safeLoad', 0],
+    ['legacy 4.x load', 1],
+  ])('%s enforces the cumulative merge-key ceiling', (_label, index) => {
+    const variant = installedVariants()[index];
+    const yaml = require(variant.modulePath);
+    const loader = yaml[variant.loaderName];
+    const expected = {one: 1, two: 2, three: 3};
+    let rejection;
+
+    try {
+      loader(mergeSource, {maxTotalMergeKeys: 2});
+    } catch (error) {
+      rejection = error;
+    }
+
+    expect(rejection).toBeInstanceOf(yaml.YAMLException);
+    expect(rejection.reason)
+      .toBe('merge keys exceeded maxTotalMergeKeys (2)');
+    expect(loader(mergeSource, {maxTotalMergeKeys: 3}).result)
+      .toEqual(expected);
+    expect(loader(mergeSource, {maxTotalMergeKeys: -1}).result)
+      .toEqual(expected);
+  });
+
+  test.each([
+    ['legacy 3.x safeLoad', 0],
+    ['legacy 4.x load', 1],
+  ])('%s avoids a linear scan of prior ordered-map keys', (_label, index) => {
+    const variant = installedVariants()[index];
+    const script = `
+      const yaml = require(${JSON.stringify(variant.modulePath)});
+      const originalIndexOf = Array.prototype.indexOf;
+      let indexOfCalls = 0;
+      Array.prototype.indexOf = function instrumentedIndexOf(...args) {
+        indexOfCalls += 1;
+        return Reflect.apply(originalIndexOf, this, args);
+      };
+      try {
+        const parsed = yaml[${JSON.stringify(variant.loaderName)}](
+          ${JSON.stringify(orderedMapSource)},
+        );
+        process.stdout.write(JSON.stringify({indexOfCalls, parsed}));
+      } finally {
+        Array.prototype.indexOf = originalIndexOf;
+      }
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ['--max-old-space-size=64', '-e', script],
+      {
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024,
+        timeout: 2_000,
+      },
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      indexOfCalls: 0,
+      parsed: {
+        ordered: [
+          {alpha: 1},
+          {beta: 2},
+          {gamma: 3},
+        ],
+      },
+    });
+  });
+});
