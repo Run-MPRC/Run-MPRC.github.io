@@ -206,11 +206,11 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the reviewed merged website source and is armed', () => {
+test('Netlify manifest pins the exact prior website artifact for rollback', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
   assert.equal(loaded.manifest.active, true);
-  assert.equal(loaded.manifest.releaseId, 'WEB-002A-2026-07-30');
+  assert.equal(loaded.manifest.releaseId, 'WEB-002A-ROLLBACK-2026-08-01');
   assert.equal(loaded.manifest.issueNumber, 473);
   assert.equal(
     loaded.manifest.expectedProductionParent,
@@ -218,15 +218,15 @@ test('Netlify manifest pins the reviewed merged website source and is armed', ()
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    '094af1096ed8721597561cd59bf695d4c4a9d210',
+    'ed1b0833f25822cee80c99ded8753722b5608a3f',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    'd12fd7660beaaddac5e952fe950dc6ad6bbdf68f',
+    '878c6628d961f4484cb49208aef53f1e9f2e3b47',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    'ed1b0833f25822cee80c99ded8753722b5608a3f',
+    '094af1096ed8721597561cd59bf695d4c4a9d210',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
@@ -234,16 +234,16 @@ test('Netlify manifest pins the reviewed merged website source and is armed', ()
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-473-shop-events-auth',
+    'refs/heads/codex/netlify-source-473-rollback',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-473-netlify-release',
+    'codex/issue-473-netlify-rollback',
   );
-  assert.equal(loaded.manifest.expectedSiteFileCount, 59);
+  assert.equal(loaded.manifest.expectedSiteFileCount, 60);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    '72f16455fb67b0f00408ed867b69543c94395fb28aaa11cb2d490383de1aed01',
+    '7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092',
   );
 });
 
