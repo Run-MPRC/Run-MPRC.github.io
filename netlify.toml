@@ -16,8 +16,8 @@
   command = "node ./scripts/netlify-release-build.js"
 
 [context.deploy-preview]
-  # The active release-control PR builds the same pinned artifact as production.
-  # Other previews retain the ordinary checked-out preview build.
+  # The temporary production release manifest is inactive. Deploy Previews use
+  # the ordinary checked-out preview tree; production remains paused.
   command = "node ./scripts/netlify-release-build.js --preview"
 
 [[headers]]

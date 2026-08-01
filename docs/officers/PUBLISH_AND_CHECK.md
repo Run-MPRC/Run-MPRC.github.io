@@ -10,7 +10,7 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01. Netlify deploy `6a6dc219a8136300081811db`, exact source `ed1b0833f25822cee80c99ded8753722b5608a3f`, is production now. Issue #473 prepares one replacement based directly on that live source and limited to the static Shop plus fixed Events/Calendar failure messages. It is **PENDING REVIEW AND RELEASE**. This does not restore event records, deploy Firebase, change sign-in, expose protected event offers, add officer editing, or authorize commerce. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
+**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01. Bounded replacement deploy `6a6dc9ea588b0c0008036312`, exact source `39ab8649df411262c8109a3c81a57bc38f1e168b`, is production now. Shop is the static catalog; Events and Calendar show a fixed retry-later notice instead of a raw provider error. Event records remain unavailable because this did not deploy Firebase. The temporary manifest is inactive again. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
 ## The release gate
 
@@ -56,7 +56,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
-- Ordinary Git-triggered Netlify production builds are paused except for the exact replacement #473 two-parent control merge. Its active manifest pins one source ref, commit, tree, artifact count, digest, previous source, and rollback deploy. Every wrong parent, commit, context, ref, tree, artifact, build hook, or later merge remains paused.
+- Ordinary Git-triggered Netlify production builds are paused. The completed #473 exception used one exact two-parent merge and pinned source/tree/artifact; its manifest is inactive and its release source is retired.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 - CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
@@ -112,10 +112,12 @@ If a member or officer sees **Server configuration is unavailable**:
 3. Wait for that commit's CI jobs.
 4. Confirm all five named jobs are green again: Frontend, Functions, commerce command journal, test artifact scrubber, and Firestore Rules.
 5. Mark the result **merged — not released**.
-6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from the merge unless it is the explicitly armed #473 web-only release.
+6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from a merge unless a separate exact temporary release is explicitly armed and reviewed.
 7. For any other merge, if Netlify unexpectedly publishes, stop and treat it as a hosting incident.
 
-## Temporary #473 permissions-containment release — PENDING REVIEW AND RELEASE
+## Temporary #473 permissions-containment release — COMPLETED 2026-08-01
+
+**Completed status:** merge `9ad6837756cdd409d296009fde5082eeeae5c059` published Netlify deploy `6a6dc9ea588b0c0008036312`. The public marker matched source `39ab8649df411262c8109a3c81a57bc38f1e168b`, tree `d76b496cdc5e79015bc048cb961758abbe88b9ce`, 60 files, and digest `07b10c7d5ff176a1ad893d7549b07042312df35f4a4126e8765824ca94eaefb8`. Preview and live route/header/robots/browser checks passed. Shop, Events, Calendar, and signed-out Account were readable; no raw provider error appeared. Final control merge `cb6a8f0a418fc14b448bce5ded71d68520415c92` made the temporary manifest inactive; Netlify attempt `6a6dcdd47bc81e000859a249` stopped unpublished, exact-main CI run `30696264830` passed all five jobs, and readback left the same bounded deploy and marker live. Both temporary release-source refs are absent; exact rollback source `ed1b0833f25822cee80c99ded8753722b5608a3f` remains. Event records remain unavailable because Firebase was unchanged.
 
 **Purpose:** make Shop usable as the approved $10 Hat/$25 Jacket pickup catalog and replace raw provider errors on Events and Calendar with one accessible retry-later notice. This is display containment only; it does not restore event records.
 
@@ -159,7 +161,7 @@ In words: the exact #473 preview must match the pinned source and artifact; only
 19. Record the deploy, control/source commits, tree, count, digest, route/header/robots/console results, check time, and result.
 20. If every check passes, disable the manifest, confirm that later production builds skip, retire the release source, and verify it is absent.
 
-**Expected result:** Netlify serves the exact pinned artifact; its public marker proves provenance; Shop is the approved display-only catalog; Events and Calendar remain readable and disclose no raw provider error. Event records remain unavailable until a separate protected Firebase repair is approved, deployed, and verified. Firebase, providers, accounts, protected offers, officer editing, and production data are unchanged by this release.
+**Expected result:** Netlify serves the exact pinned artifact; its public marker proves provenance; Shop is the approved display-only catalog; Events and Calendar remain readable and disclose no raw provider error. Event records remain unavailable until a separate protected Firebase repair is approved, deployed, and verified. Firebase, outside-provider configuration, accounts, protected offers, officer editing, and production data are unchanged by this release.
 
 **Stop conditions:** stop if `main` advances; a hash, ref, count, digest, parent, context, marker, or page differs; the preview is missing; rollback is unavailable; a deep route is not HTTP 200; a required header or robots rule is missing; the browser console shows a new release error; another production attempt starts; a public check asks for private data; or any check fails.
 
@@ -167,7 +169,7 @@ In words: the exact #473 preview must match the pinned source and artifact; only
 
 **Undo:** if nothing publishes, leave deploy `6a6dc219a8136300081811db` live. If the wrong result publishes, ask the Netlify team owner to restore that deploy. If atomic restore is unavailable, refresh and review an exact-parent Git rollback pinned to live artifact source `ed1b0833f25822cee80c99ded8753722b5608a3f` and tree `878c6628d961f4484cb49208aef53f1e9f2e3b47`; rerun its exact preview before merging. Disabling the manifest alone is not rollback.
 
-**Incident evidence:** overbroad source `094af109` was published as deploy `6a6dc0167fbe68000816b448` after a blocker was posted. Rollback merge `1099ee8` published exact prior source `ed1b0833` as deploy `6a6dc219a8136300081811db`. Safety merge `dee79511` re-paused the manifest; its provider attempt did not replace production. The broad source ref was removed. This record is why steps 4 and 11 are mandatory.
+**Incident evidence:** overbroad source `094af1096ed8721597561cd59bf695d4c4a9d210` was published by merge `40728ff6141e34a279b70cc41d983c22ac5f0daa` as deploy `6a6dc0167fbe68000816b448` after a blocker was posted. Rollback merge `1099ee8e6fdb81141fd9460de175b6d854cbcfdd` published exact prior source `ed1b0833f25822cee80c99ded8753722b5608a3f` as deploy `6a6dc219a8136300081811db`. Safety merge `dee79511b6e371329aa129139729e112e7a51aad` re-paused the manifest; Netlify attempt `6a6dc35767a4ef000877e74b` did not replace production. The broad source ref was removed. This record is why steps 4 and 11 are mandatory.
 
 **Escalation:** platform owner first; website/content owner second; security owner if private data or an unexpected application version appears.
 

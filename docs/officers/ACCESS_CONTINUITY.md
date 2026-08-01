@@ -84,7 +84,7 @@ For each system, record only:
 10. Confirm a normal merge does not start the GitHub release.
 11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
-13. Confirm ordinary Netlify Git-triggered production builds remain paused except for the exact temporary #473 control merge. Re-read the issue and pull request for a newer blocker immediately before merge. While #473 is pending, compare the executable delta with the current live artifact and confirm its one pinned source and rollback deploy match the current runbook. After verification, confirm the manifest is inactive and that release source is absent.
+13. Confirm ordinary Netlify Git-triggered production builds remain paused. The temporary #473 release is complete: confirm its manifest is inactive, its release source is absent, and its live marker matches the current runbook. For any future exception, re-read the issue and pull request for a newer blocker and compare the executable delta with the current live artifact immediately before merge.
 14. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
 15. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
 
