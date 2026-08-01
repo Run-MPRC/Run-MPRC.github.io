@@ -55,12 +55,14 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 If any proof is missing, report the change as **not live**.
 
-## In-person Shop catalog — SOURCE ONLY, NOT LIVE
+## In-person Shop catalog — PENDING #473 RELEASE
 
-**Status:** **NOT AVAILABLE YET** until issue
-[#466](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/466) is merged, the
-website is published through an approved path, and the exact
-`runmprc.com/shop` revision is verified.
+**Status:** source from issue [#466](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/466)
+is included in the bounded [#473](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/473)
+release candidate. It is **NOT LIVE** until that exact website artifact is
+published and `runmprc.com/shop` is verified. The same candidate replaces raw
+Events and Calendar provider errors with a fixed retry-later notice. It does
+not restore event records; that requires a separate protected Firebase repair.
 
 **Purpose:** show the approved MPRC Hat at $10.00 and MPRC Jacket at $25.00
 without taking an order or payment online.
