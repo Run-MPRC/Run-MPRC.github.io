@@ -20,6 +20,12 @@ const CHECKOUT_EVENT_TYPES = new Set([
   'checkout.session.async_payment_failed',
   'checkout.session.expired',
 ]);
+const CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE = new Map([
+  ['checkout.session.completed', 'complete'],
+  ['checkout.session.async_payment_succeeded', 'complete'],
+  ['checkout.session.async_payment_failed', 'complete'],
+  ['checkout.session.expired', 'expired'],
+]);
 const CHECKOUT_PAYMENT_STATUSES = new Set(['paid', 'unpaid', 'no_payment_required']);
 const DISPUTE_EVENT_TYPES = new Set([
   'charge.dispute.created',
@@ -62,6 +68,32 @@ function validateExpectedLivemode(event, expected) {
     return { ok: false, expected, reason: 'livemode_mismatch' };
   }
   return { ok: true, expected };
+}
+
+function validateEventAdmission(event, expectedLivemode) {
+  const modeValidation = validateExpectedLivemode(event, expectedLivemode);
+  if (!modeValidation.ok || !CHECKOUT_EVENT_TYPES.has(event.type)) {
+    return modeValidation;
+  }
+
+  const session = event.data?.object;
+  if (typeof session?.livemode !== 'boolean'
+    || session.livemode !== event.livemode
+    || session.livemode !== expectedLivemode) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'checkout_session_livemode_mismatch',
+    };
+  }
+  if (session.status !== CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE.get(event.type)) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'checkout_session_status_mismatch',
+    };
+  }
+  return modeValidation;
 }
 
 function isValidDocId(value) {
@@ -1199,10 +1231,10 @@ function disputeTransition({ event, dispute, target, record }) {
   };
 }
 
-function transitionForEvent(event, target, targetSnap, modeValidation, ownership) {
-  if (!modeValidation.ok) {
+function transitionForEvent(event, target, targetSnap, admissionValidation, ownership) {
+  if (!admissionValidation.ok) {
     return {
-      outcome: `needs_review:${modeValidation.reason}`,
+      outcome: `needs_review:${admissionValidation.reason}`,
       requiresReview: true,
       patch: null,
     };
@@ -1338,16 +1370,16 @@ async function processEvent(event, expectedLivemode) {
     return { duplicate: true, outcome: existing.data().outcome };
   }
 
-  const modeValidation = validateExpectedLivemode(event, expectedLivemode);
+  const admissionValidation = validateEventAdmission(event, expectedLivemode);
   const ownership = classifyMprcReference(event.data.object);
-  const target = modeValidation.ok ? await resolveTarget(event) : null;
+  const target = admissionValidation.ok ? await resolveTarget(event) : null;
   if (target) await assertExclusiveProviderOwnership(event, target);
   // Checkout creation and the Firestore write are not atomic. A supported
   // event carrying a valid MPRC reference can therefore beat its business
   // record into Firestore. Do not write a final ledger marker in that case:
   // return 5xx and let Stripe redeliver. Unrelated Stripe traffic is handled
   // below without retrying forever.
-  if (modeValidation.ok && isSupportedEventType(event.type)
+  if (admissionValidation.ok && isSupportedEventType(event.type)
     && ownership.status === 'claimed' && !target) {
     throw new Error(`Retryable Stripe target not found for ${event.id}`);
   }
@@ -1362,7 +1394,7 @@ async function processEvent(event, expectedLivemode) {
       return;
     }
     const targetSnap = target ? await tx.get(target.ref) : null;
-    if (modeValidation.ok && isSupportedEventType(event.type)
+    if (admissionValidation.ok && isSupportedEventType(event.type)
       && target && !targetSnap?.exists) {
       throw new Error(`Retryable Stripe target disappeared for ${event.id}`);
     }
@@ -1382,7 +1414,7 @@ async function processEvent(event, expectedLivemode) {
         event,
         target,
         targetSnap,
-        modeValidation,
+        admissionValidation,
         ownership,
       );
     const providerBindingVerified = targetSnap?.exists

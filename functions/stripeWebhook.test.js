@@ -193,7 +193,15 @@ process.env.STRIPE_LIVEMODE_EXPECTED = 'false';
 
 const { stripeWebhook } = require('./stripeWebhook');
 
+const CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE = Object.freeze({
+  'checkout.session.completed': 'complete',
+  'checkout.session.async_payment_succeeded': 'complete',
+  'checkout.session.async_payment_failed': 'complete',
+  'checkout.session.expired': 'expired',
+});
+
 function stripeEvent(id, type, object) {
+  const checkoutStatus = CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE[type];
   return {
     id,
     object: 'event',
@@ -203,7 +211,11 @@ function stripeEvent(id, type, object) {
     pending_webhooks: 1,
     request: null,
     type,
-    data: { object },
+    data: {
+      object: checkoutStatus
+        ? { livemode: false, status: checkoutStatus, ...object }
+        : object,
+    },
   };
 }
 
@@ -323,6 +335,35 @@ async function deliver(event) {
   const response = mockResponse();
   await stripeWebhook(signedRequest(event), response);
   return response;
+}
+
+function storedCopy(path) {
+  return JSON.parse(JSON.stringify(admin.__get(path)));
+}
+
+function expectCompatibilityQuarantine({ response, event, businessPath, before, reason }) {
+  expect(response.status).not.toHaveBeenCalled();
+  expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+    received: true,
+    duplicate: false,
+    outcome: `needs_review:${reason}`,
+    requiresReview: true,
+  }));
+  expect(admin.__get(businessPath)).toEqual(before);
+  expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+    status: 'processed',
+    outcome: `needs_review:${reason}`,
+    requiresReview: true,
+    targetType: null,
+    targetPath: null,
+    targetSource: null,
+  });
+  expect(admin.__get(
+    `stripeObjectBindings/checkout_session:${event.data.object.id}`,
+  )).toBeUndefined();
+  expect(admin.__get(
+    `stripeObjectBindings/payment_intent:${event.data.object.payment_intent}`,
+  )).toBeUndefined();
 }
 
 describe('stripeWebhook', () => {
@@ -680,6 +721,206 @@ describe('stripeWebhook', () => {
       requiresReview: true,
       targetPath: null,
     });
+  });
+
+  test.each([
+    ['opposite boolean', 'value', true],
+    ['missing', 'delete', undefined],
+    ['null', 'value', null],
+    ['string', 'value', 'false'],
+    ['number', 'value', 0],
+  ])('quarantines a Checkout Session with %s embedded livemode evidence', async (
+    label,
+    mutation,
+    value,
+  ) => {
+    seedRegistration();
+    const businessPath = 'events/race-1/registrations/reg-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      `evt_session_livemode_${label.replace(/[^a-z]+/g, '_')}`,
+      'checkout.session.completed',
+      registrationSession(),
+    );
+    if (mutation === 'delete') delete event.data.object.livemode;
+    else event.data.object.livemode = value;
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response,
+      event,
+      businessPath,
+      before,
+      reason: 'checkout_session_livemode_mismatch',
+    });
+  });
+
+  test.each([
+    ['completed open', 'checkout.session.completed', 'value', 'open', 'paid'],
+    ['completed expired', 'checkout.session.completed', 'value', 'expired', 'paid'],
+    ['async success open', 'checkout.session.async_payment_succeeded', 'value', 'open', 'paid'],
+    ['async success expired', 'checkout.session.async_payment_succeeded', 'value', 'expired', 'paid'],
+    ['async failure open', 'checkout.session.async_payment_failed', 'value', 'open', 'unpaid'],
+    ['async failure expired', 'checkout.session.async_payment_failed', 'value', 'expired', 'unpaid'],
+    ['expired open', 'checkout.session.expired', 'value', 'open', 'unpaid'],
+    ['expired complete', 'checkout.session.expired', 'value', 'complete', 'unpaid'],
+    ['status missing', 'checkout.session.completed', 'delete', undefined, 'paid'],
+    ['status null', 'checkout.session.completed', 'value', null, 'paid'],
+    ['status unknown', 'checkout.session.completed', 'value', 'unknown', 'paid'],
+    ['status non-string', 'checkout.session.completed', 'value', 1, 'paid'],
+  ])('quarantines a Checkout Session whose lifecycle is %s', async (
+    label,
+    type,
+    mutation,
+    value,
+    paymentStatus,
+  ) => {
+    seedOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      `evt_session_status_${label.replace(/[^a-z]+/g, '_')}`,
+      type,
+      orderSession({ payment_status: paymentStatus }),
+    );
+    if (mutation === 'delete') delete event.data.object.status;
+    else event.data.object.status = value;
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response,
+      event,
+      businessPath,
+      before,
+      reason: 'checkout_session_status_mismatch',
+    });
+  });
+
+  test.each([
+    ['completion', 'checkout.session.completed', 'paid', 'payment_confirmed', 'paid'],
+    [
+      'async success',
+      'checkout.session.async_payment_succeeded',
+      'paid',
+      'payment_confirmed',
+      'paid',
+    ],
+    ['async failure', 'checkout.session.async_payment_failed', 'unpaid', 'payment_failed', 'cancelled'],
+    ['expiry', 'checkout.session.expired', 'unpaid', 'payment_expired', 'cancelled'],
+  ])('preserves the valid Checkout Session lifecycle for %s', async (
+    label,
+    type,
+    paymentStatus,
+    outcome,
+    status,
+  ) => {
+    seedRegistration();
+    const event = stripeEvent(
+      `evt_valid_session_status_${label.replace(/[^a-z]+/g, '_')}`,
+      type,
+      registrationSession({ payment_status: paymentStatus }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome,
+    }));
+    expect(admin.__get('events/race-1/registrations/reg-1').status).toBe(status);
+  });
+
+  test('quarantines an incompatible claimed Checkout Event without retrying a missing target', async () => {
+    const event = stripeEvent(
+      'evt_incompatible_missing_target',
+      'checkout.session.completed',
+      registrationSession({ status: 'open' }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.status).not.toHaveBeenCalled();
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:checkout_session_status_mismatch',
+      requiresReview: true,
+    }));
+    expect(admin.__get('stripeEvents/evt_incompatible_missing_target')).toMatchObject({
+      status: 'processed',
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    });
+  });
+
+  test('keeps a compatible claimed Checkout Event retryable when its target is missing', async () => {
+    const response = await deliver(stripeEvent(
+      'evt_compatible_missing_target',
+      'checkout.session.completed',
+      registrationSession(),
+    ));
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(response.send).toHaveBeenCalledWith('Webhook handler error');
+    expect(admin.__get('stripeEvents/evt_compatible_missing_target')).toBeUndefined();
+  });
+
+  test('keeps the configured Event livemode mismatch ahead of Session contradictions', async () => {
+    seedRegistration();
+    const businessPath = 'events/race-1/registrations/reg-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_outer_livemode_precedence',
+      'checkout.session.completed',
+      registrationSession({ status: 'open' }),
+    );
+    event.livemode = true;
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'needs_review:livemode_mismatch',
+      requiresReview: true,
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+    expect(admin.__get('stripeEvents/evt_outer_livemode_precedence')).toMatchObject({
+      outcome: 'needs_review:livemode_mismatch',
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    });
+  });
+
+  test('deduplicates an incompatible Checkout Event without a target or binding mutation', async () => {
+    seedOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_incompatible_replay',
+      'checkout.session.expired',
+      orderSession({ payment_status: 'unpaid', status: 'complete' }),
+    );
+
+    const firstResponse = await deliver(event);
+    const replayResponse = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response: firstResponse,
+      event,
+      businessPath,
+      before,
+      reason: 'checkout_session_status_mismatch',
+    });
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'needs_review:checkout_session_status_mismatch',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
   });
 
   test('confirms a paid registration and records actual Stripe totals atomically', async () => {

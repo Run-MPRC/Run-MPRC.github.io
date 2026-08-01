@@ -709,7 +709,8 @@ Text alternative: a valid unpaid failure or expiry still cancels a pending order
 
 At minimum verify:
 
-- Expected `livemode` for this deployment.
+- Outer Event and embedded Checkout Session `livemode` are booleans and both match the expected deployment mode.
+- Checkout Session lifecycle `status` matches the Event: `complete` for completion and delayed-payment outcomes; `expired` for expiration.
 - Session `mode` and object type.
 - Metadata schema and local record reference.
 - Session ID ownership (or attach it exactly once from trusted metadata for a persistence-first record).
@@ -718,6 +719,8 @@ At minimum verify:
 - `amount_total` equals the allowed expected total after a validated discount policy.
 - Local record is in an allowed predecessor state.
 - PaymentIntent is not already attached to another local business record.
+
+PAY-003A2 [#520](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/520) applies the first two checks before target resolution in the legacy webhook source. Missing, malformed, or contradictory Session evidence receives a fixed processed-review ledger result without a business-record query or change and without a provider binding. Record source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, a payment performed, production data changed, and live behavior verified as separate states. The repository diff and synthetic tests do not by themselves prove any merged, published, deployed, provider, payment, production-data, or live state. This child does not select a Stripe API version or configure a provider endpoint.
 
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
@@ -896,7 +899,7 @@ Every commerce release must cover:
 - Webhook arriving before the client redirect.
 - Duplicate and out-of-order webhook events.
 - Invalid signature and wrong webhook secret.
-- Wrong livemode, amount, currency, metadata, Session, or PaymentIntent.
+- Wrong outer or embedded livemode, Event/Session lifecycle mismatch, amount, currency, metadata, Session, or PaymentIntent.
 - `completed` with unpaid/processing status.
 - Async payment success and failure.
 - Session expiry and local cancellation with Stripe expiry.
