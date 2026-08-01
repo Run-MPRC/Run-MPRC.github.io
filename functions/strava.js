@@ -1077,9 +1077,19 @@ exports.stravaDisconnect = functions
       );
     }
     const { uid } = context.auth;
-    const secretSnap = await secretDocRef(uid).get();
-    if (secretSnap.exists) {
-      const accessToken = snapshotStoredDisconnectAccessToken(secretSnap.data());
+    let secretExists = false;
+    let accessToken = null;
+    try {
+      const secretSnap = await secretDocRef(uid).get();
+      secretExists = secretSnap.exists;
+      if (secretExists) {
+        accessToken = snapshotStoredDisconnectAccessToken(secretSnap.data());
+      }
+    } catch (_error) {
+      console.warn('strava_disconnect_secret_read_failed');
+      throw stravaDisconnectError();
+    }
+    if (secretExists) {
       if (accessToken) {
         let revokeResponse;
         try {
