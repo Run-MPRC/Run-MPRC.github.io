@@ -4877,7 +4877,15 @@ describe('Strava disconnect failure log boundary', () => {
   let consoleSpies;
   let dateNowSpy;
 
+  const STRAVA_REVOKE_URL = 'https://www.strava.com/oauth/revoke';
+  const SYNTHETIC_CLIENT_ID = '12345';
+  const SYNTHETIC_CLIENT_SECRET = 'abc123';
+  const SYNTHETIC_BASIC_AUTHORIZATION = 'Basic MTIzNDU6YWJjMTIz';
+  const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded';
+
   beforeEach(() => {
+    process.env.STRAVA_CLIENT_ID = SYNTHETIC_CLIENT_ID;
+    process.env.STRAVA_CLIENT_SECRET = SYNTHETIC_CLIENT_SECRET;
     admin.__clearDeletes();
     admin.__clearDocuments();
     admin.__clearReads();
@@ -4900,6 +4908,8 @@ describe('Strava disconnect failure log boundary', () => {
     global.fetch = GUARDED_FETCH;
     dateNowSpy.mockRestore();
     Object.values(consoleSpies).forEach((spy) => spy.mockRestore());
+    delete process.env.STRAVA_CLIENT_ID;
+    delete process.env.STRAVA_CLIENT_SECRET;
   });
 
   function seedStoredSecret(secret) {
@@ -4951,6 +4961,32 @@ describe('Strava disconnect failure log boundary', () => {
     expect(dateNowSpy).not.toHaveBeenCalled();
     expect(Timestamp.now).not.toHaveBeenCalled();
     expectNoLogs();
+  }
+
+  function expectSupportedRevokeRequest(accessToken, expectedBody) {
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+
+    expect(url).toBe(STRAVA_REVOKE_URL);
+    expect(init).toEqual({
+      method: 'POST',
+      headers: {
+        Authorization: SYNTHETIC_BASIC_AUTHORIZATION,
+        'Content-Type': FORM_CONTENT_TYPE,
+      },
+      body: expect.any(String),
+    });
+    expect(init.body).not.toContain(SYNTHETIC_CLIENT_ID);
+    expect(init.body).not.toContain(SYNTHETIC_CLIENT_SECRET);
+    if (expectedBody !== undefined) expect(init.body).toBe(expectedBody);
+
+    const params = new URLSearchParams(init.body);
+    expect([...params.keys()]).toEqual(['token', 'token_type_hint']);
+    expect(params.getAll('token')).toEqual([accessToken]);
+    expect(params.getAll('token_type_hint')).toEqual(['access_token']);
+    expect(params.has('access_token')).toBe(false);
+    expect(params.has('client_id')).toBe(false);
+    expect(params.has('client_secret')).toBe(false);
   }
 
   async function expectRejectedDisconnectRequest(data) {
@@ -5156,6 +5192,124 @@ describe('Strava disconnect failure log boundary', () => {
     expectNoLogs();
   });
 
+  describe('OAUTH-001B6 supported revoke request contract', () => {
+    test('uses Basic credentials and an exact encoded token form without URL or field injection', async () => {
+      const accessToken = 'synthetic+disconnect&token=%=:?/';
+      seedConnectedAccount(accessToken);
+      fetchMock.mockResolvedValue({ ok: true });
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expectSupportedRevokeRequest(
+        accessToken,
+        'token=synthetic%2Bdisconnect%26token%3D%25%3D%3A%3F%2F'
+          + '&token_type_hint=access_token',
+      );
+      expect(fetchMock.mock.calls[0][1].headers.Authorization).not.toContain(accessToken);
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test.each([
+      ['client ID', 'STRAVA_CLIENT_ID'],
+      ['client secret', 'STRAVA_CLIENT_SECRET'],
+    ])('fails closed when the synthetic %s is missing', async (_case, variable) => {
+      delete process.env[variable];
+      seedConnectedAccount();
+      fetchMock.mockResolvedValue({ ok: true });
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(rejection);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expectLocalRecordsPreserved();
+      expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+      expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_DISCONNECT_WARNING);
+      expect(JSON.stringify({
+        public: publicError(rejection),
+        logs: consoleSpies.warn.mock.calls,
+      })).not.toMatch(/12345|abc123|credentials not configured/i);
+      ['debug', 'error', 'info', 'log']
+        .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
+    });
+
+    test.each([
+      ['no secret document', null],
+      ['a rejected stored token', { access_token: 'token with space' }],
+    ])('does not require provider credentials for %s cleanup', async (_case, secret) => {
+      delete process.env.STRAVA_CLIENT_ID;
+      delete process.env.STRAVA_CLIENT_SECRET;
+      if (secret !== null) seedStoredSecret(secret);
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test('keeps both local records until provider success is admitted', async () => {
+      let signalFetchCalled;
+      let resolveResponse;
+      const fetchCalled = new Promise((resolve) => {
+        signalFetchCalled = resolve;
+      });
+      const providerResponse = new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
+      seedConnectedAccount();
+      fetchMock.mockImplementation(() => {
+        signalFetchCalled();
+        return providerResponse;
+      });
+
+      const pendingDisconnect = stravaDisconnect({}, CONTEXT);
+      await fetchCalled;
+
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
+      expectLocalRecordsPreserved();
+      expectNoLogs();
+
+      resolveResponse({ ok: true });
+      await expect(pendingDisconnect).resolves.toEqual({ ok: true });
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test('preserves records after a lost acknowledgement and permits a later HTTP 200 retry', async () => {
+      seedConnectedAccount();
+      fetchMock.mockRejectedValue(
+        new Error('first-attempt-lost-acknowledgement canary'),
+      );
+
+      const firstFailure = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(firstFailure);
+      expectLocalRecordsPreserved();
+      expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+      expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_DISCONNECT_WARNING);
+      expect(JSON.stringify(consoleSpies.warn.mock.calls))
+        .not.toMatch(/lost-acknowledgement|canary/i);
+
+      fetchMock.mockReset();
+      consoleSpies.warn.mockClear();
+      const response = new Response('synthetic-provider-response-body-canary', {
+        status: 200,
+      });
+      fetchMock.mockResolvedValue(response);
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
+      expect(response.bodyUsed).toBe(false);
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+  });
+
   describe('stored disconnect token validation before provider use', () => {
     class DisconnectSecret {
       constructor() {
@@ -5325,13 +5479,7 @@ describe('Strava disconnect failure log boundary', () => {
       expect(result).toEqual({ ok: true });
       unknownGetters.forEach(({ getter }) => expect(getter).not.toHaveBeenCalled());
       expect(symbolGetter).not.toHaveBeenCalled();
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://www.strava.com/oauth/deauthorize',
-        {
-          method: 'POST',
-          headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
-        },
-      );
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
       expectLocalDeletes();
       expectNoLogs();
     });
@@ -5347,13 +5495,7 @@ describe('Strava disconnect failure log boundary', () => {
       const result = await stravaDisconnect({}, CONTEXT);
 
       expect(result).toEqual({ ok: true });
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://www.strava.com/oauth/deauthorize',
-        {
-          method: 'POST',
-          headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
-        },
-      );
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
       expect(secret.access_token).toBe('mutated_disconnect_access_token_test');
       expectLocalDeletes();
       expectNoLogs();
@@ -5369,13 +5511,7 @@ describe('Strava disconnect failure log boundary', () => {
       const result = await stravaDisconnect({}, CONTEXT);
 
       expect(result).toEqual({ ok: true });
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://www.strava.com/oauth/deauthorize',
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        },
-      );
+      expectSupportedRevokeRequest(accessToken);
       expectLocalDeletes();
       expectNoLogs();
     });
@@ -5395,19 +5531,13 @@ describe('Strava disconnect failure log boundary', () => {
       const result = await stravaDisconnect({}, CONTEXT);
 
       expect(result).toEqual({ ok: true });
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://www.strava.com/oauth/deauthorize',
-        {
-          method: 'POST',
-          headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
-        },
-      );
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
       expectLocalDeletes();
       expectNoLogs();
     });
   });
 
-  test('preserves the successful best-effort provider POST and local deletes', async () => {
+  test('preserves the successful provider POST and local deletes', async () => {
     seedAccessToken();
     fetchMock.mockResolvedValue({ ok: true });
 
@@ -5415,26 +5545,23 @@ describe('Strava disconnect failure log boundary', () => {
 
     expect(result).toEqual({ ok: true });
     expect(admin.__getReads()).toEqual([SECRET_PATH]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://www.strava.com/oauth/deauthorize',
-      {
-        method: 'POST',
-        headers: { Authorization: 'Bearer synthetic_disconnect_access_token_test' },
-      },
-    );
+    expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
     expectLocalDeletes();
     expectNoLogs();
   });
 
   test('accepts a genuine successful Node Response before local deletes', async () => {
     seedAccessToken();
-    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    const response = new Response('synthetic-provider-response-body-canary', {
+      status: 200,
+    });
+    fetchMock.mockResolvedValue(response);
 
     const result = await stravaDisconnect({}, CONTEXT);
 
     expect(result).toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.bodyUsed).toBe(false);
     expectLocalDeletes();
     expectNoLogs();
   });
