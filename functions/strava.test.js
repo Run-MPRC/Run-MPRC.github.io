@@ -316,6 +316,7 @@ const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
 const FIXED_DATA_ERROR = 'Strava activity data could not be loaded.';
 const FIXED_STATS_REQUEST_ERROR = 'Strava statistics request is invalid.';
 const FIXED_DISCONNECT_REQUEST_ERROR = 'Strava disconnect request is invalid.';
+const FIXED_DISCONNECT_ERROR = 'Strava disconnect could not be confirmed.';
 const FIXED_DISCONNECT_WARNING = 'strava_disconnect_revoke_failed';
 const GUARDED_FETCH = global.fetch;
 const AUTH_TIME = 1_700_000_000;
@@ -4909,9 +4910,33 @@ describe('Strava disconnect failure log boundary', () => {
     seedStoredSecret({ access_token: accessToken });
   }
 
+  function seedConnectedAccount(accessToken = 'synthetic_disconnect_access_token_test') {
+    seedAccessToken(accessToken);
+    admin.__setDocument(CONNECTION_PATH, {
+      provider: 'strava',
+      connected: true,
+    });
+  }
+
   function expectLocalDeletes() {
     expect(admin.__getDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
     expect(admin.__getWrites()).toEqual([]);
+  }
+
+  function expectLocalRecordsPreserved() {
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
+    expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
+  }
+
+  function expectFixedDisconnectError(error) {
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_DISCONNECT_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
   }
 
   function expectNoLogs() {
@@ -5402,31 +5427,217 @@ describe('Strava disconnect failure log boundary', () => {
     expectNoLogs();
   });
 
-  test('preserves current HTTP non-success handling without reading the provider body', async () => {
+  test('accepts a genuine successful Node Response before local deletes', async () => {
     seedAccessToken();
-    const text = jest.fn().mockResolvedValue(
-      'provider-body-canary access_token=provider-secret-canary',
-    );
-    const json = jest.fn();
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 599,
-      text,
-      json,
-    });
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
 
     const result = await stravaDisconnect({}, CONTEXT);
 
     expect(result).toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expectLocalDeletes();
+    expectNoLogs();
+  });
+
+  test.each([400, 401, 429, 500])(
+    'rejects provider HTTP %i without reading its body or deleting locally',
+    async (status) => {
+      seedConnectedAccount();
+      const text = jest.fn().mockResolvedValue(
+        'provider-body-canary access_token=provider-secret-canary',
+      );
+      const json = jest.fn();
+      const statusGetter = jest.fn(() => status);
+      const bodyGetter = jest.fn(() => 'provider-body-canary');
+      const statusTextGetter = jest.fn(() => 'provider-status-text-canary');
+      const response = { ok: false, text, json };
+      Object.defineProperties(response, {
+        body: {
+          configurable: true,
+          enumerable: true,
+          get: bodyGetter,
+        },
+        status: {
+          configurable: true,
+          enumerable: true,
+          get: statusGetter,
+        },
+        statusText: {
+          configurable: true,
+          enumerable: true,
+          get: statusTextGetter,
+        },
+      });
+      fetchMock.mockResolvedValue(response);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(rejection);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(text).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
+      expect(bodyGetter).not.toHaveBeenCalled();
+      expect(statusGetter).not.toHaveBeenCalled();
+      expect(statusTextGetter).not.toHaveBeenCalled();
+      expectLocalRecordsPreserved();
+      expectNoLogs();
+    },
+  );
+
+  test('rejects a genuine non-success Node Response without reading its body', async () => {
+    seedConnectedAccount();
+    const response = new Response('provider-body-canary access_token=secret-canary', {
+      status: 503,
+    });
+    fetchMock.mockResolvedValue(response);
+
+    const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+    expectFixedDisconnectError(rejection);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.bodyUsed).toBe(false);
+    expectLocalRecordsPreserved();
+    expectNoLogs();
+  });
+
+  test.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['a boolean', true],
+    ['a number', 1],
+    ['a string', 'ok'],
+    ['an array', [{ ok: true }]],
+    ['a Date', Object.assign(new Date(0), { ok: true })],
+    ['a plain record missing ok', {}],
+    ['own undefined ok', { ok: undefined }],
+    ['own null ok', { ok: null }],
+    ['numeric ok', { ok: 1 }],
+    ['string ok', { ok: 'true' }],
+    ['custom-prototype ok', Object.assign(Object.create({ inherited: true }), { ok: true })],
+  ])('rejects provider success evidence that is %s', async (_case, response) => {
+    seedConnectedAccount();
+    fetchMock.mockResolvedValue(response);
+
+    const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+    expectFixedDisconnectError(rejection);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expectLocalRecordsPreserved();
+    expectNoLogs();
+  });
+
+  test('rejects an own ok accessor without invoking it', async () => {
+    seedConnectedAccount();
+    const okGetter = jest.fn(() => true);
+    const response = {};
+    Object.defineProperty(response, 'ok', {
+      configurable: true,
+      enumerable: true,
+      get: okGetter,
+    });
+    fetchMock.mockResolvedValue(response);
+
+    const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+    expectFixedDisconnectError(rejection);
+    expect(okGetter).not.toHaveBeenCalled();
+    expectLocalRecordsPreserved();
+    expectNoLogs();
+  });
+
+  test('rejects an inherited ok accessor without invoking it', async () => {
+    seedConnectedAccount();
+    const okGetter = jest.fn(() => true);
+    const prototype = {};
+    Object.defineProperty(prototype, 'ok', {
+      configurable: true,
+      enumerable: true,
+      get: okGetter,
+    });
+    fetchMock.mockResolvedValue(Object.create(prototype));
+
+    const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+    expectFixedDisconnectError(rejection);
+    expect(okGetter).not.toHaveBeenCalled();
+    expectLocalRecordsPreserved();
+    expectNoLogs();
+  });
+
+  test('rejects a Proxy provider result without inspecting it after Promise resolution', async () => {
+    seedConnectedAccount();
+    const traps = {
+      get: jest.fn((_target, key) => {
+        if (key === 'then') return undefined;
+        throw new Error('disconnect-response-canary get trap');
+      }),
+      getOwnPropertyDescriptor: jest.fn(() => {
+        throw new Error('disconnect-response-canary descriptor trap');
+      }),
+      getPrototypeOf: jest.fn(() => {
+        throw new Error('disconnect-response-canary prototype trap');
+      }),
+      ownKeys: jest.fn(() => {
+        throw new Error('disconnect-response-canary ownKeys trap');
+      }),
+    };
+    fetchMock.mockResolvedValue(new Proxy({ ok: true }, traps));
+
+    const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+    expectFixedDisconnectError(rejection);
+    const requestedKeys = traps.get.mock.calls.map(([, key]) => key);
+    expect(requestedKeys.length).toBeGreaterThanOrEqual(1);
+    expect(requestedKeys.every((key) => key === 'then')).toBe(true);
+    [traps.getOwnPropertyDescriptor, traps.getPrototypeOf, traps.ownKeys]
+      .forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expectLocalRecordsPreserved();
+    expectNoLogs();
+  });
+
+  test('accepts an own true result without consulting hostile unknown fields', async () => {
+    seedAccessToken();
+    const unknownGetter = jest.fn(() => {
+      throw new Error('disconnect-response-canary unknown getter');
+    });
+    const text = jest.fn();
+    const json = jest.fn();
+    const bodyGetter = jest.fn(() => 'disconnect-response-canary body');
+    const statusTextGetter = jest.fn(() => 'disconnect-response-canary status text');
+    const response = { ok: true, text, json };
+    Object.defineProperties(response, {
+      body: {
+        configurable: true,
+        enumerable: true,
+        get: bodyGetter,
+      },
+      status: {
+        configurable: true,
+        enumerable: true,
+        get: unknownGetter,
+      },
+      statusText: {
+        configurable: true,
+        enumerable: true,
+        get: statusTextGetter,
+      },
+    });
+    fetchMock.mockResolvedValue(response);
+
+    const result = await stravaDisconnect({}, CONTEXT);
+
+    expect(result).toEqual({ ok: true });
+    expect(unknownGetter).not.toHaveBeenCalled();
+    expect(bodyGetter).not.toHaveBeenCalled();
+    expect(statusTextGetter).not.toHaveBeenCalled();
     expect(text).not.toHaveBeenCalled();
     expect(json).not.toHaveBeenCalled();
     expectLocalDeletes();
     expectNoLogs();
   });
 
-  test('replaces a raw provider exception with one fixed warning before local deletes', async () => {
-    seedAccessToken();
+  test('replaces a raw provider exception with one fixed warning and preserves local records', async () => {
+    seedConnectedAccount();
     fetchMock.mockRejectedValue(Object.assign(
       new Error('transport-canary https://provider.example.test/?token=secret-canary'),
       {
@@ -5436,9 +5647,9 @@ describe('Strava disconnect failure log boundary', () => {
       },
     ));
 
-    const result = await stravaDisconnect({}, CONTEXT);
+    const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
 
-    expect(result).toEqual({ ok: true });
+    expectFixedDisconnectError(rejection);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
     expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_DISCONNECT_WARNING);
@@ -5448,7 +5659,7 @@ describe('Strava disconnect failure log boundary', () => {
       );
     ['debug', 'error', 'info', 'log']
       .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
-    expectLocalDeletes();
+    expectLocalRecordsPreserved();
   });
 
   test('preserves swallowed local delete failures and the current success result', async () => {

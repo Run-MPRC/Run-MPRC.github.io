@@ -29,6 +29,7 @@ const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.'
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
 const STRAVA_STATS_REQUEST_ERROR_MESSAGE = 'Strava statistics request is invalid.';
 const STRAVA_DISCONNECT_REQUEST_ERROR_MESSAGE = 'Strava disconnect request is invalid.';
+const STRAVA_DISCONNECT_ERROR_MESSAGE = 'Strava disconnect could not be confirmed.';
 const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/u;
@@ -51,6 +52,12 @@ const reflectHas = Reflect.has;
 const reflectOwnKeys = Reflect.ownKeys;
 const regexpTest = RegExp.prototype.test;
 const stringCharCodeAt = String.prototype.charCodeAt;
+const NATIVE_RESPONSE_PROTOTYPE = typeof Response === 'function'
+  ? Response.prototype
+  : null;
+const NATIVE_RESPONSE_OK_GETTER = NATIVE_RESPONSE_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_RESPONSE_PROTOTYPE, 'ok')?.get
+  : null;
 const INVALID_SELECTED_VALUE = Symbol('invalid-selected-value');
 const MISSING_SELECTED_VALUE = Symbol('missing-selected-value');
 const INVALID_AUTHORIZATION_REQUEST = Symbol('invalid-authorization-request');
@@ -68,6 +75,10 @@ function stravaRefreshError(code) {
 
 function stravaDataError(code) {
   return new functions.https.HttpsError(code, STRAVA_DATA_ERROR_MESSAGE);
+}
+
+function stravaDisconnectError() {
+  return new functions.https.HttpsError('unavailable', STRAVA_DISCONNECT_ERROR_MESSAGE);
 }
 
 function patternMatches(pattern, value) {
@@ -141,6 +152,35 @@ function isValidStravaDisconnectRequest(data) {
 
 function isValidStravaStatsRequest(data) {
   return isExactPlainRecord(data, []);
+}
+
+function isConfirmedStravaDisconnectResponse(response) {
+  if (isPlainJsonRecord(response)) {
+    return selectedOwnDataValue(response, 'ok', true) === true;
+  }
+  if (
+    NATIVE_RESPONSE_PROTOTYPE === null
+    || typeof NATIVE_RESPONSE_OK_GETTER !== 'function'
+    || response === null
+    || typeof response !== 'object'
+    || isProxy(response)
+  ) {
+    return false;
+  }
+
+  let responsePrototype;
+  try {
+    responsePrototype = objectGetPrototypeOf(response);
+  } catch (_error) {
+    return false;
+  }
+  if (responsePrototype !== NATIVE_RESPONSE_PROTOTYPE) return false;
+
+  try {
+    return reflectApply(NATIVE_RESPONSE_OK_GETTER, response, []) === true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function isBoundedVisibleAscii(value, maxLength) {
@@ -1041,13 +1081,18 @@ exports.stravaDisconnect = functions
     if (secretSnap.exists) {
       const accessToken = snapshotStoredDisconnectAccessToken(secretSnap.data());
       if (accessToken) {
+        let revokeResponse;
         try {
-          await fetch(STRAVA_DEAUTH_URL, {
+          revokeResponse = await fetch(STRAVA_DEAUTH_URL, {
             method: 'POST',
             headers: { Authorization: `Bearer ${accessToken}` },
           });
         } catch (_error) {
           console.warn('strava_disconnect_revoke_failed');
+          throw stravaDisconnectError();
+        }
+        if (!isConfirmedStravaDisconnectResponse(revokeResponse)) {
+          throw stravaDisconnectError();
         }
       }
     }
