@@ -17,6 +17,12 @@ const PATCHED_BRACE_EXPANSION_URL =
   'https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.18.tgz';
 const PATCHED_BRACE_EXPANSION_INTEGRITY =
   'sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==';
+const PATCHED_BODY_PARSER_VERSION = '1.20.6';
+const PATCHED_BODY_PARSER_URL =
+  'https://registry.npmjs.org/body-parser/-/body-parser-1.20.6.tgz';
+const PATCHED_BODY_PARSER_INTEGRITY =
+  'sha512-p5tAzS57i5MV9fZFDj9LeIiTZEufbSe2eDozP+ElheSUq1m74CRq1jI4mYNDdVs9vQztXFLuk/Gd6BWTdwRJ5g==';
+const BODY_PARSER_FACTORIES = ['json', 'raw', 'text', 'urlencoded'];
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -231,4 +237,113 @@ describe('SUPPLY-001D12 Functions brace-expansion containment', () => {
       '06', '07', '08', '09', '10',
     ]);
   });
+});
+
+describe('SUPPLY-001D13 Functions body-parser limit enforcement', () => {
+  test('pins the sole production copy through the unchanged Express range', () => {
+    const packageJson = readJson(PACKAGE_PATH);
+    const lock = readJson(LOCK_PATH);
+    const rootRecord = lock.packages[''];
+    const entries = Object.entries(lock.packages)
+      .filter(([packagePath]) => (
+        packagePath === 'node_modules/body-parser'
+        || packagePath.endsWith('/node_modules/body-parser')
+      ));
+
+    for (const field of [
+      'dependencies',
+      'devDependencies',
+      'optionalDependencies',
+      'peerDependencies',
+      'resolutions',
+      'overrides',
+    ]) {
+      expect(packageJson[field]?.['body-parser']).toBeUndefined();
+      expect(rootRecord?.[field]?.['body-parser']).toBeUndefined();
+    }
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0][0]).toBe('node_modules/body-parser');
+    expect(entries[0][1]).toMatchObject({
+      version: PATCHED_BODY_PARSER_VERSION,
+      resolved: PATCHED_BODY_PARSER_URL,
+      integrity: PATCHED_BODY_PARSER_INTEGRITY,
+      license: 'MIT',
+    });
+    expect(entries[0][1]).not.toHaveProperty('dev');
+    expect(entries[0][1].dependencies).toEqual({
+      bytes: '~3.1.2',
+      'content-type': '~1.0.5',
+      debug: '2.6.9',
+      depd: '2.0.0',
+      destroy: '~1.2.0',
+      'http-errors': '~2.0.1',
+      'iconv-lite': '~0.4.24',
+      'on-finished': '~2.4.1',
+      qs: '~6.15.1',
+      'raw-body': '~2.5.3',
+      'type-is': '~1.6.18',
+      unpipe: '~1.0.0',
+    });
+    expect(entries[0][1].engines).toEqual({
+      node: '>= 0.8',
+      npm: '1.2.8000 || >= 1.4.16',
+    });
+
+    const consumers = Object.entries(lock.packages)
+      .filter(([, packageRecord]) => (
+        packageRecord?.dependencies?.['body-parser'] !== undefined
+      ));
+    expect(consumers).toHaveLength(1);
+    expect(consumers[0][0]).toBe('node_modules/express');
+    expect(consumers[0][1]).toMatchObject({
+      version: '4.22.2',
+    });
+    expect(consumers[0][1]).not.toHaveProperty('dev');
+    expect(consumers[0][1].dependencies['body-parser']).toBe('~1.20.5');
+
+    const installedPackagePath = require.resolve('body-parser/package.json');
+    const expressPackagePath = require.resolve('express/package.json');
+    expect(require.resolve('body-parser/package.json', {
+      paths: [path.dirname(expressPackagePath)],
+    })).toBe(installedPackagePath);
+    expect(readJson(installedPackagePath).version)
+      .toBe(PATCHED_BODY_PARSER_VERSION);
+  });
+
+  test.each(BODY_PARSER_FACTORIES)(
+    '%s rejects invalid limits when the parser is constructed',
+    (factory) => {
+      const bodyParser = require('body-parser');
+      const baseOptions = factory === 'urlencoded' ? {extended: false} : {};
+
+      expect(() => bodyParser[factory]({
+        ...baseOptions,
+        limit: 'synthetic-invalid-limit',
+      })).toThrow(TypeError);
+      expect(() => bodyParser[factory]({
+        ...baseOptions,
+        limit: Number.NaN,
+      })).toThrow(TypeError);
+    },
+  );
+
+  test.each(BODY_PARSER_FACTORIES)(
+    '%s preserves default and valid limit construction',
+    (factory) => {
+      const bodyParser = require('body-parser');
+      const baseOptions = factory === 'urlencoded' ? {extended: false} : {};
+      const compatibleOptions = [
+        baseOptions,
+        {...baseOptions, limit: undefined},
+        {...baseOptions, limit: null},
+        {...baseOptions, limit: 8_192},
+        {...baseOptions, limit: '8kb'},
+      ];
+
+      for (const options of compatibleOptions) {
+        expect(bodyParser[factory](options)).toEqual(expect.any(Function));
+      }
+    },
+  );
 });
