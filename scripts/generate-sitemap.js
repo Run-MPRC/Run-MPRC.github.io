@@ -78,8 +78,8 @@ async function loadEventEntries() {
         priority: '0.9',
       };
     });
-  } catch (err) {
-    console.warn('Failed to load events for sitemap:', err.message);
+  } catch {
+    console.warn('sitemap_dynamic_events_unavailable');
     return [];
   }
 }
@@ -102,7 +102,7 @@ ${allEntries.map(urlEntry).join('\n')}
   console.log(`Wrote sitemap with ${allEntries.length} URLs → ${OUTPUT}`);
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch(() => {
+  console.error('sitemap_generation_failed');
   process.exit(1);
 });
