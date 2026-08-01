@@ -137,8 +137,11 @@ export async function stravaExchangeCode(
 
 export async function stravaFetchStats(app: FirebaseApp): Promise<StravaStatsResult> {
   const functions = getFunctions(app);
-  const callable = httpsCallable<void, StravaStatsResult>(functions, 'stravaFetchStats');
-  const result = await callable();
+  const callable = httpsCallable<Record<string, never>, StravaStatsResult>(
+    functions,
+    'stravaFetchStats',
+  );
+  const result = await callable({});
   return result.data;
 }
 

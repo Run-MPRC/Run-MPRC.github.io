@@ -314,6 +314,7 @@ const {
 const FIXED_AUTHORIZATION_ERROR = 'Strava authorization could not be completed.';
 const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
 const FIXED_DATA_ERROR = 'Strava activity data could not be loaded.';
+const FIXED_STATS_REQUEST_ERROR = 'Strava statistics request is invalid.';
 const FIXED_DISCONNECT_REQUEST_ERROR = 'Strava disconnect request is invalid.';
 const FIXED_DISCONNECT_WARNING = 'strava_disconnect_revoke_failed';
 const GUARDED_FETCH = global.fetch;
@@ -2056,6 +2057,247 @@ describe('Strava authorization exchange failure boundary', () => {
     expect(admin.__getReads()).toEqual([]);
     expect(admin.__getDeletes()).toEqual([]);
     expect(Timestamp.now).toHaveBeenCalledTimes(3);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});
+
+describe('Strava statistics request admission boundary', () => {
+  let fetchMock;
+  let consoleSpies;
+  let dateNowSpy;
+
+  beforeEach(() => {
+    admin.__clearDeletes();
+    admin.__clearDocuments();
+    admin.__clearReads();
+    admin.__clearWrites();
+    Timestamp.now.mockClear();
+    requireAppCheck.mockReset();
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method).mockImplementation(() => undefined));
+  });
+
+  afterEach(() => {
+    global.fetch = GUARDED_FETCH;
+    dateNowSpy.mockRestore();
+    consoleSpies.forEach((spy) => spy.mockRestore());
+  });
+
+  function expectNoStatisticsSideEffects() {
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(dateNowSpy).not.toHaveBeenCalled();
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  }
+
+  async function expectRejectedStatisticsRequest(data) {
+    const rejection = await captureFailure(() => stravaFetchStats(data, CONTEXT));
+
+    expect(publicError(rejection)).toEqual({
+      code: 'invalid-argument',
+      message: FIXED_STATS_REQUEST_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(requireAppCheck).toHaveBeenCalledTimes(1);
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expectNoStatisticsSideEffects();
+  }
+
+  test('runs App Check before Auth, request reflection, or side effects', async () => {
+    const appCheckFailure = new functions.https.HttpsError(
+      'failed-precondition',
+      'synthetic app check rejection',
+    );
+    requireAppCheck.mockImplementationOnce(() => {
+      throw appCheckFailure;
+    });
+    const authGetter = jest.fn(() => CONTEXT.auth);
+    const context = Object.defineProperty(
+      { app: CONTEXT.app },
+      'auth',
+      { enumerable: true, get: authGetter },
+    );
+    const traps = {
+      getPrototypeOf: jest.fn(() => {
+        throw new Error('stats-request-order-canary prototype trap');
+      }),
+      isExtensible: jest.fn(() => {
+        throw new Error('stats-request-order-canary extensible trap');
+      }),
+      ownKeys: jest.fn(() => {
+        throw new Error('stats-request-order-canary ownKeys trap');
+      }),
+    };
+    const data = new Proxy({}, traps);
+
+    await expect(stravaFetchStats(data, context)).rejects.toBe(appCheckFailure);
+
+    expect(requireAppCheck).toHaveBeenCalledWith(context);
+    expect(authGetter).not.toHaveBeenCalled();
+    Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expectNoStatisticsSideEffects();
+  });
+
+  test('rejects a missing caller before request reflection or side effects', async () => {
+    const traps = {
+      getPrototypeOf: jest.fn(() => {
+        throw new Error('stats-request-auth-order-canary prototype trap');
+      }),
+      isExtensible: jest.fn(() => {
+        throw new Error('stats-request-auth-order-canary extensible trap');
+      }),
+      ownKeys: jest.fn(() => {
+        throw new Error('stats-request-auth-order-canary ownKeys trap');
+      }),
+    };
+    const data = new Proxy({}, traps);
+    const rejection = await captureFailure(() => (
+      stravaFetchStats(data, { ...CONTEXT, auth: null })
+    ));
+
+    expect(publicError(rejection)).toEqual({
+      code: 'unauthenticated',
+      message: 'Sign-in required',
+      details: undefined,
+      cause: undefined,
+    });
+    expect(requireAppCheck).toHaveBeenCalledTimes(1);
+    Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    expectNoStatisticsSideEffects();
+  });
+
+  describe('request validation before side effects', () => {
+    class StatisticsRequest {
+      constructor() {
+        this.unexpected = true;
+      }
+    }
+
+    const nonEnumerableRequest = {};
+    Object.defineProperty(nonEnumerableRequest, 'unexpected', {
+      configurable: true,
+      enumerable: false,
+      value: true,
+    });
+    const symbolRequest = { [Symbol('unexpected')]: true };
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a boolean', false],
+      ['a number', 0],
+      ['a bigint', 0n],
+      ['a string', ''],
+      ['a symbol', Symbol('stats-request-canary')],
+      ['a function', () => undefined],
+      ['an array', []],
+      ['a Date', new Date(0)],
+      ['a class instance', new StatisticsRequest()],
+      ['a null-prototype record', Object.create(null)],
+      ['a custom-prototype record', Object.create({ inherited: true })],
+      ['an enumerable extra key', { unexpected: true }],
+      ['a non-enumerable extra key', nonEnumerableRequest],
+      ['a symbol extra key', symbolRequest],
+    ])('rejects %s before Firestore, provider, timestamp, write, delete, or log work', async (
+      _case,
+      data,
+    ) => {
+      await expectRejectedStatisticsRequest(data);
+    });
+
+    test('rejects a Proxy without invoking any trap', async () => {
+      const traps = {
+        get: jest.fn(() => {
+          throw new Error('stats-request-canary get trap');
+        }),
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('stats-request-canary descriptor trap');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('stats-request-canary prototype trap');
+        }),
+        has: jest.fn(() => {
+          throw new Error('stats-request-canary has trap');
+        }),
+        isExtensible: jest.fn(() => {
+          throw new Error('stats-request-canary extensible trap');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('stats-request-canary ownKeys trap');
+        }),
+      };
+      const data = new Proxy({}, traps);
+
+      await expectRejectedStatisticsRequest(data);
+
+      Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('rejects a revoked Proxy without reflection', async () => {
+      const { proxy, revoke } = Proxy.revocable({}, {});
+      revoke();
+
+      await expectRejectedStatisticsRequest(proxy);
+    });
+
+    test('rejects an accessor-backed record without invoking the accessor', async () => {
+      const getter = jest.fn(() => {
+        throw new Error('stats-request-canary getter');
+      });
+      const data = {};
+      Object.defineProperty(data, 'unexpected', {
+        configurable: true,
+        enumerable: true,
+        get: getter,
+      });
+
+      await expectRejectedStatisticsRequest(data);
+
+      expect(getter).not.toHaveBeenCalled();
+    });
+
+    test('does not invoke coercion, iteration, or JSON hooks', async () => {
+      const hooks = {
+        toJSON: jest.fn(() => 'stats-request-canary'),
+        toString: jest.fn(() => 'stats-request-canary'),
+        valueOf: jest.fn(() => 'stats-request-canary'),
+        [Symbol.iterator]: jest.fn(() => [][Symbol.iterator]()),
+        [Symbol.toPrimitive]: jest.fn(() => 'stats-request-canary'),
+      };
+
+      await expectRejectedStatisticsRequest(hooks);
+
+      expect(hooks.toJSON).not.toHaveBeenCalled();
+      expect(hooks.toString).not.toHaveBeenCalled();
+      expect(hooks.valueOf).not.toHaveBeenCalled();
+      expect(hooks[Symbol.iterator]).not.toHaveBeenCalled();
+      expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+  });
+
+  test('accepts one ordinary exact empty request and reaches the connection lookup', async () => {
+    const request = {};
+
+    await expect(stravaFetchStats(request, CONTEXT)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Strava not connected',
+    });
+
+    expect(Object.getPrototypeOf(request)).toBe(Object.prototype);
+    expect(Reflect.ownKeys(request)).toEqual([]);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(dateNowSpy).not.toHaveBeenCalled();
+    expect(Timestamp.now).not.toHaveBeenCalled();
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });

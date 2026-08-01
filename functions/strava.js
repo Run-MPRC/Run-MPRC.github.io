@@ -27,6 +27,7 @@ const STRAVA_ACTIVITY_DATE_MAX_LENGTH = 64;
 const STRAVA_LONG_MAX_AS_NUMBER = 9_223_372_036_854_776_000;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
+const STRAVA_STATS_REQUEST_ERROR_MESSAGE = 'Strava statistics request is invalid.';
 const STRAVA_DISCONNECT_REQUEST_ERROR_MESSAGE = 'Strava disconnect request is invalid.';
 const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
@@ -135,6 +136,10 @@ function isExactPlainRecord(record, expectedKeys) {
 }
 
 function isValidStravaDisconnectRequest(data) {
+  return isExactPlainRecord(data, []);
+}
+
+function isValidStravaStatsRequest(data) {
   return isExactPlainRecord(data, []);
 }
 
@@ -943,6 +948,12 @@ exports.stravaFetchStats = functions
     requireAppCheck(context);
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Sign-in required');
+    }
+    if (!isValidStravaStatsRequest(data)) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        STRAVA_STATS_REQUEST_ERROR_MESSAGE,
+      );
     }
     const { uid } = context.auth;
 
