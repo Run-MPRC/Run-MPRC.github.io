@@ -1108,9 +1108,15 @@ exports.stravaDisconnect = functions
         }
       }
     }
-    await Promise.all([
-      secretDocRef(uid).delete().catch(() => {}),
-      connectionDocRef(uid).delete().catch(() => {}),
-    ]);
+    try {
+      const db = admin.firestore();
+      const cleanup = db.batch();
+      cleanup.delete(secretDocRef(uid, db));
+      cleanup.delete(connectionDocRef(uid, db));
+      await cleanup.commit();
+    } catch (_error) {
+      console.warn('strava_disconnect_cleanup_failed');
+      throw stravaDisconnectError();
+    }
     return { ok: true };
   });

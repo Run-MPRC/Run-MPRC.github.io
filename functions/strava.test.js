@@ -23,6 +23,9 @@ jest.mock('firebase-admin', () => {
   let batchCreateAttempts = 0;
   let batchCreationFailure;
   const batchCommitAttempts = [];
+  const batchDeleteAttempts = [];
+  const batchDeleteFailures = new Map();
+  const batchDeletes = [];
   const batchSetAttempts = [];
   const batchSetFailures = new Map();
   const deleteFailures = new Map();
@@ -105,6 +108,15 @@ jest.mock('firebase-admin', () => {
         }
         const staged = [];
         const batch = {
+          delete: (ref) => {
+            const operation = { type: 'delete', path: ref.path };
+            batchDeleteAttempts.push(ref.path);
+            if (batchDeleteFailures.has(ref.path)) {
+              throw batchDeleteFailures.get(ref.path);
+            }
+            staged.push(operation);
+            return batch;
+          },
           set: (ref, data, options) => {
             const operation = { path: ref.path, data, options };
             batchSetAttempts.push(operation);
@@ -120,11 +132,18 @@ jest.mock('firebase-admin', () => {
               throw batchCommitFailure;
             }
             for (const operation of staged) {
-              if (writeFailures.has(operation.path)) {
+              if (operation.type !== 'delete' && writeFailures.has(operation.path)) {
                 throw writeFailures.get(operation.path);
               }
             }
-            staged.forEach(applyWrite);
+            staged.forEach((operation) => {
+              if (operation.type === 'delete') {
+                batchDeletes.push(operation.path);
+                applyDelete(operation.path);
+              } else {
+                applyWrite(operation);
+              }
+            });
             if (batchCommitPostApplyFailure) {
               throw batchCommitPostApplyFailure;
             }
@@ -215,6 +234,9 @@ jest.mock('firebase-admin', () => {
       batchCreateAttempts = 0;
       batchCreationFailure = undefined;
       batchCommitAttempts.splice(0, batchCommitAttempts.length);
+      batchDeleteAttempts.splice(0, batchDeleteAttempts.length);
+      batchDeleteFailures.clear();
+      batchDeletes.splice(0, batchDeletes.length);
       batchSetAttempts.splice(0, batchSetAttempts.length);
       batchSetFailures.clear();
       directSetAttempts.splice(0, directSetAttempts.length);
@@ -235,6 +257,8 @@ jest.mock('firebase-admin', () => {
     },
     __getBatchCommitAttempts: () => [...batchCommitAttempts],
     __getBatchCreateAttempts: () => batchCreateAttempts,
+    __getBatchDeleteAttempts: () => [...batchDeleteAttempts],
+    __getBatchDeletes: () => [...batchDeletes],
     __getBatchSetAttempts: () => [...batchSetAttempts],
     __getDeletes: () => [...deletes],
     __getDirectSetAttempts: () => [...directSetAttempts],
@@ -256,6 +280,7 @@ jest.mock('firebase-admin', () => {
     __setBatchCreationFailure: (error) => {
       batchCreationFailure = error;
     },
+    __setBatchDeleteFailure: (path, error) => batchDeleteFailures.set(path, error),
     __setBatchSetFailure: (path, error) => batchSetFailures.set(path, error),
     __setDeleteFailure: (path, error) => deleteFailures.set(path, error),
     __removeDocument: (path) => applyDelete(path),
@@ -4882,6 +4907,7 @@ describe('Strava disconnect failure log boundary', () => {
   const SYNTHETIC_CLIENT_SECRET = 'abc123';
   const SYNTHETIC_BASIC_AUTHORIZATION = 'Basic MTIzNDU6YWJjMTIz';
   const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded';
+  const FIXED_CLEANUP_WARNING = 'strava_disconnect_cleanup_failed';
 
   beforeEach(() => {
     process.env.STRAVA_CLIENT_ID = SYNTHETIC_CLIENT_ID;
@@ -4929,12 +4955,27 @@ describe('Strava disconnect failure log boundary', () => {
   }
 
   function expectLocalDeletes() {
-    expect(admin.__getDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+    const operations = [
+      { type: 'delete', path: SECRET_PATH },
+      { type: 'delete', path: CONNECTION_PATH },
+    ];
+    expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getBatchCreateAttempts()).toBe(1);
+    expect(admin.__getBatchDeleteAttempts()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+    expect(admin.__getBatchDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+    expect(admin.__getBatchSetAttempts()).toEqual([]);
+    expect(admin.__getBatchCommitAttempts()).toEqual([operations]);
     expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
+    expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
   }
 
   function expectLocalRecordsPreserved() {
     expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getBatchCreateAttempts()).toBe(0);
+    expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+    expect(admin.__getBatchDeletes()).toEqual([]);
+    expect(admin.__getBatchCommitAttempts()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
     expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
@@ -4956,6 +4997,10 @@ describe('Strava disconnect failure log boundary', () => {
   function expectNoDisconnectSideEffects() {
     expect(admin.__getReads()).toEqual([]);
     expect(admin.__getDeletes()).toEqual([]);
+    expect(admin.__getBatchCreateAttempts()).toBe(0);
+    expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+    expect(admin.__getBatchDeletes()).toEqual([]);
+    expect(admin.__getBatchCommitAttempts()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(dateNowSpy).not.toHaveBeenCalled();
@@ -5789,21 +5834,131 @@ describe('Strava disconnect failure log boundary', () => {
     expectLocalRecordsPreserved();
   });
 
-  test('preserves swallowed local delete failures and the current success result', async () => {
-    admin.__setDeleteFailure(
-      SECRET_PATH,
-      new Error('synthetic secret delete failure'),
-    );
-    admin.__setDeleteFailure(
-      CONNECTION_PATH,
-      new Error('synthetic connection delete failure'),
-    );
+  describe('OAUTH-001B7 atomic local disconnect cleanup', () => {
+    const cleanupOperations = [
+      { type: 'delete', path: SECRET_PATH },
+      { type: 'delete', path: CONNECTION_PATH },
+    ];
 
-    const result = await stravaDisconnect({}, CONTEXT);
+    function hostileCleanupFailure() {
+      const probes = [
+        jest.fn(() => {
+          throw new Error('cleanup-cause-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('cleanup-details-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('cleanup-json-getter-canary');
+        }),
+      ];
+      const failure = new Error(
+        'cleanup-failure-canary token=synthetic-provider-secret-canary',
+      );
+      Object.defineProperties(failure, {
+        cause: { configurable: true, enumerable: true, get: probes[0] },
+        details: { configurable: true, enumerable: true, get: probes[1] },
+        toJSON: { configurable: true, enumerable: true, get: probes[2] },
+      });
+      return { failure, probes };
+    }
 
-    expect(result).toEqual({ ok: true });
-    expect(fetchMock).not.toHaveBeenCalled();
-    expectLocalDeletes();
-    expectNoLogs();
+    function expectFixedCleanupFailure(rejection, probes) {
+      const exposed = publicError(rejection);
+      expect(exposed).toEqual({
+        code: 'unavailable',
+        message: FIXED_DISCONNECT_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+      expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_CLEANUP_WARNING);
+      expect(JSON.stringify({ exposed, logs: consoleSpies.warn.mock.calls }))
+        .not.toMatch(/cleanup-|token=|provider-secret|canary/i);
+      probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+      ['debug', 'error', 'info', 'log']
+        .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
+    }
+
+    test.each([
+      [
+        'batch construction',
+        (failure) => admin.__setBatchCreationFailure(failure),
+        [],
+        [],
+      ],
+      [
+        'secret delete staging',
+        (failure) => admin.__setBatchDeleteFailure(SECRET_PATH, failure),
+        [SECRET_PATH],
+        [],
+      ],
+      [
+        'connection delete staging',
+        (failure) => admin.__setBatchDeleteFailure(CONNECTION_PATH, failure),
+        [SECRET_PATH, CONNECTION_PATH],
+        [],
+      ],
+      [
+        'pre-apply commit',
+        (failure) => admin.__setBatchCommitFailure(failure),
+        [SECRET_PATH, CONNECTION_PATH],
+        [cleanupOperations],
+      ],
+    ])('maps %s failure to one fixed result and preserves both records', async (
+      _stage,
+      configure,
+      expectedDeleteAttempts,
+      expectedCommitAttempts,
+    ) => {
+      const { failure, probes } = hostileCleanupFailure();
+      seedConnectedAccount();
+      fetchMock.mockResolvedValue({ ok: true });
+      configure(failure);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedCleanupFailure(rejection, probes);
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
+      expect(admin.__getBatchCreateAttempts()).toBe(1);
+      expect(admin.__getBatchDeleteAttempts()).toEqual(expectedDeleteAttempts);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchSetAttempts()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual(expectedCommitAttempts);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
+    });
+
+    test('returns an unknown result after lost acknowledgement and converges on retry', async () => {
+      const { failure, probes } = hostileCleanupFailure();
+      seedConnectedAccount();
+      fetchMock.mockResolvedValue({ ok: true });
+      admin.__setBatchCommitPostApplyFailure(failure);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedCleanupFailure(rejection, probes);
+      expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
+      expect(admin.__getBatchDeleteAttempts()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+      expect(admin.__getBatchDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([cleanupOperations]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
+
+      admin.__clearWrites();
+      admin.__clearReads();
+      fetchMock.mockReset();
+      consoleSpies.warn.mockClear();
+
+      const retryResult = await stravaDisconnect({}, CONTEXT);
+
+      expect(retryResult).toEqual({ ok: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expectLocalDeletes();
+      expectNoLogs();
+    });
   });
 });
