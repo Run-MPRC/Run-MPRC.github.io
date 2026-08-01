@@ -19,6 +19,19 @@ const NETLIFY_MANIFEST_PATH = path.join(
 );
 const GITIGNORE_PATH = path.join(ROOT, '.gitignore');
 const PUBLIC_CNAME_PATH = path.join(ROOT, 'public/CNAME');
+const CURRENT_RELEASE_TRUTH_PATHS = [
+  'IMPLEMENTATION_PLAN.md',
+  'OFFICER_START_HERE.md',
+  'OPERATIONS_RUNBOOK.md',
+  'README.md',
+  'SECURITY.md',
+  'SYSTEM_DESIGN.md',
+  'docs/officers/ACCESS_CONTINUITY.md',
+  'docs/officers/PUBLISH_AND_CHECK.md',
+  'docs/officers/README.md',
+  'docs/officers/REQUEST_A_CHANGE.md',
+  'docs/officers/SYSTEM_MAPS.md',
+];
 const {
   authorizeProductionRelease,
   evaluateProductionRelease,
@@ -34,6 +47,12 @@ const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
 const netlifyConfig = fs.readFileSync(NETLIFY_CONFIG_PATH, 'utf8');
 const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
+const currentReleaseTruth = new Map(
+  CURRENT_RELEASE_TRUTH_PATHS.map((relativePath) => [
+    relativePath,
+    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
+  ]),
+);
 
 function runNetlifyGate(context) {
   const env = { ...process.env };
@@ -245,6 +264,84 @@ test('Netlify manifest retains the exact rollback provenance and is paused', () 
     loaded.manifest.expectedSiteFilesSha256,
     '7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092',
   );
+});
+
+test('paused #473 authority agrees with the incident and rollback record', () => {
+  assert.match(
+    netlifyConfig,
+    /only a separately reviewed active release manifest can authorize one merge/,
+  );
+  assert.doesNotMatch(
+    netlifyConfig,
+    /except for the exact merge authorized by a reviewed release manifest/,
+  );
+  const expectedTruth = new Map([
+    ['IMPLEMENTATION_PLAN.md',
+      /WEB-002A \[#473\][^\n]*manifest disabled[^\n]*#473 remains open[^\n]*NOT AVAILABLE YET/i],
+    ['OFFICER_START_HERE.md',
+      /too-broad #473[^\n]*manifest disabled[^\n]*newly bounded[^\n]*NOT AVAILABLE YET/i],
+    ['OPERATIONS_RUNBOOK.md',
+      /WEB-002A \[#473\][\s\S]{0,3000}manifest inactive[\s\S]{0,1500}#473 remains open[^\n]*NOT AVAILABLE YET/i],
+    ['README.md',
+      /#473[^\n]*re-paused[^\n]*#473's narrower replacement is \*\*NOT AVAILABLE YET\*\*/i],
+    ['SECURITY.md',
+      /WEB-002A \[#473\][^\n]*manifest inactive[^\n]*corrected Shop\/public-error artifact as \*\*NOT AVAILABLE YET\*\*/i],
+    ['SYSTEM_DESIGN.md',
+      /#473's first temporary exception[^\n]*disabled the manifest[^\n]*#473 remains open[^\n]*NOT AVAILABLE YET/i],
+    ['docs/officers/ACCESS_CONTINUITY.md',
+      /#473 manifest is inactive[^\n]*narrower #473 release is \*\*NOT AVAILABLE YET\*\*/i],
+    ['docs/officers/PUBLISH_AND_CHECK.md',
+      /#473 manifest is inactive[\s\S]{0,5000}#473 Netlify incident and narrower replacement — NOT AVAILABLE YET/i],
+    ['docs/officers/README.md',
+      /#473 artifact[^\n]*manifest is now inactive[^\n]*newly bounded[^\n]*NOT AVAILABLE YET/i],
+    ['docs/officers/REQUEST_A_CHANGE.md',
+      /#473 manifest is inactive[^\n]*narrower #473[^\n]*NOT AVAILABLE YET/i],
+    ['docs/officers/SYSTEM_MAPS.md',
+      /Inactive #473 manifest[\s\S]{0,1000}Future narrow #473 release — NOT AVAILABLE YET/i],
+  ]);
+  const staleClaims = [
+    /codex\/netlify-source-473-shop-events-auth/,
+    /Temporary #473 Netlify web release — PENDING REVIEW AND RELEASE/,
+    /Exact active #473 manifest/,
+    /paused except for the exact[^\n]*#473/i,
+    /Issue #473[^\n]*PENDING REVIEW AND RELEASE/i,
+    /#473[^\n]{0,160}manifest (?:is|remains) active/i,
+    /#473[^\n]{0,160}(?:may|can|will) publish/i,
+  ];
+  currentReleaseTruth.forEach((contents, relativePath) => {
+    assert.match(
+      contents,
+      expectedTruth.get(relativePath),
+      `${relativePath} must bind disabled #473 authority to its unavailable replacement`,
+    );
+    staleClaims.forEach((claim) => {
+      assert.doesNotMatch(
+        contents,
+        claim,
+        `${relativePath} must not retain obsolete #473 release authority`,
+      );
+    });
+  });
+
+  const canonicalRecords = [
+    currentReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
+    currentReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
+  ];
+  [
+    '40728ff6141e34a279b70cc41d983c22ac5f0daa',
+    '6a6dc0167fbe68000816b448',
+    '1099ee8e6fdb81141fd9460de175b6d854cbcfdd',
+    '6a6dc219a8136300081811db',
+    'dee79511b6e371329aa129139729e112e7a51aad',
+    '6a6dc35767a4ef000877e74b',
+  ].forEach((identifier) => {
+    canonicalRecords.forEach((record) => {
+      assert.match(record, new RegExp(identifier));
+    });
+  });
+  canonicalRecords.forEach((record) => {
+    assert.match(record, /raw (?:Firestore )?permission (?:failures|messages|text)/);
+  });
 });
 
 test('Netlify preview and production markers separate control from stable provenance', () => {

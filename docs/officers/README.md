@@ -1,7 +1,7 @@
 # Officer Website Handbook
 
 **Audience:** MPRC officers and backup maintainers with little or no coding experience
-**Last checked:** 2026-07-30
+**Last checked:** 2026-08-01
 **Start page:** [OFFICER_START_HERE.md](../../OFFICER_START_HERE.md)
 
 The safe pattern is always the same:
@@ -63,7 +63,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 Never shorten several of these states to “done.”
 
-Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. Issue #473 prepares one platform-maintainer-only, exact-artifact release of the merged Shop and Event sign-in source. It is **PENDING REVIEW AND RELEASE**, not a reusable officer control. Production remains the dated #457 deploy until the #473 public marker and pages are verified. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
+Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. On 2026-08-01, a too-broad #473 artifact published and the prepared rollback restored the prior artifact. The temporary manifest is now inactive, and that rollback remains live. Its Shop and Events pages still show raw permission failures. A newly bounded Shop and error-message release is **NOT AVAILABLE YET**, not a reusable officer control. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
 
 The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures the environment approvers and short-lived cloud identity. Missing authority stops the release with a red failure before Firebase or website publication.
 

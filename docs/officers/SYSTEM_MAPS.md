@@ -83,15 +83,16 @@ flowchart TD
     Rules --> Functions["Deploy and verify named Functions"]
     Functions --> Pages["Pages branch without Netlify's domain claim"]
     Main -. "Ordinary Git production build paused" .-> Netlify
-    Main -. "Exact active #473 manifest" .-> WebGate{"Exact parent, source, tree, and artifact match?"}
+    Main -. "Inactive #473 manifest" .-> WebStop["Do not publish"]
+    Future["Future narrow #473 release — NOT AVAILABLE YET"] -. "new preview, rollback, and approval" .-> WebGate{"Exact parent, source, tree, and artifact match?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> Netlify
-    Netlify["Netlify — current live host; reusable protected publication unavailable"] --> Live["runmprc.com"]
+    Netlify["Netlify — verified rollback artifact live; reusable protected publication unavailable"] --> Live["runmprc.com"]
     Pages -. "existing provider claim still conflicts until verified clear" .-> Live
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify, while only the exact temporary #473 parent/source/tree/artifact may do so; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges and the inactive #473 manifest cannot publish Netlify; the verified rollback artifact remains live, while a narrower #473 release needs a new preview, rollback, and approval; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 

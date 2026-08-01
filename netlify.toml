@@ -1,8 +1,8 @@
 [build]
   command = "npm run build"
   publish = "build"
-  # Preview builds use the checked-out preview tree. Production is fail-closed
-  # except for the exact merge authorized by a reviewed release manifest.
+  # Preview builds use the checked-out preview tree. Production is fail-closed;
+  # only a separately reviewed active release manifest can authorize one merge.
   ignore = "node ./scripts/netlify-ignore-build.js"
 
 [build.environment]
