@@ -28,6 +28,8 @@ const structuredData = {
   url: SEO_CONFIG.url,
 };
 
+const EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
+
 function PriceBadge({ event }: { event: Event }) {
   const { memberCents, nonMemberCents, earlyBirdCents } = event.pricing || {};
   if (!memberCents && !nonMemberCents && !earlyBirdCents) {
@@ -100,7 +102,7 @@ function Events() {
     const unsub = lister(
       db,
       (evs) => { setEvents(evs); setLoading(false); },
-      (err) => { setError(err.message); setLoading(false); },
+      () => { setError(EVENTS_LOAD_FAILURE); setLoading(false); },
     );
     return unsub;
   }, [services, isReady, isMember]);
@@ -127,7 +129,12 @@ function Events() {
         </div>
         {loading && <p className="text-gray-500">Loading events...</p>}
         {error && (
-          <p className="text-red-500">
+          <p
+            className="text-red-500"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
             Error:
             {' '}
             {error}

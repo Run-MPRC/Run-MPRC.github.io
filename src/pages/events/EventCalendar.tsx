@@ -12,6 +12,7 @@ import {
 import { Event } from '../../types/events';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const EVENTS_LOAD_FAILURE = 'We could not load events right now. Please try again later.';
 
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -87,7 +88,7 @@ function EventCalendar() {
     const unsub = lister(
       db,
       (evs) => { setEvents(evs); setLoading(false); },
-      (err) => { setError(err.message); setLoading(false); },
+      () => { setError(EVENTS_LOAD_FAILURE); setLoading(false); },
     );
     return unsub;
   }, [services, isReady, isMember]);
@@ -154,7 +155,16 @@ function EventCalendar() {
         </div>
 
         {loading && <p className="text-gray-500">Loading...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {error && (
+          <p
+            className="text-red-500"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {error}
+          </p>
+        )}
 
         {!loading && !error && (
           <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded overflow-hidden">
