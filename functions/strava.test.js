@@ -2566,6 +2566,107 @@ describe('Strava token refresh failure boundary', () => {
     expectNoWritesOrLogs();
   });
 
+  describe('OAUTH-001A1D stored refresh-secret read boundary', () => {
+    function hostileReadFailure() {
+      const probes = [
+        jest.fn(() => {
+          throw new Error('refresh-read-cause-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('refresh-read-details-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('refresh-read-json-getter-canary');
+        }),
+      ];
+      const failure = new Error(
+        'refresh-read-canary uid=synthetic-member path=members/private token=synthetic-token',
+      );
+      Object.defineProperties(failure, {
+        cause: { configurable: true, enumerable: true, get: probes[0] },
+        details: { configurable: true, enumerable: true, get: probes[1] },
+        toJSON: { configurable: true, enumerable: true, get: probes[2] },
+      });
+      return { failure, probes };
+    }
+
+    function expectFixedReadFailure(rejection, probes) {
+      const exposed = publicError(rejection);
+      expect(exposed).toEqual({
+        code: 'unavailable',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify({ exposed, logs: consoleSpies.map((spy) => spy.mock.calls) }))
+        .not.toMatch(
+          /refresh-read-canary|synthetic-member|members\/private|synthetic-token|getter-canary/i,
+        );
+      probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+      expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchSetAttempts()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
+      expect(dateNowSpy).not.toHaveBeenCalled();
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    }
+
+    test('maps a rejected secret read to one fixed result before downstream work', async () => {
+      const { failure, probes } = hostileReadFailure();
+      seedStoredSecret(validStoredSecret());
+      admin.__setReadFailure(SECRET_PATH, failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedReadFailure(rejection, probes);
+    });
+
+    test('maps a throwing snapshot exists value to the fixed read boundary', async () => {
+      const { failure, probes } = hostileReadFailure();
+      const exists = jest.fn(() => {
+        throw failure;
+      });
+      const snapshot = {};
+      Object.defineProperty(snapshot, 'exists', {
+        configurable: true,
+        enumerable: true,
+        get: exists,
+      });
+      seedStoredSecret(validStoredSecret());
+      admin.__setReadSnapshot(SECRET_PATH, snapshot);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedReadFailure(rejection, probes);
+      expect(exists).toHaveBeenCalledTimes(1);
+    });
+
+    test('maps a throwing snapshot data method to the fixed read boundary', async () => {
+      const { failure, probes } = hostileReadFailure();
+      const data = jest.fn(() => {
+        throw failure;
+      });
+      seedStoredSecret(validStoredSecret());
+      admin.__setReadSnapshot(SECRET_PATH, { exists: true, data });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedReadFailure(rejection, probes);
+      expect(data).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test('does not read or expose a failed refresh response body or status', async () => {
     seedExpiredConnection();
     const text = jest.fn().mockResolvedValue(

@@ -874,11 +874,20 @@ async function refreshToken(refresh) {
 }
 
 async function getFreshAccessToken(uid) {
-  const snap = await secretDocRef(uid).get();
-  if (!snap.exists) {
+  let secretExists = false;
+  let stored = null;
+  try {
+    const snap = await secretDocRef(uid).get();
+    secretExists = snap.exists;
+    if (secretExists) {
+      stored = snapshotStoredTokenSecret(snap.data());
+    }
+  } catch (_error) {
+    throw stravaRefreshError('unavailable');
+  }
+  if (!secretExists) {
     throw new functions.https.HttpsError('failed-precondition', 'Strava not connected');
   }
-  const stored = snapshotStoredTokenSecret(snap.data());
   if (!stored) {
     throw stravaRefreshError('internal');
   }
