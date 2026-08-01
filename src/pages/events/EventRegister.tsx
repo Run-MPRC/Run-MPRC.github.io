@@ -117,6 +117,7 @@ function EventRegister() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const checkoutSubmitStartedRef = useRef(false);
   const outcomeUnknownRef = useRef(false);
 
   const [runner, setRunner] = useState<RunnerFormState>({
@@ -179,7 +180,7 @@ function EventRegister() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (outcomeUnknownRef.current) return;
+    if (checkoutSubmitStartedRef.current || outcomeUnknownRef.current) return;
     setError(null);
 
     if (!event) return;
@@ -188,6 +189,7 @@ function EventRegister() {
       return;
     }
 
+    checkoutSubmitStartedRef.current = true;
     track(analyticsEvents.registrationSubmitAttempt, {
       slug: event.slug,
       tier: signupType === 'volunteer' ? 'comp' : effectiveTier,

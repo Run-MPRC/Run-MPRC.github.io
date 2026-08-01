@@ -3723,6 +3723,444 @@ describe('public Shop product-load failure boundary', () => {
   });
 });
 
+describe('PAY-SESSION-001B public Checkout one-attempt boundary', () => {
+  const syntheticEvent = {
+    id: 'synthetic-event',
+    slug: 'synthetic-event',
+    title: 'Synthetic Registration Event',
+    description: 'A made-up event used only for this test.',
+    startAt: { toDate: () => new Date('2030-01-12T16:00:00Z') },
+    location: 'Made-up Park',
+    capacity: null,
+    registeredCount: 0,
+    status: 'open',
+    visibility: 'public',
+    pricing: { memberCents: 1000, nonMemberCents: 1500 },
+    customFields: [],
+    volunteerFields: [],
+    volunteerEnabled: false,
+    waiverText: 'Made-up waiver text.',
+  };
+  const syntheticProduct = {
+    id: 'synthetic-product',
+    slug: 'synthetic-product',
+    title: 'Synthetic Product',
+    description: 'A made-up product used only for this test.',
+    imageUrl: '',
+    priceCents: 3000,
+    status: 'active',
+    sizes: [],
+    colors: [],
+  };
+
+  function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+      resolve = resolvePromise;
+    });
+    return { promise, resolve };
+  }
+
+  function fillRaceFields({ acceptWaiver = true } = {}) {
+    fireEvent.change(screen.getByRole('textbox', { name: 'First name *' }), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Last name *' }), {
+      target: { value: 'Runner' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email *' }), {
+      target: { value: 'runner@example.test' },
+    });
+    if (acceptWaiver) {
+      fireEvent.click(screen.getByRole('checkbox', { name: /accept the waiver/i }));
+    }
+  }
+
+  function fillShopFields() {
+    fireEvent.change(screen.getByPlaceholderText('First name'), {
+      target: { value: 'Synthetic' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Last name'), {
+      target: { value: 'Buyer' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Email'), {
+      target: { value: 'buyer@example.test' },
+    });
+  }
+
+  function submitTwice(button) {
+    const form = button.closest('form');
+    expect(form).not.toBeNull();
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    return form;
+  }
+
+  function installCheckoutLocationRecorder() {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+    if (originalDescriptor === undefined) throw new Error('missing synthetic Location descriptor');
+    let assignedHref = window.location.href;
+    const replacement = {
+      get href() {
+        return assignedHref;
+      },
+      set href(value) {
+        assignedHref = String(value);
+      },
+    };
+    Reflect.deleteProperty(window, 'location');
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      enumerable: true,
+      value: replacement,
+    });
+    return {
+      get assignedHref() {
+        return assignedHref;
+      },
+      restore() {
+        Reflect.deleteProperty(window, 'location');
+        Object.defineProperty(window, 'location', originalDescriptor);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+    getEventBySlug.mockResolvedValue(syntheticEvent);
+    getProductBySlug.mockResolvedValue(syntheticProduct);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('admits one race Checkout request and analytics event from two same-act submissions', async () => {
+    const attempt = deferred();
+    createCheckoutSession.mockReturnValue(attempt.promise);
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRaceFields();
+    const button = screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    });
+    const form = submitTwice(button);
+
+    expect(screen.getByRole('button', {
+      name: 'Redirecting to secure checkout...',
+    })).toBeDisabled();
+    fireEvent.submit(form);
+    expect(screen.getByRole('button', {
+      name: 'Redirecting to secure checkout...',
+    })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(createCheckoutSession).toHaveBeenCalledWith(firebaseApp, {
+      eventId: 'synthetic-event',
+      runner: {
+        firstName: 'Synthetic',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+        phone: '',
+        dob: '',
+        shirtSize: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+      },
+      customFields: {},
+      signupType: 'participant',
+      acceptedWaiver: true,
+      priceTier: 'nonMember',
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledWith(analyticsEvents.registrationSubmitAttempt, {
+      slug: 'synthetic-event', tier: 'nonMember', signup_type: 'participant',
+    });
+
+    await act(async () => {
+      attempt.resolve({ free: false, registrationId: 'synthetic-registration' });
+      await attempt.promise;
+    });
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe(EVENT_REGISTER_SUBMIT_FAILURE);
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+  });
+
+  test('admits one merchandise Checkout request from two same-act submissions', async () => {
+    const attempt = deferred();
+    createMerchCheckout.mockReturnValue(attempt.promise);
+    renderPublicProduct();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Synthetic Product' }))
+      .toBeInTheDocument();
+    const initiallyDisabled = screen.getByRole('button', { name: 'Buy — $30.00' });
+    expect(initiallyDisabled).toBeDisabled();
+    fireEvent.click(initiallyDisabled);
+    expect(createMerchCheckout).not.toHaveBeenCalled();
+    fillShopFields();
+    const button = screen.getByRole('button', { name: 'Buy — $30.00' });
+    const form = submitTwice(button);
+
+    expect(screen.getByRole('button', { name: 'Redirecting to checkout...' }))
+      .toBeDisabled();
+    fireEvent.submit(form);
+    expect(screen.getByRole('button', { name: 'Redirecting to checkout...' }))
+      .toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+    expect(createMerchCheckout).toHaveBeenCalledWith(firebaseApp, {
+      productSlug: 'synthetic-product',
+      buyer: {
+        firstName: 'Synthetic',
+        lastName: 'Buyer',
+        email: 'buyer@example.test',
+        phone: '',
+      },
+      size: undefined,
+      color: undefined,
+    });
+    expect(track).not.toHaveBeenCalled();
+
+    await act(async () => {
+      attempt.resolve({ orderId: 'synthetic-order' });
+      await attempt.promise;
+    });
+    expect((await screen.findByRole('alert')).textContent).toBe(SHOP_CHECKOUT_FAILURE);
+    expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves one free participant registration across repeated submissions', async () => {
+    const attempt = deferred();
+    getEventBySlug.mockResolvedValueOnce({
+      ...syntheticEvent,
+      pricing: { memberCents: 0, nonMemberCents: 0 },
+    });
+    createCheckoutSession.mockReturnValue(attempt.promise);
+    lookupRegistration.mockReturnValue(new Promise(() => {}));
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRaceFields();
+    const form = submitTwice(screen.getByRole('button', { name: 'Complete registration' }));
+
+    expect(screen.getByRole('button', {
+      name: 'Redirecting to secure checkout...',
+    })).toBeDisabled();
+    fireEvent.submit(form);
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(createCheckoutSession).toHaveBeenCalledWith(firebaseApp, {
+      eventId: 'synthetic-event',
+      runner: {
+        firstName: 'Synthetic',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+        phone: '',
+        dob: '',
+        shirtSize: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+      },
+      customFields: {},
+      signupType: 'participant',
+      acceptedWaiver: true,
+      priceTier: 'nonMember',
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      attempt.resolve({
+        free: true,
+        registrationId: 'synthetic-free-registration',
+        confirmationToken: 'synthetic-free-confirmation',
+      });
+      await attempt.promise;
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/register/success'));
+    expect(window.location.search).toBe(
+      '?reg=synthetic-free-registration&token=synthetic-free-confirmation&event=synthetic-event',
+    );
+    expect(track).toHaveBeenNthCalledWith(1, analyticsEvents.registrationSubmitAttempt, {
+      slug: 'synthetic-event', tier: 'nonMember', signup_type: 'participant',
+    });
+    expect(track).toHaveBeenNthCalledWith(2, analyticsEvents.registrationCheckoutFree, {
+      slug: 'synthetic-event', tier: 'nonMember',
+    });
+    expect(track).toHaveBeenCalledTimes(2);
+  });
+
+  test('preserves one free volunteer registration without a participant price tier', async () => {
+    const attempt = deferred();
+    getEventBySlug.mockResolvedValueOnce({ ...syntheticEvent, volunteerEnabled: true });
+    createCheckoutSession.mockReturnValue(attempt.promise);
+    lookupRegistration.mockReturnValue(new Promise(() => {}));
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Volunteer for this event' }));
+    fillRaceFields();
+    const form = submitTwice(screen.getByRole('button', { name: 'Sign up to volunteer' }));
+
+    expect(screen.getByRole('button', { name: 'Submitting...' })).toBeDisabled();
+    fireEvent.submit(form);
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(createCheckoutSession).toHaveBeenCalledWith(firebaseApp, {
+      eventId: 'synthetic-event',
+      runner: {
+        firstName: 'Synthetic',
+        lastName: 'Runner',
+        email: 'runner@example.test',
+        phone: '',
+        dob: '',
+        shirtSize: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+      },
+      customFields: {},
+      signupType: 'volunteer',
+      acceptedWaiver: true,
+    });
+    expect(track).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      attempt.resolve({
+        free: true,
+        registrationId: 'synthetic-volunteer-registration',
+        confirmationToken: 'synthetic-volunteer-confirmation',
+      });
+      await attempt.promise;
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/register/success'));
+    expect(track).toHaveBeenNthCalledWith(1, analyticsEvents.registrationSubmitAttempt, {
+      slug: 'synthetic-event', tier: 'comp', signup_type: 'volunteer',
+    });
+    expect(track).toHaveBeenNthCalledWith(2, analyticsEvents.registrationCheckoutFree, {
+      slug: 'synthetic-event', tier: 'nonMember',
+    });
+    expect(track).toHaveBeenCalledTimes(2);
+  });
+
+  test('preserves one paid Checkout link assignment across repeated submissions', async () => {
+    const attempt = deferred();
+    const checkoutUrl = 'https://checkout.stripe.com/synthetic-no-provider-call';
+    createCheckoutSession.mockReturnValue(attempt.promise);
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRaceFields();
+    const form = submitTwice(screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    }));
+    const locationRecorder = installCheckoutLocationRecorder();
+
+    try {
+      expect(screen.getByRole('button', {
+        name: 'Redirecting to secure checkout...',
+      })).toBeDisabled();
+      fireEvent.submit(form);
+      expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+      expect(track).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        attempt.resolve({
+          free: false,
+          registrationId: 'synthetic-paid-registration',
+          url: checkoutUrl,
+        });
+        await attempt.promise;
+      });
+
+      expect(locationRecorder.assignedHref).toBe(checkoutUrl);
+      expect(track).toHaveBeenNthCalledWith(2, analyticsEvents.registrationCheckoutInitiated, {
+        slug: 'synthetic-event', tier: 'nonMember', amount_cents: 1500,
+      });
+      expect(track).toHaveBeenCalledTimes(2);
+      fireEvent.submit(form);
+      expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    } finally {
+      locationRecorder.restore();
+    }
+  });
+
+  test('preserves one merchandise Checkout link assignment across repeated submissions', async () => {
+    const attempt = deferred();
+    const checkoutUrl = 'https://checkout.stripe.com/synthetic-shop-no-provider-call';
+    createMerchCheckout.mockReturnValue(attempt.promise);
+    renderPublicProduct();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Synthetic Product' }))
+      .toBeInTheDocument();
+    fillShopFields();
+    const form = submitTwice(screen.getByRole('button', { name: 'Buy — $30.00' }));
+    const locationRecorder = installCheckoutLocationRecorder();
+
+    try {
+      expect(screen.getByRole('button', { name: 'Redirecting to checkout...' }))
+        .toBeDisabled();
+      fireEvent.submit(form);
+      expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        attempt.resolve({ orderId: 'synthetic-paid-order', url: checkoutUrl });
+        await attempt.promise;
+      });
+
+      expect(locationRecorder.assignedHref).toBe(checkoutUrl);
+      expect(track).not.toHaveBeenCalled();
+      fireEvent.submit(form);
+      expect(createMerchCheckout).toHaveBeenCalledTimes(1);
+    } finally {
+      locationRecorder.restore();
+    }
+  });
+
+  test('does not consume the race attempt before the existing waiver check passes', async () => {
+    const attempt = deferred();
+    createCheckoutSession.mockReturnValue(attempt.promise);
+    renderPublicEventRegister();
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Register for Synthetic Registration Event',
+    })).toBeInTheDocument();
+    fillRaceFields({ acceptWaiver: false });
+    const button = screen.getByRole('button', {
+      name: 'Continue to payment — $15.00',
+    });
+    const form = button.closest('form');
+    expect(form).not.toBeNull();
+
+    fireEvent.submit(form);
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe('You must accept the waiver to register.');
+    expect(createCheckoutSession).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /accept the waiver/i }));
+    fireEvent.submit(form);
+
+    expect(createCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      attempt.resolve({ free: false, registrationId: 'synthetic-registration' });
+      await attempt.promise;
+    });
+  });
+});
+
 describe('Admin Products list-load failure boundary', () => {
   beforeEach(() => {
     useAuth.mockReturnValue({
