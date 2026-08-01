@@ -761,6 +761,31 @@ The PAY-003A5 status check is compatibility evidence, not proof that a refund su
 
 PAY-003A5 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, payment/refund performed, production data changed, and live behavior verified. Source and synthetic tests do not prove any later state. This child performs no website publication, Firebase deployment, provider configuration or retrieval, payment/refund, production-data action, or live verification.
 
+### PAY-003A6 Dispute Event/status admission — SOURCE ONLY, NOT LIVE
+
+PAY-003A6 [#548](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/548) adds one universal pre-target status check for each supported Dispute Event. `charge.dispute.created` and `charge.dispute.updated` continue to accept the existing known statuses `needs_response`, `under_review`, `won`, `lost`, `warning_needs_response`, `warning_under_review`, and `warning_closed`. `charge.dispute.closed` continues to accept only `won`, `lost`, and `warning_closed`. A missing field, `null`, `prevented`, an empty or unknown string, or a non-string value receives the fixed `invalid_dispute_status` processed-review outcome.
+
+The processed-Event ledger check remains first. A new signed Event then passes the outer Event realm check, the embedded Dispute realm check, and the Event/status compatibility check in that order before metadata, references, target resolution, ownership, bindings, money, time, or local-state evaluation. An incompatible status records null target fields. It does not read or change a business record and does not create a Dispute, Charge, or PaymentIntent binding. Its fixed redacted log does not include the hostile status value. An exact rejected replay is read-only and returns the stored outcome. A compatible claimed Event whose target is absent remains retryable with no processed ledger.
+
+```mermaid
+flowchart TD
+    A["Signed supported Dispute Event"] --> B{"Already in the processed-Event ledger?"}
+    B -- "Yes" --> C["Return the stored result without changes"]
+    B -- "No" --> D{"Outer Event realm compatible?"}
+    D -- "No" --> E["Record the earlier fixed outer-realm review"]
+    D -- "Yes" --> F{"Embedded Dispute realm compatible?"}
+    F -- "No" --> G["Record the earlier fixed Dispute-realm review"]
+    F -- "Yes" --> H{"Status allowed for this Event type?"}
+    H -- "No" --> I["Record invalid-status review with no target"]
+    H -- "Yes" --> J["Continue existing metadata, reference, target, binding, money, time, and state checks"]
+```
+
+Text alternative: after a processed-Event replay check, a signed Dispute Event must pass the outer realm, embedded Dispute realm, and Event/status checks in order; incompatible status evidence is recorded for review without a target, while compatible evidence proceeds to the remaining checks.
+
+This admission check proves only that the source accepts an existing Event/status combination. It does not prove provider truth, target ownership, binding consistency, amount, currency, Event time, or a valid local transition. It does not adopt the newer `prevented` value, select or verify the Stripe endpoint API version, retrieve a provider object, reprocess history, migrate data, or complete PAY-003B or PAY-003C. Those items remain separate prerequisites or later work.
+
+PAY-003A6 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, a dispute or payment performed, production data changed, and live behavior verified. Source and synthetic tests do not prove any later state. This child performs no website publication, Firebase deployment, provider configuration or retrieval, dispute/payment, production-data action, or live verification.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines

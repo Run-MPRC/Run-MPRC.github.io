@@ -63,6 +63,12 @@ function isSupportedEventType(type) {
     || DISPUTE_EVENT_TYPES.has(type);
 }
 
+function isCompatibleDisputeStatus(type, status) {
+  return DISPUTE_STATUSES.has(status)
+    && (type !== 'charge.dispute.closed'
+      || DISPUTE_TERMINAL_STATUSES.has(status));
+}
+
 function validateExpectedLivemode(event, expected) {
   if (event.livemode !== expected) {
     return { ok: false, expected, reason: 'livemode_mismatch' };
@@ -141,6 +147,13 @@ function validateEventAdmission(event, expectedLivemode) {
       'dispute_livemode_mismatch',
     );
     if (!disputeRealm.ok) return disputeRealm;
+    if (!isCompatibleDisputeStatus(event.type, event.data?.object?.status)) {
+      return {
+        ok: false,
+        expected: expectedLivemode,
+        reason: 'invalid_dispute_status',
+      };
+    }
   }
   const schemaValidation = validateMetadataSchemaVersion(event, expectedLivemode);
   if (!schemaValidation.ok) return schemaValidation;
@@ -1200,9 +1213,7 @@ function disputeTransition({ event, dispute, target, record }) {
     return reviewTransition({ target, event, reason: 'invalid_dispute_amount' });
   }
   const disputeStatus = dispute.status;
-  if (!DISPUTE_STATUSES.has(disputeStatus)
-    || (event.type === 'charge.dispute.closed'
-      && !DISPUTE_TERMINAL_STATUSES.has(disputeStatus))) {
+  if (!isCompatibleDisputeStatus(event.type, disputeStatus)) {
     return reviewTransition({ target, event, reason: 'invalid_dispute_status' });
   }
   if (!Number.isSafeInteger(event.created) || event.created < 0) {

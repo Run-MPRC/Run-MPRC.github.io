@@ -233,6 +233,51 @@ const INVALID_REFUND_CHARGE_STATUS_CASES = [
   ['object', 'value', {}],
   ['array', 'value', []],
 ];
+const INVALID_DISPUTE_STATUS_CASES = [
+  ['missing', 'delete', undefined],
+  ['null', 'value', null],
+  ['empty string', 'value', ''],
+  ['unknown string', 'value', 'hostile-dispute-status-do-not-log'],
+  ['prevented', 'value', 'prevented'],
+  ['number', 'value', 1],
+  ['boolean', 'value', true],
+  ['object', 'value', {}],
+  ['array', 'value', []],
+];
+const DISPUTE_STATUS_EVENT_CASES = [
+  ['created', 'charge.dispute.created', 'needs_response'],
+  ['updated', 'charge.dispute.updated', 'under_review'],
+  ['closed', 'charge.dispute.closed', 'won'],
+].flatMap(([lifecycle, type, compatibleStatus]) => (
+  INVALID_DISPUTE_STATUS_CASES.map(([evidence, mutation, value]) => [
+    lifecycle,
+    evidence,
+    type,
+    compatibleStatus,
+    mutation,
+    value,
+  ])
+));
+const KNOWN_DISPUTE_STATUSES = [
+  'needs_response',
+  'under_review',
+  'won',
+  'lost',
+  'warning_needs_response',
+  'warning_under_review',
+  'warning_closed',
+];
+const CLOSED_TERMINAL_DISPUTE_STATUSES = ['won', 'lost', 'warning_closed'];
+const CLOSED_NONTERMINAL_DISPUTE_STATUSES = KNOWN_DISPUTE_STATUSES.filter(
+  (status) => !CLOSED_TERMINAL_DISPUTE_STATUSES.includes(status),
+);
+const VALID_DISPUTE_STATUS_EVENT_CASES = [
+  ['created', 'charge.dispute.created', KNOWN_DISPUTE_STATUSES],
+  ['updated', 'charge.dispute.updated', KNOWN_DISPUTE_STATUSES],
+  ['closed', 'charge.dispute.closed', CLOSED_TERMINAL_DISPUTE_STATUSES],
+].flatMap(([lifecycle, type, statuses]) => (
+  statuses.map((status) => [lifecycle, type, status])
+));
 const DISPUTE_REALM_CASES = [
   ['created', 'charge.dispute.created', 'needs_response'],
   ['updated', 'charge.dispute.updated', 'under_review'],
@@ -448,6 +493,11 @@ function setRefundChargeStatus(charge, mutation, value) {
   else charge.status = value;
 }
 
+function setDisputeStatus(dispute, mutation, value) {
+  if (mutation === 'delete') delete dispute.status;
+  else dispute.status = value;
+}
+
 function providerBindingPaths(event) {
   const object = event.data.object;
   const descriptors = [];
@@ -538,6 +588,39 @@ function expectedChargeStatusQuarantine(bindingPaths = []) {
     },
     bindingPaths,
   };
+}
+
+function expectedDisputeStatusQuarantine(bindingPaths = []) {
+  return {
+    httpStatus: null,
+    response: {
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:invalid_dispute_status',
+      requiresReview: true,
+    },
+    businessUnchanged: true,
+    ledger: {
+      status: 'processed',
+      outcome: 'needs_review:invalid_dispute_status',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    },
+    bindingPaths,
+  };
+}
+
+function seedPaidDisputeOrder(overrides = {}) {
+  seedOrder({
+    status: 'paid',
+    paymentStatus: 'paid',
+    stripePaymentIntentId: 'pi_order_1',
+    stripeChargeId: 'ch_order_1',
+    stripeAmountTotalCents: 2000,
+    ...overrides,
+  });
 }
 
 describe('stripeWebhook', () => {
@@ -1633,6 +1716,474 @@ describe('stripeWebhook', () => {
       });
     },
   );
+
+  test.each(DISPUTE_STATUS_EVENT_CASES)(
+    'PAY-003A6 quarantines a %s Dispute with %s status evidence',
+    async (lifecycle, evidence, type, compatibleStatus, mutation, value) => {
+      seedPaidDisputeOrder();
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = evidence.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const event = stripeEvent(
+        `evt_dispute_status_${lifecycle}_${slug}`,
+        type,
+        orderDispute({
+          id: `dp_dispute_status_${lifecycle}_${slug}`,
+          status: compatibleStatus,
+        }),
+      );
+      setDisputeStatus(event.data.object, mutation, value);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeStatusQuarantine());
+      expect(consoleError.mock.calls).toEqual([[
+        'Stripe event requires review',
+        {
+          eventId: event.id,
+          eventType: type,
+          outcome: 'needs_review:invalid_dispute_status',
+          targetType: null,
+        },
+      ]]);
+    },
+  );
+
+  test.each(CLOSED_NONTERMINAL_DISPUTE_STATUSES)(
+    'PAY-003A6 quarantines a closed Dispute with known nonterminal %s status',
+    async (status) => {
+      seedPaidDisputeOrder();
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = status.replace(/[^a-z]+/g, '_');
+      const event = stripeEvent(
+        `evt_dispute_status_closed_${slug}`,
+        'charge.dispute.closed',
+        orderDispute({ id: `dp_dispute_status_closed_${slug}`, status }),
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeStatusQuarantine());
+    },
+  );
+
+  test.each([
+    ['metadata-only claim', {}, {}],
+    [
+      'client-reference-only claim',
+      {
+        metadata: { schemaVersion: '1' },
+        client_reference_id: 'mprc:order:order-1',
+      },
+      {},
+    ],
+    [
+      'matching dual claim',
+      { client_reference_id: 'mprc:order:order-1' },
+      {},
+    ],
+    [
+      'legacy PaymentIntent fallback',
+      { metadata: {} },
+      {},
+    ],
+    [
+      'legacy Charge fallback',
+      { metadata: {}, payment_intent: 'pi_dispute_status_unowned' },
+      { stripePaymentIntentId: null },
+    ],
+  ])('PAY-003A6 blocks an unknown Dispute status on the %s path', async (
+    label,
+    disputePatch,
+    recordPatch,
+  ) => {
+    seedPaidDisputeOrder(recordPatch);
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const event = stripeEvent(
+      `evt_dispute_status_route_${slug}`,
+      'charge.dispute.updated',
+      orderDispute({
+        id: `dp_dispute_status_route_${slug}`,
+        status: 'hostile-dispute-status-do-not-log',
+        ...disputePatch,
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedDisputeStatusQuarantine());
+  });
+
+  test('PAY-003A6 blocks an invalid unmatched Dispute before target handling', async () => {
+    const event = stripeEvent(
+      'evt_dispute_status_unmatched',
+      'charge.dispute.updated',
+      orderDispute({
+        id: 'dp_dispute_status_unmatched',
+        charge: 'ch_dispute_status_unmatched',
+        payment_intent: 'pi_dispute_status_unmatched',
+        metadata: {},
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({ response, event }))
+      .toEqual(expectedDisputeStatusQuarantine());
+  });
+
+  test('PAY-003A6 blocks an invalid Dispute before ambiguous fallback queries', async () => {
+    seedPaidDisputeOrder({ stripePaymentIntentId: 'pi_dispute_status_ambiguous' });
+    seedRegistration({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_dispute_status_ambiguous',
+      stripeChargeId: 'ch_registration_dispute_status_ambiguous',
+      stripeAmountTotalCents: 5000,
+    });
+    const snapshots = [
+      ['orders/order-1', storedCopy('orders/order-1')],
+      [
+        'events/race-1/registrations/reg-1',
+        storedCopy('events/race-1/registrations/reg-1'),
+      ],
+    ];
+    const event = stripeEvent(
+      'evt_dispute_status_ambiguous',
+      'charge.dispute.updated',
+      orderDispute({
+        id: 'dp_dispute_status_ambiguous',
+        charge: 'ch_dispute_status_ambiguous',
+        payment_intent: 'pi_dispute_status_ambiguous',
+        metadata: {},
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: snapshots,
+    })).toEqual(expectedDisputeStatusQuarantine());
+  });
+
+  test('PAY-003A6 blocks invalid status before provider-binding conflict reads', async () => {
+    seedPaidDisputeOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const disputeBindingPath = 'stripeObjectBindings/dispute:dp_dispute_status_binding';
+    admin.__seed(disputeBindingPath, {
+      providerObjectType: 'dispute',
+      providerObjectId: 'dp_dispute_status_binding',
+      targetType: 'registration',
+      targetPath: 'events/other/registrations/other',
+      firstEventId: 'evt_other',
+    });
+    const beforeBinding = storedCopy(disputeBindingPath);
+    const event = stripeEvent(
+      'evt_dispute_status_binding_conflict',
+      'charge.dispute.updated',
+      orderDispute({
+        id: 'dp_dispute_status_binding',
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedDisputeStatusQuarantine([disputeBindingPath]));
+    expect(admin.__get(disputeBindingPath)).toEqual(beforeBinding);
+    expect(admin.__get('stripeObjectBindings/charge:ch_order_1')).toBeUndefined();
+    expect(admin.__get('stripeObjectBindings/payment_intent:pi_order_1')).toBeUndefined();
+  });
+
+  test.each([
+    [
+      'outer Event realm',
+      'livemode_mismatch',
+      (event) => { event.livemode = true; },
+    ],
+    [
+      'embedded Dispute realm',
+      'dispute_livemode_mismatch',
+      (event) => { event.data.object.livemode = true; },
+    ],
+    [
+      'metadata schema',
+      'invalid_dispute_status',
+      (event) => { setMetadataSchema(event.data.object, '2'); },
+    ],
+    [
+      'malformed reference',
+      'invalid_dispute_status',
+      (event) => {
+        Object.assign(event.data.object.metadata, {
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+        });
+      },
+    ],
+  ])('PAY-003A6 keeps %s precedence at the Dispute-status boundary', async (
+    label,
+    reason,
+    mutate,
+  ) => {
+    seedPaidDisputeOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const event = stripeEvent(
+      `evt_dispute_status_precedence_${slug}`,
+      'charge.dispute.updated',
+      orderDispute({
+        id: `dp_dispute_status_precedence_${slug}`,
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+    mutate(event);
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+  });
+
+  test.each([
+    ['object binding', (event) => { event.data.object.object = 'charge'; }],
+    ['currency', (event) => { event.data.object.currency = 'cad'; }],
+    ['amount', (event) => { event.data.object.amount = 0; }],
+    ['Event timestamp', (event) => { event.created = -1; }],
+  ])('PAY-003A6 keeps invalid status ahead of %s evaluation', async (
+    label,
+    mutate,
+  ) => {
+    seedPaidDisputeOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const event = stripeEvent(
+      `evt_dispute_status_later_${slug}`,
+      'charge.dispute.updated',
+      orderDispute({
+        id: `dp_dispute_status_later_${slug}`,
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+    mutate(event);
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedDisputeStatusQuarantine());
+  });
+
+  test('PAY-003A6 processes invalid status before a claimed missing target', async () => {
+    const event = stripeEvent(
+      'evt_dispute_status_invalid_missing_target',
+      'charge.dispute.updated',
+      orderDispute({
+        id: 'dp_dispute_status_invalid_missing_target',
+        charge: 'ch_dispute_status_invalid_missing_target',
+        payment_intent: 'pi_dispute_status_invalid_missing_target',
+        metadata: {
+          schemaVersion: '1',
+          type: 'merch',
+          orderId: 'order-missing',
+        },
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({ response, event }))
+      .toEqual(expectedDisputeStatusQuarantine());
+  });
+
+  test('PAY-003A6 keeps a compatible claimed missing target retryable', async () => {
+    const event = stripeEvent(
+      'evt_dispute_status_compatible_missing_target',
+      'charge.dispute.updated',
+      orderDispute({
+        id: 'dp_dispute_status_compatible_missing_target',
+        charge: 'ch_dispute_status_compatible_missing_target',
+        payment_intent: 'pi_dispute_status_compatible_missing_target',
+        metadata: {
+          schemaVersion: '1',
+          type: 'merch',
+          orderId: 'order-missing',
+        },
+        status: 'under_review',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(admin.__get(`stripeEvents/${event.id}`)).toBeUndefined();
+    providerBindingPaths(event).forEach((path) => {
+      expect(admin.__get(path)).toBeUndefined();
+    });
+  });
+
+  test('PAY-003A6 deduplicates rejected status without mutation or bindings', async () => {
+    seedPaidDisputeOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_dispute_status_replay',
+      'charge.dispute.updated',
+      orderDispute({
+        id: 'dp_dispute_status_replay',
+        status: 'hostile-dispute-status-do-not-log',
+      }),
+    );
+
+    const firstResponse = await deliver(event);
+    const ledgerPath = `stripeEvents/${event.id}`;
+    const afterFirstLedger = storedCopy(ledgerPath);
+    const replayResponse = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response: firstResponse,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedDisputeStatusQuarantine());
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'needs_review:invalid_dispute_status',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+    expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+  });
+
+  test('PAY-003A6 preserves an already-processed Event before status admission', async () => {
+    seedPaidDisputeOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_dispute_status_already_processed',
+      'charge.dispute.updated',
+      orderDispute({ status: 'hostile-dispute-status-do-not-log' }),
+    );
+    const ledgerPath = `stripeEvents/${event.id}`;
+    admin.__seed(ledgerPath, {
+      status: 'processed',
+      outcome: 'legacy_processed_outcome',
+      targetPath: 'orders/legacy-target',
+      sentinel: { preserve: true },
+    });
+    const beforeLedger = storedCopy(ledgerPath);
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'legacy_processed_outcome',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+    expect(admin.__get(ledgerPath)).toEqual(beforeLedger);
+    providerBindingPaths(event).forEach((path) => {
+      expect(admin.__get(path)).toBeUndefined();
+    });
+  });
+
+  test.each(VALID_DISPUTE_STATUS_EVENT_CASES)(
+    'PAY-003A6 admits a compatible %s Dispute lifecycle with %s status',
+    async (
+    lifecycle,
+    type,
+    status,
+  ) => {
+    seedPaidDisputeOrder();
+    const slug = status.replace(/[^a-z]+/g, '_');
+    const event = stripeEvent(
+      `evt_dispute_status_compatible_${lifecycle}_${slug}`,
+      type,
+      orderDispute({ id: `dp_dispute_status_compatible_${lifecycle}_${slug}`, status }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: `dispute_${status}`,
+    }));
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      disputeStatus: status,
+      stripeDisputeId: `dp_dispute_status_compatible_${lifecycle}_${slug}`,
+    });
+    },
+  );
+
+  test.each([
+    [
+      'PaymentIntent',
+      { metadata: {} },
+      {},
+      'payment_intent_query',
+    ],
+    [
+      'Charge',
+      { metadata: {}, payment_intent: 'pi_dispute_status_positive_unowned' },
+      { stripePaymentIntentId: null },
+      'charge_query',
+    ],
+  ])('PAY-003A6 admits compatible legacy %s fallback', async (
+    label,
+    disputePatch,
+    recordPatch,
+    targetSource,
+  ) => {
+    seedPaidDisputeOrder(recordPatch);
+    const slug = label.toLowerCase();
+    const event = stripeEvent(
+      `evt_dispute_status_positive_${slug}`,
+      'charge.dispute.updated',
+      orderDispute({
+        id: `dp_dispute_status_positive_${slug}`,
+        status: 'under_review',
+        ...disputePatch,
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'dispute_under_review',
+    }));
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      targetSource,
+      targetPath: 'orders/order-1',
+    });
+  });
 
   test('quarantines an incompatible claimed Dispute before resolving its missing target', async () => {
     const event = stripeEvent(
@@ -3821,14 +4372,22 @@ describe('stripeWebhook', () => {
       metadata: { type: 'merch', orderId: 'order-1' },
       ...disputePatch,
     };
-
-    await deliver(stripeEvent(
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
       `evt_dispute_${reason}_${_label.replaceAll(' ', '_')}`,
       'charge.dispute.updated',
       dispute,
-    ));
+    );
 
-    expect(admin.__get('orders/order-1')).toMatchObject({
+    const response = await deliver(event);
+
+    if (reason === 'invalid_dispute_status') {
+      expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+      return;
+    }
+
+    expect(admin.__get(businessPath)).toMatchObject({
       status: 'paid',
       paymentReviewRequired: true,
       paymentReviewReason: reason,
@@ -3858,19 +4417,22 @@ describe('stripeWebhook', () => {
       reason: 'fraudulent',
       metadata: { type: 'merch', orderId: 'order-1' },
     };
-
-    await deliver(stripeEvent(
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
       'evt_closed_missing_status',
       'charge.dispute.closed',
       dispute,
-    ));
+    );
 
-    expect(admin.__get('orders/order-1')).toMatchObject({
-      status: 'paid',
-      paymentReviewReason: 'invalid_dispute_status',
-    });
-    expect(admin.__get('stripeEvents/evt_closed_missing_status')).toMatchObject({
-      outcome: 'needs_review:invalid_dispute_status',
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response,
+      event,
+      businessPath,
+      before,
+      reason: 'invalid_dispute_status',
     });
   });
 
