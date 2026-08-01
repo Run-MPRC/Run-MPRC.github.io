@@ -853,6 +853,50 @@ Residual work remains under PAY-003A9 and #106: embedded refund Charge-created a
 
 PAY-003A8 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only boundary adds no officer screen, task, field, permission, approval, topology, or available recovery step. `SYSTEM_DESIGN.md`, `SECURITY.md`, `IMPLEMENTATION_PLAN.md`, `OPERATIONS_RUNBOOK.md`, `GITHUB_ISSUES.md`, and the officer guides remain compatible.
 
+### PAY-003A9 Refund Charge-created admission — SOURCE ONLY, NOT LIVE
+
+PAY-003A9 [#578](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/578) closes PAY-003A8's embedded-refund-time residual. Its purpose is to reject unusable `Charge.created` evidence on a new `charge.refunded` Event before any reference or fallback Firestore query, business-record read or change, provider-binding work, money check, or business-state transition. The embedded value must be a primitive safe integer from Unix epoch second `0` through Firestore maximum second `253402300799`, inclusive. A valid refund uses that provider time for a missing `paidAt`; it never invents payment time from the current server clock. An existing `paidAt` remains unchanged, but it cannot bypass admission.
+
+Approvers for this source boundary are the platform owner and payment reviewer. Prerequisites are verified webhook signature handling, the processed-Event ledger, PAY-003A5 Charge realm/status admission, PAY-003A8 outer Event-time admission, synthetic signed fixtures, and the existing nullable ledger fields. A new refund Event keeps this order:
+
+1. Return an exact processed-Event replay without changing its stored result.
+2. Check the outer Event realm.
+3. Check the embedded Charge realm.
+4. Require the exact Charge status `succeeded`.
+5. Check an explicit claimed-MPRC metadata schema version.
+6. Check the outer Event-created value.
+7. Check the embedded Charge-created value.
+8. Only then resolve a reference or fallback, inspect ownership and bindings, evaluate money and state, and persist the result.
+
+Missing, `null`, boolean, string, object, array, fractional, non-finite, negative, unsafe, or above-range Charge time produces durable `needs_review:invalid_charge_created`. The ledger keeps the valid outer `stripeCreatedAt` but has null target fields. The handler performs only the normal two new-Event ledger reads. It does not query a target or fallback, read or change a business record, or read or create a Charge or PaymentIntent binding. The fixed review log names only the Event ID, Event type, outcome, and null target type. It never contains the rejected value. An exact replay returns the stored result read-only.
+
+Earlier outer or embedded realm, Charge-status, metadata-version, and outer Event-time failures keep their existing outcomes. The metadata-version check and ledger ownership fields may use the existing pure in-memory reference classifier, but full malformed or unrelated reference handling remains later. Invalid Charge time therefore wins before any reference or fallback Firestore query. A valid claimed Event whose target is absent keeps the existing retryable behavior and writes no processed ledger.
+
+```mermaid
+flowchart TD
+    A["Verified charge.refunded Event"] --> B{"Already in the processed-Event ledger?"}
+    B -- "Yes" --> C["Return the stored result without changes"]
+    B -- "No" --> D{"Realm, Charge status, and metadata version pass?"}
+    D -- "No" --> E["Keep the earlier fixed review result"]
+    D -- "Yes" --> F{"Outer Event-created is valid?"}
+    F -- "No" --> G["Record invalid Event-time review"]
+    F -- "Yes" --> H{"Embedded Charge-created is an integer from 0 through 253402300799?"}
+    H -- "No" --> I["Record invalid Charge-time review with no target"]
+    H -- "Yes" --> J["Continue target, binding, money, and state work"]
+```
+
+Text alternative: replay returns an existing ledger result first; a new refund keeps earlier realm, status, metadata, and outer Event-time outcomes, then rejects unusable embedded Charge time without target work, while valid time may continue to normal refund processing.
+
+The expected result is target-free durable review for unusable embedded time and unchanged refund behavior for valid representable time. Success proof requires signed synthetic cases for both registration and order targets across every hostile shape and bound; honest labels for JSON-normalized `NaN` and infinity; a separately labeled mocked post-parser Proxy control; existing-`paidAt`, fallback, malformed-reference, missing-target, earlier-precedence, replay, lower/upper-bound, and non-refund compatibility controls; exact read isolation; fixed redacted logs; and proof that rejected values reach neither `Timestamp.fromMillis()` nor `Timestamp.now()`. The complete webhook suite and prior PAY-003A5/A8 matrices must remain green.
+
+Stop the merge if invalid Charge time reaches a target or fallback query, binding, business mutation, timestamp construction, log, response detail, or ledger detail; if an earlier outcome changes; if either valid boundary regresses; if current time is again substituted for missing provider evidence; or if a test needs a real credential, provider object, refund/payment, customer/member record, or production service. Escalate to the platform owner and payment reviewer. Undo is one small reviewed revert of the PAY-003A9 predicate/admission and refund-time projection, tests, and this named section. Do not edit a provider object, processed ledger, or business record as an undo path.
+
+There is no schema, Rule, index, package, workflow, stored-data migration, or backfill. Valid Events, earlier admission precedence, target resolution, bindings, money checks, refund transitions, and existing `paidAt` values remain compatible. Invalid embedded time changes from target-capable behavior, fabricated current time, or an above-range retrying `500` to durable pre-target review. Already-processed historical Events remain authoritative on replay. Previously stored `paidAt` values are not inspected or repaired.
+
+Residual work remains under #106: clock-skew and freshness policy, Charge/Event chronology, Checkout Session and Dispute embedded-time decisions, provider endpoint/API-version proof, provider retrieval and history repair, PAY-003B/C, reconciliation, alerts, protected release, and live verification. This child proves no provider truth, payment/refund success, historical correctness, or production behavior.
+
+PAY-003A9 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only evidence boundary adds no officer screen, task, field, permission, approval, topology, or available recovery step. The root design, security, implementation, operations, issue, and officer guides remain compatible.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines
