@@ -709,7 +709,7 @@ Text alternative: a valid unpaid failure or expiry still cancels a pending order
 
 At minimum verify:
 
-- Outer Event and embedded Checkout Session `livemode` are booleans and both match the expected deployment mode.
+- The outer Event `livemode` matches the expected deployment mode. For Checkout Events, the embedded Checkout Session `livemode` is a primitive boolean equal to both the outer Event and the expected mode. For `charge.refunded`, apply the same rule to the embedded [Charge](https://docs.stripe.com/api/charges/object?api-version=2024-06-20). For `charge.dispute.created`, `charge.dispute.updated`, and `charge.dispute.closed`, apply it to the embedded [Dispute](https://docs.stripe.com/api/disputes/object).
 - Checkout Session lifecycle `status` matches the Event: `complete` for completion and delayed-payment outcomes; `expired` for expiration.
 - Session `mode` and object type.
 - Metadata schema and local record reference.
@@ -721,6 +721,10 @@ At minimum verify:
 - PaymentIntent is not already attached to another local business record.
 
 PAY-003A2 [#520](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/520) applies the first two checks before target resolution in the legacy webhook source. Missing, malformed, or contradictory Session evidence receives a fixed processed-review ledger result without a business-record query or change and without a provider binding. Record source changed, tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, a payment performed, production data changed, and live behavior verified as separate states. The repository diff and synthetic tests do not by themselves prove any merged, published, deployed, provider, payment, production-data, or live state. This child does not select a Stripe API version or configure a provider endpoint.
+
+PAY-003A3 [#526](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/526) extends only the pre-target realm check to the embedded Charge for `charge.refunded` and the embedded Dispute for the three supported dispute Events. An opposite boolean, missing field, `null`, string, or number receives the fixed `charge_livemode_mismatch` or `dispute_livemode_mismatch` processed-review outcome. The outer Event/configuration mismatch keeps first precedence. Admission failure leaves the business record byte-for-byte unchanged, records null target fields, creates no Charge, PaymentIntent, or Dispute binding, and deduplicates an exact replay. A compatible claimed Event with no target remains retryable. This does not narrow refund or dispute lifecycle states, infer realm from an ID, select an API version, or reprocess historical Events.
+
+PAY-003A3 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, payment/refund/dispute performed, production data changed, and live behavior verified. A repository diff and synthetic tests prove only their named source and test states. They do not prove a merge, website publication, Firebase deployment, provider configuration, payment/refund/dispute, production-data change, or live behavior.
 
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
@@ -900,6 +904,7 @@ Every commerce release must cover:
 - Duplicate and out-of-order webhook events.
 - Invalid signature and wrong webhook secret.
 - Wrong outer or embedded livemode, Event/Session lifecycle mismatch, amount, currency, metadata, Session, or PaymentIntent.
+- Embedded-realm admission matrix: opposite boolean, missing, `null`, string, and number for the refund Charge and each supported dispute Event; assert a target-null ledger, unchanged registration/order, no provider binding, deterministic replay, outer-mismatch precedence, missing-target retry behavior, and the existing valid refund/dispute paths.
 - `completed` with unpaid/processing status.
 - Async payment success and failure.
 - Session expiry and local cancellation with Stripe expiry.

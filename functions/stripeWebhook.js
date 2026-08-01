@@ -70,28 +70,38 @@ function validateExpectedLivemode(event, expected) {
   return { ok: true, expected };
 }
 
+function validateEmbeddedLivemode(event, expected, reason) {
+  const object = event.data?.object;
+  if (typeof object?.livemode !== 'boolean'
+    || object.livemode !== event.livemode
+    || object.livemode !== expected) {
+    return { ok: false, expected, reason };
+  }
+  return { ok: true, expected };
+}
+
 function validateEventAdmission(event, expectedLivemode) {
   const modeValidation = validateExpectedLivemode(event, expectedLivemode);
-  if (!modeValidation.ok || !CHECKOUT_EVENT_TYPES.has(event.type)) {
-    return modeValidation;
-  }
+  if (!modeValidation.ok) return modeValidation;
 
-  const session = event.data?.object;
-  if (typeof session?.livemode !== 'boolean'
-    || session.livemode !== event.livemode
-    || session.livemode !== expectedLivemode) {
-    return {
-      ok: false,
-      expected: expectedLivemode,
-      reason: 'checkout_session_livemode_mismatch',
-    };
-  }
-  if (session.status !== CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE.get(event.type)) {
-    return {
-      ok: false,
-      expected: expectedLivemode,
-      reason: 'checkout_session_status_mismatch',
-    };
+  if (CHECKOUT_EVENT_TYPES.has(event.type)) {
+    const sessionRealm = validateEmbeddedLivemode(
+      event,
+      expectedLivemode,
+      'checkout_session_livemode_mismatch',
+    );
+    if (!sessionRealm.ok) return sessionRealm;
+    if (event.data?.object?.status !== CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE.get(event.type)) {
+      return {
+        ok: false,
+        expected: expectedLivemode,
+        reason: 'checkout_session_status_mismatch',
+      };
+    }
+  } else if (event.type === 'charge.refunded') {
+    return validateEmbeddedLivemode(event, expectedLivemode, 'charge_livemode_mismatch');
+  } else if (DISPUTE_EVENT_TYPES.has(event.type)) {
+    return validateEmbeddedLivemode(event, expectedLivemode, 'dispute_livemode_mismatch');
   }
   return modeValidation;
 }

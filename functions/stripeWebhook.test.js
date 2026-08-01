@@ -199,9 +199,42 @@ const CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE = Object.freeze({
   'checkout.session.async_payment_failed': 'complete',
   'checkout.session.expired': 'expired',
 });
+const PROVIDER_OBJECT_REALM_EVENT_TYPES = new Set([
+  'charge.refunded',
+  'charge.dispute.created',
+  'charge.dispute.updated',
+  'charge.dispute.closed',
+]);
+const INVALID_EMBEDDED_LIVEMODE_CASES = [
+  ['opposite boolean', 'value', true],
+  ['missing', 'delete', undefined],
+  ['null', 'value', null],
+  ['string', 'value', 'false'],
+  ['number', 'value', 0],
+];
+const DISPUTE_REALM_CASES = [
+  ['created', 'charge.dispute.created', 'needs_response'],
+  ['updated', 'charge.dispute.updated', 'under_review'],
+  ['closed', 'charge.dispute.closed', 'won'],
+].flatMap(([lifecycle, type, status]) => (
+  INVALID_EMBEDDED_LIVEMODE_CASES.map(([evidence, mutation, value]) => [
+    lifecycle,
+    evidence,
+    type,
+    status,
+    mutation,
+    value,
+  ])
+));
 
 function stripeEvent(id, type, object) {
   const checkoutStatus = CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE[type];
+  let providerObject = object;
+  if (checkoutStatus) {
+    providerObject = { livemode: false, status: checkoutStatus, ...object };
+  } else if (PROVIDER_OBJECT_REALM_EVENT_TYPES.has(type)) {
+    providerObject = { livemode: false, ...object };
+  }
   return {
     id,
     object: 'event',
@@ -212,9 +245,7 @@ function stripeEvent(id, type, object) {
     request: null,
     type,
     data: {
-      object: checkoutStatus
-        ? { livemode: false, status: checkoutStatus, ...object }
-        : object,
+      object: providerObject,
     },
   };
 }
@@ -274,6 +305,35 @@ function orderSession(overrides = {}) {
         country: 'US',
       },
     },
+    ...overrides,
+  };
+}
+
+function orderRefundCharge(overrides = {}) {
+  return {
+    id: 'ch_order_realm',
+    object: 'charge',
+    payment_intent: 'pi_order_1',
+    amount: 2000,
+    amount_refunded: 500,
+    currency: 'usd',
+    metadata: { type: 'merch', orderId: 'order-1' },
+    refunds: { data: [{ id: 're_order_realm' }] },
+    ...overrides,
+  };
+}
+
+function orderDispute(overrides = {}) {
+  return {
+    id: 'dp_order_realm',
+    object: 'dispute',
+    charge: 'ch_order_1',
+    payment_intent: 'pi_order_1',
+    amount: 2000,
+    currency: 'usd',
+    reason: 'fraudulent',
+    status: 'needs_response',
+    metadata: { type: 'merch', orderId: 'order-1' },
     ...overrides,
   };
 }
@@ -341,6 +401,26 @@ function storedCopy(path) {
   return JSON.parse(JSON.stringify(admin.__get(path)));
 }
 
+function providerBindingPaths(event) {
+  const object = event.data.object;
+  const descriptors = [];
+  if (CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE[event.type]) {
+    descriptors.push(['checkout_session', object.id]);
+    descriptors.push(['payment_intent', object.payment_intent]);
+    descriptors.push(['payment_link', object.payment_link]);
+  } else if (event.type === 'charge.refunded') {
+    descriptors.push(['charge', object.id]);
+    descriptors.push(['payment_intent', object.payment_intent]);
+  } else if (event.type.startsWith('charge.dispute.')) {
+    descriptors.push(['dispute', object.id]);
+    descriptors.push(['charge', object.charge]);
+    descriptors.push(['payment_intent', object.payment_intent]);
+  }
+  return descriptors
+    .filter(([, id]) => typeof id === 'string' && id.length > 0)
+    .map(([type, id]) => `stripeObjectBindings/${type}:${id}`);
+}
+
 function expectCompatibilityQuarantine({ response, event, businessPath, before, reason }) {
   expect(response.status).not.toHaveBeenCalled();
   expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -358,12 +438,9 @@ function expectCompatibilityQuarantine({ response, event, businessPath, before, 
     targetPath: null,
     targetSource: null,
   });
-  expect(admin.__get(
-    `stripeObjectBindings/checkout_session:${event.data.object.id}`,
-  )).toBeUndefined();
-  expect(admin.__get(
-    `stripeObjectBindings/payment_intent:${event.data.object.payment_intent}`,
-  )).toBeUndefined();
+  providerBindingPaths(event).forEach((path) => {
+    expect(admin.__get(path)).toBeUndefined();
+  });
 }
 
 describe('stripeWebhook', () => {
@@ -919,6 +996,188 @@ describe('stripeWebhook', () => {
       received: true,
       duplicate: true,
       outcome: 'needs_review:checkout_session_status_mismatch',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+  });
+
+  test.each(INVALID_EMBEDDED_LIVEMODE_CASES)(
+    'quarantines a refund Charge with %s embedded livemode evidence',
+    async (label, mutation, value) => {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = label.replace(/[^a-z]+/g, '_');
+      const event = stripeEvent(
+        `evt_charge_livemode_${slug}`,
+        'charge.refunded',
+        orderRefundCharge({ id: `ch_charge_livemode_${slug}` }),
+      );
+      if (mutation === 'delete') delete event.data.object.livemode;
+      else event.data.object.livemode = value;
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({
+        response,
+        event,
+        businessPath,
+        before,
+        reason: 'charge_livemode_mismatch',
+      });
+    },
+  );
+
+  test.each(DISPUTE_REALM_CASES)(
+    'quarantines a %s Dispute with %s embedded livemode evidence',
+    async (lifecycle, evidence, type, status, mutation, value) => {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeChargeId: 'ch_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = evidence.replace(/[^a-z]+/g, '_');
+      const event = stripeEvent(
+        `evt_dispute_${lifecycle}_livemode_${slug}`,
+        type,
+        orderDispute({ id: `dp_${lifecycle}_livemode_${slug}`, status }),
+      );
+      if (mutation === 'delete') delete event.data.object.livemode;
+      else event.data.object.livemode = value;
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({
+        response,
+        event,
+        businessPath,
+        before,
+        reason: 'dispute_livemode_mismatch',
+      });
+    },
+  );
+
+  test('quarantines an incompatible claimed Dispute before resolving its missing target', async () => {
+    const event = stripeEvent(
+      'evt_dispute_missing_target',
+      'charge.dispute.created',
+      orderDispute({
+        id: 'dp_incompatible_missing_target',
+        charge: 'ch_incompatible_missing_target',
+        payment_intent: 'pi_incompatible_missing_target',
+        metadata: { type: 'merch', orderId: 'order-missing' },
+        livemode: true,
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.status).not.toHaveBeenCalled();
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:dispute_livemode_mismatch',
+      requiresReview: true,
+    }));
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      status: 'processed',
+      outcome: 'needs_review:dispute_livemode_mismatch',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    });
+    providerBindingPaths(event).forEach((path) => {
+      expect(admin.__get(path)).toBeUndefined();
+    });
+  });
+
+  test.each([
+    [
+      'Charge',
+      'charge.refunded',
+      orderRefundCharge({ livemode: null }),
+    ],
+    [
+      'Dispute',
+      'charge.dispute.updated',
+      orderDispute({ status: 'under_review', livemode: null }),
+    ],
+  ])('keeps the configured Event livemode mismatch ahead of embedded %s contradictions', async (
+    label,
+    type,
+    object,
+  ) => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeChargeId: 'ch_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(`evt_outer_precedence_${label.toLowerCase()}`, type, object);
+    event.livemode = true;
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response,
+      event,
+      businessPath,
+      before,
+      reason: 'livemode_mismatch',
+    });
+  });
+
+  test('deduplicates an incompatible refund Charge without target or binding mutation', async () => {
+    seedRegistration({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_reg_1',
+      stripeAmountTotalCents: 5000,
+    });
+    const businessPath = 'events/race-1/registrations/reg-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_refund_charge_realm_replay',
+      'charge.refunded',
+      {
+        id: 'ch_registration_replay',
+        object: 'charge',
+        payment_intent: 'pi_reg_1',
+        amount: 5000,
+        amount_refunded: 500,
+        currency: 'usd',
+        metadata: { eventId: 'race-1', registrationId: 'reg-1' },
+        refunds: { data: [{ id: 're_registration_replay' }] },
+        livemode: true,
+      },
+    );
+
+    const firstResponse = await deliver(event);
+    const replayResponse = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response: firstResponse,
+      event,
+      businessPath,
+      before,
+      reason: 'charge_livemode_mismatch',
+    });
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'needs_review:charge_livemode_mismatch',
     }));
     expect(admin.__get(businessPath)).toEqual(before);
   });
