@@ -214,7 +214,7 @@ test('Netlify manifest pins the exact prior website artifact for rollback', () =
   assert.equal(loaded.manifest.issueNumber, 473);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    '52fd426662c3d814044aa55eb6104ea1464a5bc6',
+    '40728ff6141e34a279b70cc41d983c22ac5f0daa',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
@@ -230,7 +230,7 @@ test('Netlify manifest pins the exact prior website artifact for rollback', () =
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
-    '6a61c544171ea80008307623',
+    '6a6dc0167fbe68000816b448',
   );
   assert.equal(
     loaded.manifest.sourceRef,
