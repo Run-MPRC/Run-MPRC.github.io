@@ -608,6 +608,202 @@ describe('LoginForm return navigation', () => {
   });
 });
 
+describe('AUTH-006C email/password one-attempt submissions', () => {
+  const signIn = jest.fn();
+  const register = jest.fn();
+  const sendPasswordReset = jest.fn();
+
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, reject, resolve };
+  }
+
+  function prepareCredentials({ initialEntry = '/login', registering = false } = {}) {
+    renderLogin(initialEntry);
+    if (registering) {
+      fireEvent.click(screen.getByRole('button', { name: 'New here? Register' }));
+    }
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'synthetic-member@example.test' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'synthetic-password' },
+    });
+    return screen.getByRole('button', {
+      name: registering ? 'Create account' : 'Sign in',
+    }).closest('form');
+  }
+
+  function submitRapidly(form) {
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    signIn.mockReset();
+    register.mockReset();
+    sendPasswordReset.mockReset();
+    signIn.mockResolvedValue({ user: { email: 'synthetic-member@example.test' } });
+    register.mockResolvedValue({
+      user: { email: 'synthetic-member@example.test' },
+      verificationEmailRequest: 'accepted',
+    });
+    sendPasswordReset.mockResolvedValue(undefined);
+    useServiceLocator.mockReturnValue({
+      isReady: true,
+      services: {
+        identityService: { signIn, register, sendPasswordReset },
+      },
+    });
+    useAuth.mockReturnValue({
+      isLoading: false,
+      isAuthenticated: false,
+      isAdmin: false,
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('admits one sign-in request from two same-act submissions', async () => {
+    const attempt = deferred();
+    signIn.mockReturnValue(attempt.promise);
+    const form = prepareCredentials({
+      initialEntry: {
+        pathname: '/login',
+        state: { from: '/discounts?kind=race#active' },
+      },
+    });
+
+    submitRapidly(form);
+
+    expect(screen.getByRole('button', { name: 'Working...' })).toBeDisabled();
+    expect(screen.getByLabelText('Email address')).toBeDisabled();
+    expect(screen.getByLabelText('Password')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'New here? Register' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeDisabled();
+    await act(async () => {
+      attempt.resolve({ user: { email: 'synthetic-member@example.test' } });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText('Discounts destination')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/discounts?kind=race#active');
+    expect(signIn).toHaveBeenCalledTimes(1);
+    expect(signIn).toHaveBeenCalledWith(
+      'synthetic-member@example.test',
+      'synthetic-password',
+    );
+    expect(register).not.toHaveBeenCalled();
+    expect(sendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  test('admits one registration request from two same-act submissions', async () => {
+    const attempt = deferred();
+    register.mockReturnValue(attempt.promise);
+    const form = prepareCredentials({ registering: true });
+
+    submitRapidly(form);
+
+    expect(screen.getByRole('button', { name: 'Working...' })).toBeDisabled();
+    expect(screen.getByLabelText('Email address')).toBeDisabled();
+    expect(screen.getByLabelText('Password')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Have an account? Sign in' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Forgot password?' })).not.toBeInTheDocument();
+    await act(async () => {
+      attempt.resolve({
+        user: { email: 'synthetic-member@example.test' },
+        verificationEmailRequest: 'accepted',
+      });
+      await Promise.resolve();
+    });
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Account created.');
+    expect(status).toHaveTextContent('accepted the verification email request');
+    expect(status).toHaveFocus();
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register).toHaveBeenCalledWith(
+      'synthetic-member@example.test',
+      'synthetic-password',
+    );
+    expect(signIn).not.toHaveBeenCalled();
+    expect(sendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  test('lets a later deliberate sign-in submission start one new request', async () => {
+    signIn
+      .mockRejectedValueOnce(new Error('synthetic sign-in provider detail'))
+      .mockResolvedValueOnce({ user: { email: 'synthetic-member@example.test' } });
+    const form = prepareCredentials();
+
+    fireEvent.submit(form);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to authenticate. Please check your credentials and try again.',
+    );
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+    expect(document.body).not.toHaveTextContent('synthetic sign-in provider detail');
+    fireEvent.submit(form);
+
+    expect(await screen.findByText('Account destination')).toBeInTheDocument();
+    expect(signIn).toHaveBeenCalledTimes(2);
+    expect(signIn).toHaveBeenNthCalledWith(
+      1,
+      'synthetic-member@example.test',
+      'synthetic-password',
+    );
+    expect(signIn).toHaveBeenNthCalledWith(
+      2,
+      'synthetic-member@example.test',
+      'synthetic-password',
+    );
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  test('lets a later deliberate registration submission start one new request', async () => {
+    register
+      .mockRejectedValueOnce(new Error('synthetic registration provider detail'))
+      .mockResolvedValueOnce({
+        user: { email: 'synthetic-member@example.test' },
+        verificationEmailRequest: 'accepted',
+      });
+    const form = prepareCredentials({ registering: true });
+
+    fireEvent.submit(form);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not create the account. Please try again.',
+    );
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeEnabled();
+    expect(document.body).not.toHaveTextContent('synthetic registration provider detail');
+    fireEvent.submit(form);
+
+    expect(await screen.findByText('Account created.')).toBeInTheDocument();
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(register).toHaveBeenNthCalledWith(
+      1,
+      'synthetic-member@example.test',
+      'synthetic-password',
+    );
+    expect(register).toHaveBeenNthCalledWith(
+      2,
+      'synthetic-member@example.test',
+      'synthetic-password',
+    );
+    expect(signIn).not.toHaveBeenCalled();
+  });
+});
+
 describe('LoginForm account-email spam guidance (AUTH-MAIL-002 C6)', () => {
   const ENV_KEY = 'REACT_APP_ACCOUNT_EMAIL_SENDER';
   const originalSender = process.env[ENV_KEY];
