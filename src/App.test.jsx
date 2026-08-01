@@ -6263,6 +6263,298 @@ describe('Admin Events list-load failure boundary', () => {
   });
 });
 
+describe('WEB-PRIVACY-001Z Admin Events current-context lifecycle', () => {
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, reject, resolve };
+  }
+
+  function syntheticListedEvent({
+    id = 'synthetic-listed-event',
+    slug = id,
+    title = 'Synthetic Listed Event',
+  } = {}) {
+    return {
+      id,
+      slug,
+      title,
+      startAt: { toDate: () => new Date(2030, 0, 12, 12, 0) },
+      capacity: 20,
+      registeredCount: 7,
+      status: 'open',
+      visibility: 'public',
+      pricing: { memberCents: 1000, nonMemberCents: 1500 },
+    };
+  }
+
+  function configureAdminEventsContext({
+    database = firestore,
+    ready = true,
+    servicesAvailable = true,
+  } = {}) {
+    useServiceLocator.mockReturnValue({
+      services: servicesAvailable ? { firebaseResources: { firestore: database } } : null,
+      isReady: ready,
+    });
+  }
+
+  function expectEventResultsHidden() {
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Create the first one' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Signups' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument();
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    configureAdminEventsContext();
+    listAllEvents.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    ['readiness is lost', { ready: false }],
+    ['services are missing', { servicesAvailable: false }],
+    ['the database is missing', { database: null }],
+  ])('hides an earlier table immediately when %s', async (_label, unavailableContext) => {
+    const titleGetter = jest.fn(() => 'Earlier Synthetic Event');
+    const earlierEvent = Object.defineProperty(syntheticListedEvent(), 'title', {
+      configurable: true,
+      get: titleGetter,
+    });
+    listAllEvents.mockResolvedValueOnce([earlierEvent]);
+    const view = renderAdminEvents();
+    expect(await screen.findByText('Earlier Synthetic Event')).toBeInTheDocument();
+    titleGetter.mockClear();
+
+    configureAdminEventsContext(unavailableContext);
+    view.rerender(<App />);
+
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Synthetic Event')).not.toBeInTheDocument();
+    expectEventResultsHidden();
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+  });
+
+  test('starts no lookup before a complete ready database context exists', async () => {
+    configureAdminEventsContext({ database: null });
+
+    renderAdminEvents();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Events' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectEventResultsHidden();
+    expect(listAllEvents).not.toHaveBeenCalled();
+  });
+
+  test('does not reload when only the services wrapper changes', async () => {
+    listAllEvents.mockResolvedValueOnce([syntheticListedEvent()]);
+    const view = renderAdminEvents();
+    expect(await screen.findByText('Synthetic Listed Event')).toBeInTheDocument();
+
+    listAllEvents.mockReturnValueOnce(new Promise(() => {}));
+    configureAdminEventsContext();
+    view.rerender(<App />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('Synthetic Listed Event')).toBeInTheDocument();
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenCalledTimes(1);
+    expect(listAllEvents).toHaveBeenCalledWith(firestore);
+  });
+
+  test('hides earlier events while a changed-database lookup is pending', async () => {
+    const titleGetter = jest.fn(() => 'Earlier Database Event');
+    const earlierEvent = Object.defineProperty(syntheticListedEvent(), 'title', {
+      configurable: true,
+      get: titleGetter,
+    });
+    listAllEvents.mockResolvedValueOnce([earlierEvent]);
+    const view = renderAdminEvents();
+    expect(await screen.findByText('Earlier Database Event')).toBeInTheDocument();
+    titleGetter.mockClear();
+
+    const currentLookup = deferred();
+    listAllEvents.mockReturnValueOnce(currentLookup.promise);
+    const currentFirestore = { name: 'synthetic-current-events-firestore' };
+    configureAdminEventsContext({ database: currentFirestore });
+    view.rerender(<App />);
+
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Database Event')).not.toBeInTheDocument();
+    expectEventResultsHidden();
+    await waitFor(() => expect(listAllEvents).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Database Event')).not.toBeInTheDocument();
+    expectEventResultsHidden();
+
+    await act(async () => {
+      currentLookup.resolve([syntheticListedEvent({
+        id: 'synthetic-current-event',
+        title: 'Current Database Event',
+      })]);
+    });
+    expect(await screen.findByText('Current Database Event')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Database Event')).not.toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllEvents).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('treats ready to not-ready to ready as distinct attempts for one database', async () => {
+    const titleGetter = jest.fn(() => 'Earlier Ready Event');
+    const earlierEvent = Object.defineProperty(syntheticListedEvent(), 'title', {
+      configurable: true,
+      get: titleGetter,
+    });
+    listAllEvents.mockResolvedValueOnce([earlierEvent]);
+    const view = renderAdminEvents();
+    expect(await screen.findByText('Earlier Ready Event')).toBeInTheDocument();
+    titleGetter.mockClear();
+
+    configureAdminEventsContext({ ready: false });
+    view.rerender(<App />);
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectEventResultsHidden();
+
+    const recoveredLookup = deferred();
+    listAllEvents.mockReturnValueOnce(recoveredLookup.promise);
+    configureAdminEventsContext();
+    view.rerender(<App />);
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectEventResultsHidden();
+    await waitFor(() => expect(listAllEvents).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      recoveredLookup.resolve([syntheticListedEvent({
+        id: 'synthetic-recovered-event',
+        title: 'Recovered Current Event',
+      })]);
+    });
+
+    expect(await screen.findByText('Recovered Current Event')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Ready Event')).not.toBeInTheDocument();
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(listAllEvents).toHaveBeenCalledTimes(2);
+  });
+
+  test('keeps a newer empty result when an older lookup later resolves', async () => {
+    const olderLookup = deferred();
+    listAllEvents.mockReturnValueOnce(olderLookup.promise);
+    const view = renderAdminEvents();
+    await waitFor(() => expect(listAllEvents).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-newer-empty-events-firestore' };
+    listAllEvents.mockResolvedValueOnce([]);
+    configureAdminEventsContext({ database: currentFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByRole('link', { name: 'Create the first one' }))
+      .toBeInTheDocument();
+
+    await act(async () => {
+      olderLookup.resolve([syntheticListedEvent({ title: 'Obsolete Synthetic Event' })]);
+    });
+
+    expect(screen.getByRole('link', { name: 'Create the first one' })).toBeInTheDocument();
+    expect(screen.queryByText('Obsolete Synthetic Event')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('keeps a newer event when an older hostile rejection later arrives', async () => {
+    const olderLookup = deferred();
+    listAllEvents.mockReturnValueOnce(olderLookup.promise);
+    const view = renderAdminEvents();
+    await waitFor(() => expect(listAllEvents).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-newer-events-firestore' };
+    listAllEvents.mockResolvedValueOnce([syntheticListedEvent({
+      id: 'synthetic-current-event',
+      title: 'Current Synthetic Event',
+    })]);
+    configureAdminEventsContext({ database: currentFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByText('Current Synthetic Event')).toBeInTheDocument();
+
+    const messageGetter = jest.fn(() => 'obsolete-events-private-canary');
+    await act(async () => {
+      olderLookup.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Current Synthetic Event')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-events-private-canary');
+  });
+
+  test('does not inspect a hostile rejection after the page unmounts', async () => {
+    const lookup = deferred();
+    listAllEvents.mockReturnValueOnce(lookup.promise);
+    const view = renderAdminEvents();
+    await waitFor(() => expect(listAllEvents).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const messageGetter = jest.fn(() => 'unmounted-events-private-canary');
+    await act(async () => {
+      lookup.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('does not inspect or display a successful result after the page unmounts', async () => {
+    const lookup = deferred();
+    listAllEvents.mockReturnValueOnce(lookup.promise);
+    const view = renderAdminEvents();
+    await waitFor(() => expect(listAllEvents).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const titleGetter = jest.fn(() => 'Unmounted Synthetic Event');
+    const event = Object.defineProperty(syntheticListedEvent(), 'title', {
+      configurable: true,
+      get: titleGetter,
+    });
+    await act(async () => {
+      lookup.resolve([event]);
+      await Promise.resolve();
+    });
+
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('Unmounted Synthetic Event');
+    expect(track).not.toHaveBeenCalled();
+  });
+});
+
 describe('Admin Event editor load-failure boundary', () => {
   function syntheticAdminEvent({
     slug = 'synthetic-event',
