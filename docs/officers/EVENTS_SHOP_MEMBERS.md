@@ -2399,23 +2399,26 @@ Officer review steps after every prerequisite has proof:
 
 ## Optional profile photo and officer people finder — SOURCE ONLY, NOT LIVE
 
-**Purpose:** let a signed-in person choose one private profile thumbnail and, separately, choose whether a future authorized-officer people finder may show their display name and thumbnail.
+**Purpose:** let a signed-in person choose one private profile thumbnail and, separately, choose whether the People finder may show their display name and thumbnail. Under the current temporary access boundary, a verified website administrator searches by name and may compare the voluntary thumbnails visually. A finder-specific permission is still required before release. The system does not search a photo or recognize a face.
 
 **Approver:** membership lead, privacy owner, and platform/security owner. The privacy owner must approve the final notice and backup/removal wording before publication.
 
-**Prerequisites:** parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504) and source child [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) are reviewed; use only made-up accounts and generated non-face images. Officer search [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506), protected release [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507), and the approved #110 privacy entry are still required before live use.
+**Prerequisites:** parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504), account source child [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505), and search source child [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) are reviewed. Use only made-up accounts, made-up names, and generated non-face images. Protected release [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507), the approved #110 privacy entry, #133 protected release authority, and isolated staging are still required before live use.
 
 ```mermaid
-flowchart LR
+flowchart TD
     Person["Signed-in person"] --> Photo["Upload or remove private processed thumbnail"]
     Person --> Choice{"Allow optional officer finder?"}
     Choice -- "No or missing" --> Hidden["Hidden from optional finder"]
-    Choice -- "Yes" --> Future["Future officer name search\nNOT AVAILABLE YET"]
+    Choice -- "Yes, with current name" --> Private["Minimum private search entry"]
     Photo -. "does not turn on" .-> Choice
-    Choice -. "does not prove or change" .-> Official["Membership, role, payment, or official records"]
+    Officer["Verified admin types a name and selects Search"] --> Server["Server checks access, limits, and current choice"]
+    Server --> Private
+    Server --> Results["Up to 24 voluntary name/photo cards"]
+    Results -. "does not prove or change" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the person controls a private processed thumbnail and a separate default-off finder choice; uploading does not opt them in, and neither choice proves or changes membership, role, payment, or official records.
+Text alternative: the person controls a private processed thumbnail and a separate default-off finder choice. A verified admin types a name and receives at most 24 currently opted-in name/photo cards. Uploading does not opt a person in, and no card proves or changes an official record.
 
 Officer review steps for the #505 source only:
 
@@ -2424,18 +2427,61 @@ Officer review steps for the #505 source only:
 3. Confirm the test uses generated colored pixels, not a real person's photo.
 4. Confirm a missing choice is off.
 5. Confirm uploading or replacing the generated image does not turn the choice on.
-6. Confirm clearing the made-up account's display name leaves opt-out available but makes the account ineligible for finder results until a valid name is restored.
+6. Confirm clearing the made-up account's display name leaves opt-out available but makes the account ineligible for a result until a valid name is restored.
 7. Confirm the server keeps only a small 256-pixel WebP thumbnail and no submitted original, filename, or location metadata.
 8. Confirm turning the choice off does not delete or change an official account, role, membership, registration, or payment record.
 9. Confirm removing the photo is a separate action and deletes the active thumbnail.
 10. Confirm an uncertain change hides further controls until the person deliberately reloads the settings; a fixed server rejection instead refetches current settings and leaves controls available.
-11. Stop. Do not open the production Account or Admin screen, upload a real photo, search a real name, or edit Firebase.
+11. Stop the #505 review. Do not open the production Account screen, upload a real photo, or edit Firebase.
 
-**Expected result:** source and synthetic tests prove one person's private, revisioned preference and processed thumbnail behavior. There is no officer search route, public URL, Firebase Storage object, face recognition, image-to-person query, embedding, or biometric template.
+Officer review steps for the #506 source only:
 
-**Stop conditions:** a real person, name, photo, member record, production account, or production Firebase project; a public/permanent photo URL; an upload that silently opts in; an opt-out that still appears in the optional finder; raw image, name, query, or provider detail in a log, issue, screenshot, message, email, or AI tool; a request for face recognition; missing privacy approval; or a claim that source, tests, merge, or preview means the feature is live.
+1. Keep the complete feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #506 pull request, commit, and synthetic test record.
+3. Confirm the separate page is named **People finder** at `/admin/member-directory`.
+4. Confirm **Website accounts** says its broad name/email filter is for website-role work.
+5. Confirm **Website accounts** says that filter does not honor People finder choices and is not the official membership roster.
+6. Type a made-up name prefix in the isolated test.
+7. Confirm typing alone sends nothing.
+8. Select **Search**.
+9. Confirm browser autocomplete is off.
+10. Confirm the server accepts only safely normalized names from 2 through 80 characters.
+11. Confirm the made-up verified admin can search under the current temporary access boundary.
+12. Repeat the denial check with a made-up member role.
+13. Repeat the denial check with an unverified admin-shaped account.
+14. Repeat the denial check with a malformed admin role.
+15. Repeat the denial check without App Check proof.
+16. Repeat the denial check while signed out.
+17. Search a made-up name prefix that returns cards.
+18. Confirm no more than 24 cards appear.
+19. Confirm each card shows only one current display name and either one current 256-pixel thumbnail or a clear no-photo fallback.
+20. Confirm no card shows email, phone, role, account ID, membership, payment, registration, or provider data.
+21. Run the prepared search/opt-out race.
+22. Confirm a search transaction ordered after completed opt-out retries and returns no card.
+23. Confirm the notice says an earlier-committed search cannot be recalled and its response may arrive later.
+24. Change the made-up display name.
+25. Confirm later results use only the current display name.
+26. Replace the generated thumbnail.
+27. Confirm later results use only the replacement thumbnail.
+28. Remove the generated thumbnail.
+29. Confirm later results show the no-photo fallback.
+30. Clear or invalidate the made-up display name.
+31. Confirm the account stays hidden from later results.
+32. Reuse the same made-up request number.
+33. Confirm the reused number returns one fixed failure without replaying prior personal results.
+34. Confirm the reused number creates no second search audit.
+35. Confirm the private audit records only the officer account ID, fixed purpose/action, request number, query-length group, result count, fixed outcome, and time.
+36. Confirm the audit contains no typed name, returned name, entry reference, photo, source row, or raw error.
+37. Confirm direct browser access cannot list the private search entries, preferences, photos, audits, or rate counters.
+38. Set the source page to a 320-pixel width with only synthetic data.
+39. Confirm loading, no-result, fixed-error, and missing-photo states remain readable.
+40. Stop. Do not open production Account or Admin pages, search a real name, inspect a real profile, or edit Firebase.
 
-**Success proof:** record the exact #505 pull request and merge commit, green focused and full checks, dependency review, independent privacy/security review, and explicit statements that Firebase deployment, website publication, `runmprc.com`, production data, officer search, and live behavior were not performed. Final live proof belongs to #507.
+**Expected result:** source and synthetic tests prove the separate default-off account controls and a bounded officer name search whose results are rechecked against current private state. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
+
+**Stop conditions:** a real person, name, photo, member record, production account, or production Firebase project; a public/permanent photo URL; an upload that silently opts in; a result from a search transaction ordered after completed opt-out; a notice that fails to explain that an earlier-committed response may still arrive; raw image, name, query, result identity, or provider detail in a log, issue, screenshot, message, email, or AI tool; a request for photo search, face recognition, similarity matching, or biometric processing; missing privacy approval; or a claim that source, tests, merge, or preview means the feature is live.
+
+**Success proof:** record the exact #505 and #506 pull requests and merge commits, green focused and full checks, dependency review, independent privacy/security and backup-officer reviews, and explicit statements that Firebase deployment, website publication, `runmprc.com`, privacy notice, production data, and live behavior were not performed. Final live proof belongs to #507.
 
 **Undo:** before publication, use one reviewed source revert or safe roll-forward. After a future approved release, use the documented backend-first release path and verify opt-out/removal with a made-up account. Never undo by deleting or editing a real account or Firebase record manually.
 

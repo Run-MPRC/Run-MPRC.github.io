@@ -18,6 +18,10 @@
 | Production or live | The version real visitors or officers actually use. |
 | Frontend | The pages people see in a browser. |
 | Backend | Private services behind the pages, including login, data, and server actions. |
+| People finder | An optional private page where a verified website administrator under the current temporary access boundary types a name and visually compares only names and thumbnails people chose to share. It is not the membership roster and does not recognize faces. A finder-specific permission is still required before release. |
+| Profile thumbnail | A small processed copy of a chosen profile photo. The source design keeps no submitted original and gives it no membership meaning. |
+| Projection | A minimum server-only copy made for one approved task, such as finding an opted-in display name, without sending the full account record to the browser. |
+| Facial recognition | Automated processing that tries to identify or match a person from an image. The MPRC People finder does not do this and cannot accept a photo as a search. |
 | Firebase | The service used for login, database records, and backend Functions. |
 | Firestore | The database inside Firebase. Saving an Admin form can change its records immediately. |
 | Function | A protected backend action, such as checking access or handling a payment event. |

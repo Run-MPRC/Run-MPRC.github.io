@@ -341,11 +341,13 @@ function MemberDirectoryProfileAttempt({
         does not turn on the officer finder.
       </p>
       <p id="member-directory-privacy-description">
-        If you turn on the officer finder, authorized officers can search for your
-        name and see your thumbnail, if you added one. Turning it off removes you
-        from this optional finder but leaves your private thumbnail stored until you
-        remove it. This feature does not use facial recognition or image matching.
-        A search result does not prove current club membership, payment, or eligibility.
+        If you turn on the officer finder, verified website administrators can search
+        for your name and see your thumbnail, if you added one. Turning it off prevents
+        later searches ordered after the change from returning you, but an earlier
+        completed search cannot be recalled and its response may arrive afterward. Your
+        private thumbnail stays stored until you remove it. This feature does not use
+        facial recognition or image matching. A search result does not prove current
+        club membership, payment, or eligibility.
       </p>
 
       {state.phase === 'loading' && (
@@ -430,7 +432,7 @@ function MemberDirectoryProfileAttempt({
                     !hasDisplayName ? 'member-directory-name-required' : null,
                   ].filter(Boolean).join(' ')}
                 />
-                Let authorized officers find me by name
+                Let verified website administrators find me by name
               </label>
               {finderNeedsName && (
                 <p id="member-directory-name-required">

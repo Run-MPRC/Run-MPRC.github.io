@@ -15,6 +15,7 @@ const ACTORS = [
 const SERVER_ONLY_COLLECTIONS = [
   ['member directory preferences', 'memberDirectoryPreferences'],
   ['member directory photos', 'memberDirectoryPhotos'],
+  ['member directory search entries', 'memberDirectoryEntries'],
   ['directory audit events', 'auditEvents'],
 ];
 

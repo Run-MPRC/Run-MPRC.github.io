@@ -35,6 +35,7 @@ const AdminEventsList = lazy(() => import('./pages/admin/events/AdminEventsList'
 const AdminEventEditor = lazy(() => import('./pages/admin/events/AdminEventEditor'));
 const AdminEventRegistrations = lazy(() => import('./pages/admin/events/AdminEventRegistrations'));
 const AdminMembers = lazy(() => import('./pages/admin/members/AdminMembers'));
+const AdminMemberDirectory = lazy(() => import('./pages/admin/members/AdminMemberDirectory'));
 const AdminProducts = lazy(() => import('./pages/admin/shop/AdminProducts'));
 const AdminProductEditor = lazy(() => import('./pages/admin/shop/AdminProductEditor'));
 const AdminOrders = lazy(() => import('./pages/admin/shop/AdminOrders'));
@@ -67,6 +68,7 @@ function App() {
                 <Route path="admin/events/:slug/edit" element={<Suspense fallback={AdminFallback}><AdminEventEditor /></Suspense>} />
                 <Route path="admin/events/:slug/registrations" element={<Suspense fallback={AdminFallback}><AdminEventRegistrations /></Suspense>} />
                 <Route path="admin/members" element={<Suspense fallback={AdminFallback}><AdminMembers /></Suspense>} />
+                <Route path="admin/member-directory" element={<Suspense fallback={AdminFallback}><AdminMemberDirectory /></Suspense>} />
                 <Route path="admin/products" element={<Suspense fallback={AdminFallback}><AdminProducts /></Suspense>} />
                 <Route path="admin/products/new" element={<Suspense fallback={AdminFallback}><AdminProductEditor /></Suspense>} />
                 <Route path="admin/products/:slug/edit" element={<Suspense fallback={AdminFallback}><AdminProductEditor /></Suspense>} />

@@ -1,0 +1,310 @@
+import { FirebaseApp } from 'firebase/app';
+import React, {
+  FormEvent, useEffect, useRef, useState,
+} from 'react';
+import { Link } from 'react-router-dom';
+import SEO from '../../../components/SEO';
+import { useServiceLocator } from '../../../services/ServiceLocatorContext';
+import {
+  createMemberDirectorySearchRequestId,
+  MemberDirectorySearchResult,
+  normalizeMemberDirectorySearchQuery,
+  searchMemberDirectory,
+} from '../../../services/account/memberDirectorySearchService';
+import { useAuth } from '../../../services/hooks/useAuth';
+import AdminGuard from '../AdminGuard';
+
+const QUERY_REQUIREMENT = 'Enter a longer name prefix using letters or numbers. Normalized search text may contain 2 to 80 characters.';
+const SEARCH_FAILURE = 'We could not complete that people-finder search. No results are shown. Try again later.';
+const SETUP_FAILURE = 'The People finder is unavailable right now. No results are shown.';
+
+const appIdentities = new WeakMap<object, number>();
+let nextAppIdentity = 1;
+
+function appIdentity(app: object): number {
+  const existing = appIdentities.get(app);
+  if (existing !== undefined) return existing;
+  const identity = nextAppIdentity;
+  nextAppIdentity += 1;
+  appIdentities.set(app, identity);
+  return identity;
+}
+
+type SearchState =
+  | { phase: 'idle' }
+  | { phase: 'pending' }
+  | { phase: 'resolved'; results: readonly MemberDirectorySearchResult[] }
+  | { phase: 'unavailable' };
+
+function PhotoFallback({ displayName }: { displayName: string }) {
+  return (
+    <div
+      className="grid h-32 w-32 flex-none place-items-center rounded-lg border-2 border-gray-400 bg-gray-100 px-2 text-center text-sm font-semibold text-gray-700"
+      role="img"
+      aria-label={`No profile photo for ${displayName}`}
+    >
+      No photo
+    </div>
+  );
+}
+
+function DirectoryPhoto({ result }: { result: MemberDirectorySearchResult }) {
+  const [failed, setFailed] = useState(false);
+  if (result.photo === null || failed) {
+    return <PhotoFallback displayName={result.displayName} />;
+  }
+  return (
+    <img
+      src={`data:${result.photo.contentType};base64,${result.photo.base64Data}`}
+      width={128}
+      height={128}
+      className="h-32 w-32 flex-none rounded-lg border-2 border-gray-400 object-cover"
+      alt={`Profile thumbnail for ${result.displayName}`}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function SearchAttempt({ app }: { app: FirebaseApp }) {
+  const [queryInput, setQueryInput] = useState('');
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [state, setState] = useState<SearchState>({ phase: 'idle' });
+  const mountedRef = useRef(false);
+  const pendingRef = useRef(false);
+  const operationRef = useRef<symbol | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pendingRef.current = false;
+      operationRef.current = null;
+    };
+  }, []);
+
+  function handleQueryChange(event: React.ChangeEvent<HTMLInputElement>) {
+    if (pendingRef.current) return;
+    operationRef.current = null;
+    setQueryInput(event.currentTarget.value);
+    setValidationMessage(null);
+    setState({ phase: 'idle' });
+  }
+
+  async function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pendingRef.current) return;
+
+    const query = normalizeMemberDirectorySearchQuery(queryInput);
+    if (query === null) {
+      operationRef.current = null;
+      setValidationMessage(QUERY_REQUIREMENT);
+      setState({ phase: 'idle' });
+      return;
+    }
+
+    let requestId: string;
+    try {
+      requestId = createMemberDirectorySearchRequestId();
+    } catch {
+      setValidationMessage(null);
+      setState({ phase: 'unavailable' });
+      return;
+    }
+
+    const operation = Symbol('member-directory-search');
+    operationRef.current = operation;
+    pendingRef.current = true;
+    setQueryInput(query);
+    setValidationMessage(null);
+    setState({ phase: 'pending' });
+
+    try {
+      const response = await searchMemberDirectory(app, { requestId, query });
+      if (!mountedRef.current || operationRef.current !== operation) return;
+      setState({ phase: 'resolved', results: response.results });
+    } catch {
+      if (!mountedRef.current || operationRef.current !== operation) return;
+      setState({ phase: 'unavailable' });
+    } finally {
+      if (mountedRef.current && operationRef.current === operation) {
+        pendingRef.current = false;
+      }
+    }
+  }
+
+  const pending = state.phase === 'pending';
+
+  return (
+    <>
+      <form
+        className="mt-6 min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-4"
+        onSubmit={handleSearch}
+        noValidate
+      >
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+          <label
+            htmlFor="member-directory-name-query"
+            className="block min-w-0 flex-1"
+          >
+            <span
+              id="member-directory-query-label"
+              className="block font-semibold text-gray-900"
+            >
+              Search opted-in people by name
+            </span>
+            <span
+              id="member-directory-query-help"
+              className="mt-1 block text-sm text-gray-700"
+            >
+              Enter the beginning of a name or name part. Search runs only when you
+              choose Search.
+            </span>
+            <input
+              id="member-directory-name-query"
+              name="member-directory-name-query"
+              type="text"
+              value={queryInput}
+              onChange={handleQueryChange}
+              disabled={pending}
+              maxLength={512}
+              autoComplete="off"
+              spellCheck={false}
+              aria-labelledby="member-directory-query-label"
+              aria-describedby="member-directory-query-help"
+              className="mt-3 block min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={pending}
+            className="min-h-11 rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pending ? 'Searching...' : 'Search'}
+          </button>
+        </div>
+      </form>
+
+      {validationMessage && (
+        <p
+          className="mt-4 rounded border border-amber-600 bg-amber-50 p-3 text-sm text-amber-950"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          {validationMessage}
+        </p>
+      )}
+
+      {state.phase === 'pending' && (
+        <p className="mt-4 text-sm text-gray-700" role="status" aria-live="polite">
+          Searching the optional People finder...
+        </p>
+      )}
+
+      {state.phase === 'unavailable' && (
+        <p
+          className="mt-4 rounded border border-red-700 bg-red-50 p-3 text-sm text-red-900"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          {SEARCH_FAILURE}
+        </p>
+      )}
+
+      {state.phase === 'resolved' && state.results.length === 0 && (
+        <p className="mt-4 text-sm text-gray-700" role="status" aria-live="polite">
+          No result cards are available for that name prefix. Try a longer prefix
+          if you expected someone.
+        </p>
+      )}
+
+      {state.phase === 'resolved' && state.results.length > 0 && (
+        <section className="mt-6 min-w-0" aria-labelledby="member-directory-results-heading">
+          <h2 id="member-directory-results-heading" className="text-xl font-bold text-gray-900">
+            Opted-in people
+          </h2>
+          <ul
+            className="mt-4 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            aria-label="Opted-in People finder results"
+          >
+            {state.results.map((result) => (
+              <li
+                key={result.entryRef}
+                className="min-w-0 overflow-hidden rounded-lg border border-gray-300 bg-white p-4 text-gray-900"
+              >
+                <DirectoryPhoto
+                  key={result.photo?.version ?? 'no-photo'}
+                  result={result}
+                />
+                <h3 className="mt-3 max-w-full break-words text-lg font-bold text-gray-900">
+                  <bdi dir="auto">{result.displayName}</bdi>
+                </h3>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
+
+function MemberDirectoryRoute() {
+  const { services, isReady } = useServiceLocator();
+  const { user } = useAuth();
+  const app = isReady && services ? services.firebaseResources.app : null;
+  const adminUid = user?.uid ?? null;
+
+  if (!app || !adminUid) {
+    return (
+      <p
+        className="mt-6 rounded border border-red-700 bg-red-50 p-3 text-sm text-red-900"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+      >
+        {SETUP_FAILURE}
+      </p>
+    );
+  }
+
+  return (
+    <SearchAttempt
+      key={`${appIdentity(app)}:${adminUid}`}
+      app={app}
+    />
+  );
+}
+
+function Inner() {
+  return (
+    <>
+      <SEO title="Admin — People finder" noindex />
+      <div className="container mx-auto min-w-0 max-w-5xl overflow-x-hidden p-4 text-gray-900">
+        <Link to="/admin" className="text-sm text-blue-700 underline hover:text-blue-900">
+          ← Admin home
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">People finder</h1>
+        <p className="mt-3 max-w-3xl text-gray-800">
+          Search by the beginning of a person&apos;s current display name or any name
+          part. Only website-account holders who turned on the optional officer finder
+          can appear. A result does not prove current club membership, payment,
+          eligibility, or a website role.
+        </p>
+        <p className="mt-2 max-w-3xl text-gray-800">
+          Photos are voluntary. This page does not accept a photo as a query and does
+          not use facial recognition, image matching, fuzzy matching, or a full account list.
+        </p>
+        <MemberDirectoryRoute />
+      </div>
+    </>
+  );
+}
+
+export default function AdminMemberDirectory() {
+  return (
+    <AdminGuard>
+      <Inner />
+    </AdminGuard>
+  );
+}

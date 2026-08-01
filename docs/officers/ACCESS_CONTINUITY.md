@@ -127,6 +127,49 @@ For each system, record only:
 
 **Escalation:** platform/security owner plus backup. Add the privacy lead if any real or exported data was exposed. Add the club president if neither technical owner is reachable.
 
+### Synthetic People finder boundary drill — NOT AVAILABLE YET
+
+**Purpose:** prove that a backup officer with no terminal access can use the staged optional People finder without seeing opted-out or unrelated account data.
+
+**Approver:** membership lead, privacy owner, platform/security owner, and one backup officer who did not build the feature.
+
+**Prerequisites:** #505 and #506 source is merged; #110 has approved notice, retention, backup, access, and removal wording; #133 protected authority is configured; #507 has deployed and read back the exact Rules, profile/search Functions, trigger, and any required index in isolated staging; the staged website identifies the same approved commit; only made-up accounts, made-up names, and generated non-face images exist; reviewed backend and website recovery plans are ready. If any prerequisite is missing, do not start.
+
+1. Ask the platform/security owner to record the exact staged Rules, Functions, index, and website revisions without copying a credential or record.
+2. Ask the privacy owner to identify the approved notice version.
+3. Ask the privacy owner to confirm the test records contain no real person, name, photo, email, phone, membership, or payment data.
+4. Sign in as the made-up verified admin.
+5. Open **People finder**. Do not use **Website accounts** for this drill.
+6. Type a made-up name prefix.
+7. Confirm typing alone sends nothing.
+8. Select **Search**.
+9. Confirm the returned card has only the current made-up display name and generated thumbnail or no-photo fallback.
+10. Confirm the page does not show email, phone, role, account ID, membership, registration, payment, provider data, a result total, a download, or another page of results.
+11. Ask the platform/security owner to run the prepared synthetic opt-out/search race.
+12. Confirm a search ordered after completed opt-out retries and returns no card.
+13. Confirm the notice explains that a search already committed before opt-out cannot be recalled and may arrive later.
+14. Repeat the denial check with a made-up member role.
+15. Repeat the denial check with an unverified admin-shaped account.
+16. Repeat the denial check with a malformed admin role.
+17. Repeat the denial check without App Check proof.
+18. Repeat the denial check while signed out.
+19. Ask the platform/security owner to show the fixed redacted audit proof.
+20. Confirm the audit proof contains no typed name, result name, entry reference, or photo.
+21. Set the staged view to 320 pixels wide.
+22. Confirm search, loading, no-result, fixed-error, and missing-photo states are readable without a terminal.
+23. Record only the date, approvers, exact revisions, made-up scenario labels, and fixed pass/fail outcomes.
+24. Stop. Do not repeat this drill on production or with a real account, name, or photo.
+
+**Expected result:** the backup officer can perform one explicit staged name search and understand the cards; a search ordered after completed opt-out is hidden, while the notice truthfully describes the earlier-committed snapshot limit; authorization boundaries hold; the page cannot be confused with website-account administration or the official membership roster.
+
+**Success proof:** the private drill record names all approved revisions, the notice version, four approvers, the date, and fixed outcomes for explicit submit, minimum response, opt-out race, four authorization cases, redacted audit, and 320-pixel readability. It contains no query, result, identity, thumbnail, token, screenshot of private data, or source row.
+
+**Stop conditions:** any real person or production service; any result from a search transaction ordered after completed opt-out; a notice that fails to explain that an earlier-committed response may still arrive; direct browser listing; missing or malformed role accepted; raw query/result data in audit, URL, analytics, logs, or screenshot; a photo submitted as a search; any claim or control suggesting automated face or photo matching is available; revision mismatch; or an officer needing terminal/Firebase Console access to complete the ordinary drill.
+
+**Undo and recovery:** keep the staged website unpublished. Ask the platform/security owner to use the reviewed backend-first rollback or safe roll-forward, read back all affected revisions again, and repeat the complete synthetic drill. Never repair the result by editing or deleting a real Firebase record.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real identity or photo appeared, opt-out failed, or private search data entered a log or screenshot.
+
 ## Expected result and success proof
 
 - Two current officers can open the private entry document.

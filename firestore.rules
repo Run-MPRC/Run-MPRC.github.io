@@ -489,6 +489,16 @@ service cloud.firestore {
       }
     }
 
+    // Optional people-finder entries are a server-owned candidate index, not
+    // a browser-readable roster. The search Function revalidates every result.
+    match /memberDirectoryEntries/{uid} {
+      allow read, write: if false;
+
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
     match /auditEvents/{auditEventId} {
       allow read, write: if false;
     }
