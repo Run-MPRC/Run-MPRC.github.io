@@ -127,6 +127,13 @@ function validateEventAdmission(event, expectedLivemode) {
       'charge_livemode_mismatch',
     );
     if (!chargeRealm.ok) return chargeRealm;
+    if (event.data?.object?.status !== 'succeeded') {
+      return {
+        ok: false,
+        expected: expectedLivemode,
+        reason: 'charge_status_mismatch',
+      };
+    }
   } else if (DISPUTE_EVENT_TYPES.has(event.type)) {
     const disputeRealm = validateEmbeddedLivemode(
       event,

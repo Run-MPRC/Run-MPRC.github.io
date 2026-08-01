@@ -221,6 +221,18 @@ const INVALID_METADATA_SCHEMA_CASES = [
   ['object', {}],
   ['array', []],
 ];
+const INVALID_REFUND_CHARGE_STATUS_CASES = [
+  ['missing', 'delete', undefined],
+  ['null', 'value', null],
+  ['pending', 'value', 'pending'],
+  ['failed', 'value', 'failed'],
+  ['empty string', 'value', ''],
+  ['unknown string', 'value', 'hostile-status-do-not-log'],
+  ['number', 'value', 1],
+  ['boolean', 'value', true],
+  ['object', 'value', {}],
+  ['array', 'value', []],
+];
 const DISPUTE_REALM_CASES = [
   ['created', 'charge.dispute.created', 'needs_response'],
   ['updated', 'charge.dispute.updated', 'under_review'],
@@ -254,6 +266,8 @@ function stripeEvent(id, type, object) {
   let providerObject = object;
   if (checkoutStatus) {
     providerObject = { livemode: false, status: checkoutStatus, ...object };
+  } else if (type === 'charge.refunded') {
+    providerObject = { livemode: false, status: 'succeeded', ...object };
   } else if (PROVIDER_OBJECT_REALM_EVENT_TYPES.has(type)) {
     providerObject = { livemode: false, ...object };
   }
@@ -429,6 +443,11 @@ function setMetadataSchema(object, value) {
   object.metadata.schemaVersion = value;
 }
 
+function setRefundChargeStatus(charge, mutation, value) {
+  if (mutation === 'delete') delete charge.status;
+  else charge.status = value;
+}
+
 function providerBindingPaths(event) {
   const object = event.data.object;
   const descriptors = [];
@@ -469,6 +488,56 @@ function expectCompatibilityQuarantine({ response, event, businessPath, before, 
   providerBindingPaths(event).forEach((path) => {
     expect(admin.__get(path)).toBeUndefined();
   });
+}
+
+function refundAdmissionObservation({ response, event, businessSnapshots = [] }) {
+  const responseBody = response.json.mock.calls.at(-1)?.[0];
+  const ledger = admin.__get(`stripeEvents/${event.id}`);
+  return {
+    httpStatus: response.status.mock.calls.at(-1)?.[0] ?? null,
+    response: responseBody ? {
+      received: responseBody.received,
+      duplicate: responseBody.duplicate,
+      outcome: responseBody.outcome,
+      requiresReview: responseBody.requiresReview,
+    } : null,
+    businessUnchanged: businessSnapshots.every(([path, before]) => (
+      JSON.stringify(admin.__get(path)) === JSON.stringify(before)
+    )),
+    ledger: ledger ? {
+      status: ledger.status,
+      outcome: ledger.outcome,
+      requiresReview: ledger.requiresReview,
+      targetType: ledger.targetType,
+      targetPath: ledger.targetPath,
+      targetSource: ledger.targetSource,
+    } : null,
+    bindingPaths: providerBindingPaths(event).filter(
+      (path) => admin.__get(path) !== undefined,
+    ),
+  };
+}
+
+function expectedChargeStatusQuarantine(bindingPaths = []) {
+  return {
+    httpStatus: null,
+    response: {
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:charge_status_mismatch',
+      requiresReview: true,
+    },
+    businessUnchanged: true,
+    ledger: {
+      status: 'processed',
+      outcome: 'needs_review:charge_status_mismatch',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    },
+    bindingPaths,
+  };
 }
 
 describe('stripeWebhook', () => {
@@ -1060,6 +1129,477 @@ describe('stripeWebhook', () => {
       });
     },
   );
+
+  test.each(INVALID_REFUND_CHARGE_STATUS_CASES)(
+    'PAY-003A5 quarantines a refund Charge with %s status evidence',
+    async (label, mutation, value) => {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const event = stripeEvent(
+        `evt_charge_status_${slug}`,
+        'charge.refunded',
+        orderRefundCharge({ id: `ch_charge_status_${slug}` }),
+      );
+      setRefundChargeStatus(event.data.object, mutation, value);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedChargeStatusQuarantine());
+      expect(consoleError.mock.calls).toEqual([[
+        'Stripe event requires review',
+        {
+          eventId: event.id,
+          eventType: 'charge.refunded',
+          outcome: 'needs_review:charge_status_mismatch',
+          targetType: null,
+        },
+      ]]);
+    },
+  );
+
+  test.each([
+    [
+      'metadata-only claim',
+      {},
+      { stripePaymentIntentId: 'pi_order_1' },
+    ],
+    [
+      'client-reference-only claim',
+      {
+        metadata: { schemaVersion: '1' },
+        client_reference_id: 'mprc:order:order-1',
+      },
+      {},
+    ],
+    [
+      'matching dual claim',
+      { client_reference_id: 'mprc:order:order-1' },
+      {},
+    ],
+    [
+      'legacy PaymentIntent fallback',
+      { metadata: {} },
+      { stripePaymentIntentId: 'pi_order_1' },
+    ],
+    [
+      'legacy Charge fallback',
+      {
+        metadata: {},
+        payment_intent: 'pi_status_unowned',
+      },
+      {
+        stripePaymentIntentId: null,
+        stripeChargeId: 'ch_status_route_legacy_charge_fallback',
+      },
+    ],
+  ])('PAY-003A5 blocks a pending Charge on the %s path', async (
+    label,
+    chargePatch,
+    recordPatch,
+  ) => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripeAmountTotalCents: 2000,
+      ...recordPatch,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const event = stripeEvent(
+      `evt_charge_status_route_${slug}`,
+      'charge.refunded',
+      orderRefundCharge({
+        id: `ch_status_route_${slug}`,
+        status: 'pending',
+        ...chargePatch,
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedChargeStatusQuarantine());
+  });
+
+  test('PAY-003A5 blocks a pending unmatched refund before target handling', async () => {
+    const event = stripeEvent(
+      'evt_charge_status_unmatched',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_charge_status_unmatched',
+        payment_intent: 'pi_charge_status_unmatched',
+        metadata: {},
+        status: 'pending',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({ response, event }))
+      .toEqual(expectedChargeStatusQuarantine());
+  });
+
+  test('PAY-003A5 blocks an invalid Charge before ambiguous fallback queries', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_charge_status_ambiguous',
+      stripeAmountTotalCents: 2000,
+    });
+    seedRegistration({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_charge_status_ambiguous',
+      stripeAmountTotalCents: 5000,
+    });
+    const snapshots = [
+      ['orders/order-1', storedCopy('orders/order-1')],
+      [
+        'events/race-1/registrations/reg-1',
+        storedCopy('events/race-1/registrations/reg-1'),
+      ],
+    ];
+    const event = stripeEvent(
+      'evt_charge_status_ambiguous',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_charge_status_ambiguous',
+        payment_intent: 'pi_charge_status_ambiguous',
+        metadata: {},
+        status: 'pending',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: snapshots,
+    })).toEqual(expectedChargeStatusQuarantine());
+  });
+
+  test('PAY-003A5 blocks invalid status before provider-binding conflict reads', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_charge_status_binding',
+      stripeAmountTotalCents: 2000,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const chargeBindingPath = 'stripeObjectBindings/charge:ch_charge_status_binding';
+    admin.__seed(chargeBindingPath, {
+      providerObjectType: 'charge',
+      providerObjectId: 'ch_charge_status_binding',
+      targetType: 'registration',
+      targetPath: 'events/other/registrations/other',
+      firstEventId: 'evt_other',
+    });
+    const beforeBinding = storedCopy(chargeBindingPath);
+    const event = stripeEvent(
+      'evt_charge_status_binding_conflict',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_charge_status_binding',
+        payment_intent: 'pi_charge_status_binding',
+        status: 'pending',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedChargeStatusQuarantine([chargeBindingPath]));
+    expect(admin.__get(chargeBindingPath)).toEqual(beforeBinding);
+    expect(admin.__get(
+      'stripeObjectBindings/payment_intent:pi_charge_status_binding',
+    )).toBeUndefined();
+  });
+
+  test.each([
+    [
+      'outer Event realm',
+      'livemode_mismatch',
+      (event) => { event.livemode = true; },
+    ],
+    [
+      'embedded Charge realm',
+      'charge_livemode_mismatch',
+      (event) => { event.data.object.livemode = true; },
+    ],
+    [
+      'metadata schema',
+      'charge_status_mismatch',
+      (event) => { setMetadataSchema(event.data.object, '2'); },
+    ],
+    [
+      'malformed reference',
+      'charge_status_mismatch',
+      (event) => {
+        Object.assign(event.data.object.metadata, {
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+        });
+      },
+    ],
+  ])('PAY-003A5 keeps %s precedence at the Charge-status boundary', async (
+    _label,
+    reason,
+    mutate,
+  ) => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      `evt_charge_status_precedence_${reason}`,
+      'charge.refunded',
+      orderRefundCharge({
+        id: `ch_charge_status_precedence_${reason}`,
+        status: 'pending',
+      }),
+    );
+    mutate(event);
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+  });
+
+  test('PAY-003A5 processes invalid status before a claimed missing target', async () => {
+    const event = stripeEvent(
+      'evt_charge_status_invalid_missing_target',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_charge_status_invalid_missing_target',
+        payment_intent: 'pi_charge_status_invalid_missing_target',
+        metadata: {
+          schemaVersion: '1',
+          type: 'merch',
+          orderId: 'order-missing',
+        },
+        status: 'pending',
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({ response, event }))
+      .toEqual(expectedChargeStatusQuarantine());
+  });
+
+  test('PAY-003A5 keeps exact-succeeded missing targets retryable', async () => {
+    const event = stripeEvent(
+      'evt_charge_status_succeeded_missing_target',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_charge_status_succeeded_missing_target',
+        payment_intent: 'pi_charge_status_succeeded_missing_target',
+        metadata: {
+          schemaVersion: '1',
+          type: 'merch',
+          orderId: 'order-missing',
+        },
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(admin.__get(`stripeEvents/${event.id}`)).toBeUndefined();
+    providerBindingPaths(event).forEach((path) => {
+      expect(admin.__get(path)).toBeUndefined();
+    });
+  });
+
+  test('PAY-003A5 deduplicates rejected status without mutation or bindings', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_charge_status_replay',
+      'charge.refunded',
+      orderRefundCharge({ id: 'ch_charge_status_replay', status: 'pending' }),
+    );
+
+    const firstResponse = await deliver(event);
+    const replayResponse = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response: firstResponse,
+      event,
+      businessSnapshots: [[businessPath, before]],
+    })).toEqual(expectedChargeStatusQuarantine());
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'needs_review:charge_status_mismatch',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+  });
+
+  test('PAY-003A5 preserves an already-processed Event before status admission', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_charge_status_already_processed',
+      'charge.refunded',
+      orderRefundCharge({ status: 'pending' }),
+    );
+    const ledgerPath = `stripeEvents/${event.id}`;
+    admin.__seed(ledgerPath, {
+      status: 'processed',
+      outcome: 'legacy_processed_outcome',
+      targetPath: 'orders/legacy-target',
+      sentinel: { preserve: true },
+    });
+    const beforeLedger = storedCopy(ledgerPath);
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'legacy_processed_outcome',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+    expect(admin.__get(ledgerPath)).toEqual(beforeLedger);
+    providerBindingPaths(event).forEach((path) => {
+      expect(admin.__get(path)).toBeUndefined();
+    });
+  });
+
+  test('PAY-003A5 admits an exact-succeeded metadata refund Charge', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const event = stripeEvent(
+      'evt_charge_status_succeeded_metadata',
+      'charge.refunded',
+      orderRefundCharge({ id: 'ch_charge_status_succeeded_metadata' }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'partially_refunded',
+    }));
+    expect(admin.__get('orders/order-1')).toMatchObject({
+      paymentStatus: 'partially_refunded',
+      stripeChargeId: 'ch_charge_status_succeeded_metadata',
+    });
+  });
+
+  test.each([
+    [
+      'PaymentIntent',
+      { metadata: {} },
+      { stripePaymentIntentId: 'pi_order_1' },
+      'payment_intent_query',
+    ],
+    [
+      'Charge',
+      { metadata: {}, payment_intent: 'pi_status_positive_unowned' },
+      { stripeChargeId: 'ch_charge_status_positive_charge' },
+      'charge_query',
+    ],
+  ])('PAY-003A5 admits exact-succeeded legacy %s fallback', async (
+    label,
+    chargePatch,
+    recordPatch,
+    targetSource,
+  ) => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripeAmountTotalCents: 2000,
+      ...recordPatch,
+    });
+    const slug = label.toLowerCase();
+    const event = stripeEvent(
+      `evt_charge_status_positive_${slug}`,
+      'charge.refunded',
+      orderRefundCharge({
+        id: `ch_charge_status_positive_${slug}`,
+        ...chargePatch,
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'partially_refunded',
+    }));
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      targetSource,
+      targetPath: 'orders/order-1',
+    });
+  });
+
+  test('PAY-003A5 keeps an exact-succeeded unmatched refund in review', async () => {
+    const event = stripeEvent(
+      'evt_charge_status_succeeded_unmatched',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_charge_status_succeeded_unmatched',
+        payment_intent: 'pi_charge_status_succeeded_unmatched',
+        metadata: {},
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:unmatched_refund',
+      requiresReview: true,
+    }));
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    });
+  });
 
   test.each(DISPUTE_REALM_CASES)(
     'quarantines a %s Dispute with %s embedded livemode evidence',

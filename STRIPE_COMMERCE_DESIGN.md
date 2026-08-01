@@ -744,6 +744,23 @@ Text alternative: after the earlier realm and Checkout lifecycle checks, a suppo
 
 PAY-003A4 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, payment/refund/dispute performed, production data changed, and live behavior verified. Source and synthetic tests do not prove any later state. This child performs no website publication, Firebase deployment, provider configuration, payment/refund/dispute, production-data action, or live verification.
 
+PAY-003A5 [#542](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/542) adds one universal pre-target admission check for every `charge.refunded` Event. After the outer Event and embedded Charge realm checks, the embedded Charge `status` must be the exact primitive string `succeeded`. A missing field, `null`, `pending`, `failed`, an empty or unknown string, or a non-string value receives the fixed `charge_status_mismatch` processed-review outcome. The ledger has null target fields, the business record is unchanged, and no new Charge or PaymentIntent binding is created. This check runs before metadata, client-reference, legacy provider-ID record-field queries, ownership, binding, money, or state evaluation. Exact rejected replays are read-only; an already-processed Event keeps its stored outcome. Earlier realm failures keep precedence, while an exact-`succeeded` Charge continues to the existing metadata and target checks.
+
+```mermaid
+flowchart TD
+    A["Signed charge.refunded Event"] --> B{"Outer Event and embedded Charge realm compatible?"}
+    B -- "No" --> C["Record the earlier fixed realm-review outcome"]
+    B -- "Yes" --> D{"Charge status is exact string succeeded?"}
+    D -- "No" --> E["Record Charge-status review with no target"]
+    D -- "Yes" --> F["Continue existing metadata, reference, target, money, and state checks"]
+```
+
+Text alternative: a signed refund Event must first pass both realm checks and then carry an embedded Charge whose status is exactly string `succeeded`; incompatible status evidence is recorded for review without resolving or changing a business target, while compatible evidence only proceeds to the remaining checks.
+
+The PAY-003A5 status check is compatibility evidence, not proof that a refund succeeded, settled, has the correct amount, or belongs to a local record. It does not inspect nested Refund status, choose or configure a Stripe endpoint API version, reprocess historical Events, migrate data, or perform a provider retrieval. Endpoint-version compatibility therefore remains an operational prerequisite outside this source-only child.
+
+PAY-003A5 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, payment/refund performed, production data changed, and live behavior verified. Source and synthetic tests do not prove any later state. This child performs no website publication, Firebase deployment, provider configuration or retrieval, payment/refund, production-data action, or live verification.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines
