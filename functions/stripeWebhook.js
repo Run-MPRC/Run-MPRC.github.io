@@ -34,7 +34,7 @@ const DISPUTE_EVENT_TYPES = new Set([
   'charge.dispute.closed',
 ]);
 
-function isValidDisputeEventCreated(value) {
+function isValidEventCreated(value) {
   return Number.isSafeInteger(value)
     && value >= 0
     && value <= FIRESTORE_TIMESTAMP_MAX_SECONDS;
@@ -165,8 +165,8 @@ function validateEventAdmission(event, expectedLivemode) {
   }
   const schemaValidation = validateMetadataSchemaVersion(event, expectedLivemode);
   if (!schemaValidation.ok) return schemaValidation;
-  if (DISPUTE_EVENT_TYPES.has(event.type)
-    && !isValidDisputeEventCreated(event.created)) {
+  if (isSupportedEventType(event.type)
+    && !isValidEventCreated(event.created)) {
     return {
       ok: false,
       expected: expectedLivemode,
@@ -1402,16 +1402,14 @@ function providerBindingCanBeRecorded(event, record, result) {
 
 function ledgerData(event, target, result, ownership) {
   const now = Date.now();
-  const unusableDisputeEventCreated = DISPUTE_EVENT_TYPES.has(event.type)
-    && !isValidDisputeEventCreated(event.created);
+  const eventCreated = event.created;
   return {
     eventId: event.id,
     type: event.type,
     objectId: objectId(event.data?.object) || null,
     livemode: event.livemode === true,
-    stripeCreatedAt: !unusableDisputeEventCreated
-      && Number.isSafeInteger(event.created)
-      ? Timestamp.fromMillis(event.created * 1000)
+    stripeCreatedAt: isValidEventCreated(eventCreated)
+      ? Timestamp.fromMillis(eventCreated * 1000)
       : null,
     status: 'processed',
     outcome: result.outcome,

@@ -811,6 +811,48 @@ Residual work remains explicit. This check does not compare an Event time with t
 
 PAY-003A7 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, a dispute or payment performed, production data changed, and live behavior verified. Source and synthetic tests do not prove any later state. This child performs no website publication, Firebase deployment, provider configuration or retrieval, dispute/payment, production-data action, or live verification. Officer impact and officer documentation are both none: this is a server-only admission boundary with no new officer screen, task, field, permission, approval, or available recovery step.
 
+### PAY-003A8 Checkout and refund Event-created admission — SOURCE ONLY, NOT LIVE
+
+PAY-003A8 [#572](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/572) closes PAY-003A7's explicit non-Dispute residual. Its purpose is to apply the same outer Stripe Event `created` contract to all four supported Checkout lifecycles and `charge.refunded` before any business target or provider binding work. PAY-003A7 remains the provenance for the three supported Dispute lifecycles; A8 only generalizes the shared predicate and safe ledger projection, so all eight supported Event types now require a primitive safe integer from Unix epoch second `0` through Firestore maximum second `253402300799`, inclusive.
+
+Approvers for this source boundary are the platform owner and payment reviewer. Prerequisites are verified webhook signature handling, the existing processed-Event ledger, the A2–A7 admission sequence, synthetic signed fixtures, and the current nullable `stripeCreatedAt` ledger field. Processing keeps this order:
+
+1. Return an exact processed-Event replay without changing its stored result.
+2. Check the outer Event realm and the applicable embedded Session, Charge, or Dispute realm.
+3. Check the applicable Checkout lifecycle, refund Charge status, or Dispute status.
+4. Check an explicit claimed-MPRC metadata version.
+5. Check the outer Event-created value for every supported Event type.
+6. Only then resolve a target or fallback, inspect ownership bindings, evaluate money or state, and persist the result.
+
+Malformed or unrelated reference classification is not an earlier admission result. Invalid supported Event time therefore wins before those target-handling paths. It produces durable `needs_review:invalid_event_created` with null target fields and `stripeCreatedAt: null`. It runs no target or fallback Firestore query, reads or changes no business record, and reads or creates no provider binding. The fixed review log contains only the Event ID, Event type, outcome, and null target type; it never includes the rejected value. The existing minimal reference classification may still supply redacted ledger ownership fields without performing target work. An exact replay returns the stored result read-only. A valid claimed Event whose target is missing remains retryable and writes no processed ledger.
+
+An earlier realm, lifecycle/status, or metadata failure keeps its existing outcome, while an unusable Event time is safely projected as null instead of reaching Firestore Timestamp construction. An unsupported Event never becomes `invalid_event_created`: it keeps its existing outcome and null target, and its ledger time is the valid projection or null. This safe projection prevents unrelated or already-rejected traffic from becoming a timestamp-construction retry storm.
+
+```mermaid
+flowchart TD
+    A["Verified Stripe Event"] --> B{"Already in the processed-Event ledger?"}
+    B -- "Yes" --> C["Return the stored result without changes"]
+    B -- "No" --> D{"Earlier realm, lifecycle or status, and metadata checks pass?"}
+    D -- "No" --> E["Keep the earlier result; store Event time or null safely"]
+    D -- "Yes" --> F{"Supported Event type?"}
+    F -- "No" --> G["Keep unsupported outcome; store Event time or null safely"]
+    F -- "Yes" --> H{"Event-created is an integer from 0 through 253402300799?"}
+    H -- "No" --> I["Record invalid-time review with no target"]
+    H -- "Yes" --> J["Continue target, binding, money, and state work"]
+```
+
+Text alternative: replay returns the existing ledger result first; a new Event keeps any earlier realm, lifecycle/status, or metadata result, unsupported traffic keeps its unsupported result, and both paths safely store a valid Event time or null. Only a supported Event with a Firestore-representable whole Unix timestamp may continue to target, binding, money, and state work.
+
+The expected result is target-free durable review for unusable supported time and unchanged behavior for valid representable time. Success proof requires separately named tests for all four Checkout lifecycles and refund Events; signed-JSON hostile shapes and bounds; earlier realm, lifecycle/status, and metadata precedence; target, fallback, binding, money, and state isolation; exact replay; inclusive epoch and Firestore-maximum controls; valid missing-target retry; unsupported-event compatibility; fixed redacted logging; and no rejected argument to `Timestamp.fromMillis()`. JSON fixtures label `NaN` and infinity honestly as normalized to `null`. A separate mocked post-parser Proxy control is defensive JavaScript evidence, not a claim that JSON can encode a Proxy. The complete PAY-003A7 suite and valid payment/refund behavior must remain green.
+
+Stop the merge if invalid time reaches a target query, provider binding, business mutation, log, serialized result detail, or Timestamp construction; if an earlier outcome changes; if a valid boundary regresses; or if a test needs a real credential, provider object, payment/refund, customer/member record, or production service. Escalate to the platform owner and payment reviewer. Undo is one small reviewed revert of the PAY-003A8 predicate/admission projection, tests, and this named section. Do not edit a provider object, processed ledger, or business record as an undo path.
+
+There is no schema, Rule, index, stored-data migration, or backfill. `stripeCreatedAt` already permits null. Valid Events, earlier admission precedence, target resolution, bindings, and payment/refund transitions remain compatible. Invalid supported time changes from target-capable behavior, or an above-range retrying `500`, to durable pre-target review. Above-range unsupported or earlier-rejected Events change from timestamp-construction `500` to their existing durable outcome with null time. Already-processed historical Events remain authoritative on replay and are neither inspected nor repaired.
+
+Residual work remains under PAY-003A9 and #106: embedded refund Charge-created admission, clock-skew/freshness policy, provider/API-version proof, provider retrieval and history repair, PAY-003B/C, reconciliation, alerts, protected release, and live verification. This source child validates no embedded Charge time, provider truth, payment/refund success, or production behavior.
+
+PAY-003A8 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only boundary adds no officer screen, task, field, permission, approval, topology, or available recovery step. `SYSTEM_DESIGN.md`, `SECURITY.md`, `IMPLEMENTATION_PLAN.md`, `OPERATIONS_RUNBOOK.md`, `GITHUB_ISSUES.md`, and the officer guides remain compatible.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines

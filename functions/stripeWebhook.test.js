@@ -202,6 +202,7 @@ jest.mock('firebase-admin/firestore', () => {
 
 const admin = require('firebase-admin');
 const { Timestamp } = require('firebase-admin/firestore');
+const Stripe = require('stripe');
 
 const WEBHOOK_SECRET = 'stripe_webhook_synthetic_test_material';
 process.env.ENVIRONMENT_NAME = 'test';
@@ -354,6 +355,24 @@ const DISPUTE_EVENT_CREATED_CASES = [
     value,
   ])
 ));
+const NON_DISPUTE_EVENT_TYPES = [
+  ['Checkout completed', 'checkout.session.completed'],
+  ['Checkout async success', 'checkout.session.async_payment_succeeded'],
+  ['Checkout async failure', 'checkout.session.async_payment_failed'],
+  ['Checkout expired', 'checkout.session.expired'],
+  ['refund', 'charge.refunded'],
+];
+const NON_DISPUTE_EVENT_CREATED_CASES = NON_DISPUTE_EVENT_TYPES.flatMap(
+  ([lifecycle, type]) => INVALID_DISPUTE_EVENT_CREATED_CASES.map(
+    ([evidence, mutation, value]) => [
+      lifecycle,
+      evidence,
+      type,
+      mutation,
+      value,
+    ],
+  ),
+);
 
 function stripeEvent(id, type, object) {
   const checkoutStatus = CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE[type];
@@ -500,6 +519,63 @@ function seedOrder(overrides = {}) {
   });
 }
 
+function nonDisputeEventFixture(type, suffix, { missingTarget = false } = {}) {
+  if (type === 'charge.refunded') {
+    if (!missingTarget) {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+    }
+    return {
+      businessPath: missingTarget ? null : 'orders/order-1',
+      event: stripeEvent(
+        `evt_pay003a8_${suffix}`,
+        type,
+        orderRefundCharge({
+          id: `ch_pay003a8_${suffix}`,
+          metadata: missingTarget ? {
+            schemaVersion: '1',
+            type: 'merch',
+            orderId: 'order-missing',
+          } : {
+            schemaVersion: '1',
+            type: 'merch',
+            orderId: 'order-1',
+          },
+        }),
+      ),
+    };
+  }
+
+  if (!missingTarget) seedRegistration();
+  const unpaid = type === 'checkout.session.async_payment_failed'
+    || type === 'checkout.session.expired';
+  return {
+    businessPath: missingTarget ? null : 'events/race-1/registrations/reg-1',
+    event: stripeEvent(
+      `evt_pay003a8_${suffix}`,
+      type,
+      registrationSession({
+        payment_status: unpaid ? 'unpaid' : 'paid',
+        metadata: missingTarget ? {
+          schemaVersion: '1',
+          eventId: 'race-missing',
+          registrationId: 'registration-missing',
+          priceTier: 'nonMember',
+        } : {
+          schemaVersion: '1',
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+          priceTier: 'nonMember',
+        },
+      }),
+    ),
+  };
+}
+
 function signedRequest(event, signatureOverride) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signedPayload = createSignedStripePayload({
@@ -527,6 +603,23 @@ async function deliver(event) {
   const response = mockResponse();
   await stripeWebhook(signedRequest(event), response);
   return response;
+}
+
+async function deliverMockedConstructedEvent(event) {
+  const transportEvent = stripeEvent(
+    'evt_pay003a8_safe_transport',
+    'checkout.session.completed',
+    registrationSession(),
+  );
+  const constructEvent = jest.spyOn(Stripe.webhooks, 'constructEvent')
+    .mockReturnValueOnce(event);
+  try {
+    const response = mockResponse();
+    await stripeWebhook(signedRequest(transportEvent), response);
+    return response;
+  } finally {
+    constructEvent.mockRestore();
+  }
 }
 
 function storedCopy(path) {
@@ -666,7 +759,7 @@ function expectedDisputeStatusQuarantine(bindingPaths = []) {
   };
 }
 
-function expectedDisputeEventCreatedQuarantine(bindingPaths = []) {
+function expectedEventCreatedQuarantine(bindingPaths = []) {
   return {
     httpStatus: null,
     response: {
@@ -2289,7 +2382,7 @@ describe('stripeWebhook', () => {
         response,
         event,
         businessSnapshots: [[businessPath, before]],
-      })).toEqual(expectedDisputeEventCreatedQuarantine());
+      })).toEqual(expectedEventCreatedQuarantine());
       expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
         stripeCreatedAt: null,
       });
@@ -2363,7 +2456,7 @@ describe('stripeWebhook', () => {
       response,
       event,
       businessSnapshots: [[businessPath, before]],
-    })).toEqual(expectedDisputeEventCreatedQuarantine());
+    })).toEqual(expectedEventCreatedQuarantine());
     expectOnlyEventLedgerReads(event);
   });
 
@@ -2384,7 +2477,7 @@ describe('stripeWebhook', () => {
     const response = await deliver(event);
 
     expect(refundAdmissionObservation({ response, event }))
-      .toEqual(expectedDisputeEventCreatedQuarantine());
+      .toEqual(expectedEventCreatedQuarantine());
     expectOnlyEventLedgerReads(event);
   });
 
@@ -2409,7 +2502,7 @@ describe('stripeWebhook', () => {
     const response = await deliver(event);
 
     expect(refundAdmissionObservation({ response, event }))
-      .toEqual(expectedDisputeEventCreatedQuarantine());
+      .toEqual(expectedEventCreatedQuarantine());
     expectOnlyEventLedgerReads(event);
   });
 
@@ -2448,7 +2541,7 @@ describe('stripeWebhook', () => {
       response,
       event,
       businessSnapshots: snapshots,
-    })).toEqual(expectedDisputeEventCreatedQuarantine());
+    })).toEqual(expectedEventCreatedQuarantine());
     expectOnlyEventLedgerReads(event);
   });
 
@@ -2481,7 +2574,7 @@ describe('stripeWebhook', () => {
       response,
       event,
       businessSnapshots: [[businessPath, before]],
-    })).toEqual(expectedDisputeEventCreatedQuarantine([disputeBindingPath]));
+    })).toEqual(expectedEventCreatedQuarantine([disputeBindingPath]));
     expect(admin.__get(disputeBindingPath)).toEqual(beforeBinding);
     expect(admin.__get('stripeObjectBindings/charge:ch_order_1')).toBeUndefined();
     expect(admin.__get('stripeObjectBindings/payment_intent:pi_order_1')).toBeUndefined();
@@ -2576,7 +2669,7 @@ describe('stripeWebhook', () => {
       response,
       event,
       businessSnapshots: [[businessPath, before]],
-    })).toEqual(expectedDisputeEventCreatedQuarantine());
+    })).toEqual(expectedEventCreatedQuarantine());
     expectOnlyEventLedgerReads(event);
   });
 
@@ -2600,7 +2693,7 @@ describe('stripeWebhook', () => {
       response: firstResponse,
       event,
       businessSnapshots: [[businessPath, before]],
-    })).toEqual(expectedDisputeEventCreatedQuarantine());
+    })).toEqual(expectedEventCreatedQuarantine());
     expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
       received: true,
       duplicate: true,
@@ -2704,6 +2797,374 @@ describe('stripeWebhook', () => {
     providerBindingPaths(event).forEach((path) => {
       expect(admin.__get(path)).toBeUndefined();
     });
+  });
+
+  test.each(NON_DISPUTE_EVENT_CREATED_CASES)(
+    'PAY-003A8 quarantines %s with %s outer Event-created evidence',
+    async (lifecycle, evidence, type, mutation, value) => {
+      const slug = `${lifecycle}_${evidence}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = nonDisputeEventFixture(type, slug);
+      const before = storedCopy(businessPath);
+      setEventCreated(event, mutation, value);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedEventCreatedQuarantine());
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        stripeCreatedAt: null,
+      });
+      expectOnlyEventLedgerReads(event);
+      if (Number.isSafeInteger(value)) {
+        expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(value * 1000);
+      }
+      expect(consoleError).toHaveBeenCalledWith(
+        'Stripe event requires review',
+        {
+          eventId: event.id,
+          eventType: type,
+          outcome: 'needs_review:invalid_event_created',
+          targetType: null,
+        },
+      );
+      expect(JSON.stringify({
+        response: response.json.mock.calls,
+        ledger: admin.__get(`stripeEvents/${event.id}`),
+        logs: consoleError.mock.calls,
+      })).not.toContain('hostile-event-created-do-not-log');
+    },
+  );
+
+  test.each(NON_DISPUTE_EVENT_TYPES)(
+    'PAY-003A8 defensively rejects a parser-return Proxy for %s without coercion',
+    async (lifecycle, type) => {
+      const slug = lifecycle.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = nonDisputeEventFixture(type, `proxy_${slug}`);
+      const before = storedCopy(businessPath);
+      const trap = jest.fn(() => {
+        throw new Error('Event-created Proxy trap must not run');
+      });
+      event.created = new Proxy({}, {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+        ownKeys: trap,
+      });
+
+      const response = await deliverMockedConstructedEvent(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedEventCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+      expect(trap).not.toHaveBeenCalled();
+    },
+  );
+
+  test('PAY-003A8 blocks invalid Checkout time before ambiguous legacy fallback', async () => {
+    seedOrder({ stripeSessionId: 'cs_pay003a8_ambiguous' });
+    seedRegistration({ stripeSessionId: 'cs_pay003a8_ambiguous' });
+    const snapshots = [
+      ['orders/order-1', storedCopy('orders/order-1')],
+      [
+        'events/race-1/registrations/reg-1',
+        storedCopy('events/race-1/registrations/reg-1'),
+      ],
+    ];
+    const event = stripeEvent(
+      'evt_pay003a8_checkout_fallback',
+      'checkout.session.completed',
+      registrationSession({
+        id: 'cs_pay003a8_ambiguous',
+        metadata: {},
+      }),
+    );
+    event.created = -1;
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: snapshots,
+    })).toEqual(expectedEventCreatedQuarantine());
+    expectOnlyEventLedgerReads(event);
+  });
+
+  test('PAY-003A8 blocks invalid refund time before ambiguous legacy fallback', async () => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_pay003a8_ambiguous',
+      stripeAmountTotalCents: 2000,
+    });
+    seedRegistration({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_pay003a8_ambiguous',
+      stripeAmountTotalCents: 5000,
+    });
+    const snapshots = [
+      ['orders/order-1', storedCopy('orders/order-1')],
+      [
+        'events/race-1/registrations/reg-1',
+        storedCopy('events/race-1/registrations/reg-1'),
+      ],
+    ];
+    const event = stripeEvent(
+      'evt_pay003a8_refund_fallback',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_pay003a8_refund_fallback',
+        payment_intent: 'pi_pay003a8_ambiguous',
+        metadata: {},
+      }),
+    );
+    event.created = -1;
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: snapshots,
+    })).toEqual(expectedEventCreatedQuarantine());
+    expectOnlyEventLedgerReads(event);
+  });
+
+  test('PAY-003A8 keeps invalid time ahead of malformed reference handling', async () => {
+    const event = stripeEvent(
+      'evt_pay003a8_malformed_reference',
+      'checkout.session.completed',
+      registrationSession({
+        metadata: {
+          schemaVersion: '1',
+          type: 'merch',
+          orderId: 'order-1',
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+        },
+      }),
+    );
+    event.created = -1;
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({ response, event }))
+      .toEqual(expectedEventCreatedQuarantine());
+    expectOnlyEventLedgerReads(event);
+  });
+
+  test.each([
+    [
+      'Checkout outer realm',
+      'checkout.session.completed',
+      'livemode_mismatch',
+      (event) => { event.livemode = true; },
+    ],
+    [
+      'Checkout embedded realm',
+      'checkout.session.completed',
+      'checkout_session_livemode_mismatch',
+      (event) => { event.data.object.livemode = true; },
+    ],
+    [
+      'Checkout lifecycle',
+      'checkout.session.completed',
+      'checkout_session_status_mismatch',
+      (event) => { event.data.object.status = 'hostile-checkout-status'; },
+    ],
+    [
+      'Checkout metadata schema',
+      'checkout.session.completed',
+      'metadata_schema_version_mismatch',
+      (event) => { setMetadataSchema(event.data.object, '2'); },
+    ],
+    [
+      'refund outer realm',
+      'charge.refunded',
+      'livemode_mismatch',
+      (event) => { event.livemode = true; },
+    ],
+    [
+      'refund embedded realm',
+      'charge.refunded',
+      'charge_livemode_mismatch',
+      (event) => { event.data.object.livemode = true; },
+    ],
+    [
+      'refund Charge status',
+      'charge.refunded',
+      'charge_status_mismatch',
+      (event) => { event.data.object.status = 'pending'; },
+    ],
+    [
+      'refund metadata schema',
+      'charge.refunded',
+      'metadata_schema_version_mismatch',
+      (event) => { setMetadataSchema(event.data.object, '2'); },
+    ],
+  ])('PAY-003A8 keeps %s precedence with unusable Event time', async (
+    label,
+    type,
+    reason,
+    mutate,
+  ) => {
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const { event, businessPath } = nonDisputeEventFixture(type, `precedence_${slug}`);
+    const before = storedCopy(businessPath);
+    event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1;
+    mutate(event);
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      stripeCreatedAt: null,
+    });
+    expectOnlyEventLedgerReads(event);
+    expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(
+      (FIRESTORE_TIMESTAMP_MAX_SECONDS + 1) * 1000,
+    );
+  });
+
+  test.each(NON_DISPUTE_EVENT_TYPES)(
+    'PAY-003A8 processes invalid %s Event time before a claimed missing target',
+    async (lifecycle, type) => {
+      const slug = lifecycle.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event } = nonDisputeEventFixture(type, `missing_${slug}`, {
+        missingTarget: true,
+      });
+      event.created = -1;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({ response, event }))
+        .toEqual(expectedEventCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    },
+  );
+
+  test.each(NON_DISPUTE_EVENT_TYPES)(
+    'PAY-003A8 deduplicates rejected %s Event time without target work',
+    async (lifecycle, type) => {
+      const slug = lifecycle.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = nonDisputeEventFixture(type, `replay_${slug}`);
+      const before = storedCopy(businessPath);
+      event.created = -1;
+
+      const firstResponse = await deliver(event);
+      const ledgerPath = `stripeEvents/${event.id}`;
+      const afterFirstLedger = storedCopy(ledgerPath);
+      const replayResponse = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response: firstResponse,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedEventCreatedQuarantine());
+      expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: true,
+        outcome: 'needs_review:invalid_event_created',
+      }));
+      expect(admin.__get(businessPath)).toEqual(before);
+      expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+      expect(admin.__readOperations()).toEqual([
+        { kind: 'document', path: ledgerPath },
+        { kind: 'document', path: ledgerPath },
+        { kind: 'document', path: ledgerPath },
+      ]);
+      expect(Timestamp.fromMillis).toHaveBeenCalledTimes(2);
+      expect(consoleError).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test.each(NON_DISPUTE_EVENT_TYPES.flatMap(([lifecycle, type]) => [
+    [lifecycle, type, 'Unix epoch', 0],
+    [lifecycle, type, 'Firestore maximum', FIRESTORE_TIMESTAMP_MAX_SECONDS],
+  ]))('PAY-003A8 admits the inclusive %s %s %s Event-created boundary', async (
+    lifecycle,
+    type,
+    boundary,
+    eventCreated,
+  ) => {
+    const slug = `${lifecycle}_${boundary}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const { event } = nonDisputeEventFixture(type, `valid_${slug}`);
+    event.created = eventCreated;
+
+    const response = await deliver(event);
+
+    expect(response.status).not.toHaveBeenCalledWith(500);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+    }));
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      stripeCreatedAt: { _milliseconds: eventCreated * 1000 },
+    });
+  });
+
+  test.each(NON_DISPUTE_EVENT_TYPES)(
+    'PAY-003A8 keeps an admissible claimed missing %s target retryable',
+    async (lifecycle, type) => {
+      const slug = lifecycle.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event } = nonDisputeEventFixture(type, `valid_missing_${slug}`, {
+        missingTarget: true,
+      });
+      event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS;
+
+      const response = await deliver(event);
+
+      expect(response.status).toHaveBeenCalledWith(500);
+      expect(admin.__get(`stripeEvents/${event.id}`)).toBeUndefined();
+      providerBindingPaths(event).forEach((path) => {
+        expect(admin.__get(path)).toBeUndefined();
+      });
+    },
+  );
+
+  test('PAY-003A8 safely preserves an unsupported Event with unusable time', async () => {
+    const event = stripeEvent(
+      'evt_pay003a8_unsupported',
+      'customer.created',
+      { id: 'cus_pay003a8_unsupported', object: 'customer' },
+    );
+    event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1;
+
+    const firstResponse = await deliver(event);
+    const ledgerPath = `stripeEvents/${event.id}`;
+    const afterFirstLedger = admin.__get(ledgerPath) === undefined
+      ? undefined
+      : storedCopy(ledgerPath);
+    const replayResponse = await deliver(event);
+
+    expect(firstResponse.status).not.toHaveBeenCalledWith(500);
+    expect(firstResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'ignored:unsupported_event',
+    }));
+    expect(admin.__get(ledgerPath)).toMatchObject({
+      outcome: 'ignored:unsupported_event',
+      stripeCreatedAt: null,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    });
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'ignored:unsupported_event',
+    }));
+    expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+    expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(
+      (FIRESTORE_TIMESTAMP_MAX_SECONDS + 1) * 1000,
+    );
   });
 
   test('quarantines an incompatible claimed Dispute before resolving its missing target', async () => {
