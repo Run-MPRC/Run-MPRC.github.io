@@ -124,11 +124,11 @@ describe('shared page hero semantics', () => {
 
     expectDecorativeHero(container, 'MPRC Shop');
     expect(screen.getByText(
-      'Club merchandise and gear for the MPRC community.',
+      'Club merchandise for in-person pickup at a club run.',
     )).toBeInTheDocument();
     expect(screen.getByRole('heading', {
       level: 2,
-      name: 'Available merchandise',
+      name: 'In-person club merchandise',
     })).toBeInTheDocument();
   });
 
