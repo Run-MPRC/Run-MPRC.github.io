@@ -11,12 +11,12 @@
   DISABLE_ESLINT_PLUGIN = "true"
 
 [context.production]
-  # This wrapper archives and verifies the pinned hotfix tree; it never builds
+  # This wrapper archives and verifies the pinned release tree; it never builds
   # the accumulated application tree from the triggering main merge.
   command = "node ./scripts/netlify-release-build.js"
 
 [context.deploy-preview]
-  # The #457 release-control PR builds the same pinned artifact as production.
+  # The active release-control PR builds the same pinned artifact as production.
   # Other previews retain the ordinary checked-out preview build.
   command = "node ./scripts/netlify-release-build.js --preview"
 
