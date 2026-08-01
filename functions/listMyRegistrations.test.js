@@ -42,6 +42,8 @@ jest.mock('firebase-admin', () => {
   let registrationSnapshotFailure = null;
   let eventLookupFailure = null;
   let eventLookupStages = [];
+  let eventSnapshotFailure = null;
+  let eventSnapshotStages = [];
 
   function enterRegistrationQueryStage(stage) {
     registrationQueryStages.push(stage);
@@ -58,6 +60,13 @@ jest.mock('firebase-admin', () => {
     eventLookupStages.push(eventId === null ? stage : `${stage}:${eventId}`);
     if (eventLookupFailure?.stage === stage) {
       throw eventLookupFailure.value;
+    }
+  }
+
+  function enterEventSnapshotStage(stage, eventId) {
+    eventSnapshotStages.push(`${stage}:${eventId}`);
+    if (eventSnapshotFailure?.stage === stage) {
+      throw eventSnapshotFailure.value;
     }
   }
 
@@ -108,8 +117,14 @@ jest.mock('firebase-admin', () => {
               eventReads.push(eventId);
               const event = events.get(eventId);
               return {
-                exists: event !== undefined,
-                data: () => event,
+                get exists() {
+                  enterEventSnapshotStage('exists', eventId);
+                  return event !== undefined;
+                },
+                data: () => {
+                  enterEventSnapshotStage('data', eventId);
+                  return event;
+                },
               };
             }),
           };
@@ -126,8 +141,12 @@ jest.mock('firebase-admin', () => {
     __eventCollectionCalls: () => firestoreApi.collection.mock.calls.length,
     __eventLookupStages: () => [...eventLookupStages],
     __eventReads: () => [...eventReads],
+    __eventSnapshotStages: () => [...eventSnapshotStages],
     __failEventLookupAt: (stage, value) => {
       eventLookupFailure = { stage, value };
+    },
+    __failEventSnapshotAt: (stage, value) => {
+      eventSnapshotFailure = { stage, value };
     },
     __failRegistrationQueryAt: (stage, value) => {
       registrationQueryFailure = { stage, value };
@@ -147,6 +166,8 @@ jest.mock('firebase-admin', () => {
       registrationSnapshotFailure = null;
       eventLookupFailure = null;
       eventLookupStages = [];
+      eventSnapshotFailure = null;
+      eventSnapshotStages = [];
       firestoreApi.collectionGroup.mockClear();
       firestoreApi.collection.mockClear();
     },
@@ -857,5 +878,268 @@ describe('DATA-001A7 registration event-acquisition failure boundary', () => {
     });
     expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
     expect(admin.firestore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DATA-001A8 registration event snapshot/projection failure boundary', () => {
+  beforeEach(() => {
+    admin.__reset();
+    admin.firestore.mockClear();
+    firebaseFunctions.__resetLoggerCalls();
+    requireAppCheck.mockReset();
+  });
+
+  test.each([
+    ['exists', ['exists:synthetic-event'], []],
+    ['data', [
+      'exists:synthetic-event',
+      'data:synthetic-event',
+    ], []],
+    ['slug', [
+      'exists:synthetic-event',
+      'data:synthetic-event',
+    ], ['slug']],
+    ['title', [
+      'exists:synthetic-event',
+      'data:synthetic-event',
+    ], ['slug', 'title']],
+    ['startAt', [
+      'exists:synthetic-event',
+      'data:synthetic-event',
+    ], ['slug', 'title', 'startAt']],
+    ['location', [
+      'exists:synthetic-event',
+      'data:synthetic-event',
+    ], ['slug', 'title', 'startAt', 'location']],
+  ])('maps a hostile event %s failure to one fixed result', async (
+    stage,
+    expectedSnapshotStages,
+    expectedProjectionStages,
+  ) => {
+    let hostileReads = 0;
+    const hostileFailureTarget = Object.create(null);
+    Object.defineProperty(hostileFailureTarget, inspect.custom, {
+      value: () => {
+        hostileReads += 1;
+        throw new Error('hostile event snapshot formatter was inspected');
+      },
+    });
+    const hostileFailure = new Proxy(hostileFailureTarget, {
+      get() {
+        hostileReads += 1;
+        throw new Error('hostile event snapshot getter was inspected');
+      },
+      getOwnPropertyDescriptor() {
+        hostileReads += 1;
+        throw new Error('hostile event snapshot descriptor was inspected');
+      },
+      ownKeys() {
+        hostileReads += 1;
+        throw new Error('hostile event snapshot keys were inspected');
+      },
+    });
+    const projectionValues = {
+      slug: 'synthetic-event',
+      title: 'Synthetic Projection Event',
+      startAt: { _seconds: 1_900_000_000 },
+      location: 'Synthetic Projection Park',
+    };
+    const projectionStages = [];
+    const event = Object.create(null);
+    Object.keys(projectionValues).forEach((field) => {
+      Object.defineProperty(event, field, {
+        enumerable: true,
+        get() {
+          projectionStages.push(field);
+          if (stage === field) throw hostileFailure;
+          return projectionValues[field];
+        },
+      });
+    });
+    const documents = [
+      registrationDocument({
+        createdSeconds: 1_800_000_020,
+        id: 'synthetic-registration-newer',
+      }),
+      registrationDocument({
+        createdSeconds: 1_800_000_010,
+        id: 'synthetic-registration-older',
+      }),
+    ];
+    let sortReads = 0;
+    documents.forEach((document) => {
+      const createdAt = document.data().createdAt;
+      document.data.mockClear();
+      Object.defineProperty(createdAt, '_seconds', {
+        get() {
+          sortReads += 1;
+          throw new Error('registration sort started after event failure');
+        },
+      });
+    });
+    admin.__seedRegistrations(documents);
+    admin.__seedEvent('synthetic-event', event);
+    if (stage === 'exists' || stage === 'data') {
+      admin.__failEventSnapshotAt(stage, hostileFailure);
+    }
+    const logSpies = ['debug', 'error', 'info', 'log', 'warn'].map((method) => (
+      jest.spyOn(console, method).mockImplementation(() => {})
+    ));
+
+    let caught;
+    let logCalls;
+    try {
+      try {
+        await listMyRegistrations({}, CONTEXT);
+      } catch (error) {
+        caught = error;
+      }
+    } finally {
+      logCalls = logSpies.map((spy) => spy.mock.calls.length);
+      logSpies.forEach((spy) => spy.mockRestore());
+    }
+    const rawFailureEscaped = caught === hostileFailure;
+    const publicFailure = rawFailureEscaped ? null : {
+      causeAbsent: caught?.cause === undefined,
+      code: caught?.code,
+      detailsAbsent: caught?.details === undefined,
+      message: caught?.message,
+    };
+
+    expect({
+      eventCollectionCalls: admin.__eventCollectionCalls(),
+      eventLookupStages: admin.__eventLookupStages(),
+      eventReads: admin.__eventReads(),
+      eventSnapshotStages: admin.__eventSnapshotStages(),
+      functionLoggerCalls: firebaseFunctions.__loggerCalls(),
+      hostileReads,
+      logCalls,
+      projectionStages,
+      publicFailure,
+      queries: admin.__queries(),
+      queryStages: admin.__registrationQueryStages(),
+      rawFailureEscaped,
+      registrationDataCalls: documents.map(
+        (document) => document.data.mock.calls.length,
+      ),
+      sortReads,
+    }).toEqual({
+      eventCollectionCalls: 1,
+      eventLookupStages: [
+        'collection',
+        'doc:synthetic-event',
+        'get:synthetic-event',
+      ],
+      eventReads: ['synthetic-event'],
+      eventSnapshotStages: expectedSnapshotStages,
+      functionLoggerCalls: 0,
+      hostileReads: 0,
+      logCalls: [0, 0, 0, 0, 0],
+      projectionStages: expectedProjectionStages,
+      publicFailure: {
+        causeAbsent: true,
+        code: 'unavailable',
+        detailsAbsent: true,
+        message: 'Registration data could not be loaded.',
+      },
+      queries: [{
+        field: 'uid',
+        operator: '==',
+        value: CONTEXT.auth.uid,
+      }],
+      queryStages: ['firestore', 'collectionGroup', 'where', 'get'],
+      rawFailureEscaped: false,
+      registrationDataCalls: [2, 2],
+      sortReads: 0,
+    });
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.firestore).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves distinct event slugs and the exact empty-slug fallback', async () => {
+    admin.__seedRegistrations([
+      registrationDocument({
+        createdSeconds: 1_800_000_020,
+        eventId: 'event-with-custom-slug',
+        id: 'registration-with-custom-slug',
+      }),
+      registrationDocument({
+        createdSeconds: 1_800_000_010,
+        eventId: 'event-with-empty-slug',
+        id: 'registration-with-empty-slug',
+      }),
+    ]);
+    admin.__seedEvent('event-with-custom-slug', {
+      location: 'Synthetic Custom Park',
+      slug: 'distinct-route-slug',
+      startAt: { _seconds: 1_900_000_020 },
+      title: 'Synthetic Custom Slug Event',
+    });
+    admin.__seedEvent('event-with-empty-slug', {
+      location: 'Synthetic Fallback Park',
+      slug: '',
+      startAt: { _seconds: 1_900_000_010 },
+      title: 'Synthetic Empty Slug Event',
+    });
+
+    await expect(listMyRegistrations({}, CONTEXT)).resolves.toEqual({
+      events: {
+        'event-with-custom-slug': {
+          id: 'event-with-custom-slug',
+          location: 'Synthetic Custom Park',
+          slug: 'distinct-route-slug',
+          startAt: { _seconds: 1_900_000_020 },
+          title: 'Synthetic Custom Slug Event',
+        },
+        'event-with-empty-slug': {
+          id: 'event-with-empty-slug',
+          location: 'Synthetic Fallback Park',
+          slug: 'event-with-empty-slug',
+          startAt: { _seconds: 1_900_000_010 },
+          title: 'Synthetic Empty Slug Event',
+        },
+      },
+      registrations: [
+        expect.objectContaining({
+          eventId: 'event-with-custom-slug',
+          id: 'registration-with-custom-slug',
+        }),
+        expect.objectContaining({
+          eventId: 'event-with-empty-slug',
+          id: 'registration-with-empty-slug',
+        }),
+      ],
+    });
+    expect(admin.__eventReads().sort()).toEqual([
+      'event-with-custom-slug',
+      'event-with-empty-slug',
+    ]);
+  });
+
+  test('keeps a missing event snapshot as the exact successful empty summary', async () => {
+    admin.__seedRegistrations([registrationDocument()]);
+
+    await expect(listMyRegistrations({}, CONTEXT)).resolves.toEqual({
+      events: {},
+      registrations: [{
+        amountCents: 2500,
+        cancelledAt: null,
+        createdAt: { _seconds: 1_800_000_000 },
+        currency: 'usd',
+        eventId: 'synthetic-event',
+        id: 'synthetic-registration',
+        paidAt: { _seconds: 1_800_000_010 },
+        priceTier: 'nonMember',
+        refundedAt: null,
+        status: 'paid',
+      }],
+    });
+    expect(admin.__eventLookupStages()).toEqual([
+      'collection',
+      'doc:synthetic-event',
+      'get:synthetic-event',
+    ]);
+    expect(admin.__eventReads()).toEqual(['synthetic-event']);
+    expect(admin.__eventSnapshotStages()).toEqual(['exists:synthetic-event']);
   });
 });

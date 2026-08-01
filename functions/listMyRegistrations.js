@@ -64,15 +64,22 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
         'Registration data could not be loaded.',
       );
     }
-    if (ev.exists) {
-      const e = ev.data();
-      events[eid] = {
-        id: eid,
-        slug: e.slug || eid,
-        title: e.title,
-        startAt: e.startAt,
-        location: e.location,
-      };
+    try {
+      if (ev.exists) {
+        const e = ev.data();
+        events[eid] = {
+          id: eid,
+          slug: e.slug || eid,
+          title: e.title,
+          startAt: e.startAt,
+          location: e.location,
+        };
+      }
+    } catch {
+      throw new functions.https.HttpsError(
+        'unavailable',
+        'Registration data could not be loaded.',
+      );
     }
   }));
 
