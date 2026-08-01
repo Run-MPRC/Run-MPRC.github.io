@@ -117,7 +117,7 @@ describe('My Account member directory profile', () => {
     })).toBeInTheDocument();
     expect(await screen.findByLabelText('No profile photo')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     })).not.toBeChecked();
     expect(screen.getByLabelText('Add profile photo')).toHaveAttribute(
       'accept',
@@ -127,9 +127,11 @@ describe('My Account member directory profile', () => {
       .not.toBeInTheDocument();
     expect(screen.getByText(/search result does not prove current club membership/i))
       .toBeInTheDocument();
-    expect(screen.getByText(/turning it off removes you from this optional finder/i))
+    expect(screen.getByText(/turning it off prevents later searches ordered after the change/i))
       .toBeInTheDocument();
-    expect(screen.getByText(/leaves your private thumbnail stored until you remove it/i))
+    expect(screen.getByText(/earlier completed search cannot be recalled and its response may arrive afterward/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/private thumbnail stays stored until you remove it/i))
       .toBeInTheDocument();
     expect(screen.getByText(/does not use facial recognition or image matching/i))
       .toBeInTheDocument();
@@ -238,7 +240,7 @@ describe('My Account member directory profile', () => {
       .mockResolvedValueOnce(searchableProfile);
     renderProfile();
     const checkbox = await screen.findByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     });
 
     fireEvent.click(checkbox);
@@ -250,7 +252,7 @@ describe('My Account member directory profile', () => {
     }));
     expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
     expect(await screen.findByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     })).toBeChecked();
     expect(screen.getByRole('status')).toHaveTextContent('Officer finder is on.');
   });
@@ -266,7 +268,7 @@ describe('My Account member directory profile', () => {
       .mockResolvedValueOnce(hiddenProfile);
     renderProfile();
     const checkbox = await screen.findByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     });
 
     fireEvent.click(checkbox);
@@ -307,7 +309,7 @@ describe('My Account member directory profile', () => {
     renderProfile({ hasDisplayName: false });
 
     const checkbox = await screen.findByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     });
     expect(checkbox).toBeDisabled();
     expect(screen.getByText(/add your full name in the Profile section/i))
@@ -337,7 +339,7 @@ describe('My Account member directory profile', () => {
     renderProfile({ hasDisplayName: false });
 
     const checkbox = await screen.findByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     });
     expect(checkbox).toBeChecked();
     expect(checkbox).toBeEnabled();
@@ -371,7 +373,7 @@ describe('My Account member directory profile', () => {
     expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
     expect(await screen.findByLabelText('No profile photo')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     })).toBeChecked();
     expect(screen.getByRole('status')).toHaveTextContent(
       'Profile photo removed. Your officer finder setting did not change.',
@@ -404,7 +406,7 @@ describe('My Account member directory profile', () => {
     (setMyMemberDirectoryVisibility as jest.Mock).mockReturnValueOnce(request.promise);
     renderProfile();
     const checkbox = await screen.findByRole('checkbox', {
-      name: 'Let authorized officers find me by name',
+      name: 'Let verified website administrators find me by name',
     });
 
     fireEvent.click(checkbox);

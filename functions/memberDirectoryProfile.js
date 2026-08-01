@@ -8,6 +8,12 @@ const functions = require('firebase-functions');
 
 const { checkRateLimit } = require('./rateLimit');
 const { requireAppCheck } = require('./stripeHelpers');
+const {
+  MEMBER_DIRECTORY_ENTRY_COLLECTION,
+  isSafeUid,
+  buildDirectoryProjection,
+  directoryProjectionsEqual,
+} = require('./memberDirectoryProjection');
 
 const schemaVersion = 1;
 const PHOTO_SIZE = 256;
@@ -27,8 +33,6 @@ const REQUEST_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const BASE64_PATTERN =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
-const UID_PATTERN = /^[^/]{1,128}$/;
-
 const CONTENT_TYPES = Object.freeze({
   'image/jpeg': 'jpeg',
   'image/png': 'png',
@@ -722,12 +726,7 @@ async function processMemberDirectoryPhoto(decodedRequest) {
 
 function authenticatedUid(context) {
   const uid = context && context.auth && context.auth.uid;
-  const hasControlCharacter = typeof uid === 'string'
-    && Array.from(uid).some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint <= 0x1f || codePoint === 0x7f;
-    });
-  if (typeof uid !== 'string' || !UID_PATTERN.test(uid) || hasControlCharacter) {
+  if (!isSafeUid(uid)) {
     throw new functions.https.HttpsError('unauthenticated', UNAUTHENTICATED_MESSAGE);
   }
   return uid;
@@ -782,6 +781,7 @@ function refsForUid(db, uid) {
     preference: db.collection(PREFERENCE_COLLECTION).doc(uid),
     photo: db.collection(PHOTO_COLLECTION).doc(uid),
     member: db.collection('members').doc(uid),
+    entry: db.collection(MEMBER_DIRECTORY_ENTRY_COLLECTION).doc(uid),
   });
 }
 
@@ -815,10 +815,16 @@ async function mutateProfile(uid, command) {
   );
   try {
     return await db.runTransaction(async (transaction) => {
-      const [preferenceSnapshot, photoSnapshot, auditSnapshot] = await Promise.all([
+      const [
+        preferenceSnapshot,
+        photoSnapshot,
+        auditSnapshot,
+        entrySnapshot,
+      ] = await Promise.all([
         transaction.get(refs.preference),
         transaction.get(refs.photo),
         transaction.get(auditRef),
+        transaction.get(refs.entry),
       ]);
       const previousPreference = snapshotValue(preferenceSnapshot);
       const previousPhoto = snapshotValue(photoSnapshot);
@@ -836,10 +842,25 @@ async function mutateProfile(uid, command) {
       }
       if (auditSnapshot.exists) fail('stale');
 
-      if (command.action === ACTIONS.setVisibility
-        && command.searchableByOfficers === true) {
+      let desiredEntry = null;
+      if (reduced.preference.searchableByOfficers === true) {
         const memberSnapshot = await transaction.get(refs.member);
-        if (!memberSnapshot.exists || !readMemberName(memberSnapshot.data())) {
+        desiredEntry = buildDirectoryProjection({
+          uid,
+          member: memberSnapshot.exists ? memberSnapshot.data() : null,
+          state: {
+            preference: reduced.preference,
+            photo: reduced.photo,
+            revision: reduced.preference.revision,
+            searchableByOfficers: reduced.preference.searchableByOfficers,
+            hasPhoto: reduced.preference.hasPhoto,
+          },
+          existingProjection: snapshotValue(entrySnapshot),
+          updatedAt: command.occurredAt,
+        });
+        if (command.action === ACTIONS.setVisibility
+          && command.searchableByOfficers === true
+          && !desiredEntry) {
           throw new functions.https.HttpsError(
             'failed-precondition',
             NAME_REQUIRED_MESSAGE,
@@ -852,6 +873,14 @@ async function mutateProfile(uid, command) {
         transaction.set(refs.photo, reduced.photo);
       } else if (command.action === ACTIONS.removePhoto && previousPhoto !== null) {
         transaction.delete(refs.photo);
+      }
+      if (desiredEntry) {
+        if (!entrySnapshot.exists
+          || !directoryProjectionsEqual(entrySnapshot.data(), desiredEntry)) {
+          transaction.set(refs.entry, desiredEntry);
+        }
+      } else if (entrySnapshot.exists) {
+        transaction.delete(refs.entry);
       }
       transaction.create(auditRef, expectedAudit);
       return publicState(reduced.preference, reduced.photo, false);
@@ -979,6 +1008,9 @@ module.exports = Object.freeze({
   readMemberName,
   publicState,
   processMemberDirectoryPhoto,
+  authenticatedUid,
+  requirePrivateNoStoreResponse,
+  isHttpsError,
   getMyMemberDirectoryProfile,
   setMyMemberDirectoryVisibility,
   setMyMemberDirectoryPhoto,

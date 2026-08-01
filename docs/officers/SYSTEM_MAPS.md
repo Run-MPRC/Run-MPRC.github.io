@@ -149,25 +149,27 @@ In words: a signed-in member gets their existing profile unchanged or one new pe
 
 Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair, and [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) owns the temporary phone-collection pause. Source code and local tests do not make either live. The website, server Function, database permissions, and made-up live check must each be proven separately.
 
-## Optional profile photo preference — SOURCE ONLY, NOT LIVE
+## Optional profile photo and officer people finder — SOURCE ONLY, NOT LIVE
 
 ```mermaid
-flowchart LR
-    Account["Signed-in person's Account page"] --> Server["Native App Check Firebase Functions\nprivate no-store responses"]
-    Server --> Profile["Existing profile name check"]
-    Server --> Preference["Default-off finder preference"]
-    Server --> Thumbnail["Private processed thumbnail\noriginal not retained"]
-    Server --> Audit["Minimal private audit event"]
-    Server -- "each upload or retry" --> Rate["Private per-account abuse counter\nexpiry TTL required"]
-    Browser["Browser, including admin"] -. "direct access denied" .-> Preference
-    Browser -. "direct access denied" .-> Thumbnail
-    Browser -. "direct access denied" .-> Rate
-    Preference -. "no authority" .-> Records["Membership, role, registration, and payment records"]
+flowchart TD
+    Account["Signed-in person's Account page"] --> ProfileServer["Private App Check profile actions"]
+    ProfileServer --> Preference{"Finder choice on?"}
+    ProfileServer --> Thumbnail["Private processed thumbnail\noriginal not retained"]
+    Preference -- "No, missing, or invalid name" --> Hidden["No finder entry"]
+    Preference -- "Yes, current valid name" --> Projection["Minimum server-only name-prefix projection"]
+    Officer["Verified admin types a name and selects Search"] --> Search["Private App Check search\nfixed rate and result bounds"]
+    Search --> Projection
+    Search --> Recheck["Re-read current name, choice, and thumbnail"]
+    Recheck --> Cards["Up to 24 voluntary name/photo cards"]
+    Search --> Audit["Minimal audit\nno query or result identities"]
+    Browser["Browser, including admin"] -. "direct access denied" .-> Projection
+    Cards -. "does not prove or change" .-> Records["Membership, role, registration, payment, or official roster"]
 ```
 
-In words: the signed-in person uses private server actions for a separate default-off preference and processed thumbnail; each upload or retry consumes a private pseudonymous per-account abuse-counter attempt whose expiry needs the configured TTL. Browsers cannot directly access these records, and the choice changes no membership, role, registration, or payment authority. If an opted-in person has no valid current display name, the future server finder must exclude them while leaving opt-out available.
+In words: a signed-in person separately controls a private processed thumbnail and a default-off finder choice. A verified admin may explicitly search a name prefix, but the server returns at most 24 cards only after rechecking each person's current choice, display name, and thumbnail. Browsers cannot directly access the projection. A card does not prove membership or grant authority.
 
-Issue [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) owns this source-only account slice. It does not provide an officer finder. Issue [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) owns later bounded officer name search, and [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) owns privacy approval, backend-first release, website publication, and live proof. No issue authorizes facial recognition or biometric processing.
+Issue [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) owns the source-only account slice. Issue [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) owns the source-only server search and officer page. Issue [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) still owns privacy approval, backend-first release, website publication, and live proof. No issue authorizes a photo query, facial recognition, similarity matching, or biometric processing. Every upload/search rate pseudonym and prefix digest is linkable, not anonymous, and remains private server state.
 
 ## Verification email action — SOURCE ONLY, NOT LIVE
 

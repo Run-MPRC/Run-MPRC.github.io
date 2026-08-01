@@ -74,6 +74,128 @@
         { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
         { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
       ]
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "prefixDigests",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
+      ]
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "schemaVersion",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "normalizationVersion",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "entryRef",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "displayName",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "photoVersion",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "preferenceRevision",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "createdAt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryEntries",
+      "fieldPath": "updatedAt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "schemaVersion",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "revision",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "searchableByOfficers",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "hasPhoto",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "lastRequestId",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "lastAction",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "lastExpectedRevision",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPreferences",
+      "fieldPath": "updatedAt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "schemaVersion",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "bytes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "contentType",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "width",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "height",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "version",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberDirectoryPhotos",
+      "fieldPath": "updatedAt",
+      "indexes": []
     }
   ]
 }

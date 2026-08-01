@@ -186,11 +186,25 @@ function Inner() {
   return (
     <>
       <SEO title="Admin — Website accounts" noindex />
-      <div className="container mx-auto p-4 max-w-5xl">
+      <div className="container mx-auto min-w-0 max-w-5xl p-4 text-gray-900">
         <Link to="/admin" className="text-sm text-blue-600 hover:underline">
           ← Admin home
         </Link>
         <h1 className="text-2xl font-bold mt-2">Website accounts</h1>
+        <p className="mt-3 max-w-3xl text-gray-800">
+          This page lists website accounts for website-access administration. Its
+          name and email filter does not honor the optional People finder preference
+          and is not a club membership roster. Use the
+          {' '}
+          <Link
+            to="/admin/member-directory"
+            className="font-semibold text-blue-700 underline hover:text-blue-900"
+          >
+            People finder
+          </Link>
+          {' '}
+          only to search people who opted in.
+        </p>
 
         {showAccountResults && (
           <>
@@ -217,6 +231,8 @@ function Inner() {
               <input
                 className="border rounded px-3 py-2 flex-1 min-w-[200px]"
                 placeholder="Search by name or email..."
+                aria-label="Filter loaded website accounts by name or email"
+                autoComplete="off"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               />

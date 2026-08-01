@@ -466,6 +466,11 @@ function renderAdminMembers() {
   return render(<App />);
 }
 
+function renderAdminMemberDirectory() {
+  window.history.pushState({}, '', '/admin/member-directory');
+  return render(<App />);
+}
+
 describe('public Events-list failure boundary', () => {
   let unsubscribe;
 
@@ -5578,7 +5583,12 @@ describe('Admin dashboard summary load-failure boundary', () => {
   function expectManagementNavigation() {
     expect(document.querySelector('a[href="/admin/events"]')).not.toBeNull();
     expect(document.querySelector('a[href="/admin/events/new"]')).not.toBeNull();
-    expect(document.querySelector('a[href="/admin/members"]')).not.toBeNull();
+    expect(document.querySelector('a[href="/admin/members"]')).toHaveTextContent(
+      'Website accountsManage website roles; not a people finder',
+    );
+    expect(document.querySelector('a[href="/admin/member-directory"]')).toHaveTextContent(
+      'People finderSearch opted-in names; view voluntary photos',
+    );
     expect(document.querySelector('a[href="/admin/products"]')).not.toBeNull();
     expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
   }
@@ -9179,6 +9189,37 @@ describe('Admin Orders action unknown-outcome boundary', () => {
   });
 });
 
+describe('Admin People finder route', () => {
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    useServiceLocator.mockReturnValue({
+      services: { firebaseResources: { app: firebaseApp, firestore } },
+      isReady: true,
+    });
+  });
+
+  test('routes an authorized officer to the separate explicit-submit People finder', async () => {
+    renderAdminMemberDirectory();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'People finder' }))
+      .toBeInTheDocument();
+    expect(window.location.pathname).toBe('/admin/member-directory');
+    expect(screen.getByRole('textbox', { name: 'Search opted-in people by name' }))
+      .toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled();
+    expect(screen.getByText(/does not accept a photo as a query/i)).toBeInTheDocument();
+  });
+});
+
 describe('Admin website-account role-list load failure boundary', () => {
   function syntheticTimestamp(value) {
     const date = new Date(value);
@@ -9207,6 +9248,11 @@ describe('Admin website-account role-list load failure boundary', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Admin home/ }))
       .toHaveAttribute('href', '/admin');
+    expect(screen.getByText(/name and email filter does not honor the optional People finder/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/is not a club membership roster/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'People finder' }))
+      .toHaveAttribute('href', '/admin/member-directory');
     expect(window.location.pathname).toBe('/admin/members');
   }
 
@@ -9354,6 +9400,9 @@ describe('Admin website-account role-list load failure boundary', () => {
     expect(getWebsiteAccountSummaryTile('Total website accounts'))
       .toHaveTextContent(/Total website accounts\s*0/);
     expect(screen.getByPlaceholderText('Search by name or email...')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {
+      name: 'Filter loaded website accounts by name or email',
+    })).toHaveAttribute('autocomplete', 'off');
     expect(screen.getByRole('combobox')).toHaveValue('all');
     expect(screen.getByRole('option', { name: 'All website roles' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Website role' })).toBeInTheDocument();

@@ -69,6 +69,8 @@ The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures
 
 GitHub Pages currently still claims `runmprc.com`, so its normal address redirects to the Netlify-served name. The source stops adding that claim, but #136/WEB-001 must publish and verify the provider setting before officers call Pages an independent copy.
 
+The optional profile photo and officer **People finder** are **NOT AVAILABLE YET**. #505/#506 source supports a separate default-off choice and explicit name search with voluntary thumbnails; it is not the official roster and performs no photo query or facial recognition. Use only the synthetic source-review steps in [Events, shop, members, and money](./EVENTS_SHOP_MEMBERS.md). Do not open the production Account/Admin flow or use a real name or photo until #507 records privacy approval and backend-first live proof.
+
 ## Current safety warning
 
 The repository contains race, shop, registration, payment, refund, and admin work that is **not approved for live commerce**. Do not enter live Stripe keys or accept real payments until the launch blockers in the root security documents are closed and officers approve a controlled launch.

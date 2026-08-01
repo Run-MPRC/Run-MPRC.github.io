@@ -44,6 +44,11 @@ const functions = require('firebase-functions');
 const { requireAppCheck } = require('./stripeHelpers');
 const { checkRateLimit } = require('./rateLimit');
 const {
+  buildDirectoryProjection,
+  derivePrefixDigests,
+  directoryEntryReference,
+} = require('./memberDirectoryProjection');
+const {
   ACTIONS,
   MemberDirectoryProfileError,
   readEmptyRequest,
@@ -84,6 +89,7 @@ const PATHS = Object.freeze({
   preference: `memberDirectoryPreferences/${UID}`,
   photo: `memberDirectoryPhotos/${UID}`,
   member: `members/${UID}`,
+  entry: `memberDirectoryEntries/${UID}`,
 });
 
 function snapshot(value) {
@@ -160,6 +166,33 @@ function preference(overrides = {}) {
     updatedAt: NOW,
     ...overrides,
   };
+}
+
+function memberDoc(overrides = {}) {
+  return {
+    fullName: 'Synthetic Runner',
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function entryDoc({
+  currentPreference = preference({ searchableByOfficers: true }),
+  currentPhoto = null,
+  currentMember = memberDoc(),
+} = {}) {
+  return buildDirectoryProjection({
+    uid: UID,
+    member: currentMember,
+    state: {
+      preference: currentPreference,
+      photo: currentPhoto,
+      revision: currentPreference.revision,
+      searchableByOfficers: currentPreference.searchableByOfficers,
+      hasPhoto: Boolean(currentPhoto),
+    },
+  });
 }
 
 function command(overrides = {}) {
@@ -868,11 +901,19 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
       searchableByOfficers: true,
     }), CONTEXT)).rejects.toMatchObject({ code: 'failed-precondition' });
     expect(getter).not.toHaveBeenCalled();
+
+    createFirestoreHarness({ [PATHS.member]: memberDoc({ fullName: '-A-' }) });
+    await expect(setMyMemberDirectoryVisibility(visibilityRequest({
+      searchableByOfficers: true,
+    }), CONTEXT)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'A valid account display name is required before enabling search.',
+    });
   });
 
   test('visibility commits preference and one deterministic minimal audit atomically', async () => {
     const harness = createFirestoreHarness({
-      [PATHS.member]: { fullName: 'Synthetic Runner', role: 'unverified', email: HOSTILE_CANARY },
+      [PATHS.member]: memberDoc({ role: 'unverified', email: HOSTILE_CANARY }),
     });
     const result = await setMyMemberDirectoryVisibility(visibilityRequest({
       searchableByOfficers: true,
@@ -887,6 +928,17 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
       searchableByOfficers: true,
       updatedAt: expect.any(Timestamp),
     }));
+    expect(harness.store.get(PATHS.entry)).toEqual({
+      schemaVersion: 1,
+      normalizationVersion: 1,
+      entryRef: directoryEntryReference(UID),
+      displayName: 'Synthetic Runner',
+      prefixDigests: derivePrefixDigests('Synthetic Runner'),
+      photoVersion: null,
+      preferenceRevision: 1,
+      createdAt: expect.any(Timestamp),
+      updatedAt: expect.any(Timestamp),
+    });
     const auditPath = `auditEvents/${auditDocumentId(UID, REQUEST_1)}`;
     expect(harness.store.get(auditPath)).toEqual({
       actorUid: UID,
@@ -903,9 +955,14 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
 
   test('visibility opt-out preserves the photo and does not read the member name', async () => {
     const storedPhoto = photoDoc();
+    const storedPreference = preference({ searchableByOfficers: true, hasPhoto: true });
     const harness = createFirestoreHarness({
-      [PATHS.preference]: preference({ searchableByOfficers: true, hasPhoto: true }),
+      [PATHS.preference]: storedPreference,
       [PATHS.photo]: storedPhoto,
+      [PATHS.entry]: entryDoc({
+        currentPreference: storedPreference,
+        currentPhoto: storedPhoto,
+      }),
     });
     await expect(setMyMemberDirectoryVisibility(visibilityRequest({
       requestId: REQUEST_2,
@@ -918,8 +975,46 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
       hasPhoto: true,
     });
     expect(harness.store.get(PATHS.photo)).toBe(storedPhoto);
+    expect(harness.store.has(PATHS.entry)).toBe(false);
+    expect(harness.history[0].staged).toContainEqual(['delete', PATHS.entry]);
     expect(harness.history[0].transaction.get)
       .not.toHaveBeenCalledWith(expect.objectContaining({ path: PATHS.member }));
+  });
+
+  test('opted-in photo upload and replacement keep only the current projection revision/version', async () => {
+    const firstInput = await makeImage('png', { width: 80, height: 40 });
+    const secondInput = await makeImage('jpeg', { width: 72, height: 96 });
+    const currentPreference = preference({ searchableByOfficers: true });
+    const currentMember = memberDoc();
+    const harness = createFirestoreHarness({
+      [PATHS.preference]: currentPreference,
+      [PATHS.member]: currentMember,
+      [PATHS.entry]: entryDoc({ currentPreference, currentMember }),
+    });
+
+    await setMyMemberDirectoryPhoto(photoRequest(firstInput, 'image/png', {
+      requestId: REQUEST_2,
+      expectedRevision: 1,
+    }), CONTEXT);
+    const firstEntry = harness.store.get(PATHS.entry);
+    expect(firstEntry).toMatchObject({
+      photoVersion: REQUEST_2,
+      preferenceRevision: 2,
+      displayName: 'Synthetic Runner',
+    });
+
+    await setMyMemberDirectoryPhoto(photoRequest(secondInput, 'image/jpeg', {
+      requestId: REQUEST_3,
+      expectedRevision: 2,
+    }), CONTEXT);
+    const replacedEntry = harness.store.get(PATHS.entry);
+    expect(replacedEntry).toMatchObject({
+      photoVersion: REQUEST_3,
+      preferenceRevision: 3,
+      displayName: 'Synthetic Runner',
+    });
+    expect(replacedEntry.createdAt).toBe(firstEntry.createdAt);
+    expect(JSON.stringify(replacedEntry)).not.toContain(REQUEST_2);
   });
 
   test('upload processes generated pixels, preserves visibility, and stores no original', async () => {
@@ -972,9 +1067,17 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
 
   test('remove deletes active bytes while preserving visibility', async () => {
     const storedPhoto = photoDoc();
+    const storedPreference = preference({ searchableByOfficers: true, hasPhoto: true });
+    const currentMember = memberDoc();
     const harness = createFirestoreHarness({
-      [PATHS.preference]: preference({ searchableByOfficers: true, hasPhoto: true }),
+      [PATHS.preference]: storedPreference,
       [PATHS.photo]: storedPhoto,
+      [PATHS.member]: currentMember,
+      [PATHS.entry]: entryDoc({
+        currentPreference: storedPreference,
+        currentPhoto: storedPhoto,
+        currentMember,
+      }),
     });
     await expect(removeMyMemberDirectoryPhoto(removeRequest({
       requestId: REQUEST_2,
@@ -990,14 +1093,51 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
       searchableByOfficers: true,
       hasPhoto: false,
     });
+    expect(harness.store.get(PATHS.entry)).toMatchObject({
+      photoVersion: null,
+      preferenceRevision: 2,
+      displayName: 'Synthetic Runner',
+    });
+  });
+
+  test.each([
+    ['missing', undefined],
+    ['malformed', { fullName: '---', updatedAt: NOW }],
+  ])('an opted-in profile mutation hides a stale entry when the member name is %s', async (
+    _label,
+    currentMember,
+  ) => {
+    const storedPhoto = photoDoc();
+    const storedPreference = preference({ searchableByOfficers: true, hasPhoto: true });
+    const seed = {
+      [PATHS.preference]: storedPreference,
+      [PATHS.photo]: storedPhoto,
+      [PATHS.entry]: entryDoc({
+        currentPreference: storedPreference,
+        currentPhoto: storedPhoto,
+      }),
+    };
+    if (currentMember !== undefined) seed[PATHS.member] = currentMember;
+    const harness = createFirestoreHarness(seed);
+
+    await expect(removeMyMemberDirectoryPhoto(removeRequest({
+      requestId: REQUEST_2,
+      expectedRevision: 1,
+    }), CONTEXT)).resolves.toMatchObject({
+      revision: 2,
+      searchableByOfficers: true,
+      hasPhoto: false,
+    });
+    expect(harness.store.has(PATHS.entry)).toBe(false);
   });
 
   test('exact latest visibility retry validates its audit and performs no writes', async () => {
-    const harness = createFirestoreHarness();
-    const request = visibilityRequest();
+    const harness = createFirestoreHarness({ [PATHS.member]: memberDoc() });
+    const request = visibilityRequest({ searchableByOfficers: true });
     const first = await setMyMemberDirectoryVisibility(request, CONTEXT);
     const firstHistory = harness.history.length;
     const originalPreference = harness.store.get(PATHS.preference);
+    const originalEntry = harness.store.get(PATHS.entry);
     const auditPath = `auditEvents/${auditDocumentId(UID, REQUEST_1)}`;
     const originalAudit = harness.store.get(auditPath);
     const equalButDistinctAuditTime = new Timestamp(
@@ -1012,6 +1152,7 @@ describe('callable authorization, ordering, transactions, and fixed failures', (
     expect(harness.history).toHaveLength(firstHistory + 1);
     expect(harness.history.at(-1).staged).toEqual([]);
     expect(harness.store.get(PATHS.preference)).toBe(originalPreference);
+    expect(harness.store.get(PATHS.entry)).toBe(originalEntry);
     expect(harness.store.get(auditPath)).toBe(separatelyDecodedAudit);
   });
 

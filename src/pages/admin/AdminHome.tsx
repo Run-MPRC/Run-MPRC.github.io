@@ -237,8 +237,19 @@ function Inner() {
               to="/admin/members"
               className="block border rounded-lg p-4 hover:bg-gray-50"
             >
-              <div className="font-semibold">Members</div>
-              <div className="text-sm text-gray-600">Promote, demote, search</div>
+              <div className="font-semibold">Website accounts</div>
+              <div className="text-sm text-gray-600">
+                Manage website roles; not a people finder
+              </div>
+            </Link>
+            <Link
+              to="/admin/member-directory"
+              className="block border rounded-lg p-4 hover:bg-gray-50"
+            >
+              <div className="font-semibold">People finder</div>
+              <div className="text-sm text-gray-600">
+                Search opted-in names; view voluntary photos
+              </div>
             </Link>
             <Link
               to="/admin/products"

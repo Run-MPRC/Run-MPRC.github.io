@@ -32,6 +32,10 @@ const {
   setMyMemberDirectoryPhoto,
   removeMyMemberDirectoryPhoto,
 } = require('./memberDirectoryProfile');
+const {
+  searchMemberDirectory,
+  syncMemberDirectoryEntryOnMemberWrite,
+} = require('./memberDirectorySearch');
 
 // Auth triggers
 exports.createMemberOnSignUp = onSignUp;
@@ -68,6 +72,10 @@ exports.getMyMemberDirectoryProfile = getMyMemberDirectoryProfile;
 exports.setMyMemberDirectoryVisibility = setMyMemberDirectoryVisibility;
 exports.setMyMemberDirectoryPhoto = setMyMemberDirectoryPhoto;
 exports.removeMyMemberDirectoryPhoto = removeMyMemberDirectoryPhoto;
+exports.searchMemberDirectory = searchMemberDirectory;
+
+// Keep the server-only directory projection current when a member name changes.
+exports.syncMemberDirectoryEntryOnMemberWrite = syncMemberDirectoryEntryOnMemberWrite;
 
 // Firestore triggers
 exports.sendConfirmationEmail = sendConfirmationEmail;
