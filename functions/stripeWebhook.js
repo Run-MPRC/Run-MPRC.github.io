@@ -34,7 +34,7 @@ const DISPUTE_EVENT_TYPES = new Set([
   'charge.dispute.closed',
 ]);
 
-function isValidEventCreated(value) {
+function isValidStripeCreated(value) {
   return Number.isSafeInteger(value)
     && value >= 0
     && value <= FIRESTORE_TIMESTAMP_MAX_SECONDS;
@@ -166,11 +166,19 @@ function validateEventAdmission(event, expectedLivemode) {
   const schemaValidation = validateMetadataSchemaVersion(event, expectedLivemode);
   if (!schemaValidation.ok) return schemaValidation;
   if (isSupportedEventType(event.type)
-    && !isValidEventCreated(event.created)) {
+    && !isValidStripeCreated(event.created)) {
     return {
       ok: false,
       expected: expectedLivemode,
       reason: 'invalid_event_created',
+    };
+  }
+  if (event.type === 'charge.refunded'
+    && !isValidStripeCreated(event.data?.object?.created)) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'invalid_charge_created',
     };
   }
   return modeValidation;
@@ -1139,11 +1147,7 @@ function refundTransition({ event, charge, target, record }) {
     stripeChargeId: record.stripeChargeId || chargeId,
     stripeAmountTotalCents: totalAmount,
     stripeAmountRefundedCents: amountRefunded,
-    paidAt: record.paidAt || (
-      Number.isSafeInteger(charge.created)
-        ? Timestamp.fromMillis(charge.created * 1000)
-        : Timestamp.now()
-    ),
+    paidAt: record.paidAt || Timestamp.fromMillis(charge.created * 1000),
     refundedAt: Timestamp.now(),
     lastStripeEventId: event.id,
     updatedAt: Timestamp.now(),
@@ -1408,7 +1412,7 @@ function ledgerData(event, target, result, ownership) {
     type: event.type,
     objectId: objectId(event.data?.object) || null,
     livemode: event.livemode === true,
-    stripeCreatedAt: isValidEventCreated(eventCreated)
+    stripeCreatedAt: isValidStripeCreated(eventCreated)
       ? Timestamp.fromMillis(eventCreated * 1000)
       : null,
     status: 'processed',

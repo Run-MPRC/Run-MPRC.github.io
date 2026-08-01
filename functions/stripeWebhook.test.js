@@ -186,7 +186,7 @@ jest.mock('firebase-admin/firestore', () => {
   let tick = 1_800_000_000_000;
   return {
     Timestamp: {
-      now: () => ({ _milliseconds: tick += 1 }),
+      now: jest.fn(() => ({ _milliseconds: tick += 1 })),
       fromMillis: jest.fn((milliseconds) => {
         if (!Number.isFinite(milliseconds)
           || milliseconds < -62_135_596_800_000
@@ -373,6 +373,28 @@ const NON_DISPUTE_EVENT_CREATED_CASES = NON_DISPUTE_EVENT_TYPES.flatMap(
     ],
   ),
 );
+const REFUND_CHARGE_CREATED_DOMAINS = ['registration', 'order'];
+const INVALID_REFUND_CHARGE_CREATED_CASES = [
+  ['missing', 'delete', undefined],
+  ['null', 'value', null],
+  ['negative', 'value', -1],
+  ['fractional', 'value', 1.5],
+  ['string', 'value', 'hostile-charge-created-do-not-log'],
+  ['boolean', 'value', true],
+  ['object', 'value', { marker: 'hostile-charge-created-do-not-log' }],
+  ['array', 'value', ['hostile-charge-created-do-not-log']],
+  ['NaN serialized as null', 'value', Number.NaN],
+  ['positive infinity serialized as null', 'value', Number.POSITIVE_INFINITY],
+  ['negative infinity serialized as null', 'value', Number.NEGATIVE_INFINITY],
+  ['Firestore maximum plus one', 'value', FIRESTORE_TIMESTAMP_MAX_SECONDS + 1],
+  ['maximum safe integer', 'value', Number.MAX_SAFE_INTEGER],
+  ['unsafe integer', 'value', Number.MAX_SAFE_INTEGER + 1],
+];
+const REFUND_CHARGE_CREATED_CASES = REFUND_CHARGE_CREATED_DOMAINS.flatMap(
+  (domain) => INVALID_REFUND_CHARGE_CREATED_CASES.map(
+    ([evidence, mutation, value]) => [domain, evidence, mutation, value],
+  ),
+);
 
 function stripeEvent(id, type, object) {
   const checkoutStatus = CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE[type];
@@ -380,7 +402,12 @@ function stripeEvent(id, type, object) {
   if (checkoutStatus) {
     providerObject = { livemode: false, status: checkoutStatus, ...object };
   } else if (type === 'charge.refunded') {
-    providerObject = { livemode: false, status: 'succeeded', ...object };
+    providerObject = {
+      created: 1_799_999_900,
+      livemode: false,
+      status: 'succeeded',
+      ...object,
+    };
   } else if (PROVIDER_OBJECT_REALM_EVENT_TYPES.has(type)) {
     providerObject = { livemode: false, ...object };
   }
@@ -576,6 +603,58 @@ function nonDisputeEventFixture(type, suffix, { missingTarget = false } = {}) {
   };
 }
 
+function refundChargeCreatedFixture(
+  domain,
+  suffix,
+  { missingTarget = false, existingPaidAt = null } = {},
+) {
+  const registration = domain === 'registration';
+  const businessPath = registration
+    ? 'events/race-1/registrations/reg-1'
+    : 'orders/order-1';
+  const paymentIntentId = `pi_pay003a9_${suffix}`;
+  const amount = registration ? 5000 : 2000;
+  const metadata = registration ? {
+    schemaVersion: '1',
+    eventId: missingTarget ? 'race-missing' : 'race-1',
+    registrationId: missingTarget ? 'registration-missing' : 'reg-1',
+  } : {
+    schemaVersion: '1',
+    type: 'merch',
+    orderId: missingTarget ? 'order-missing' : 'order-1',
+  };
+
+  if (!missingTarget) {
+    const record = {
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: paymentIntentId,
+      stripeAmountTotalCents: amount,
+      ...(existingPaidAt ? { paidAt: existingPaidAt } : {}),
+    };
+    if (registration) seedRegistration(record);
+    else seedOrder(record);
+  }
+
+  return {
+    businessPath: missingTarget ? null : businessPath,
+    event: stripeEvent(
+      `evt_pay003a9_${suffix}`,
+      'charge.refunded',
+      {
+        id: `ch_pay003a9_${suffix}`,
+        object: 'charge',
+        payment_intent: paymentIntentId,
+        amount,
+        amount_refunded: 500,
+        currency: 'usd',
+        metadata,
+        refunds: { data: [{ id: `re_pay003a9_${suffix}` }] },
+      },
+    ),
+  };
+}
+
 function signedRequest(event, signatureOverride) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signedPayload = createSignedStripePayload({
@@ -643,6 +722,11 @@ function setDisputeStatus(dispute, mutation, value) {
 function setEventCreated(event, mutation, value) {
   if (mutation === 'delete') delete event.created;
   else event.created = value;
+}
+
+function setChargeCreated(charge, mutation, value) {
+  if (mutation === 'delete') delete charge.created;
+  else charge.created = value;
 }
 
 function providerBindingPaths(event) {
@@ -781,11 +865,44 @@ function expectedEventCreatedQuarantine(bindingPaths = []) {
   };
 }
 
+function expectedChargeCreatedQuarantine(bindingPaths = []) {
+  return {
+    httpStatus: null,
+    response: {
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:invalid_charge_created',
+      requiresReview: true,
+    },
+    businessUnchanged: true,
+    ledger: {
+      status: 'processed',
+      outcome: 'needs_review:invalid_charge_created',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    },
+    bindingPaths,
+  };
+}
+
 function expectOnlyEventLedgerReads(event) {
   expect(admin.__readOperations()).toEqual([
     { kind: 'document', path: `stripeEvents/${event.id}` },
     { kind: 'document', path: `stripeEvents/${event.id}` },
   ]);
+}
+
+function expectOnlyEventLedgerTimestamps(event) {
+  const ledger = admin.__get(`stripeEvents/${event.id}`);
+  expect(Timestamp.fromMillis.mock.calls).toEqual([
+    [event.created * 1000],
+    [ledger.processedAt._milliseconds],
+    [ledger.expiresAt._milliseconds],
+  ]);
+  expect(ledger.expiresAt._milliseconds - ledger.processedAt._milliseconds)
+    .toBe(90 * 24 * 60 * 60 * 1000);
 }
 
 function seedPaidDisputeOrder(overrides = {}) {
@@ -808,6 +925,7 @@ describe('stripeWebhook', () => {
 
   beforeEach(() => {
     admin.__clear();
+    Timestamp.now.mockClear();
     Timestamp.fromMillis.mockClear();
     delete process.env.COMMERCE_ENABLED;
     process.env.ENVIRONMENT_NAME = 'test';
@@ -3165,6 +3283,392 @@ describe('stripeWebhook', () => {
     expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(
       (FIRESTORE_TIMESTAMP_MAX_SECONDS + 1) * 1000,
     );
+  });
+
+  test.each(REFUND_CHARGE_CREATED_CASES)(
+    'PAY-003A9 quarantines %s refund with %s Charge-created evidence',
+    async (domain, evidence, mutation, value) => {
+      const slug = `${domain}_${evidence}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = refundChargeCreatedFixture(domain, slug);
+      const before = storedCopy(businessPath);
+      setChargeCreated(event.data.object, mutation, value);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedChargeCreatedQuarantine());
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        stripeCreatedAt: { _milliseconds: event.created * 1000 },
+      });
+      expectOnlyEventLedgerReads(event);
+      expectOnlyEventLedgerTimestamps(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        'Stripe event requires review',
+        {
+          eventId: event.id,
+          eventType: 'charge.refunded',
+          outcome: 'needs_review:invalid_charge_created',
+          targetType: null,
+        },
+      );
+      expect(JSON.stringify({
+        response: response.json.mock.calls,
+        ledger: admin.__get(`stripeEvents/${event.id}`),
+        logs: consoleError.mock.calls,
+      })).not.toContain('hostile-charge-created-do-not-log');
+    },
+  );
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS)(
+    'PAY-003A9 defensively rejects a post-parser Proxy for %s Charge-created',
+    async (domain) => {
+      const { event, businessPath } = refundChargeCreatedFixture(domain, `proxy_${domain}`);
+      const before = storedCopy(businessPath);
+      const trap = jest.fn(() => {
+        throw new Error('Charge-created Proxy trap must not run');
+      });
+      event.data.object.created = new Proxy({}, {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+        ownKeys: trap,
+      });
+
+      const response = await deliverMockedConstructedEvent(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedChargeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(trap).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS)(
+    'PAY-003A9 does not let existing %s paidAt bypass invalid Charge-created admission',
+    async (domain) => {
+      const existingPaidAt = { _milliseconds: 1_700_000_000_000 };
+      const { event, businessPath } = refundChargeCreatedFixture(
+        domain,
+        `existing_paid_at_${domain}`,
+        { existingPaidAt },
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedChargeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(-1000);
+    },
+  );
+
+  test('PAY-003A9 blocks invalid Charge time before ambiguous legacy fallback', async () => {
+    const paymentIntentId = 'pi_pay003a9_ambiguous';
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: paymentIntentId,
+      stripeAmountTotalCents: 2000,
+    });
+    seedRegistration({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: paymentIntentId,
+      stripeAmountTotalCents: 5000,
+    });
+    const snapshots = [
+      ['orders/order-1', storedCopy('orders/order-1')],
+      [
+        'events/race-1/registrations/reg-1',
+        storedCopy('events/race-1/registrations/reg-1'),
+      ],
+    ];
+    const event = stripeEvent(
+      'evt_pay003a9_ambiguous_fallback',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_pay003a9_ambiguous_fallback',
+        payment_intent: paymentIntentId,
+        metadata: {},
+      }),
+    );
+    event.data.object.created = -1;
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({
+      response,
+      event,
+      businessSnapshots: snapshots,
+    })).toEqual(expectedChargeCreatedQuarantine());
+    expectOnlyEventLedgerReads(event);
+  });
+
+  test('PAY-003A9 keeps invalid Charge time ahead of malformed reference handling', async () => {
+    const event = stripeEvent(
+      'evt_pay003a9_malformed_reference',
+      'charge.refunded',
+      orderRefundCharge({
+        id: 'ch_pay003a9_malformed_reference',
+        metadata: {
+          schemaVersion: '1',
+          type: 'merch',
+          orderId: 'order-1',
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+        },
+      }),
+    );
+    event.data.object.created = -1;
+
+    const response = await deliver(event);
+
+    expect(refundAdmissionObservation({ response, event }))
+      .toEqual(expectedChargeCreatedQuarantine());
+    expectOnlyEventLedgerReads(event);
+  });
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS)(
+    'PAY-003A9 processes invalid Charge time before a claimed missing %s target',
+    async (domain) => {
+      const { event } = refundChargeCreatedFixture(
+        domain,
+        `invalid_missing_${domain}`,
+        { missingTarget: true },
+      );
+      event.data.object.created = -1;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({ response, event }))
+        .toEqual(expectedChargeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS)(
+    'PAY-003A9 keeps a valid Charge time with a claimed missing %s target retryable',
+    async (domain) => {
+      const { event } = refundChargeCreatedFixture(
+        domain,
+        `valid_missing_${domain}`,
+        { missingTarget: true },
+      );
+      event.data.object.created = FIRESTORE_TIMESTAMP_MAX_SECONDS;
+
+      const response = await deliver(event);
+
+      expect(response.status).toHaveBeenCalledWith(500);
+      expect(admin.__get(`stripeEvents/${event.id}`)).toBeUndefined();
+      providerBindingPaths(event).forEach((path) => {
+        expect(admin.__get(path)).toBeUndefined();
+      });
+    },
+  );
+
+  test.each([
+    [
+      'outer Event realm',
+      'livemode_mismatch',
+      (event) => { event.livemode = true; },
+      { _milliseconds: 1_800_000_000_000 },
+    ],
+    [
+      'embedded Charge realm',
+      'charge_livemode_mismatch',
+      (event) => { event.data.object.livemode = true; },
+      { _milliseconds: 1_800_000_000_000 },
+    ],
+    [
+      'Charge status',
+      'charge_status_mismatch',
+      (event) => { event.data.object.status = 'pending'; },
+      { _milliseconds: 1_800_000_000_000 },
+    ],
+    [
+      'metadata schema',
+      'metadata_schema_version_mismatch',
+      (event) => { setMetadataSchema(event.data.object, '2'); },
+      { _milliseconds: 1_800_000_000_000 },
+    ],
+    [
+      'outer Event time',
+      'invalid_event_created',
+      (event) => { event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1; },
+      null,
+    ],
+  ])('PAY-003A9 keeps %s precedence over invalid Charge time', async (
+    label,
+    reason,
+    mutate,
+    expectedStripeCreatedAt,
+  ) => {
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const { event, businessPath } = refundChargeCreatedFixture(
+      'order',
+      `precedence_${slug}`,
+    );
+    const before = storedCopy(businessPath);
+    event.data.object.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1;
+    mutate(event);
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      stripeCreatedAt: expectedStripeCreatedAt,
+    });
+    expectOnlyEventLedgerReads(event);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(
+      (FIRESTORE_TIMESTAMP_MAX_SECONDS + 1) * 1000,
+    );
+  });
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS)(
+    'PAY-003A9 deduplicates rejected %s Charge time without target work',
+    async (domain) => {
+      const { event, businessPath } = refundChargeCreatedFixture(
+        domain,
+        `replay_${domain}`,
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+
+      const firstResponse = await deliver(event);
+      const ledgerPath = `stripeEvents/${event.id}`;
+      const afterFirstLedger = storedCopy(ledgerPath);
+      const replayResponse = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response: firstResponse,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedChargeCreatedQuarantine());
+      expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: true,
+        outcome: 'needs_review:invalid_charge_created',
+      }));
+      expect(admin.__get(businessPath)).toEqual(before);
+      expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+      expect(admin.__readOperations()).toEqual([
+        { kind: 'document', path: ledgerPath },
+        { kind: 'document', path: ledgerPath },
+        { kind: 'document', path: ledgerPath },
+      ]);
+      expect(Timestamp.fromMillis).toHaveBeenCalledTimes(3);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS.flatMap((domain) => [
+    [domain, 'Unix epoch', 0],
+    [domain, 'Firestore maximum', FIRESTORE_TIMESTAMP_MAX_SECONDS],
+  ]))('PAY-003A9 admits the inclusive %s %s Charge-created boundary', async (
+    domain,
+    boundary,
+    chargeCreated,
+  ) => {
+    const slug = `${domain}_${boundary}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const { event, businessPath } = refundChargeCreatedFixture(domain, `valid_${slug}`);
+    event.data.object.created = chargeCreated;
+
+    const response = await deliver(event);
+
+    expect(response.status).not.toHaveBeenCalledWith(500);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'partially_refunded',
+    }));
+    expect(admin.__get(businessPath)).toMatchObject({
+      paymentStatus: 'partially_refunded',
+      paidAt: { _milliseconds: chargeCreated * 1000 },
+    });
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      targetPath: businessPath,
+      stripeCreatedAt: { _milliseconds: event.created * 1000 },
+    });
+  });
+
+  test.each(REFUND_CHARGE_CREATED_DOMAINS)(
+    'PAY-003A9 preserves an existing %s paidAt for valid Charge time',
+    async (domain) => {
+      const existingPaidAt = { _milliseconds: 1_700_000_000_000 };
+      const { event, businessPath } = refundChargeCreatedFixture(
+        domain,
+        `valid_existing_paid_at_${domain}`,
+        { existingPaidAt },
+      );
+      event.data.object.created = FIRESTORE_TIMESTAMP_MAX_SECONDS;
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'partially_refunded',
+      }));
+      expect(admin.__get(businessPath).paidAt).toEqual(existingPaidAt);
+    },
+  );
+
+  test('PAY-003A9 leaves Checkout Session-created evidence outside this child', async () => {
+    seedRegistration();
+    const event = stripeEvent(
+      'evt_pay003a9_checkout_compatibility',
+      'checkout.session.completed',
+      registrationSession({ created: -1 }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'payment_confirmed',
+    }));
+  });
+
+  test('PAY-003A9 leaves Dispute-created evidence outside this child', async () => {
+    seedPaidDisputeOrder();
+    const event = stripeEvent(
+      'evt_pay003a9_dispute_compatibility',
+      'charge.dispute.updated',
+      orderDispute({ created: -1, status: 'under_review' }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'dispute_under_review',
+    }));
+  });
+
+  test('PAY-003A9 leaves unsupported embedded created evidence unchanged', async () => {
+    const event = stripeEvent(
+      'evt_pay003a9_unsupported_compatibility',
+      'customer.created',
+      { id: 'cus_pay003a9_unsupported', object: 'customer', created: -1 },
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'ignored:unsupported_event',
+    }));
   });
 
   test('quarantines an incompatible claimed Dispute before resolving its missing target', async () => {
