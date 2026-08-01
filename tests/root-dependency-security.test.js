@@ -38,9 +38,9 @@ const EXPECTED_WEBSOCKET_DRIVER_DEPENDENCIES = Object.freeze({
   'websocket-extensions': '>=0.1.1',
 });
 const EXPECTED_SHELL_QUOTE = Object.freeze({
-  version: '1.8.4',
-  resolved: 'https://registry.npmjs.org/shell-quote/-/shell-quote-1.8.4.tgz',
-  integrity: 'sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==',
+  version: '1.9.0',
+  resolved: 'https://registry.npmjs.org/shell-quote/-/shell-quote-1.9.0.tgz',
+  integrity: 'sha512-Iov+JwFv/2HcTpcwNMKd8+IWNb8tboQJNQTkAY/LLVK7gGH9jy+LGkVqPxfekHl+yMmiqXszdGWXgkfml7hjqA==',
 });
 const EXPECTED_PICOMATCH = Object.freeze({
   version: '2.3.2',
@@ -650,7 +650,7 @@ test('closes draft-75 length headers only when declared length exceeds maxLength
   assert.deepEqual(atThreshold.events, ['open', 'close']);
 });
 
-test('pins the sole root shell-quote resolution to the patched 1.8.4 release', () => {
+test('pins the sole root shell-quote resolution to the patched 1.9.0 release', () => {
   const packageJson = readJson(PACKAGE_PATH);
   const lock = readJson(LOCK_PATH);
 
@@ -696,6 +696,45 @@ test('pins the sole root shell-quote resolution to the patched 1.8.4 release', (
     path.join(REPOSITORY, 'node_modules/shell-quote/package.json'),
   );
   assert.equal(installed.version, EXPECTED_SHELL_QUOTE.version);
+});
+
+test('SUPPLY-001D11 bounds shell-quote parse token finalization', () => {
+  const installedPath = path.join(REPOSITORY, 'node_modules/shell-quote');
+  const tokenCount = 64_000;
+  const childSource = `
+    const { parse } = require(${JSON.stringify(installedPath)});
+    const tokenCount = ${tokenCount};
+    const tokens = parse('x '.repeat(tokenCount));
+    process.stdout.write(JSON.stringify({
+      count: tokens.length,
+      first: tokens[0],
+      last: tokens[tokens.length - 1],
+    }));
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ['--max-old-space-size=64', '-e', childSource],
+    {
+      cwd: REPOSITORY,
+      encoding: 'utf8',
+      maxBuffer: 1_024,
+      timeout: 2_000,
+    },
+  );
+
+  assert.equal(
+    result.error,
+    undefined,
+    'the public parse() API must finish the bounded synthetic input before the timeout',
+  );
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), {
+    count: tokenCount,
+    first: 'x',
+    last: 'x',
+  });
 });
 
 test('rejects line-terminator shell operator objects without executing a shell', () => {
