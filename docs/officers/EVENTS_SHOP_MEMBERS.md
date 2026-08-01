@@ -2400,7 +2400,7 @@ Officer review steps after the source merge:
 12. Confirm the mocked lookup receives only the current mocked database reference and route slug. Do not submit or save the form.
 13. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider, product-record, production-data, Admin-screen approval, and live behavior as separate results.
 
-**Expected result:** the reviewed source discards the complete rejected value without binding, inspecting, logging, measuring, storing, or rendering it. A rejection shows one fixed accessible retry-later sentence and no editable form. Only the current route and database lookup may settle the page; older results are inert, and a later current success recovers. Existing current missing-product and successful-product displays remain distinct. Save, create, update, validation, and navigation behavior are unchanged. This does not authorize an officer to open, edit, or save an Admin Product screen live.
+**Expected result:** the reviewed source discards the complete rejected value without binding, inspecting, logging, measuring, storing, or rendering it. A rejection shows one fixed accessible retry-later sentence and no editable form. Only the current route and database lookup may settle the page; older results are inert, and a later current success recovers. Existing current missing-product and successful-product displays remain distinct. Issue [#496](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/496) separately contains the save rejection and immediate repeat-click boundary. Its local validation, create/update request shapes, and current successful navigation remain unchanged. Neither slice authorizes an officer to open, edit, or save an Admin Product screen live.
 
 **Stop conditions:** any real officer, member, product, price, inventory, order, checkout, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise the failure; a request to force a production error; a raw detail on the page, in analytics, or in the console; a product form or Save action after an unknown result; a stale product after the route or database changes; an attempted product/admin write; a Firebase, Rules, provider, or permission change; or a claim that source, tests, merge, preview, or a green workflow proves the sentence or editor is live.
 
@@ -2411,6 +2411,69 @@ Officer review steps after the source merge:
 **Escalation:** shop lead plus platform/security owner. Add the privacy owner and use the private incident path if any database, Firebase, provider, account, product, order, payment, endpoint, token-shaped, or technical detail appeared. Add the treasurer if a commerce or payment state might be involved. Do not copy private details into an issue, message, screenshot, email, or AI tool.
 
 No system-topology diagram changes for this source slice because data movement, permissions, account ownership, and deployment topology are unchanged. The state-flow diagram above records only the editor's load-result display and current-request lifecycle.
+
+### Admin Product save unknown result — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** stop one open Admin Product editor page from starting a second save after the first result becomes unknown. A pending or unknown save must show no product detail, form, save button, cancel action, database detail, or provider detail.
+
+**Approver:** shop lead, treasurer, and platform/security and privacy owners.
+
+**Prerequisites:** issue [#296](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/296) and issue [#496](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/496) must be merged for source review. Use only a made-up admin identity, mocked database references, made-up products, and mocked save results. The **Admin screens — NOT AVAILABLE YET** restrictions above still apply. This slice does not approve the editor, save a product, add server idempotency, reconcile an unknown write, deploy Firebase, change Rules or permissions, use production data, or prove live behavior.
+
+Before #496, the page could inspect and show a rejected provider message, accept two immediate save requests, fall back to the text `admin` when no current account ID existed, and enable Save again after a rejected request that might already have written the product. An older request could also send the officer to the product list after the route, database connection, account, ready state, or page had changed.
+
+```mermaid
+flowchart LR
+    A["Current made-up product form"] --> B["Local validation"]
+    B -- "Invalid" --> C["Fixed local correction; no save attempt"]
+    B -- "Valid" --> D["One browser-page save attempt"]
+    D --> E["Fixed polite pending status; no form or action"]
+    E -- "Current mocked success" --> F["Existing Admin Products navigation"]
+    E -- "Current mocked rejection" --> G["Fixed unknown alert; no form, action, reload, or repeat"]
+    H["Older or closed-page result"] -. "Ignored" .-> I["No navigation or display change"]
+    J["Reload, another tab, device, or script"] -. "Not protected by this browser guard" .-> K["Stop; private reconciliation is still required"]
+```
+
+Text alternative: local validation errors remain correctable without a save. One valid form may start one mocked save on the current page. Pending work hides the form and actions. A current mocked success keeps the existing navigation. A current rejection shows one fixed stop alert and no retry. An older or closed-page result changes nothing. Reloading or using another tab, device, or script is outside this browser guard and never makes a repeat safe.
+
+Officer review steps after the source merge:
+
+1. Keep the complete Admin Product editor marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #496 issue, reviewed pull request, merged commit, and synthetic frontend test result.
+3. Confirm the tests use only a made-up admin identity, mocked database references, made-up products, and mocked create or update requests.
+4. Confirm a local form error starts no save, appears as one accessible alert, and remains correctable.
+5. Confirm one valid made-up edit sends the existing database reference, product path, and product input exactly once.
+6. Confirm one valid made-up create sends the existing database reference, product input, and exact current made-up admin ID exactly once.
+7. Confirm no create starts when the current database reference or admin ID is missing, and no edit starts when the current product lookup is missing.
+8. Confirm two immediate submissions still start only one request.
+9. Confirm a pending request shows exactly `Product save in progress. Do not start another save.`
+10. Confirm assistive technology receives the whole pending sentence politely as one status.
+11. Confirm pending work shows no product title, field, form, **Create product**, **Save changes**, **Cancel**, or **All products** action.
+12. Confirm an ordinary or hostile mocked rejection shows exactly `We could not confirm that product save. Do not repeat it. Stop and contact the shop lead, treasurer, and platform owner.`
+13. Confirm assistive technology receives the whole unknown-result sentence immediately as one alert.
+14. Confirm the rejected value is not inspected, coerced, logged, measured, stored, sent to analytics, or displayed.
+15. Confirm the unknown result shows no product title, field, form, create, save, cancel, navigation, reload, or retry action.
+16. Confirm changing the route, database reference, ready state, or made-up admin ID makes the older mocked success or rejection inert.
+17. Confirm a result received after the page closes is inert.
+18. Confirm an internal page update with the same effective route, database reference, and made-up admin ID does not clear an unknown lock.
+19. Confirm a current mocked success keeps the existing one-time navigation to the Admin Products list.
+20. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, Rules or permissions, provider configuration, product records, production data, Admin-screen approval, and live behavior as separate results.
+
+**Expected result:** one mounted page admits at most one valid mocked save for its current route, database reference, and made-up admin ID. Pending work shows one fixed polite status and no product detail or action. A current rejection is discarded without inspection and becomes one fixed terminal alert. An older or closed-page result is inert. A current success preserves the existing request and navigation. A missing admin ID or database reference starts no save.
+
+This is only an immediate browser-page guard. Leaving or reloading the page resets it. Another tab, device, account, or script can repeat a write. The current create service still checks then writes without one durable command ID. The current update service has no version fence. A rejected database promise might already have committed. Do not use refresh, navigation, a new tab, a new device, another account, or direct database inspection as a reconciliation method or a reason to repeat the save.
+
+**Stop conditions:** any real officer, member, product, price, inventory, order, checkout, payment, Firebase, Stripe, provider, endpoint, credential, or production record used to exercise a save; a request to force a production failure; a private or technical detail on the page, in analytics, in the console, or in a review record; more than one mocked request; any form or action visible during pending or unknown state; any older result that navigates or changes the page; a reload, navigation, new tab, device, account, script, manual database inspection, or repeated save offered as recovery; a Firebase, Rules, permission, or product-record change; or a claim that source, tests, merge, preview, or a green workflow proves the result or editor is live.
+
+**Success proof:** for source completion, record the exact #496 issue, reviewed pull request, merged commit, old-source failures, green synthetic actual-route tests, relevant full checks, and independent privacy/security, lifecycle/compatibility, accessibility, and officer-continuity reviews. The safe officer review stops at source and mocked tests because the Admin screen is not approved for officer use. A future live process still needs server-authoritative idempotency, durable audit, private readback and reconciliation, authorization, backup, rollback, approved deployment, and exact-revision verification. Record website publication, `runmprc.com`, Firebase deployment, Rules or permission changes, provider configuration, product changes, production-data actions, saves, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend-and-guide revert or safe roll-forward. After any later approved publication, use the protected website release path and verify the replacement revision. Never undo by refreshing, leaving the page, repeating a save, or creating, changing, deleting, or manually repairing a product, order, payment, officer account, permission, database record, source document, or provider setting.
+
+**Escalation:** stop and contact the shop lead, treasurer, and platform/security owner. Add the privacy owner if any private or technical detail appeared. Use the private incident path if a save might have completed, another request was attempted, or the page navigated after its context changed. Do not copy product details, provider details, database records, or account details into an issue, screenshot, email, message, or AI tool.
+
+No system-topology diagram changes are required because this source slice changes no server authority, data movement, permissions, account ownership, or deployment topology. The state-flow diagram above records only the current browser page's save display and immediate repeat guard.
 
 ### Admin event-list load failure privacy — SOURCE ONLY, NOT LIVE
 
