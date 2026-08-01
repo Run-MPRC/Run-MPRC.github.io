@@ -218,11 +218,11 @@ test('Netlify manifest pins the bounded permissions-containment artifact', () =>
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    'fc25692fc79883f89bf90309654f781b1554e867',
+    '39ab8649df411262c8109a3c81a57bc38f1e168b',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    '91a351452af620c09b0a957c5af2c44a88fc1e70',
+    'd76b496cdc5e79015bc048cb961758abbe88b9ce',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
@@ -234,7 +234,7 @@ test('Netlify manifest pins the bounded permissions-containment artifact', () =>
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-473-permissions-containment',
+    'refs/heads/codex/netlify-source-473-permissions-containment-v2',
   );
   assert.equal(
     loaded.manifest.previewBranch,
