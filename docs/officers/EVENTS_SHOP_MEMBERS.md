@@ -2397,6 +2397,50 @@ Officer review steps after every prerequisite has proof:
 
 **Escalation:** treasurer plus platform/security owner. Use the private incident path if any unexpected refund or real record was involved.
 
+## Optional profile photo and officer people finder — SOURCE ONLY, NOT LIVE
+
+**Purpose:** let a signed-in person choose one private profile thumbnail and, separately, choose whether a future authorized-officer people finder may show their display name and thumbnail.
+
+**Approver:** membership lead, privacy owner, and platform/security owner. The privacy owner must approve the final notice and backup/removal wording before publication.
+
+**Prerequisites:** parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504) and source child [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) are reviewed; use only made-up accounts and generated non-face images. Officer search [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506), protected release [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507), and the approved #110 privacy entry are still required before live use.
+
+```mermaid
+flowchart LR
+    Person["Signed-in person"] --> Photo["Upload or remove private processed thumbnail"]
+    Person --> Choice{"Allow optional officer finder?"}
+    Choice -- "No or missing" --> Hidden["Hidden from optional finder"]
+    Choice -- "Yes" --> Future["Future officer name search\nNOT AVAILABLE YET"]
+    Photo -. "does not turn on" .-> Choice
+    Choice -. "does not prove or change" .-> Official["Membership, role, payment, or official records"]
+```
+
+Text alternative: the person controls a private processed thumbnail and a separate default-off finder choice; uploading does not opt them in, and neither choice proves or changes membership, role, payment, or official records.
+
+Officer review steps for the #505 source only:
+
+1. Keep the complete photo and people-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #505 pull request, commit, and synthetic test record.
+3. Confirm the test uses generated colored pixels, not a real person's photo.
+4. Confirm a missing choice is off.
+5. Confirm uploading or replacing the generated image does not turn the choice on.
+6. Confirm clearing the made-up account's display name leaves opt-out available but makes the account ineligible for finder results until a valid name is restored.
+7. Confirm the server keeps only a small 256-pixel WebP thumbnail and no submitted original, filename, or location metadata.
+8. Confirm turning the choice off does not delete or change an official account, role, membership, registration, or payment record.
+9. Confirm removing the photo is a separate action and deletes the active thumbnail.
+10. Confirm an uncertain change hides further controls until the person deliberately reloads the settings; a fixed server rejection instead refetches current settings and leaves controls available.
+11. Stop. Do not open the production Account or Admin screen, upload a real photo, search a real name, or edit Firebase.
+
+**Expected result:** source and synthetic tests prove one person's private, revisioned preference and processed thumbnail behavior. There is no officer search route, public URL, Firebase Storage object, face recognition, image-to-person query, embedding, or biometric template.
+
+**Stop conditions:** a real person, name, photo, member record, production account, or production Firebase project; a public/permanent photo URL; an upload that silently opts in; an opt-out that still appears in the optional finder; raw image, name, query, or provider detail in a log, issue, screenshot, message, email, or AI tool; a request for face recognition; missing privacy approval; or a claim that source, tests, merge, or preview means the feature is live.
+
+**Success proof:** record the exact #505 pull request and merge commit, green focused and full checks, dependency review, independent privacy/security review, and explicit statements that Firebase deployment, website publication, `runmprc.com`, production data, officer search, and live behavior were not performed. Final live proof belongs to #507.
+
+**Undo:** before publication, use one reviewed source revert or safe roll-forward. After a future approved release, use the documented backend-first release path and verify opt-out/removal with a made-up account. Never undo by deleting or editing a real account or Firebase record manually.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real photo/name appeared, a visibility choice was wrong, or deletion could not be confirmed.
+
 ## Admin screens — NOT AVAILABLE YET
 
 Admin event and product editors exist in source, but their live permissions, backup, preview, and rollback behavior have not been approved. Saving can write directly to production Firestore. Officers must not use these screens as a continuity procedure yet.

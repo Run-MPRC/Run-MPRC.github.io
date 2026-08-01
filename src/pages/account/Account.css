@@ -169,6 +169,137 @@
   cursor: not-allowed;
 }
 
+.member-directory-profile {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  color: #111827;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+}
+
+.member-directory-profile h2 {
+  margin: 0 0 0.75rem;
+  color: #111827;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.member-directory-profile p {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.member-directory-profile__controls,
+.member-directory-profile__warning,
+.member-directory-profile__photo-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.member-directory-profile__controls,
+.member-directory-profile__warning {
+  margin-top: 1rem;
+}
+
+.member-directory-profile__photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.member-directory-profile__photo img,
+.member-directory-profile__placeholder {
+  width: 8rem;
+  height: 8rem;
+  flex: 0 0 8rem;
+  border: 2px solid #9ca3af;
+  border-radius: 0.5rem;
+}
+
+.member-directory-profile__photo img {
+  object-fit: cover;
+}
+
+.member-directory-profile__placeholder {
+  display: grid;
+  place-items: center;
+  color: #4b5563;
+  background: #e5e7eb;
+  font-weight: 700;
+}
+
+.member-directory-profile__photo-actions label,
+.member-directory-profile__visibility label {
+  font-weight: 700;
+}
+
+.member-directory-profile__photo-actions span,
+.member-directory-profile__visibility p {
+  max-width: 34rem;
+  color: #4b5563;
+  font-size: 0.875rem;
+}
+
+.member-directory-profile__photo-actions,
+.member-directory-profile__photo-actions input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.member-directory-profile__visibility {
+  padding-top: 1rem;
+  border-top: 1px solid #d1d5db;
+}
+
+.member-directory-profile__visibility input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-right: 0.5rem;
+  vertical-align: -0.15rem;
+}
+
+.member-directory-profile button {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.9rem;
+  color: #fff;
+  background: #005bd8;
+  border: 2px solid #005bd8;
+  border-radius: 0.375rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.member-directory-profile button:hover:not(:disabled) {
+  color: #111827;
+  background: #facc15;
+  border-color: #111827;
+}
+
+.member-directory-profile button:focus-visible,
+.member-directory-profile input:focus-visible {
+  outline: 3px solid #005bd8;
+  outline-offset: 3px;
+}
+
+.member-directory-profile button:disabled,
+.member-directory-profile input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.member-directory-profile__warning {
+  padding: 0.75rem;
+  color: #7f1d1d;
+  background: #fef2f2;
+  border: 2px solid #fca5a5;
+  border-radius: 0.375rem;
+}
+
 @media (min-width: 640px) {
   .account-verification-notice {
     align-items: flex-start;

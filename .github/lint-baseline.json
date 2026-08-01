@@ -10,12 +10,12 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 110,
+  "scannedFileCount": 114,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 34,
-    ".ts": 38,
-    ".tsx": 26
+    ".ts": 40,
+    ".tsx": 28
   },
   "errorCount": 113,
   "warningCount": 6,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:467439cd5e18f9bb1bb375f49ef70c25dcc69441d3673ede19b724226078389d",
+  "fingerprint": "sha256:aa46c52bf371c03cd1e908e2c82da261601863e22dc8ef36e6c166180425e7b1",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -63,6 +63,8 @@
     "src/pages/about/About.jsx",
     "src/pages/account/Account.test.tsx",
     "src/pages/account/Account.tsx",
+    "src/pages/account/MemberDirectoryProfile.test.tsx",
+    "src/pages/account/MemberDirectoryProfile.tsx",
     "src/pages/account/StravaCallback.tsx",
     "src/pages/account/StravaSection.tsx",
     "src/pages/activities/Activities.jsx",
@@ -108,6 +110,8 @@
     "src/services/account/accountService.test.ts",
     "src/services/account/accountService.ts",
     "src/services/account/adminMembersService.ts",
+    "src/services/account/memberDirectoryService.test.ts",
+    "src/services/account/memberDirectoryService.ts",
     "src/services/accountEmail/accountEmailSender.test.ts",
     "src/services/accountEmail/accountEmailSender.ts",
     "src/services/analytics/analytics.test.ts",

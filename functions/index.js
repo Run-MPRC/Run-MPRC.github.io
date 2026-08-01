@@ -26,6 +26,12 @@ const {
   sendConfirmationEmail,
   sendConfirmationEmailOnCreate,
 } = require('./sendConfirmationEmail');
+const {
+  getMyMemberDirectoryProfile,
+  setMyMemberDirectoryVisibility,
+  setMyMemberDirectoryPhoto,
+  removeMyMemberDirectoryPhoto,
+} = require('./memberDirectoryProfile');
 
 // Auth triggers
 exports.createMemberOnSignUp = onSignUp;
@@ -56,6 +62,12 @@ exports.stravaBeginAuthorization = stravaBeginAuthorization;
 exports.stravaExchangeCode = stravaExchangeCode;
 exports.stravaFetchStats = stravaFetchStats;
 exports.stravaDisconnect = stravaDisconnect;
+
+// Private member-directory profile controls
+exports.getMyMemberDirectoryProfile = getMyMemberDirectoryProfile;
+exports.setMyMemberDirectoryVisibility = setMyMemberDirectoryVisibility;
+exports.setMyMemberDirectoryPhoto = setMyMemberDirectoryPhoto;
+exports.removeMyMemberDirectoryPhoto = removeMyMemberDirectoryPhoto;
 
 // Firestore triggers
 exports.sendConfirmationEmail = sendConfirmationEmail;

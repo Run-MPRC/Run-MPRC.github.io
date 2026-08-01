@@ -20,6 +20,7 @@ import {
 } from '../../services/account/accountService';
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
 import StravaSection from './StravaSection';
+import MemberDirectoryProfile from './MemberDirectoryProfile';
 import { getLocationReturnPath } from '../login/loginReturnPath';
 import { getSpamGuidance } from '../../services/accountEmail/accountEmailSender';
 import './Account.css';
@@ -702,6 +703,14 @@ export function AccountContent({
             </div>
           )}
         </section>
+
+        {profileState === 'ready' && profile && firebaseApp && (
+          <MemberDirectoryProfile
+            app={firebaseApp}
+            uid={user.uid}
+            hasDisplayName={Boolean(profile.fullName?.trim())}
+          />
+        )}
 
         {profileState === 'ready' && (
           <section className="mt-6">

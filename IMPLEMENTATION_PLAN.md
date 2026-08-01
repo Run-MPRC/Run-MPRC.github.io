@@ -169,6 +169,8 @@ Exit gate:
 - Payment SLOs, structured redacted logs, and actionable alerts are live.
 - Backup restoration into isolated infrastructure succeeds and is documented.
 
+**Current optional-directory boundary:** Parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504) defines a private, opt-in officer people finder as name search with voluntary thumbnails—not facial recognition. MEMBERS-DIRECTORY-001A [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) owns only the signed-in person's server-only processed thumbnail and independent default-off preference. [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) still owns the bounded minimum officer search projection and gallery; [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) owns policy completion, fixed deployment/readback, website publication, and live proof. Do not reuse the current browser-side full-account filter or describe #505 source as an available directory.
+
 ### Phase 5 — End-to-end qualification
 
 **Issue:** TEST-001 plus final closure evidence from all prior phases
