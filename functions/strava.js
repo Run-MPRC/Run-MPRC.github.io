@@ -1006,11 +1006,20 @@ exports.stravaFetchStats = functions
     }
     const { uid } = context.auth;
 
-    const connSnap = await connectionDocRef(uid).get();
-    if (!connSnap.exists) {
+    let connectionExists = false;
+    let conn = null;
+    try {
+      const connSnap = await connectionDocRef(uid).get();
+      connectionExists = connSnap.exists;
+      if (connectionExists) {
+        conn = snapshotStoredConnection(connSnap.data());
+      }
+    } catch (_error) {
+      throw stravaDataError('unavailable');
+    }
+    if (!connectionExists) {
       throw new functions.https.HttpsError('failed-precondition', 'Strava not connected');
     }
-    const conn = snapshotStoredConnection(connSnap.data());
     if (!conn) {
       throw stravaDataError('internal');
     }
