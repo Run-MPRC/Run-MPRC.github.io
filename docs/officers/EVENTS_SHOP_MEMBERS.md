@@ -1155,6 +1155,43 @@ Backup-officer source-review steps:
 
 No system-topology map changes are required because this unused contract changes no data movement, permissions, account ownership, or deployment topology.
 
+## Membership Offer metadata containment — SOURCE ONLY, NOT LIVE
+
+**Status: NOT AVAILABLE YET**
+
+**Purpose:** prevent the Join route's membership structured data from giving search engines or browsers a machine-readable membership price, currency, or annual term before the club approves the versioned membership plan under #114. The visible Join-page dues sentence is unchanged. The separate static `$0` Offer for the free Saturday run is not a membership Offer and remains unchanged.
+
+**Terms:** structured data is page information embedded for search engines. `WebPage` labels the page, `SportsOrganization` labels the club, and `Offer` labels machine-readable price or term information. The separate static `Event` labels the free Saturday run.
+
+**Approver:** membership lead plus treasurer and communications/platform owner.
+
+**Prerequisites:** issue [#486](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/486) and its exact reviewed pull request must be merged for source review. A protected website publication and an exact revision check on `runmprc.com` are required before describing this containment as live. Any future membership `Offer` metadata requires the owner-approved term, price, household meaning, effective date, and change process under #114; visible copy alone is not that approval.
+
+**Steps:**
+
+1. Ask the platform owner for the exact #486 issue, pull request, and merge commit.
+2. Confirm the reviewed Join route test selects the real `/joinus` WebPage schema by its URL.
+3. Confirm that schema's SportsOrganization `mainEntity` has no membership `offers`, `Offer`, `price`, `priceCurrency`, or individual annual-fee description.
+4. Confirm the reviewed shared Join-schema helper has the same membership omissions.
+5. Confirm both tests retain the club organization and Saturday-run event metadata.
+6. Confirm the visible Join page still says `Affordable membership fees: $25/individual or $30/household per calendar year`.
+7. Keep the separate static `$0` Saturday-run Event Offer distinct from the removed membership Offer.
+8. Record source change, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, outside-provider configuration, membership or payment data changes, and live behavior as separate results.
+
+**Expected result:** the reviewed Join WebPage/SportsOrganization source keeps useful club and Saturday-run metadata but publishes no machine-readable membership Offer. The separate static Event schema may still describe the Saturday run as free. No officer edits source files, changes provider settings, or changes member or payment records for this task.
+
+**Stop conditions:** the route-owned Join WebPage/SportsOrganization schema retains a membership `Offer`, `offers`, machine-readable membership price, currency, annual-fee description, or unapproved term; the separate free-run Event Offer is confused with membership dues; visible dues copy changes; club or Saturday-run metadata disappears; #114 approval is assumed from existing copy; a provider, Firebase, payment, account, membership record, or production-data action is requested; or source, tests, merge, preview, or a green workflow is presented as proof of live `runmprc.com` behavior.
+
+**Success proof — source completion:** exact #486 issue, pull request, reviewed merge commit, and focused and full frontend results. These prove only the reviewed source outcome.
+
+**Success proof — live containment (separate; not authorized by #486):** a later protected website publication record and dated exact-revision check of the public `/joinus` route-owned WebPage/SportsOrganization structured data. The check identifies the separate static `$0` Saturday-run Event Offer without treating it as membership pricing. Record Firebase, Stripe or another provider, member or payment data, migration, and live membership behavior as not changed unless each has separate private evidence and approval.
+
+**Undo:** before publication, use one reviewed revert or safe roll-forward of the two Offer-removal hunks, focused tests, and this named section. After publication, use the protected website rollback path and verify the exact public revision. Do not restore Offer metadata until #114 records the required owner decisions and a separate reviewed issue implements them.
+
+**Escalation:** membership lead plus treasurer and communications/platform owner. Use the private incident route if machine-readable dues disclose an unintended term or any real member, payment, account, or provider data appears.
+
+No system-topology map changes are required because this source-only removal changes no data movement, permissions, account ownership, or deployment topology.
+
 ## My Account membership truth — SOURCE ONLY, NOT LIVE
 
 **Status: NOT AVAILABLE YET**
