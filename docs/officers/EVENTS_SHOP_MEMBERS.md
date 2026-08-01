@@ -1378,40 +1378,43 @@ Officer review steps after the source merge:
 
 **Approver:** event lead plus membership and privacy/platform owners.
 
-**Prerequisites:** issue [#374](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/374), its exact reviewed pull request and merge commit, and tests that use made-up accounts and registrations only. Calling this behavior live also requires a protected Firebase Function deployment and readback, a protected website publication, and a separate exact revision check on `runmprc.com`. A future officer-assisted link still requires the approved evidence and audited server workflow under [#115](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/115).
+**Prerequisites:** issues [#374](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/374) and [#553](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/553), their exact reviewed pull requests and merge commits, and tests that use made-up accounts and registrations only. Calling this behavior live also requires a protected Firebase Function deployment and readback, a protected website publication, and a separate exact revision check on `runmprc.com`. A future officer-assisted link still requires the approved evidence and audited server workflow under [#115](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/115).
 
 ```mermaid
 flowchart TD
     A["Signed-in person opens My Account"] --> B["Server uses the signed-in account ID"]
     B --> C["Find registrations with that exact stored account ID"]
-    C --> D["Return only the approved registration summary"]
+    C --> D["Return the registration and event summary without runner name, email, or shirt size"]
+    H["Stored runner name, email, and shirt size"] --> I["Keep out of the My Account browser response"]
     E["Matching email address"] --> F["No access and no automatic link"]
     F --> G["Future reviewed officer association under #115"]
 ```
 
-Text alternative: the server uses only the signed-in account ID to find registrations. A matching email address does not reveal or automatically link a registration. A future link requires a separate reviewed officer process.
+Text alternative: the server uses only the signed-in account ID to find registrations and returns the registration and event summary without runner name, email, or shirt size. Stored runner details stay out of the My Account browser response. A matching email address does not reveal or automatically link a registration. A future link requires a separate reviewed officer process.
 
 Backup-officer source-review steps:
 
 1. Keep this procedure marked **NOT AVAILABLE YET**.
-2. Obtain the exact #374 issue, reviewed pull request, merge commit, and made-up test report.
+2. Obtain the exact #374 and #553 issues, reviewed pull requests, merge commits, and made-up test reports.
 3. Confirm the report uses only invented account IDs, people, events, and registrations.
 4. Confirm a registration with the exact signed-in account ID appears.
-5. Confirm the returned summary keeps the existing approved fields and registration-created order.
-6. Confirm a registration with only a matching email address does not appear.
-7. Confirm a registration owned by another account does not appear, even when its email matches.
-8. Confirm the server does not read the signed-in email claim or run an email search.
-9. Confirm an empty result performs no event-detail read.
-10. Confirm no registration, account, payment, or provider record is changed.
-11. Record source, tests, merge, Firebase deployment, website publication, `runmprc.com`, production data, and live behavior as separate results.
-12. If a member says a registration is missing, stop. Do not ask them to register again or change a database record.
-13. Open a redacted request through [Request a change](./REQUEST_A_CHANGE.md) for the event lead and membership owner.
+5. Confirm the returned summary keeps every non-runner field and registration-created order.
+6. Confirm the report shows that the returned Firestore document's `runner` property was not accessed.
+7. Confirm runner name, email, and shirt size do not appear in the response.
+8. Confirm a registration with only a matching email address does not appear.
+9. Confirm a registration owned by another account does not appear, even when its email matches.
+10. Confirm the server does not read the signed-in email claim or run an email search.
+11. Confirm an empty result performs no event-detail read.
+12. Confirm no registration, account, payment, or provider record is changed.
+13. Record source, tests, merge, Firebase deployment, website publication, `runmprc.com`, production data, and live behavior as separate results.
+14. If a member says a registration is missing, stop. Do not ask them to register again or change a database record.
+15. Open a redacted request through [Request a change](./REQUEST_A_CHANGE.md) for the event lead and membership owner.
 
-**Expected result:** source returns only registrations whose stored account ID exactly matches the signed-in account. Verified or matching email does not grant access. The empty page says that no upcoming registration is linked to the account and warns that a signed-out registration may not appear. This does not link an older registration, prove payment, change membership, or repair data.
+**Expected result:** source returns only registrations whose stored account ID exactly matches the signed-in account, and the My Account response omits runner name, email, and shirt size while preserving every non-runner summary field. Verified or matching email does not grant access. The empty page says that no upcoming registration is linked to the account and warns that a signed-out registration may not appear. This does not delete stored runner data, link an older registration, prove payment, change membership, or repair data.
 
 **Stop conditions:** a real member or registration; a request for an email address, confirmation link, payment detail, registration screenshot, or database lookup; a manual Firestore edit; asking the person to pay or register again; an automatic email match; skipped Firebase or website proof; or a claim that source, tests, merge, preview, or green CI proves live behavior.
 
-**Success proof:** exact #374 issue, pull request, reviewed commit, recorded old-source failures, green UID-only and empty-state tests, relevant full checks, and independent privacy and backup-officer reviews. For live availability, separately record the exact Function deployment/readback, website publication, `runmprc.com` revision, and a made-up account check. Record provider and production-data actions as not performed unless each has separate approved evidence.
+**Success proof:** exact #374 and #553 issues, pull requests, reviewed commits, recorded old-source failures, green UID-only, response-minimization, and empty-state tests, relevant full checks, and independent privacy and backup-officer reviews. For live availability, separately record the exact Function deployment/readback, website publication, `runmprc.com` revision, and a made-up account check. Record provider and production-data actions as not performed unless each has separate approved evidence.
 
 **Undo:** before publication, use one reviewed revert or safe roll-forward. After a future approved release, use the protected backend-first rollback path and verify the Function and website revisions separately. Never undo by changing, deleting, or copying a registration, account, payment, or member record.
 

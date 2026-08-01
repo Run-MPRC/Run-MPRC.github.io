@@ -11,12 +11,6 @@ function sanitize(regDoc) {
     priceTier: d.priceTier,
     amountCents: d.amountCents,
     currency: d.currency,
-    runner: {
-      firstName: d.runner?.firstName || '',
-      lastName: d.runner?.lastName || '',
-      email: d.runner?.email || '',
-      shirtSize: d.runner?.shirtSize || null,
-    },
     createdAt: d.createdAt || null,
     paidAt: d.paidAt || null,
     refundedAt: d.refundedAt || null,
