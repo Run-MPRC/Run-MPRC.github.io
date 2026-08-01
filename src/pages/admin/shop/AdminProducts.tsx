@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
 import AdminGuard from '../AdminGuard';
@@ -7,6 +7,24 @@ import { Product } from '../../../types/shop';
 import { listAllProducts, formatPrice } from '../../../services/shop/shopService';
 
 const LOAD_FAILURE = 'We could not load products right now. Please try again later.';
+const firestoreIdentities = new WeakMap<object, number>();
+let nextFirestoreIdentity = 1;
+
+function getFirestoreIdentity(value: object | null): number {
+  if (value === null) return 0;
+  const existing = firestoreIdentities.get(value);
+  if (existing !== undefined) return existing;
+  const identity = nextFirestoreIdentity;
+  nextFirestoreIdentity += 1;
+  firestoreIdentities.set(value, identity);
+  return identity;
+}
+
+interface ProductsLoadOutcome {
+  firestore: unknown;
+  status: 'loading' | 'resolved' | 'unavailable';
+  products: Product[];
+}
 
 function StatusPill({ status }: { status: string }) {
   const m: Record<string, string> = {
@@ -18,18 +36,48 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`text-xs px-2 py-0.5 rounded ${m[status] || 'bg-gray-100'}`}>{status}</span>;
 }
 
-function Inner() {
-  const { services, isReady } = useServiceLocator();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type ProductsFirestore = Parameters<typeof listAllProducts>[0];
+
+function ProductsAttempt({ firestore }: { firestore: ProductsFirestore | null }) {
+  const currentFirestoreRef = useRef(firestore);
+  currentFirestoreRef.current = firestore;
+  const requestSequence = useRef(0);
+  const [loadOutcome, setLoadOutcome] = useState<ProductsLoadOutcome | null>(null);
+
+  const currentOutcome = loadOutcome?.firestore === firestore ? loadOutcome : null;
+  const currentStatus = currentOutcome?.status ?? 'loading';
+  const products = currentOutcome?.status === 'resolved' ? currentOutcome.products : [];
+  const loading = currentStatus === 'loading';
+  const error = currentStatus === 'unavailable' ? LOAD_FAILURE : null;
 
   useEffect(() => {
-    if (!isReady || !services) return;
-    listAllProducts(services.firebaseResources.firestore)
-      .then((ps) => { setProducts(ps); setLoading(false); })
-      .catch(() => { setError(LOAD_FAILURE); setLoading(false); });
-  }, [services, isReady]);
+    if (!firestore) {
+      requestSequence.current += 1;
+      return () => undefined;
+    }
+
+    const requestFirestore = firestore;
+    requestSequence.current += 1;
+    const requestId = requestSequence.current;
+    const outcomeKey = { firestore: requestFirestore };
+    setLoadOutcome({ ...outcomeKey, status: 'loading', products: [] });
+
+    async function load() {
+      try {
+        const all = await listAllProducts(requestFirestore);
+        if (requestId !== requestSequence.current
+          || currentFirestoreRef.current !== requestFirestore) return;
+        setLoadOutcome({ ...outcomeKey, status: 'resolved', products: all });
+      } catch {
+        if (requestId !== requestSequence.current
+          || currentFirestoreRef.current !== requestFirestore) return;
+        setLoadOutcome({ ...outcomeKey, status: 'unavailable', products: [] });
+      }
+    }
+
+    load();
+    return () => { requestSequence.current += 1; };
+  }, [firestore]);
 
   return (
     <>
@@ -104,6 +152,20 @@ function Inner() {
         )}
       </div>
     </>
+  );
+}
+
+function Inner() {
+  const { services, isReady } = useServiceLocator();
+  const firestore = isReady && services
+    ? services.firebaseResources.firestore
+    : null;
+
+  return (
+    <ProductsAttempt
+      key={getFirestoreIdentity(firestore)}
+      firestore={firestore}
+    />
   );
 }
 

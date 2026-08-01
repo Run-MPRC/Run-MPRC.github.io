@@ -3853,6 +3853,309 @@ describe('Admin Products list-load failure boundary', () => {
   });
 });
 
+describe('WEB-PRIVACY-001X Admin Products current-context lifecycle', () => {
+  function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return { promise, reject, resolve };
+  }
+
+  function syntheticListedProduct({
+    id = 'synthetic-listed-product',
+    slug = id,
+    title = 'Synthetic Listed Product',
+    priceCents = 2500,
+    status = 'active',
+  } = {}) {
+    return {
+      id,
+      slug,
+      title,
+      description: 'A made-up product used only for this test.',
+      imageUrl: '',
+      priceCents,
+      status,
+      sizes: [],
+      colors: [],
+    };
+  }
+
+  function configureAdminProductsContext({
+    database = firestore,
+    ready = true,
+    servicesAvailable = true,
+  } = {}) {
+    useServiceLocator.mockReturnValue({
+      services: servicesAvailable ? { firebaseResources: { firestore: database } } : null,
+      isReady: ready,
+    });
+  }
+
+  function expectProductResultsHidden() {
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Create one' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument();
+  }
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { uid: 'synthetic-admin' },
+      isLoading: false,
+      isAuthenticated: true,
+      isMember: true,
+      isAdmin: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+      register: jest.fn(),
+    });
+    configureAdminProductsContext();
+    listAllProducts.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('starts no lookup and exposes no catalog result before services are ready', async () => {
+    configureAdminProductsContext({ ready: false });
+
+    renderAdminProducts();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Products' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectProductResultsHidden();
+    expect(listAllProducts).not.toHaveBeenCalled();
+  });
+
+  test('starts no lookup and exposes no catalog result without a database', async () => {
+    configureAdminProductsContext({ database: null });
+
+    renderAdminProducts();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Products' }))
+      .toBeInTheDocument();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectProductResultsHidden();
+    expect(listAllProducts).not.toHaveBeenCalled();
+  });
+
+  test('does not reload when only the services wrapper changes', async () => {
+    listAllProducts.mockResolvedValueOnce([syntheticListedProduct()]);
+    const view = renderAdminProducts();
+    expect(await screen.findByText('Synthetic Listed Product')).toBeInTheDocument();
+
+    configureAdminProductsContext();
+    view.rerender(<App />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('Synthetic Listed Product')).toBeInTheDocument();
+    expect(listAllProducts).toHaveBeenCalledTimes(1);
+    expect(listAllProducts).toHaveBeenCalledWith(firestore);
+  });
+
+  test('hides earlier products while a changed-database lookup is pending and rejected', async () => {
+    listAllProducts.mockResolvedValueOnce([syntheticListedProduct({
+      title: 'Earlier Synthetic Product',
+    })]);
+    const view = renderAdminProducts();
+    expect(await screen.findByText('Earlier Synthetic Product')).toBeInTheDocument();
+
+    const currentLookup = deferred();
+    listAllProducts.mockReturnValueOnce(currentLookup.promise);
+    const currentFirestore = { name: 'synthetic-current-products-firestore' };
+    configureAdminProductsContext({ database: currentFirestore });
+    view.rerender(<App />);
+
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Synthetic Product')).not.toBeInTheDocument();
+    expectProductResultsHidden();
+
+    await act(async () => { currentLookup.reject(new Error('synthetic current failure')); });
+    expect((await screen.findByRole('alert')).textContent).toBe(ADMIN_PRODUCTS_LOAD_FAILURE);
+    expect(screen.queryByText('Earlier Synthetic Product')).not.toBeInTheDocument();
+    expectProductResultsHidden();
+    expect(listAllProducts).toHaveBeenNthCalledWith(1, firestore);
+    expect(listAllProducts).toHaveBeenNthCalledWith(2, currentFirestore);
+  });
+
+  test('hides earlier products when readiness is lost and reloads the same database after recovery', async () => {
+    listAllProducts.mockResolvedValueOnce([syntheticListedProduct({
+      title: 'Earlier Ready Product',
+    })]);
+    const view = renderAdminProducts();
+    expect(await screen.findByText('Earlier Ready Product')).toBeInTheDocument();
+
+    configureAdminProductsContext({ ready: false });
+    view.rerender(<App />);
+
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Ready Product')).not.toBeInTheDocument();
+    expectProductResultsHidden();
+    expect(listAllProducts).toHaveBeenCalledTimes(1);
+
+    const recoveredLookup = deferred();
+    listAllProducts.mockReturnValueOnce(recoveredLookup.promise);
+    const staleAdditions = [];
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => record.addedNodes.forEach((node) => {
+        if (node.textContent?.includes('Earlier Ready Product')) staleAdditions.push(node);
+      }));
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    configureAdminProductsContext();
+    view.rerender(<App />);
+
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(2));
+    await act(async () => { await Promise.resolve(); });
+    observer.disconnect();
+    expect(staleAdditions).toHaveLength(0);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Ready Product')).not.toBeInTheDocument();
+    expectProductResultsHidden();
+
+    await act(async () => {
+      recoveredLookup.resolve([syntheticListedProduct({
+        id: 'synthetic-recovered-product',
+        title: 'Recovered Current Product',
+      })]);
+    });
+    expect(await screen.findByText('Recovered Current Product')).toBeInTheDocument();
+    expect(screen.queryByText('Earlier Ready Product')).not.toBeInTheDocument();
+    expect(listAllProducts).toHaveBeenCalledTimes(2);
+    expect(listAllProducts).toHaveBeenNthCalledWith(2, firestore);
+  });
+
+  test('keeps a newer empty result when an older lookup later resolves', async () => {
+    const olderLookup = deferred();
+    listAllProducts.mockReturnValueOnce(olderLookup.promise);
+    const view = renderAdminProducts();
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-newer-empty-products-firestore' };
+    listAllProducts.mockResolvedValueOnce([]);
+    configureAdminProductsContext({ database: currentFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByRole('link', { name: 'Create one' })).toBeInTheDocument();
+
+    await act(async () => {
+      olderLookup.resolve([syntheticListedProduct({ title: 'Obsolete Synthetic Product' })]);
+    });
+
+    expect(screen.getByRole('link', { name: 'Create one' })).toBeInTheDocument();
+    expect(screen.queryByText('Obsolete Synthetic Product')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('keeps a newer product when an older hostile rejection later arrives', async () => {
+    const olderLookup = deferred();
+    listAllProducts.mockReturnValueOnce(olderLookup.promise);
+    const view = renderAdminProducts();
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(1));
+
+    const currentFirestore = { name: 'synthetic-newer-product-firestore' };
+    listAllProducts.mockResolvedValueOnce([syntheticListedProduct({
+      id: 'synthetic-current-product',
+      title: 'Current Synthetic Product',
+    })]);
+    configureAdminProductsContext({ database: currentFirestore });
+    view.rerender(<App />);
+    expect(await screen.findByText('Current Synthetic Product')).toBeInTheDocument();
+
+    const messageGetter = jest.fn(() => 'obsolete-products-private-canary');
+    await act(async () => {
+      olderLookup.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(screen.getByText('Current Synthetic Product')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('obsolete-products-private-canary');
+  });
+
+  test('treats ready to not-ready to ready as distinct generations for the same database', async () => {
+    const olderLookup = deferred();
+    listAllProducts.mockReturnValueOnce(olderLookup.promise);
+    const view = renderAdminProducts();
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(1));
+
+    configureAdminProductsContext({ ready: false });
+    view.rerender(<App />);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expectProductResultsHidden();
+
+    listAllProducts.mockResolvedValueOnce([syntheticListedProduct({
+      id: 'synthetic-current-a-product',
+      title: 'Current A Product',
+    })]);
+    configureAdminProductsContext();
+    view.rerender(<App />);
+    expect(await screen.findByText('Current A Product')).toBeInTheDocument();
+
+    await act(async () => {
+      olderLookup.resolve([syntheticListedProduct({
+        id: 'synthetic-obsolete-a-product',
+        title: 'Obsolete A Product',
+      })]);
+    });
+
+    expect(screen.getByText('Current A Product')).toBeInTheDocument();
+    expect(screen.queryByText('Obsolete A Product')).not.toBeInTheDocument();
+    expect(listAllProducts).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not inspect a hostile rejection after the page unmounts', async () => {
+    const lookup = deferred();
+    listAllProducts.mockReturnValueOnce(lookup.promise);
+    const view = renderAdminProducts();
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const messageGetter = jest.fn(() => 'unmounted-products-private-canary');
+    await act(async () => {
+      lookup.reject(Object.defineProperty({}, 'message', {
+        configurable: true,
+        get: messageGetter,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(messageGetter).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  test('does not inspect or display a successful result after the page unmounts', async () => {
+    const lookup = deferred();
+    listAllProducts.mockReturnValueOnce(lookup.promise);
+    const view = renderAdminProducts();
+    await waitFor(() => expect(listAllProducts).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    const titleGetter = jest.fn(() => 'Unmounted Synthetic Product');
+    const product = Object.defineProperty(syntheticListedProduct(), 'title', {
+      configurable: true,
+      get: titleGetter,
+    });
+    await act(async () => {
+      lookup.resolve([product]);
+      await Promise.resolve();
+    });
+
+    expect(titleGetter).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('Unmounted Synthetic Product');
+    expect(track).not.toHaveBeenCalled();
+  });
+});
+
 describe('Admin Product editor load-failure boundary', () => {
   beforeEach(() => {
     useAuth.mockReturnValue({
