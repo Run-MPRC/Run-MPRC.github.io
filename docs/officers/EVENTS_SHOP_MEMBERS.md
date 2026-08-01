@@ -775,56 +775,77 @@ The diagram above records the new current-handler result and page states. Accoun
 
 **Status: NOT AVAILABLE YET**
 
-**Purpose:** admit only the first valid race or Shop Checkout submission during one mounted page visit, including repeats that arrive before the busy button renders.
+**Purpose:** allow only the first valid race or Shop Checkout submission until the visitor leaves or reloads the page, including repeats made before the busy label appears.
 
 **Approver:** event lead and shop lead, plus treasurer and platform/security owner. Add the privacy owner to any incident review.
 
-**Prerequisites:** issues [#357](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/357) and [#503](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/503) must be merged, and their exact reviewed commits and synthetic reports must be named. Use only made-up events, items, runners, and buyers with replaced service calls. Do not enter a checkout form in a preview or public site: those clients may point at production Firebase. This guard does not replace the persistence-first PAY-002C/D design.
+**Prerequisites:** issues [#357](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/357) and [#503](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/503) must be merged, and their exact reviewed commits and made-up test reports must be named. Use only made-up events, items, runners, and buyers. Replace the website connections so the tests cannot contact Firebase or Stripe. Do not enter a checkout form in a preview or public site: those pages may point at production Firebase. This guard does not replace the PAY-002C/D server design for recording a request before contacting Stripe.
 
 ```mermaid
 flowchart TD
-    A["Made-up race or Shop form is locally valid"] --> B{"Has this mounted page admitted a Checkout request?"}
+    A["Made-up race or Shop form passes its current checks"] --> B{"Has this page visit already sent a Checkout request?"}
     B -- "Yes" --> C["Ignore the repeated submission"]
-    B -- "No" --> D["Synchronously mark one attempt as started"]
-    D --> E["Show the existing pending button and call the replaced service once"]
+    B -- "No" --> D["Immediately record that one request started"]
+    D --> E["Show the existing busy button and use the test replacement once"]
     E --> F{"Result?"}
     F -- "Current success path" --> G["Navigate to success or Checkout"]
-    F -- "Rejected or missing paid URL" --> H["Use #357's fixed terminal unknown-result state"]
-    C --> I["No second browser service call or race-attempt analytics event"]
+    F -- "Rejected or missing paid link" --> H["Use #357's fixed unknown-result stop"]
+    C --> I["No second request or race submission-count record"]
     H --> J["Stop; do not retry on this page"]
 ```
 
-Text alternative: after current local checks pass, the page synchronously records that one Checkout request has started before calling the replaced service. Another submission on that mounted page is ignored even if React has not rendered the pending button yet. The first result either follows the existing navigation path or enters #357's terminal unknown-result state. The browser makes no second service call, but reloads, remounts, other tabs or devices, scripts, and direct service callers remain outside this guard.
+Text alternative: after the current page checks pass, the page immediately records that one Checkout request has started. It does this before using the test replacement or showing the busy label. Another submission is ignored until the visitor leaves or reloads the page. The first result either follows the existing success path or uses #357's fixed unknown-result stop. The page makes no second request, but a reload, another tab or device, a script, or another program that calls the website connection directly remains outside this guard.
 
 Officer source-review steps:
 
 1. Keep live paid race registration and Shop checkout unavailable.
 2. Ask the platform owner for the exact #503 pull request, merge commit, old-source failure, and made-up test report.
-3. Confirm the tests replace the Checkout services and submit each valid race and Shop form twice in the same action.
-4. Confirm each pair produces exactly one service call. For race registration, confirm it also produces exactly one submit-attempt analytics event.
-5. Confirm the page marks the attempt synchronously, before the first service promise can settle and before relying on a React render.
-6. Confirm the existing submit button shows its pending disabled label while the first request is unresolved.
-7. Confirm the other existing form controls are not described as locked. This slice does not add a full-form editing lock.
-8. Confirm an unaccepted race waiver does not consume the attempt. One later valid made-up submission may proceed.
-9. Confirm a Shop button that is already disabled by current required-field checks makes no request when clicked.
-10. Confirm a made-up free participant and volunteer each reach the existing success route after only one service call. Confirm the volunteer request omits the participant price tier.
-11. Confirm one made-up accepted race paid link and one made-up accepted Shop paid link are each assigned once after only one service call. They are test output, not real Checkout links.
-12. Confirm the attempt marker never releases during that mounted page visit. The result must navigate or use #357's terminal unknown-result state.
-13. Confirm changing directly to another event or item address while the same screen remains open leaves Checkout locked. An older pending result can still affect that new address; stop and ask for a separate lifecycle fix.
-14. Confirm the test uses no real contact, member, order, event, Firebase, Stripe, or payment data and makes no provider call.
-15. Record source change, tests, merge, website publication, `runmprc.com`, Firebase deployment, Stripe/provider state, production data, and live behavior as separate results.
+3. Confirm the tests replace every Checkout connection so no Firebase or Stripe call is possible.
+4. Confirm two immediate valid race submissions produce one Checkout request.
+5. Confirm those race submissions produce one analytics record, which is the site's count of submission attempts.
+6. Confirm two immediate valid Shop submissions produce one Checkout request.
+7. Confirm the test report shows that the first request is recorded before the busy label appears or the request finishes.
+8. Confirm the existing submit button shows its disabled busy label while the first request is unfinished.
+9. Confirm the other form controls remain editable. This change does not lock the complete form.
+10. Confirm a race form with an unaccepted waiver sends no request.
+11. Confirm the same made-up race form can send one request after the waiver is accepted.
+12. Confirm a Shop button disabled by the current required-field checks sends no request when clicked.
+13. Confirm one made-up free participant reaches the existing success page after one request.
+14. Confirm one made-up volunteer reaches the existing success page after one request.
+15. Confirm the volunteer request omits the participant price choice.
+16. Confirm one made-up accepted race paid link is assigned once after one request.
+17. Confirm one made-up accepted Shop paid link is assigned once after one request.
+18. Confirm the race paid link is test output.
+19. Confirm the Shop paid link is test output.
+20. Confirm the page keeps its first-request record until the visitor leaves or reloads the page.
+21. Confirm a rejected request or missing paid link uses #357's fixed unknown-result stop.
+22. Confirm moving directly to another event or item address on the same open screen keeps Checkout locked.
+23. Stop and ask for a separate fix if an older unfinished result could affect that new address.
+24. Confirm the tests use no real contact, member, order, event, Firebase, Stripe, or payment data.
+25. Record the source change result.
+26. Record the test result.
+27. Record the merge result.
+28. Record the website publication result.
+29. Record the `runmprc.com` result.
+30. Record the Firebase deployment result.
+31. Record the Stripe result.
+32. Record the outside-provider result.
+33. Record the production-data result.
+34. Record the checkout result.
+35. Record the payment result.
+36. Record the live-behavior result.
 
-**Expected result:** one mounted race or Shop page admits at most one locally valid Checkout handler request. Same-action repeats are inert before and after the pending-button render. Local validation can still fail without consuming the attempt. This is browser containment only; it is not durable idempotency, provider execution proof, payment proof, or reconciliation.
+**Expected result:** one race or Shop page visit sends at most one Checkout request after the current page checks pass. Immediate repeats and repeats after the busy label appears are ignored. A failed page check does not use up the one request. This page-only protection does not stop duplicate requests at the server, prove that Stripe acted, prove payment, or match Stripe records to website records.
 
-**Stop conditions:** a second service call or race-attempt analytics event from the same made-up submission pair; a valid first request blocked by an earlier local waiver or native disabled-button check; an attempt marker that releases after rejection; any real person, event, item, Session, checkout URL, payment, Firebase record, Stripe call, production test, or provider detail; an instruction to retry after an unknown result; or a claim that source, tests, merge, preview, or green CI makes checkout safe or live.
+**Stop conditions:** a second Checkout request or race analytics record from the same made-up pair; a valid first request blocked by an earlier unaccepted waiver or disabled Shop button; loss of the first-request record before the visitor leaves or reloads the page; any real person, event, item, Session, checkout link, payment, Firebase record, Stripe call, production test, or provider detail; an instruction to retry after an unknown result; or a claim that source, tests, merge, preview, or green CI makes checkout safe or live.
 
-**Success proof:** exact #503 pull request and merge commit; recorded old-source two-call failures followed by green same-action race, Shop, local-validation, free-participant, volunteer, race-and-Shop paid-link-assignment, and post-render-repeat tests; unchanged reviewed lint counts; relevant full checks; independent security, payment-lifecycle, and backup-officer reviews; and an explicit statement that no website, `runmprc.com`, Firebase, Stripe/provider, production-data, checkout, payment, or live behavior was changed or verified.
+**Success proof:** exact #503 pull request and merge commit; recorded old-source two-request failures followed by green immediate-repeat, page-check, free-participant, volunteer, race-link, Shop-link, and after-busy-label tests; unchanged reviewed lint counts; relevant full checks; independent security, payment-lifecycle, and backup-officer reviews; and an explicit statement that no website, `runmprc.com`, Firebase, Stripe/provider, production-data, checkout, payment, or live behavior was changed or verified.
 
 **Undo:** before publication, use one reviewed revert or safe roll-forward. After any future approved publication, use the protected website release path and verify the exact published source separately from Firebase and Stripe. Never undo or test this guard by changing or creating a registration, order, Session, payment, Firebase record, or Stripe setting.
 
 **Escalation:** event lead and shop lead, plus treasurer and platform/security owner. Use the private incident path if a live visitor may have submitted twice or a Checkout result is unknown. Add the privacy owner if any contact or transaction detail appeared. Do not paste that detail into an issue, screenshot, email, message, or AI tool.
 
-No system-topology map changes are required. This source slice adds one in-memory page guard and changes no account, permission, data store, server, provider, or publishing boundary.
+No system-topology map changes are required. This source change adds one short-lived page record and changes no account, permission, data store, server, provider, or publishing boundary.
 
 ## Late-registration amount format guard — SOURCE ONLY, NOT LIVE
 
