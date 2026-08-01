@@ -49,6 +49,37 @@ Do not publish photos of minors, private events, name badges, addresses, license
 4. Check spelling, title, photo, order, and old-officer removal.
 5. Ask AI to confirm no account permissions changed. Website display and GitHub/Firebase access are separate.
 
+## Phone navigation preview check — NOT LIVE YET
+
+**Purpose:** confirm that the small-screen menu is predictable before a website release.
+
+**Approver:** communications lead or platform owner.
+
+**Before you start:** have the reviewed preview link. Stay signed out and use no private information.
+
+1. Open the preview at a phone-sized width.
+2. Select the MPRC logo while the menu is closed.
+3. Confirm Home opens and the menu stays closed.
+4. Open the menu with its button.
+5. Select one public page and confirm the menu closes.
+6. Reopen the menu and select Sign in.
+7. Confirm the Sign in page opens and the menu closes.
+8. Use Tab and Enter to repeat the open, close, and public-page check.
+9. Open the preview at a normal computer width.
+10. Confirm the navigation links remain visible and work normally.
+
+**Expected result:** only the menu button opens the menu; the logo or any destination closes it after opening the correct page.
+
+**Stop conditions:** stop if a destination is wrong, the logo opens the menu, the menu stays open after a choice, keyboard use fails, or computer navigation changes.
+
+**Success proof:** record the preview link, check date, phone and computer widths, tested destination, keyboard result, and pass or fail. Keep accounts and private information out of screenshots.
+
+**Undo:** ask the platform maintainer for one revert pull request. Do not publish a second fix at the same time.
+
+**Escalation:** platform owner first; accessibility reviewer second.
+
+This check describes #490 source and preview behavior only. It is **NOT LIVE YET** until an approved exact website release is published and the same checks pass on `runmprc.com`.
+
 ## Success check
 
 - The exact change appears on `runmprc.com`.

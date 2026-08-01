@@ -7,11 +7,14 @@ import './navbar.css';
 import Logo from '../assets/images/logo.svg';
 import { useAuth } from '../services/hooks/useAuth';
 
+const PRIMARY_NAVIGATION_ID = 'primary-navigation';
+
 function Navbar() {
   const [isNavShowing, setIsNavShowing] = useState(false);
   const { isAuthenticated } = useAuth();
 
   const handleNavToggle = () => setIsNavShowing((prevValue) => !prevValue);
+  const handleNavClose = () => setIsNavShowing(false);
 
   const baseAnimationDelay = 100;
   const staggeredAnimationDelayIncrement = 50;
@@ -25,10 +28,11 @@ function Navbar() {
   return (
     <nav>
       <div className="container nav__container">
-        <Link to="/" className="logo" onClick={handleNavToggle}>
+        <Link to="/" className="logo" onClick={handleNavClose}>
           <img src={Logo} alt="MPRC Logo" />
         </Link>
         <ul
+          id={PRIMARY_NAVIGATION_ID}
           className={`nav__links ${isNavShowing ? 'show__nav' : 'hide__nav'}`}
         >
           {/* Destructure the links array of object from the links to get each item */}
@@ -37,7 +41,7 @@ function Navbar() {
               <NavLink
                 to={path}
                 className={({ isActive }) => (isActive ? 'active-nav' : '')}
-                onClick={handleNavToggle}
+                onClick={handleNavClose}
               >
                 {name}
               </NavLink>
@@ -47,7 +51,7 @@ function Navbar() {
             <NavLink
               to={isAuthenticated ? '/account' : '/login'}
               className={({ isActive }) => (isActive ? 'active-nav' : '')}
-              onClick={handleNavToggle}
+              onClick={handleNavClose}
             >
               {isAuthenticated ? 'My Account' : 'Sign in'}
             </NavLink>
@@ -59,6 +63,8 @@ function Navbar() {
           onClick={handleNavToggle}
           className="nav__toggle-btn"
           aria-label={isNavShowing ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-controls={PRIMARY_NAVIGATION_ID}
+          aria-expanded={isNavShowing}
         >
           {isNavShowing ? <MdOutlineClose /> : <FaBars />}
         </button>

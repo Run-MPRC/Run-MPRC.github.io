@@ -3,8 +3,14 @@
 import React from 'react';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import Header from './components/Header';
+import Navbar from './components/Navbar';
+
+jest.mock('./services/hooks/useAuth', () => ({
+  useAuth: () => ({ isAuthenticated: false }),
+}));
 
 const readStylesheet = (...parts) => readFileSync(join(__dirname, ...parts), 'utf8');
 
@@ -97,6 +103,62 @@ describe('persistent navigation clearance', () => {
   test('does not add legacy hero offsets on top of the shared clearance', () => {
     expect(getRule(globalStyles, '.header')).toMatch(/margin-top:\s*0\s*;/);
     expect(getRule(homeStyles, '.main__header')).toMatch(/margin-top:\s*0\s*;/);
+  });
+});
+
+describe('mobile navigation disclosure semantics', () => {
+  const renderNavbar = () => render(React.createElement(
+    MemoryRouter,
+    {
+      initialEntries: ['/synthetic-start'],
+      future: { v7_startTransition: true, v7_relativeSplatPath: true },
+    },
+    React.createElement(Navbar),
+  ));
+
+  const expectMenuState = (toggle, list, isOpen) => {
+    expect(list).toHaveClass(isOpen ? 'show__nav' : 'hide__nav');
+    expect(list).not.toHaveClass(isOpen ? 'hide__nav' : 'show__nav');
+    expect(toggle).toHaveAttribute('aria-expanded', String(isOpen));
+    expect(toggle).toHaveAccessibleName(
+      isOpen ? 'Close navigation menu' : 'Open navigation menu',
+    );
+  };
+
+  test('binds the toggle disclosure state to one stable navigation list', () => {
+    renderNavbar();
+
+    const toggle = screen.getByRole('button', { name: 'Open navigation menu' });
+    const list = screen.getByRole('list');
+    expect(list.id).toBe('primary-navigation');
+    expect(document.querySelectorAll(`#${list.id}`)).toHaveLength(1);
+    expect(toggle).toHaveAttribute('aria-controls', list.id);
+    expectMenuState(toggle, list, false);
+
+    fireEvent.click(toggle);
+    expectMenuState(toggle, list, true);
+
+    fireEvent.click(toggle);
+    expectMenuState(toggle, list, false);
+  });
+
+  test.each([
+    ['MPRC logo', () => screen.getByRole('link', { name: 'MPRC Logo' })],
+    ['ordinary destination', () => screen.getByRole('link', { name: 'Join Us' })],
+    ['authentication destination', () => screen.getByRole('link', { name: 'Sign in' })],
+  ])('selecting the %s always leaves the menu closed', (_label, getTarget) => {
+    renderNavbar();
+
+    const toggle = screen.getByRole('button', { name: 'Open navigation menu' });
+    const list = screen.getByRole('list');
+
+    fireEvent.click(getTarget());
+    expectMenuState(toggle, list, false);
+
+    fireEvent.click(toggle);
+    expectMenuState(toggle, list, true);
+    fireEvent.click(getTarget());
+    expectMenuState(toggle, list, false);
   });
 });
 
