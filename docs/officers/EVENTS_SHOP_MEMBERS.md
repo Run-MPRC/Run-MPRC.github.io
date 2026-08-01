@@ -202,6 +202,56 @@ Password reset is a separate recovery path. [#155](https://github.com/Run-MPRC/R
 
 The incoming verification link is another separate step. [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) tracks a deliberate-click `/auth/action` source route that removes the private code from the address and never grants membership. It is **NOT LIVE** and must not become Firebase's global handler while reset-password and email-recovery modes are unsupported. After every provider and website prerequisite is proven, use only [Verification link page — SOURCE ONLY, NOT LIVE](./EMERGENCY_AND_RECOVERY.md#verification-link-page--source-only-not-live). Officers never open, copy, or request the member's link or code.
 
+## Email/password submission one-attempt guard — SOURCE ONLY, NOT LIVE
+
+**Purpose:** make one quick series of clicks on the existing **Sign in** or **Create account** action start only one request, while allowing a later deliberate submission after the page shows its existing general failure message.
+
+**Approver:** membership lead plus identity/platform and privacy owners.
+
+**Prerequisites:** issue [#500](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/500), its reviewed pull request, exact merge commit, and synthetic tests must be complete. Use only a made-up email, password, account result, and rejected value. Parent [#109](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/109) remains incomplete and externally blocked for Google sign-in. This source slice does not enable Google, link accounts, change Firebase or a provider, create a production account, deploy the website, or prove live behavior.
+
+```mermaid
+flowchart TD
+    A["Member chooses existing Sign in or Create account"] --> B{"Is one email request already under way?"}
+    B -- "Yes" --> C["Ignore the repeat"]
+    B -- "No" --> D["Start one request and disable competing actions"]
+    D --> E{"Did that one request finish successfully?"}
+    E -- "Yes" --> F["Keep the existing sign-in destination or account-created result"]
+    E -- "No" --> G["Show the existing general failure message"]
+    G --> H["A later deliberate submission may start one new request"]
+    H --> B
+```
+
+In words: the first valid email sign-in or account-creation submission starts one request and disables the other account actions. Extra submissions during that request do nothing. A success keeps the existing result. A failure reveals no provider detail and allows the member to try again deliberately after the action is available. Sequential retries remain possible; each later submission is guarded as its own attempt.
+
+Officer review steps after the source merge:
+
+1. Keep this guard and the Google sign-in work marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #500 issue, reviewed pull request, merge commit, and synthetic test result.
+3. Confirm the tests use only a made-up email, password, account result, and rejected value.
+4. Confirm two sign-in submissions made together call the existing sign-in request once with the same made-up email and password.
+5. Confirm two Create-account submissions made together call the existing registration request once with the same made-up email and password.
+6. Confirm the email, password, submit, mode-change, and password-reset actions are unavailable while the request is under way.
+7. Confirm a successful sign-in keeps the existing checked return address or Account fallback.
+8. Confirm a successful account creation keeps the existing accepted-or-unavailable verification-email result.
+9. Confirm a failed sign-in or account creation shows only its existing general message and no rejected provider detail.
+10. Confirm the action becomes available after that failure and each later deliberate submission starts at most one new request. Sequential retries remain possible.
+11. Confirm the separate password-reset request, countdown, result, and retry behavior are unchanged.
+12. Confirm no Google control, popup, redirect, account linking, membership decision, provider setting, Firebase rule, Function, or production account was added or changed.
+13. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase/Auth deployment, provider configuration, account/data action, and live behavior as separate results.
+
+**Expected result:** one quick series of submissions starts one existing email/password request. All competing account actions stay unavailable until that request settles. The existing successful sign-in or account-created result remains unchanged. The existing general failure message reveals no rejected value. A later deliberate submission starts at most one new request, and sequential retries remain possible. This browser guard does not cancel a request already started, persist through a reload, remount, another tab, device, or script, control an already-started result received after navigation or a service-context change, provide server idempotency, add Google sign-in, prove membership, or establish live availability.
+
+**Stop conditions:** any real email, password, account, member, provider response, credential, or production data; a production Auth test; more than one provider call from one quick series of submissions; a raw provider detail on the page, in analytics, or in the console; account actions that remain active during the request; a failure that cannot be retried once; any Google, Firebase, Rule, Function, provider-setting, membership, discount, payment, account-data, or deployment change; or a claim that source, tests, merge, preview, or green CI proves the guard or Google sign-in is live.
+
+**Success proof:** for source completion, record the exact #500 issue, reviewed pull request and merge commit, the two intended old-source duplicate-call failures, four green focused tests, the unchanged Login tests, relevant full checks, and independent lifecycle, privacy, and officer-continuity reviews. Live availability requires a separately approved website publication and dated exact-revision verification using an approved isolated made-up account. Record website publication, `runmprc.com`, Firebase/Auth deployment, Google/provider configuration, account/data action, and live behavior as **not performed** unless separate evidence proves otherwise.
+
+**Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After a future approved publication, use the same protected website release path and verify the replacement revision. Do not undo by deleting or recreating an account, changing Firebase or provider settings, or changing membership data.
+
+**Escalation:** membership lead plus identity/platform owner. Add the privacy/security owner if a provider detail or private account value appears. Use the private incident path and never paste an email, password, code, provider response, screenshot, or account record into an issue, message, email, or AI tool.
+
+No system-topology diagram changes for this source slice because page structure, data movement, permissions, account ownership, provider configuration, and deployment topology are unchanged. The state-flow diagram above records only the one-attempt browser behavior.
+
 ## Checkout adjustment guard — SOURCE ONLY, NOT LIVE
 
 **Purpose:** prevent an unknown discount, tax, or shipping charge from being treated as a valid payment.

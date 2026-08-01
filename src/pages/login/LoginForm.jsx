@@ -25,6 +25,7 @@ function LoginForm() {
   const emailInputRef = useRef(null);
   const registrationStatusRef = useRef(null);
   const resetStatusRef = useRef(null);
+  const authSubmitInFlightRef = useRef(false);
   const resetInFlightRef = useRef(false);
   const resetRetryAtRef = useRef(0);
   const mountedRef = useRef(true);
@@ -95,6 +96,7 @@ function LoginForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (authSubmitInFlightRef.current) return;
     setError('');
     setRegistrationOutcome(null);
 
@@ -103,6 +105,7 @@ function LoginForm() {
       return;
     }
 
+    authSubmitInFlightRef.current = true;
     setIsLoading(true);
 
     try {
@@ -119,6 +122,7 @@ function LoginForm() {
         ? 'We could not create the account. Please try again.'
         : 'Failed to authenticate. Please check your credentials and try again.');
     } finally {
+      authSubmitInFlightRef.current = false;
       setIsLoading(false);
     }
   };
