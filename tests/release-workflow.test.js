@@ -206,10 +206,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the reviewed merged website source and is armed', () => {
+test('Netlify manifest pins the reviewed merged website source and is paused', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(loaded.manifest.releaseId, 'WEB-002A-2026-07-30');
   assert.equal(loaded.manifest.issueNumber, 473);
   assert.equal(
