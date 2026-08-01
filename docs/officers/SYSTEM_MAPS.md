@@ -149,6 +149,26 @@ In words: a signed-in member gets their existing profile unchanged or one new pe
 
 Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair, and [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) owns the temporary phone-collection pause. Source code and local tests do not make either live. The website, server Function, database permissions, and made-up live check must each be proven separately.
 
+## Optional profile photo preference — SOURCE ONLY, NOT LIVE
+
+```mermaid
+flowchart LR
+    Account["Signed-in person's Account page"] --> Server["Native App Check Firebase Functions\nprivate no-store responses"]
+    Server --> Profile["Existing profile name check"]
+    Server --> Preference["Default-off finder preference"]
+    Server --> Thumbnail["Private processed thumbnail\noriginal not retained"]
+    Server --> Audit["Minimal private audit event"]
+    Server -- "each upload or retry" --> Rate["Private per-account abuse counter\nexpiry TTL required"]
+    Browser["Browser, including admin"] -. "direct access denied" .-> Preference
+    Browser -. "direct access denied" .-> Thumbnail
+    Browser -. "direct access denied" .-> Rate
+    Preference -. "no authority" .-> Records["Membership, role, registration, and payment records"]
+```
+
+In words: the signed-in person uses private server actions for a separate default-off preference and processed thumbnail; each upload or retry consumes a private pseudonymous per-account abuse-counter attempt whose expiry needs the configured TTL. Browsers cannot directly access these records, and the choice changes no membership, role, registration, or payment authority. If an opted-in person has no valid current display name, the future server finder must exclude them while leaving opt-out available.
+
+Issue [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) owns this source-only account slice. It does not provide an officer finder. Issue [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) owns later bounded officer name search, and [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) owns privacy approval, backend-first release, website publication, and live proof. No issue authorizes facial recognition or biometric processing.
+
 ## Verification email action — SOURCE ONLY, NOT LIVE
 
 ```mermaid

@@ -32,6 +32,7 @@ import StravaCallback from './StravaCallback';
 
 const mockCaptureException = jest.fn();
 const mockTrack = jest.fn();
+const mockMemberDirectoryProfile = jest.fn();
 
 jest.mock('../../services/ServiceLocatorContext', () => ({
   useServiceLocator: jest.fn(),
@@ -85,6 +86,11 @@ jest.mock('../../services/analytics/analytics', () => ({
 
 jest.mock('./StravaSection', () => function StravaSection() {
   return <div data-testid="strava-section" />;
+});
+
+jest.mock('./MemberDirectoryProfile', () => function MemberDirectoryProfile(props: unknown) {
+  mockMemberDirectoryProfile(props);
+  return <div data-testid="member-directory-profile" />;
 });
 
 const ActualStravaSection = jest.requireActual('./StravaSection').default;
@@ -242,6 +248,19 @@ describe('Account profile recovery', () => {
     expect(calls).toEqual(['ensure', 'read']);
     expect(ensureMyProfile).toHaveBeenCalledWith(app);
     expect(getMyProfile).toHaveBeenCalledWith(firestore, USER.uid);
+  });
+
+  test('binds the directory controls to the current app, account, and display-name state', async () => {
+    (getMyProfile as jest.Mock).mockResolvedValue({ ...PROFILE, fullName: null });
+
+    renderAccount();
+
+    expect(await screen.findByTestId('member-directory-profile')).toBeInTheDocument();
+    expect(mockMemberDirectoryProfile).toHaveBeenLastCalledWith({
+      app,
+      uid: USER.uid,
+      hasDisplayName: false,
+    });
   });
 
   test('shows the shared page hero while authentication is loading', () => {

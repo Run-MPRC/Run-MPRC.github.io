@@ -383,6 +383,8 @@ All four slices are source boundaries until the exact Rules, Functions, and webs
 | `retentionJobs/{jobId}` | Optional operational record of scheduled minimization/deletion work |
 | `systemConfig/commerce` | Versioned global/domain command admission; browser read/write denied; protected writer is not available yet |
 | `events/{id}.checkoutEnabled` and `products/{id}.checkoutEnabled` | Explicit server-owned resource admission; missing means disabled |
+| `memberDirectoryPreferences/{uid}` | MEMBERS-DIRECTORY-001A/#505 server-only revisioned preference. A missing record means hidden from the optional officer finder. |
+| `memberDirectoryPhotos/{uid}` | MEMBERS-DIRECTORY-001A/#505 server-only bounded WebP thumbnail bytes. The submitted original is decoded in memory and never retained. |
 
 Large `auditLog` arrays on registration and order documents should be replaced before they approach Firestore document-size and write-contention limits. New audit data should be append-oriented.
 
@@ -618,6 +620,32 @@ The callable accepts no UID or profile fields. A missing record receives bounded
 DATA-001C1 [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) pauses optional phone display and collection in My Account. The owner-profile projection omits `phoneNumber`, the client validates and writes only `fullName`, and the Rules source rejects every browser phone mutation while allowing an existing phone value to remain unchanged during a name edit. DATA-001C2 [#197](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/197) extends the same pause to the shared signup/recovery helper: a new profile keeps the empty phone schema field even when Firebase Auth already has a phone. The create-once transaction leaves every existing profile unchanged. Firestore still authorizes and transports the owner's complete document at its document-level boundary; #116 retains future server projections for broader administrative reads. Neither slice deletes, migrates, exports, or inspects existing phone data, changes Google Forms/providers, or proves spam causation. Source is not live protection until the exact Rules and both profile Functions are deployed/read back before the dependent website revision is published and verified.
 
 The server chooses initial timestamps. The current self-edit path sends a Firestore server timestamp, but the Rules source type-checks rather than independently proves that edit timestamp. Do not describe arbitrary profile edit timestamps as server-authoritative until a coordinated Rules/API issue closes that residual.
+
+### 8.0p Private profile thumbnail and officer-finder preference — SOURCE ONLY, NOT LIVE
+
+MEMBERS-DIRECTORY-001A [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) is the first source slice of parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504). It adds an optional account thumbnail and an independent preference for a future officer people finder. Missing preference means hidden. Uploading a photo does not enable discoverability, and opting out does not delete or change the account, role, membership, registration, or payment record.
+
+```mermaid
+flowchart LR
+    Account["Signed-in person's My Account"] --> Callable["Native App Check and authenticated profile Functions\nprivate no-store responses"]
+    Callable --> Profile["Existing members/{uid}\nname prerequisite only"]
+    Callable --> Preference["Server-only preference\nmissing means hidden"]
+    Upload["Bounded JPG, PNG, or WebP"] --> Process["Decode in memory; orient, crop, re-encode\nand strip metadata"]
+    Callable -- "each upload, including retry" --> Rate["Server-only pseudonymous per-account abuse counter\nexpiresAt TTL required"]
+    Process --> Photo["Server-only 256px WebP thumbnail"]
+    Callable --> Photo
+    Callable --> Audit["Minimal append-oriented audit event"]
+    Browser["Any browser, including admin"] -. "direct read/write denied" .-> Preference
+    Browser -. "direct read/write denied" .-> Photo
+    Browser -. "direct read/write denied" .-> Rate
+    Preference -. "does not grant" .-> Authority["Membership, role, payment, or admin authority"]
+```
+
+Text alternative: one signed-in person uses authenticated server operations for their own revisioned preference and processed thumbnail; the server reads only the current profile name when enabling the preference, stores no original, writes a minimal audit event with each mutation, and charges each upload or retry to a private pseudonymous per-account abuse counter whose expiry needs the configured TTL. Browsers cannot access these private records, and the choice grants no membership or account authority.
+
+All four callable declarations use the Firebase runtime's native `enforceAppCheck: true` option rather than relying on the repository's fail-open environment helper. Each handler also fails closed unless it can set `Cache-Control: private, no-store, max-age=0` and matching legacy no-cache headers before returning private state. The callable contract uses an exact UUID request ID and expected revision. A current exact retry does not rewrite preference, photo, or audit state; a stale revision, reuse with a different action or visibility value, reuse that produces a different normalized thumbnail, malformed stored state, or uncertain result stops without overwriting newer intent. Two submitted files that normalize to exactly the same stored thumbnail have the same durable effect and require no retained original-file fingerprint. Every upload invocation, including an exact retry, still advances a domain-separated SHA-256 account-key rate-limit record before image processing so reuse of one request ID cannot bypass the CPU-abuse bound. That stable pseudonym is not anonymous. The operational record requires the separately configured `ratelimits.expiresAt` TTL described in RISK-022. The photo input is strict base64 and is decoded as one static JPEG, PNG, or WebP under byte, dimension, and pixel limits. The server auto-orients and center-crops to one 256-by-256 WebP, strips metadata by default, caps the stored result at 64 KiB, and stores it separately from the browser-readable member profile. Direct Rules reads and writes to preferences, photos, nested records, and audit events remain denied to owners and browser admins. If a person clears their display name after opting in, the preference stays controllable but the account is ineligible for results until a valid name is restored; #506 must enforce that current-name check at the server response boundary.
+
+This slice contains no officer query, directory projection, public media URL, Firebase Storage dependency, face detection, facial recognition, image embedding, similarity score, or biometric template. [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) owns bounded server-side name search and an officer gallery. [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) owns approved privacy wording, protected backend-first deployment, website publication, and live proof. Source, tests, merge, Firebase deployment, website publication, `runmprc.com` verification, and production behavior are separate states.
 
 ### 8.0a Provider-neutral membership authority and entitlement — SOURCE ONLY, UNUSED
 

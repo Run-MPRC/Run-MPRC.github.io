@@ -465,6 +465,30 @@ service cloud.firestore {
       }
     }
 
+    // Profile-directory preferences and processed thumbnails contain private
+    // member data. Owners and browser admins use authenticated callable
+    // Functions for every read and mutation so that validation, revision
+    // checks, and audit writes remain one server-authoritative operation.
+    match /memberDirectoryPreferences/{uid} {
+      allow read, write: if false;
+
+      // Subcollections do not inherit the parent document rule. Keep any
+      // future nested preference records behind the same server-only boundary.
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /memberDirectoryPhotos/{uid} {
+      allow read, write: if false;
+
+      // Processed photo bytes and any future nested media records must never
+      // become browser-readable merely because a subcollection is introduced.
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
     match /auditEvents/{auditEventId} {
       allow read, write: if false;
     }
