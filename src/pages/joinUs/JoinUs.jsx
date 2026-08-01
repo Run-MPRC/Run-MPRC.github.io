@@ -197,12 +197,6 @@ function JoinUs() {
           name: 'Mid-Peninsula Running Club',
         },
       },
-      offers: {
-        '@type': 'Offer',
-        price: '25',
-        priceCurrency: 'USD',
-        description: 'Annual membership fee for individuals (2026)',
-      },
     },
   };
 

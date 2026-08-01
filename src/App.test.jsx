@@ -42,6 +42,7 @@ import {
   listAllProducts,
   lookupOrder,
 } from './services/shop/shopService';
+import { createJoinUsPageSchema } from './services/seo/structuredData';
 import App from './App';
 
 jest.mock('./services/ServiceLocatorProvider', () => function TestServiceLocatorProvider({
@@ -179,6 +180,62 @@ test('renders the MPRC home route without contacting Firebase', () => {
   } finally {
     consoleWarn.mockRestore();
   }
+});
+
+test('keeps the real Join route structured data free of an unapproved membership Offer', async () => {
+  window.history.pushState({}, '', '/joinus');
+  render(<App />);
+
+  const joinSchema = await waitFor(() => {
+    const schemas = Array.from(
+      document.head.querySelectorAll('script[type="application/ld+json"]'),
+      (script) => JSON.parse(script.textContent),
+    );
+    const schema = schemas.find((candidate) => candidate.url === 'https://runmprc.com/joinus');
+
+    expect(schema).toBeDefined();
+    return schema;
+  });
+
+  expect(joinSchema.mainEntity).toMatchObject({
+    '@type': 'SportsOrganization',
+    event: {
+      '@type': 'SportsEvent',
+      name: 'Saturday Morning Run',
+    },
+  });
+  expect(joinSchema.mainEntity).not.toHaveProperty('offers');
+  expect(JSON.stringify(joinSchema)).not.toMatch(
+    /"@type":"Offer"|"price":|"priceCurrency":|Annual membership fee for individuals \(2026\)/,
+  );
+  expect(screen.getByText(
+    'Affordable membership fees: $25/individual or $30/household per calendar year',
+  )).toBeInTheDocument();
+});
+
+test('keeps the shared Join schema helper price-neutral while retaining organization and run data', () => {
+  const schema = createJoinUsPageSchema({
+    pageTitle: 'Synthetic Join Page',
+    pageDescription: 'Synthetic public running-club description',
+    pageUrl: 'https://example.test/join',
+  });
+
+  expect(schema).toMatchObject({
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'Synthetic Join Page',
+    mainEntity: {
+      '@type': 'SportsOrganization',
+      event: {
+        '@type': 'SportsEvent',
+        name: 'Saturday Morning Run',
+      },
+    },
+  });
+  expect(schema.mainEntity).not.toHaveProperty('offers');
+  expect(JSON.stringify(schema)).not.toMatch(
+    /"@type":"Offer"|"price":|"priceCurrency":|Annual membership fee for individuals \(2026\)/,
+  );
 });
 
 test('normalizes embedded double slashes before resolving a route', () => {
