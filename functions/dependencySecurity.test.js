@@ -567,3 +567,202 @@ describe('SUPPLY-001D14 Functions js-yaml merge containment', () => {
     });
   });
 });
+
+describe('SUPPLY-001D15 Functions protobufjs option parsing', () => {
+  const patchedVersion = '7.6.5';
+  const patchedUrl =
+    'https://registry.npmjs.org/protobufjs/-/protobufjs-7.6.5.tgz';
+  const patchedIntegrity =
+    'sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==';
+  const protobufPackagePath = 'node_modules/protobufjs';
+  const inquirePackagePath = 'node_modules/@protobufjs/inquire';
+
+  test('pins the sole production copy through six unchanged parent ranges', () => {
+    const packageJson = readJson(PACKAGE_PATH);
+    const lock = readJson(LOCK_PATH);
+    const rootRecord = lock.packages[''];
+    const protobufEntries = Object.entries(lock.packages)
+      .filter(([packagePath]) => (
+        packagePath === protobufPackagePath
+        || packagePath.endsWith('/node_modules/protobufjs')
+      ));
+    const inquireEntries = Object.entries(lock.packages)
+      .filter(([packagePath]) => (
+        packagePath === inquirePackagePath
+        || packagePath.endsWith('/node_modules/@protobufjs/inquire')
+      ));
+
+    for (const dependency of ['protobufjs', '@protobufjs/inquire']) {
+      for (const field of [
+        'dependencies',
+        'devDependencies',
+        'optionalDependencies',
+        'peerDependencies',
+        'resolutions',
+        'overrides',
+      ]) {
+        expect(packageJson[field]?.[dependency]).toBeUndefined();
+        expect(rootRecord?.[field]?.[dependency]).toBeUndefined();
+      }
+    }
+
+    expect(protobufEntries).toHaveLength(1);
+    expect(protobufEntries[0][0]).toBe(protobufPackagePath);
+    expect(protobufEntries[0][1]).toMatchObject({
+      version: patchedVersion,
+      resolved: patchedUrl,
+      integrity: patchedIntegrity,
+      hasInstallScript: true,
+      license: 'BSD-3-Clause',
+    });
+    expect(protobufEntries[0][1]).not.toHaveProperty('dev');
+    expect(protobufEntries[0][1].dependencies).toEqual({
+      '@protobufjs/aspromise': '^1.1.2',
+      '@protobufjs/base64': '^1.1.2',
+      '@protobufjs/codegen': '^2.0.5',
+      '@protobufjs/eventemitter': '^1.1.1',
+      '@protobufjs/fetch': '^1.1.1',
+      '@protobufjs/float': '^1.0.2',
+      '@protobufjs/path': '^1.1.2',
+      '@protobufjs/pool': '^1.1.0',
+      '@protobufjs/utf8': '^1.1.1',
+      '@types/node': '>=13.7.0',
+      long: '^5.3.2',
+    });
+    expect(protobufEntries[0][1].engines).toEqual({node: '>=12.0.0'});
+    expect(inquireEntries).toEqual([]);
+
+    const consumers = Object.entries(lock.packages)
+      .filter(([, packageRecord]) => (
+        packageRecord?.dependencies?.protobufjs !== undefined
+      ))
+      .map(([packagePath, packageRecord]) => ({
+        packagePath,
+        version: packageRecord.version,
+        dev: packageRecord.dev ?? false,
+        range: packageRecord.dependencies.protobufjs,
+      }))
+      .sort((left, right) => left.packagePath.localeCompare(right.packagePath));
+    expect(consumers).toEqual([
+      {
+        packagePath: 'node_modules/@google-cloud/firestore',
+        version: '7.11.6',
+        dev: false,
+        range: '^7.2.6',
+      },
+      {
+        packagePath:
+          'node_modules/@grpc/grpc-js/node_modules/@grpc/proto-loader',
+        version: '0.8.1',
+        dev: false,
+        range: '^7.5.5',
+      },
+      {
+        packagePath: 'node_modules/@grpc/proto-loader',
+        version: '0.7.15',
+        dev: false,
+        range: '^7.2.5',
+      },
+      {
+        packagePath: 'node_modules/firebase-functions',
+        version: '4.9.0',
+        dev: false,
+        range: '^7.2.2',
+      },
+      {
+        packagePath: 'node_modules/google-gax',
+        version: '4.6.1',
+        dev: false,
+        range: '^7.3.2',
+      },
+      {
+        packagePath: 'node_modules/proto3-json-serializer',
+        version: '2.0.2',
+        dev: false,
+        range: '^7.2.5',
+      },
+    ]);
+
+    const installedPackagePath = require.resolve('protobufjs/package.json');
+    expect(path.relative(FUNCTIONS_ROOT, installedPackagePath))
+      .toBe(`${protobufPackagePath}/package.json`);
+    expect(readJson(installedPackagePath).version).toBe(patchedVersion);
+    for (const consumer of consumers) {
+      expect(require.resolve('protobufjs/package.json', {
+        paths: [path.join(FUNCTIONS_ROOT, consumer.packagePath)],
+      })).toBe(installedPackagePath);
+    }
+
+    let inquireResolution;
+    let inquireError;
+    try {
+      inquireResolution = require.resolve('@protobufjs/inquire/package.json');
+    } catch (error) {
+      inquireError = error;
+    }
+    expect(inquireResolution).toBeUndefined();
+    expect(inquireError?.code).toBe('MODULE_NOT_FOUND');
+  });
+
+  test('rejects an unterminated option promptly and preserves valid parsing', () => {
+    const installedPath = require.resolve('protobufjs');
+    const validScript = `
+      const protobuf = require(${JSON.stringify(installedPath)});
+      const parsed = protobuf.parse(
+        'syntax = "proto3"; '
+          + 'option java_package = "org.example"; '
+          + 'message Ping { string id = 1; }',
+      );
+      process.stdout.write(JSON.stringify({
+        javaPackage: parsed.root.options.java_package,
+        messageFields: Object.keys(parsed.root.lookupType('Ping').fields),
+      }));
+    `;
+    const validResult = spawnSync(
+      process.execPath,
+      ['--max-old-space-size=64', '-e', validScript],
+      {
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024,
+        timeout: 2_000,
+      },
+    );
+
+    expect(validResult.error).toBeUndefined();
+    expect(validResult.signal).toBeNull();
+    expect(validResult.status).toBe(0);
+    expect(validResult.stderr).toBe('');
+    expect(JSON.parse(validResult.stdout)).toEqual({
+      javaPackage: 'org.example',
+      messageFields: ['id'],
+    });
+
+    const affectedScript = `
+      const protobuf = require(${JSON.stringify(installedPath)});
+      let unterminated;
+      try {
+        protobuf.parse('option foo');
+        unterminated = 'resolved';
+      } catch {
+        unterminated = 'rejected';
+      }
+      process.stdout.write(JSON.stringify({unterminated}));
+    `;
+    const affectedResult = spawnSync(
+      process.execPath,
+      ['--max-old-space-size=64', '-e', affectedScript],
+      {
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024,
+        timeout: 2_000,
+      },
+    );
+
+    expect(affectedResult.error).toBeUndefined();
+    expect(affectedResult.signal).toBeNull();
+    expect(affectedResult.status).toBe(0);
+    expect(affectedResult.stderr).toBe('');
+    expect(JSON.parse(affectedResult.stdout))
+      .toEqual({unterminated: 'rejected'});
+  });
+});
