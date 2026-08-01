@@ -2791,6 +2791,175 @@ describe('Strava token refresh failure boundary', () => {
     });
   });
 
+  describe('OAUTH-001A1F refresh freshness-clock boundary', () => {
+    function expectNoPostClockWork() {
+      expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchSetAttempts()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    }
+
+    async function expectInvalidClock(value) {
+      seedExpiredConnection();
+      dateNowSpy.mockReturnValueOnce(value);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(rejection)).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expectNoPostClockWork();
+    }
+
+    test('discards a hostile thrown clock value without reading or exposing it', async () => {
+      const failure = Object.create(null);
+      const probes = ['cause', 'code', 'details', 'message', 'stack', 'toJSON', 'toString']
+        .map((field) => {
+          const probe = jest.fn(() => {
+            throw new Error(`refresh-clock-${field}-getter-canary`);
+          });
+          Object.defineProperty(failure, field, {
+            configurable: false,
+            enumerable: true,
+            get: probe,
+          });
+          return probe;
+        });
+      seedExpiredConnection();
+      dateNowSpy.mockImplementationOnce(() => {
+        throw failure;
+      });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      if (rejection === failure) {
+        throw new Error('Raw hostile refresh-clock failure escaped the fixed boundary.');
+      }
+      const exposed = publicError(rejection);
+      expect(exposed).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify({ exposed, logs: consoleSpies.map((spy) => spy.mock.calls) }))
+        .not.toMatch(/refresh-clock|getter-canary/i);
+      probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+      expectNoPostClockWork();
+    });
+
+    test('maps a clock-projection failure to the same fixed boundary', async () => {
+      seedExpiredConnection();
+      const floorSpy = jest.spyOn(Math, 'floor').mockImplementationOnce(() => {
+        throw new Error('refresh-clock-floor-canary');
+      });
+      let rejection;
+      try {
+        rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+      } finally {
+        floorSpy.mockRestore();
+      }
+
+      const exposed = publicError(rejection);
+      expect(exposed).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify({ exposed, logs: consoleSpies.map((spy) => spy.mock.calls) }))
+        .not.toMatch(/refresh-clock-floor-canary/i);
+      expectNoPostClockWork();
+    });
+
+    test.each([
+      ['not-a-number', Number.NaN],
+      ['positive infinity', Number.POSITIVE_INFINITY],
+      ['negative infinity', Number.NEGATIVE_INFINITY],
+      ['zero', 0],
+      ['a negative value', -1],
+      ['a fractional millisecond', (NOW_SECONDS * 1_000) + 0.5],
+      ['an unsafe millisecond integer', Number.MAX_SAFE_INTEGER + 1],
+      ['a numeric string', String(NOW_SECONDS * 1_000)],
+      ['a boxed number', Object(NOW_SECONDS * 1_000)],
+      ['a bigint', 1n],
+      ['a symbol', Symbol('refresh-clock-canary')],
+    ])('rejects %s before provider or persistence work', async (_case, value) => {
+      await expectInvalidClock(value);
+    });
+
+    test('rejects an invalid clock before application credentials are required', async () => {
+      delete process.env.STRAVA_CLIENT_ID;
+      delete process.env.STRAVA_CLIENT_SECRET;
+
+      await expectInvalidClock(Number.NaN);
+    });
+
+    test('rejects a coercible clock object without invoking its hooks', async () => {
+      const hooks = {
+        toString: jest.fn(() => String(NOW_SECONDS * 1_000)),
+        valueOf: jest.fn(() => NOW_SECONDS * 1_000),
+        [Symbol.toPrimitive]: jest.fn(() => NOW_SECONDS * 1_000),
+      };
+
+      await expectInvalidClock(hooks);
+
+      expect(hooks.toString).not.toHaveBeenCalled();
+      expect(hooks.valueOf).not.toHaveBeenCalled();
+      expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+    });
+
+    test('rejects a clock Proxy without invoking any trap', async () => {
+      const traps = {
+        get: jest.fn(() => {
+          throw new Error('refresh-clock-proxy-get-canary');
+        }),
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('refresh-clock-proxy-descriptor-canary');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('refresh-clock-proxy-prototype-canary');
+        }),
+        has: jest.fn(() => {
+          throw new Error('refresh-clock-proxy-has-canary');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('refresh-clock-proxy-ownKeys-canary');
+        }),
+      };
+      const value = new Proxy(Object(NOW_SECONDS * 1_000), traps);
+
+      await expectInvalidClock(value);
+
+      Object.values(traps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
+    });
+
+    test('rejects a revoked clock Proxy without reflection', async () => {
+      const { proxy, revoke } = Proxy.revocable(Object(NOW_SECONDS * 1_000), {});
+      revoke();
+
+      await expectInvalidClock(proxy);
+    });
+  });
+
   describe('OAUTH-001A1E refreshed-secret persistence boundary', () => {
     function hostilePersistenceFailure() {
       const probes = [
