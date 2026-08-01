@@ -33,6 +33,8 @@ jest.mock('firebase-admin', () => {
   const directSetAttempts = [];
   const documents = new Map();
   const documentVersions = new Map();
+  const readFailures = new Map();
+  const readSnapshots = new Map();
   const reads = [];
   let transactionCommitFailure;
   let transactionCommitPostApplyFailure;
@@ -81,6 +83,12 @@ jest.mock('firebase-admin', () => {
       },
       get: async () => {
         reads.push(path);
+        if (readFailures.has(path)) {
+          throw readFailures.get(path);
+        }
+        if (readSnapshots.has(path)) {
+          return readSnapshots.get(path);
+        }
         const exists = documents.has(path);
         const data = documents.get(path);
         return {
@@ -227,7 +235,11 @@ jest.mock('firebase-admin', () => {
       documents.clear();
       documentVersions.clear();
     },
-    __clearReads: () => reads.splice(0, reads.length),
+    __clearReads: () => {
+      readFailures.clear();
+      readSnapshots.clear();
+      reads.splice(0, reads.length);
+    },
     __clearWrites: () => {
       batchCommitFailure = undefined;
       batchCommitPostApplyFailure = undefined;
@@ -288,6 +300,8 @@ jest.mock('firebase-admin', () => {
       documents.set(path, data);
       bumpVersion(path);
     },
+    __setReadFailure: (path, error) => readFailures.set(path, error),
+    __setReadSnapshot: (path, snapshot) => readSnapshots.set(path, snapshot),
     __setTransactionCommitFailure: (error) => {
       transactionCommitFailure = error;
     },
@@ -4908,6 +4922,7 @@ describe('Strava disconnect failure log boundary', () => {
   const SYNTHETIC_BASIC_AUTHORIZATION = 'Basic MTIzNDU6YWJjMTIz';
   const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded';
   const FIXED_CLEANUP_WARNING = 'strava_disconnect_cleanup_failed';
+  const FIXED_SECRET_READ_WARNING = 'strava_disconnect_secret_read_failed';
 
   beforeEach(() => {
     process.env.STRAVA_CLIENT_ID = SYNTHETIC_CLIENT_ID;
@@ -5832,6 +5847,109 @@ describe('Strava disconnect failure log boundary', () => {
     ['debug', 'error', 'info', 'log']
       .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
     expectLocalRecordsPreserved();
+  });
+
+  describe('OAUTH-001B8 disconnect storage-read boundary', () => {
+    function hostileReadFailure() {
+      const probes = [
+        jest.fn(() => {
+          throw new Error('read-cause-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('read-details-getter-canary');
+        }),
+        jest.fn(() => {
+          throw new Error('read-json-getter-canary');
+        }),
+      ];
+      const failure = new Error(
+        'read-failure-canary uid=synthetic-member path=members/private token=synthetic-token',
+      );
+      Object.defineProperties(failure, {
+        cause: { configurable: true, enumerable: true, get: probes[0] },
+        details: { configurable: true, enumerable: true, get: probes[1] },
+        toJSON: { configurable: true, enumerable: true, get: probes[2] },
+      });
+      return { failure, probes };
+    }
+
+    function expectFixedReadFailure(rejection, probes) {
+      const exposed = publicError(rejection);
+      expect(exposed).toEqual({
+        code: 'unavailable',
+        message: FIXED_DISCONNECT_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+      expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_SECRET_READ_WARNING);
+      expect(JSON.stringify({ exposed, logs: consoleSpies.warn.mock.calls }))
+        .not.toMatch(
+          /read-failure-canary|synthetic-member|members\/private|synthetic-token|getter-canary/i,
+        );
+      probes.forEach((probe) => expect(probe).not.toHaveBeenCalled());
+      ['debug', 'error', 'info', 'log']
+        .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
+      expect(admin.__getReads()).toEqual([SECRET_PATH]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchSetAttempts()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
+      expect(dateNowSpy).not.toHaveBeenCalled();
+      expect(Timestamp.now).not.toHaveBeenCalled();
+    }
+
+    test('maps a rejected secret read to one fixed result before downstream work', async () => {
+      const { failure, probes } = hostileReadFailure();
+      seedConnectedAccount();
+      admin.__setReadFailure(SECRET_PATH, failure);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedReadFailure(rejection, probes);
+    });
+
+    test('maps a throwing snapshot exists value to the fixed read boundary', async () => {
+      const { failure, probes } = hostileReadFailure();
+      const exists = jest.fn(() => {
+        throw failure;
+      });
+      const snapshot = {};
+      Object.defineProperty(snapshot, 'exists', {
+        configurable: true,
+        enumerable: true,
+        get: exists,
+      });
+      seedConnectedAccount();
+      admin.__setReadSnapshot(SECRET_PATH, snapshot);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedReadFailure(rejection, probes);
+      expect(exists).toHaveBeenCalledTimes(1);
+    });
+
+    test('maps a throwing snapshot data method to the fixed read boundary', async () => {
+      const { failure, probes } = hostileReadFailure();
+      const data = jest.fn(() => {
+        throw failure;
+      });
+      seedConnectedAccount();
+      admin.__setReadSnapshot(SECRET_PATH, { exists: true, data });
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedReadFailure(rejection, probes);
+      expect(data).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('OAUTH-001B7 atomic local disconnect cleanup', () => {
