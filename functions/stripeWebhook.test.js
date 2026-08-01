@@ -212,6 +212,15 @@ const INVALID_EMBEDDED_LIVEMODE_CASES = [
   ['string', 'value', 'false'],
   ['number', 'value', 0],
 ];
+const INVALID_METADATA_SCHEMA_CASES = [
+  ['future string', '2'],
+  ['empty string', ''],
+  ['null', null],
+  ['number', 1],
+  ['boolean', true],
+  ['object', {}],
+  ['array', []],
+];
 const DISPUTE_REALM_CASES = [
   ['created', 'charge.dispute.created', 'needs_response'],
   ['updated', 'charge.dispute.updated', 'under_review'],
@@ -223,6 +232,19 @@ const DISPUTE_REALM_CASES = [
     type,
     status,
     mutation,
+    value,
+  ])
+));
+const DISPUTE_METADATA_SCHEMA_CASES = [
+  ['created', 'charge.dispute.created', 'needs_response'],
+  ['updated', 'charge.dispute.updated', 'under_review'],
+  ['closed', 'charge.dispute.closed', 'won'],
+].flatMap(([lifecycle, type, status]) => (
+  INVALID_METADATA_SCHEMA_CASES.map(([evidence, value]) => [
+    lifecycle,
+    evidence,
+    type,
+    status,
     value,
   ])
 ));
@@ -256,6 +278,7 @@ function registrationSession(overrides = {}) {
     object: 'checkout.session',
     mode: 'payment',
     metadata: {
+      schemaVersion: '1',
       eventId: 'race-1',
       registrationId: 'reg-1',
       priceTier: 'nonMember',
@@ -280,6 +303,7 @@ function orderSession(overrides = {}) {
     object: 'checkout.session',
     mode: 'payment',
     metadata: {
+      schemaVersion: '1',
       type: 'merch',
       orderId: 'order-1',
       productSlug: 'hat',
@@ -317,7 +341,7 @@ function orderRefundCharge(overrides = {}) {
     amount: 2000,
     amount_refunded: 500,
     currency: 'usd',
-    metadata: { type: 'merch', orderId: 'order-1' },
+    metadata: { schemaVersion: '1', type: 'merch', orderId: 'order-1' },
     refunds: { data: [{ id: 're_order_realm' }] },
     ...overrides,
   };
@@ -333,7 +357,7 @@ function orderDispute(overrides = {}) {
     currency: 'usd',
     reason: 'fraudulent',
     status: 'needs_response',
-    metadata: { type: 'merch', orderId: 'order-1' },
+    metadata: { schemaVersion: '1', type: 'merch', orderId: 'order-1' },
     ...overrides,
   };
 }
@@ -399,6 +423,10 @@ async function deliver(event) {
 
 function storedCopy(path) {
   return JSON.parse(JSON.stringify(admin.__get(path)));
+}
+
+function setMetadataSchema(object, value) {
+  object.metadata.schemaVersion = value;
 }
 
 function providerBindingPaths(event) {
@@ -591,6 +619,7 @@ describe('stripeWebhook', () => {
     const event = stripeEvent('evt_unsupported', 'customer.created', {
       id: 'cus_1',
       object: 'customer',
+      metadata: { schemaVersion: '2', type: 'merch', orderId: 'order-1' },
     });
 
     const firstResponse = await deliver(event);
@@ -617,7 +646,7 @@ describe('stripeWebhook', () => {
       'checkout.session.completed',
       registrationSession({
         id: 'cs_other_integration',
-        metadata: { integration: 'another_application' },
+        metadata: { integration: 'another_application', schemaVersion: '2' },
       }),
     );
 
@@ -1180,6 +1209,376 @@ describe('stripeWebhook', () => {
       outcome: 'needs_review:charge_livemode_mismatch',
     }));
     expect(admin.__get(businessPath)).toEqual(before);
+  });
+
+  test.each(INVALID_METADATA_SCHEMA_CASES)(
+    'quarantines a claimed Checkout Session with an explicit %s metadata schema',
+    async (label, value) => {
+      seedRegistration();
+      const businessPath = 'events/race-1/registrations/reg-1';
+      const before = storedCopy(businessPath);
+      const event = stripeEvent(
+        `evt_session_schema_${label.replace(/[^a-z]+/g, '_')}`,
+        'checkout.session.completed',
+        registrationSession(),
+      );
+      setMetadataSchema(event.data.object, value);
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({
+        response,
+        event,
+        businessPath,
+        before,
+        reason: 'metadata_schema_version_mismatch',
+      });
+    },
+  );
+
+  test.each(INVALID_METADATA_SCHEMA_CASES)(
+    'quarantines a claimed refund Charge with an explicit %s metadata schema',
+    async (label, value) => {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const event = stripeEvent(
+        `evt_refund_schema_${label.replace(/[^a-z]+/g, '_')}`,
+        'charge.refunded',
+        orderRefundCharge({ id: `ch_refund_schema_${label.replace(/[^a-z]+/g, '_')}` }),
+      );
+      setMetadataSchema(event.data.object, value);
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({
+        response,
+        event,
+        businessPath,
+        before,
+        reason: 'metadata_schema_version_mismatch',
+      });
+    },
+  );
+
+  test.each(DISPUTE_METADATA_SCHEMA_CASES)(
+    'quarantines a claimed %s Dispute with an explicit %s metadata schema',
+    async (lifecycle, evidence, type, status, value) => {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeChargeId: 'ch_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = evidence.replace(/[^a-z]+/g, '_');
+      const event = stripeEvent(
+        `evt_dispute_${lifecycle}_schema_${slug}`,
+        type,
+        orderDispute({ id: `dp_${lifecycle}_schema_${slug}`, status }),
+      );
+      setMetadataSchema(event.data.object, value);
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({
+        response,
+        event,
+        businessPath,
+        before,
+        reason: 'metadata_schema_version_mismatch',
+      });
+    },
+  );
+
+  test.each([
+    ['client reference only', true],
+    ['matching metadata and client reference', false],
+  ])('does not let a %s claim bypass metadata schema admission', async (_label, clientOnly) => {
+    seedRegistration();
+    const businessPath = 'events/race-1/registrations/reg-1';
+    const before = storedCopy(businessPath);
+    const session = registrationSession({
+      client_reference_id: 'mprc:registration:race-1:reg-1',
+    });
+    if (clientOnly) session.metadata = { schemaVersion: '2' };
+    else setMetadataSchema(session, '2');
+    const event = stripeEvent(
+      `evt_schema_claim_${clientOnly ? 'client' : 'matching'}`,
+      'checkout.session.completed',
+      session,
+    );
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response,
+      event,
+      businessPath,
+      before,
+      reason: 'metadata_schema_version_mismatch',
+    });
+  });
+
+  test.each([
+    ['outer Event realm', 'livemode_mismatch', (event) => { event.livemode = true; }],
+    [
+      'Checkout Session realm',
+      'checkout_session_livemode_mismatch',
+      (event) => { event.data.object.livemode = true; },
+    ],
+    [
+      'Checkout Session lifecycle',
+      'checkout_session_status_mismatch',
+      (event) => { event.data.object.status = 'open'; },
+    ],
+  ])('keeps %s precedence over metadata schema admission', async (_label, reason, mutate) => {
+    seedRegistration();
+    const businessPath = 'events/race-1/registrations/reg-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      `evt_schema_precedence_${reason}`,
+      'checkout.session.completed',
+      registrationSession(),
+    );
+    setMetadataSchema(event.data.object, '2');
+    mutate(event);
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+  });
+
+  test.each([
+    [
+      'refund Charge realm',
+      'charge.refunded',
+      orderRefundCharge({ livemode: true }),
+      'charge_livemode_mismatch',
+    ],
+    [
+      'Dispute realm',
+      'charge.dispute.updated',
+      orderDispute({ status: 'under_review', livemode: true }),
+      'dispute_livemode_mismatch',
+    ],
+  ])('keeps %s precedence over metadata schema admission', async (
+    _label,
+    type,
+    object,
+    reason,
+  ) => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeChargeId: 'ch_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    setMetadataSchema(object, '2');
+    const event = stripeEvent(`evt_schema_precedence_${reason}`, type, object);
+
+    const response = await deliver(event);
+
+    expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+  });
+
+  test('keeps malformed-reference precedence over metadata schema admission', async () => {
+    seedOrder();
+    seedRegistration();
+    const event = stripeEvent(
+      'evt_schema_malformed_reference_precedence',
+      'checkout.session.completed',
+      orderSession({
+        metadata: {
+          schemaVersion: '2',
+          type: 'merch',
+          orderId: 'order-1',
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+        },
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:conflicting_reference',
+      requiresReview: true,
+    }));
+    expect(admin.__get('orders/order-1').status).toBe('pending');
+    expect(admin.__get('events/race-1/registrations/reg-1').status).toBe('pending');
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      outcome: 'needs_review:conflicting_reference',
+      targetPath: null,
+    });
+  });
+
+  test('processes an incompatible claimed metadata schema before a missing target', async () => {
+    const event = stripeEvent(
+      'evt_schema_incompatible_missing_target',
+      'checkout.session.completed',
+      registrationSession({
+        metadata: {
+          schemaVersion: '2',
+          eventId: 'race-missing',
+          registrationId: 'reg-missing',
+        },
+      }),
+    );
+
+    const response = await deliver(event);
+
+    expect(response.status).not.toHaveBeenCalled();
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:metadata_schema_version_mismatch',
+      requiresReview: true,
+    }));
+    expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+      status: 'processed',
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    });
+  });
+
+  test('deduplicates an unsupported metadata schema without target or binding mutation', async () => {
+    seedOrder();
+    const businessPath = 'orders/order-1';
+    const before = storedCopy(businessPath);
+    const event = stripeEvent(
+      'evt_schema_incompatible_replay',
+      'checkout.session.completed',
+      orderSession(),
+    );
+    setMetadataSchema(event.data.object, '2');
+
+    const firstResponse = await deliver(event);
+    const replayResponse = await deliver(event);
+
+    expectCompatibilityQuarantine({
+      response: firstResponse,
+      event,
+      businessPath,
+      before,
+      reason: 'metadata_schema_version_mismatch',
+    });
+    expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: true,
+      outcome: 'needs_review:metadata_schema_version_mismatch',
+    }));
+    expect(admin.__get(businessPath)).toEqual(before);
+  });
+
+  test.each([
+    ['exact version 1', false],
+    ['missing legacy version', true],
+  ])(
+    'admits a claimed Checkout Session with %s',
+    async (_label, omitVersion) => {
+      seedRegistration();
+      const session = registrationSession();
+      if (omitVersion) delete session.metadata.schemaVersion;
+      const event = stripeEvent(
+        `evt_schema_session_compatible_${omitVersion ? 'legacy' : 'v1'}`,
+        'checkout.session.completed',
+        session,
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome: 'payment_confirmed',
+      }));
+      expect(admin.__get('events/race-1/registrations/reg-1').status).toBe('paid');
+    },
+  );
+
+  test.each([
+    ['exact version 1', false],
+    ['missing legacy version', true],
+  ])(
+    'admits a claimed refund Charge with %s',
+    async (_label, omitVersion) => {
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_order_1',
+        stripeAmountTotalCents: 2000,
+      });
+      const suffix = omitVersion ? 'legacy' : 'v1';
+      const charge = orderRefundCharge({ id: `ch_schema_refund_compatible_${suffix}` });
+      if (omitVersion) delete charge.metadata.schemaVersion;
+      const event = stripeEvent(
+        `evt_schema_refund_compatible_${suffix}`,
+        'charge.refunded',
+        charge,
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome: 'partially_refunded',
+      }));
+      expect(admin.__get('orders/order-1').status).toBe('partially_refunded');
+    },
+  );
+
+  test.each([
+    ['created', 'charge.dispute.created', 'needs_response', 'dispute_needs_response', false],
+    ['created legacy', 'charge.dispute.created', 'needs_response', 'dispute_needs_response', true],
+    ['updated', 'charge.dispute.updated', 'under_review', 'dispute_under_review', false],
+    ['updated legacy', 'charge.dispute.updated', 'under_review', 'dispute_under_review', true],
+    ['closed', 'charge.dispute.closed', 'won', 'dispute_won', false],
+    ['closed legacy', 'charge.dispute.closed', 'won', 'dispute_won', true],
+  ])('admits a claimed %s Dispute metadata schema', async (
+    label,
+    type,
+    status,
+    outcome,
+    omitVersion,
+  ) => {
+    seedOrder({
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: 'pi_order_1',
+      stripeChargeId: 'ch_order_1',
+      stripeAmountTotalCents: 2000,
+    });
+    const dispute = orderDispute({ id: `dp_schema_${label.replace(/[^a-z]+/g, '_')}`, status });
+    if (omitVersion) delete dispute.metadata.schemaVersion;
+    const event = stripeEvent(
+      `evt_schema_${label.replace(/[^a-z]+/g, '_')}`,
+      type,
+      dispute,
+    );
+
+    const response = await deliver(event);
+
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      received: true,
+      duplicate: false,
+      outcome,
+    }));
+    expect(admin.__get('orders/order-1').disputeStatus).toBe(status);
   });
 
   test('confirms a paid registration and records actual Stripe totals atomically', async () => {

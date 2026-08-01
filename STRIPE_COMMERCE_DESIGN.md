@@ -726,6 +726,24 @@ PAY-003A3 [#526](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/526) exte
 
 PAY-003A3 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, payment/refund/dispute performed, production data changed, and live behavior verified. A repository diff and synthetic tests prove only their named source and test states. They do not prove a merge, website publication, Firebase deployment, provider configuration, payment/refund/dispute, production-data change, or live behavior.
 
+PAY-003A4 [#535](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/535) adds the MPRC-owned metadata-version check after the existing outer realm, embedded realm, and Checkout lifecycle checks and before any business-target lookup. For the eight supported Event types, an otherwise valid MPRC claim with an own metadata `schemaVersion` is compatible only when the value is the exact string `"1"`. A future string, empty string, `null`, number, boolean, object, or array receives the fixed `metadata_schema_version_mismatch` processed-review outcome with no target, business mutation, or provider binding. Missing versions remain on the named legacy path. Unrelated or malformed references and unsupported Events keep their prior classifications, an exact rejected replay is read-only, and a compatible claimed Event whose target is not present remains retryable. This does not require the key, allowlist every metadata key, migrate history, select a Stripe API version, or narrow Charge/refund/dispute lifecycle semantics.
+
+```mermaid
+flowchart TD
+    A["Signed supported Stripe Event"] --> B{"Outer and embedded realm plus Checkout lifecycle compatible?"}
+    B -- "No" --> C["Record the earlier fixed review outcome"]
+    B -- "Yes" --> D{"Otherwise valid MPRC claim?"}
+    D -- "No" --> E["Keep existing malformed or unrelated handling"]
+    D -- "Yes" --> F{"Own metadata schemaVersion present?"}
+    F -- "No" --> G["Use the legacy-compatible target path"]
+    F -- "Yes; exact string 1" --> H["Resolve the business target"]
+    F -- "Yes; any other value" --> I["Record metadata-version review with no target"]
+```
+
+Text alternative: after the earlier realm and Checkout lifecycle checks, a supported Event with a valid MPRC claim may resolve a target when its metadata version is absent or exactly string `1`; any explicit different value is recorded for review without a target.
+
+PAY-003A4 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed, Stripe/provider configured, payment/refund/dispute performed, production data changed, and live behavior verified. Source and synthetic tests do not prove any later state. This child performs no website publication, Firebase deployment, provider configuration, payment/refund/dispute, production-data action, or live verification.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines

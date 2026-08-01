@@ -80,6 +80,28 @@ function validateEmbeddedLivemode(event, expected, reason) {
   return { ok: true, expected };
 }
 
+function validateMetadataSchemaVersion(event, expected) {
+  if (!isSupportedEventType(event.type)) return { ok: true, expected };
+  const object = event.data?.object;
+  const metadata = object?.metadata;
+  // Older provider objects can predate versioned MPRC metadata. Only an
+  // explicitly supplied incompatible version is contradictory evidence.
+  if (metadata === null
+    || typeof metadata !== 'object'
+    || !Object.prototype.hasOwnProperty.call(metadata, 'schemaVersion')
+    || classifyMprcReference(object).status !== 'claimed') {
+    return { ok: true, expected };
+  }
+  if (metadata.schemaVersion !== '1') {
+    return {
+      ok: false,
+      expected,
+      reason: 'metadata_schema_version_mismatch',
+    };
+  }
+  return { ok: true, expected };
+}
+
 function validateEventAdmission(event, expectedLivemode) {
   const modeValidation = validateExpectedLivemode(event, expectedLivemode);
   if (!modeValidation.ok) return modeValidation;
@@ -99,10 +121,22 @@ function validateEventAdmission(event, expectedLivemode) {
       };
     }
   } else if (event.type === 'charge.refunded') {
-    return validateEmbeddedLivemode(event, expectedLivemode, 'charge_livemode_mismatch');
+    const chargeRealm = validateEmbeddedLivemode(
+      event,
+      expectedLivemode,
+      'charge_livemode_mismatch',
+    );
+    if (!chargeRealm.ok) return chargeRealm;
   } else if (DISPUTE_EVENT_TYPES.has(event.type)) {
-    return validateEmbeddedLivemode(event, expectedLivemode, 'dispute_livemode_mismatch');
+    const disputeRealm = validateEmbeddedLivemode(
+      event,
+      expectedLivemode,
+      'dispute_livemode_mismatch',
+    );
+    if (!disputeRealm.ok) return disputeRealm;
   }
+  const schemaValidation = validateMetadataSchemaVersion(event, expectedLivemode);
+  if (!schemaValidation.ok) return schemaValidation;
   return modeValidation;
 }
 
