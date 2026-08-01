@@ -206,44 +206,44 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest retains the exact rollback provenance and is paused', () => {
+test('Netlify manifest pins the bounded permissions-containment artifact', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, false);
-  assert.equal(loaded.manifest.releaseId, 'WEB-002A-ROLLBACK-2026-08-01');
+  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.releaseId, 'WEB-002A-CONTAINMENT-2026-08-01');
   assert.equal(loaded.manifest.issueNumber, 473);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    '40728ff6141e34a279b70cc41d983c22ac5f0daa',
+    'dee79511b6e371329aa129139729e112e7a51aad',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    'ed1b0833f25822cee80c99ded8753722b5608a3f',
+    'fc25692fc79883f89bf90309654f781b1554e867',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    '878c6628d961f4484cb49208aef53f1e9f2e3b47',
+    '91a351452af620c09b0a957c5af2c44a88fc1e70',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    '094af1096ed8721597561cd59bf695d4c4a9d210',
+    'ed1b0833f25822cee80c99ded8753722b5608a3f',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
-    '6a6dc0167fbe68000816b448',
+    '6a6dc219a8136300081811db',
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-473-rollback',
+    'refs/heads/codex/netlify-source-473-permissions-containment',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-473-netlify-rollback',
+    'codex/issue-473-permissions-containment-release',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 60);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    '7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092',
+    '07b10c7d5ff176a1ad893d7549b07042312df35f4a4126e8765824ca94eaefb8',
   );
 });
 

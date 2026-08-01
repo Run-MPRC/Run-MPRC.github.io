@@ -63,7 +63,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 Never shorten several of these states to “done.”
 
-Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. Issue #473 prepares one platform-maintainer-only, exact-artifact release of the merged Shop and Event sign-in source. It is **PENDING REVIEW AND RELEASE**, not a reusable officer control. Production remains the dated #457 deploy until the #473 public marker and pages are verified. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
+Independent officer publishing to the live Netlify host is **NOT AVAILABLE YET**. An overbroad #473 artifact was published and rolled back on 2026-08-01. Production again uses exact source `ed1b0833`. Issue #473 now prepares one platform-maintainer-only replacement containing only the static Shop and fixed Events/Calendar failure messages. It is **PENDING REVIEW AND RELEASE**, not a reusable officer control. Use a platform maintainer until the Netlify connection and rollback path are documented and tested.
 
 The protected GitHub release is also **NOT AVAILABLE YET** until #133 configures the environment approvers and short-lived cloud identity. Missing authority stops the release with a red failure before Firebase or website publication.
 
