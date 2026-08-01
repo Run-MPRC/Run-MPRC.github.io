@@ -143,7 +143,6 @@ describe('client diagnostic privacy', () => {
     [clientFailureEvents.appCheckDisabled, 'warn'],
     [clientFailureEvents.appCheckInitializationFailed, 'warn'],
     [clientFailureEvents.emailVerificationFailed, 'warn'],
-    [clientFailureEvents.membersOnlyFetchFailed, 'warn'],
     [clientFailureEvents.renderFailed, 'error'],
   ])('emits the closed %s outcome without diagnostic data', (eventName, level) => {
     reportClientFailure(eventName);
@@ -156,6 +155,20 @@ describe('client diagnostic privacy', () => {
       expect(consoleWarn).toHaveBeenCalledWith(expected);
       expect(consoleError).not.toHaveBeenCalled();
     }
+  });
+
+  test('drops the retired members-only outcome and keeps the allowlist exact', () => {
+    expect(clientFailureEvents).toEqual({
+      appCheckDisabled: 'app_check_disabled',
+      appCheckInitializationFailed: 'app_check_initialization_failed',
+      emailVerificationFailed: 'email_verification_failed',
+      renderFailed: 'render_failed',
+    });
+
+    reportClientFailure('members_only_fetch_failed');
+
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   test('drops hostile and sensitive input without reading or coercing it', () => {

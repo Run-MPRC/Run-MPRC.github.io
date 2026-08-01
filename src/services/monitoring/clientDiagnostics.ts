@@ -2,7 +2,6 @@ export const clientFailureEvents = {
   appCheckDisabled: 'app_check_disabled',
   appCheckInitializationFailed: 'app_check_initialization_failed',
   emailVerificationFailed: 'email_verification_failed',
-  membersOnlyFetchFailed: 'members_only_fetch_failed',
   renderFailed: 'render_failed',
 } as const;
 
