@@ -206,27 +206,27 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the bounded permissions-containment artifact', () => {
+test('Netlify manifest pins the exact live-artifact rollback projection', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
   assert.equal(loaded.manifest.active, true);
-  assert.equal(loaded.manifest.releaseId, 'WEB-002A-CONTAINMENT-2026-08-01');
+  assert.equal(loaded.manifest.releaseId, 'WEB-002A-CONTAINMENT-ROLLBACK-2026-08-01');
   assert.equal(loaded.manifest.issueNumber, 473);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    'dee79511b6e371329aa129139729e112e7a51aad',
+    '7b2a09967aa056afbfe5217c1ab2f256fb7e8c8f',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    '39ab8649df411262c8109a3c81a57bc38f1e168b',
+    'ed1b0833f25822cee80c99ded8753722b5608a3f',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    'd76b496cdc5e79015bc048cb961758abbe88b9ce',
+    '878c6628d961f4484cb49208aef53f1e9f2e3b47',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    'ed1b0833f25822cee80c99ded8753722b5608a3f',
+    '39ab8649df411262c8109a3c81a57bc38f1e168b',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
@@ -234,16 +234,16 @@ test('Netlify manifest pins the bounded permissions-containment artifact', () =>
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-473-permissions-containment-v2',
+    'refs/heads/codex/netlify-source-473-rollback',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-473-permissions-containment-release',
+    'codex/issue-473-permissions-containment-rollback',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 60);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    '07b10c7d5ff176a1ad893d7549b07042312df35f4a4126e8765824ca94eaefb8',
+    '7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092',
   );
 });
 

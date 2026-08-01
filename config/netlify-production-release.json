@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "active": true,
-  "releaseId": "WEB-002A-CONTAINMENT-2026-08-01",
+  "releaseId": "WEB-002A-CONTAINMENT-ROLLBACK-2026-08-01",
   "issueNumber": 473,
-  "previewBranch": "codex/issue-473-permissions-containment-release",
-  "expectedProductionParent": "dee79511b6e371329aa129139729e112e7a51aad",
+  "previewBranch": "codex/issue-473-permissions-containment-rollback",
+  "expectedProductionParent": "7b2a09967aa056afbfe5217c1ab2f256fb7e8c8f",
   "sourceRepository": "https://github.com/Run-MPRC/Run-MPRC.github.io.git",
-  "sourceRef": "refs/heads/codex/netlify-source-473-permissions-containment-v2",
-  "sourceCommit": "39ab8649df411262c8109a3c81a57bc38f1e168b",
-  "sourceTree": "d76b496cdc5e79015bc048cb961758abbe88b9ce",
-  "previousSourceCommit": "ed1b0833f25822cee80c99ded8753722b5608a3f",
+  "sourceRef": "refs/heads/codex/netlify-source-473-rollback",
+  "sourceCommit": "ed1b0833f25822cee80c99ded8753722b5608a3f",
+  "sourceTree": "878c6628d961f4484cb49208aef53f1e9f2e3b47",
+  "previousSourceCommit": "39ab8649df411262c8109a3c81a57bc38f1e168b",
   "rollbackDeployId": "6a6dc219a8136300081811db",
   "expectedSiteFileCount": 60,
-  "expectedSiteFilesSha256": "07b10c7d5ff176a1ad893d7549b07042312df35f4a4126e8765824ca94eaefb8"
+  "expectedSiteFilesSha256": "7570955c2a00926e5813aef135f1799172cfd046072ac89fb4e492bed0797092"
 }
