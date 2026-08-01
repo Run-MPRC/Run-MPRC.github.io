@@ -1046,27 +1046,50 @@ describe('Strava authorization exchange failure boundary', () => {
     expectNoSideEffects();
   });
 
-  test('consumes valid state before missing provider credentials and never restores it', async () => {
-    delete process.env.STRAVA_CLIENT_ID;
-    delete process.env.STRAVA_CLIENT_SECRET;
+  test.each([
+    ['a missing client ID', ['STRAVA_CLIENT_ID']],
+    ['a missing client secret', ['STRAVA_CLIENT_SECRET']],
+    ['both missing application credentials', ['STRAVA_CLIENT_ID', 'STRAVA_CLIENT_SECRET']],
+  ])('OAUTH-001A1G consumes valid state before %s and never restores it', async (
+    _case,
+    missingVariables,
+  ) => {
+    process.env.STRAVA_CLIENT_ID = 'strava-client-id-canary';
+    process.env.STRAVA_CLIENT_SECRET = 'strava-client-secret-canary';
+    missingVariables.forEach((name) => delete process.env[name]);
 
     const credentialFailure = await captureFailure(() => stravaExchangeCode({
       code: CODE,
       state: STATE,
     }, CONTEXT));
+    const exposed = publicError(credentialFailure);
 
-    expect(publicError(credentialFailure)).toEqual({
+    expect(exposed).toEqual({
       code: 'failed-precondition',
-      message: 'Strava credentials not configured',
+      message: FIXED_AUTHORIZATION_ERROR,
       details: undefined,
       cause: undefined,
     });
+    expect(JSON.stringify({ exposed, logs: consoleSpies.map((spy) => spy.mock.calls) }))
+      .not.toMatch(
+        /credentials not configured|strava-client-id-canary|strava-client-secret-canary/i,
+      );
     expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionRunAttempts()).toBe(1);
+    expect(admin.__getTransactionReads()).toEqual([STATE_PATH]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([STATE_PATH]);
     expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     expect(admin.__getDirectSetAttempts()).toEqual([]);
+    expect(admin.__getBatchCreateAttempts()).toBe(0);
+    expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+    expect(admin.__getBatchSetAttempts()).toEqual([]);
     expect(Timestamp.now).not.toHaveBeenCalled();
+    expect(dateNowSpy).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
 
     process.env.STRAVA_CLIENT_ID = 'strava_client_test';
     process.env.STRAVA_CLIENT_SECRET = 'strava_secret_test';
@@ -1081,9 +1104,20 @@ describe('Strava authorization exchange failure boundary', () => {
       details: undefined,
       cause: undefined,
     });
+    expect(admin.__getTransactionRunAttempts()).toBe(2);
+    expect(admin.__getTransactionReads()).toEqual([STATE_PATH, STATE_PATH]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([STATE_PATH]);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getReads()).toEqual([]);
+    expect(admin.__getDeletes()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     expect(admin.__getDirectSetAttempts()).toEqual([]);
+    expect(admin.__getBatchCreateAttempts()).toBe(0);
+    expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+    expect(admin.__getBatchSetAttempts()).toEqual([]);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    expect(dateNowSpy).toHaveBeenCalledTimes(1);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 
@@ -3932,6 +3966,62 @@ describe('Strava token refresh failure boundary', () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(Timestamp.now).toHaveBeenCalledTimes(1);
       consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+  });
+
+  describe('OAUTH-001A1G missing application-credential boundary', () => {
+    function expectNoCredentialFailureWork() {
+      expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchSetAttempts()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    }
+
+    test.each([
+      ['a missing client ID', ['STRAVA_CLIENT_ID']],
+      ['a missing client secret', ['STRAVA_CLIENT_SECRET']],
+      ['both missing application credentials', ['STRAVA_CLIENT_ID', 'STRAVA_CLIENT_SECRET']],
+    ])('returns one fixed refresh result for %s', async (_case, missingVariables) => {
+      process.env.STRAVA_CLIENT_ID = 'strava-client-id-canary';
+      process.env.STRAVA_CLIENT_SECRET = 'strava-client-secret-canary';
+      missingVariables.forEach((name) => delete process.env[name]);
+      seedExpiredConnection();
+      let readsAtClock;
+      dateNowSpy.mockImplementationOnce(() => {
+        readsAtClock = admin.__getReads();
+        return NOW_SECONDS * 1_000;
+      });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+      const exposed = publicError(rejection);
+
+      expect(readsAtClock).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(exposed).toEqual({
+        code: 'failed-precondition',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify({ exposed, logs: consoleSpies.map((spy) => spy.mock.calls) }))
+        .not.toMatch(
+          /credentials not configured|strava-client-id-canary|strava-client-secret-canary/i,
+        );
+      expectNoCredentialFailureWork();
     });
   });
 

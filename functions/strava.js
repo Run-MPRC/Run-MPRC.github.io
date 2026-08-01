@@ -810,7 +810,13 @@ async function consumeOAuthState(session, state) {
 }
 
 async function exchangeCode(code) {
-  const { clientId, clientSecret } = getStravaCreds();
+  let credentials;
+  try {
+    credentials = getStravaCreds();
+  } catch {
+    throw stravaAuthorizationError('failed-precondition');
+  }
+  const { clientId, clientSecret } = credentials;
   let resp;
   try {
     resp = await fetch(STRAVA_TOKEN_URL, {
@@ -843,7 +849,13 @@ async function exchangeCode(code) {
 }
 
 async function refreshToken(refresh) {
-  const { clientId, clientSecret } = getStravaCreds();
+  let credentials;
+  try {
+    credentials = getStravaCreds();
+  } catch {
+    throw stravaRefreshError('failed-precondition');
+  }
+  const { clientId, clientSecret } = credentials;
   let resp;
   try {
     resp = await fetch(STRAVA_TOKEN_URL, {
