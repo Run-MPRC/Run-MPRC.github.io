@@ -8,6 +8,7 @@ const test = require('node:test');
 
 const REPOSITORY = path.resolve(__dirname, '..');
 const SCANNER = path.join(REPOSITORY, '.github/scripts/scan-test-artifacts.mjs');
+const SITEMAP_GENERATOR = path.join(REPOSITORY, 'scripts/generate-sitemap.js');
 const CI_PATH = path.join(REPOSITORY, '.github/workflows/ci.yml');
 const RELEASE_PATH = path.join(REPOSITORY, '.github/workflows/deploy.yml');
 const ciWorkflow = fs.readFileSync(CI_PATH, 'utf8');
@@ -120,6 +121,27 @@ function runScanner(...roots) {
   return spawnSync(process.execPath, [SCANNER, ...roots], {
     cwd: REPOSITORY,
     encoding: 'utf8',
+  });
+}
+
+function makeSitemapFixture(name = 'sitemap-fixture') {
+  const { root } = makeArtifactRoot(name);
+  const script = path.join(root, 'scripts/generate-sitemap.js');
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  fs.copyFileSync(SITEMAP_GENERATOR, script);
+  return { root, script };
+}
+
+function runSitemapGenerator(fixture, environment = {}) {
+  const env = { ...process.env };
+  delete env.FIREBASE_SERVICE_ACCOUNT;
+  delete env.GOOGLE_APPLICATION_CREDENTIALS;
+  delete env.SITE_ORIGIN;
+  Object.assign(env, environment);
+  return spawnSync(process.execPath, [fixture.script], {
+    cwd: fixture.root,
+    encoding: 'utf8',
+    env,
   });
 }
 
@@ -316,6 +338,72 @@ function releaseErrors(workflow) {
   }
   return errors;
 }
+
+test('WEB-PRIVACY-001Y sitemap failures expose only fixed log codes', async (t) => {
+  await t.test('recoverable provider errors keep the static sitemap without details', () => {
+    const providerCanary = 'sitemap-provider-error-canary';
+    const fixture = makeSitemapFixture();
+    fs.mkdirSync(path.join(fixture.root, 'public'), { recursive: true });
+    writeArtifact(
+      fixture.root,
+      'node_modules/firebase-admin/index.js',
+      `module.exports = {
+  apps: [],
+  credential: { cert() { return {}; } },
+  initializeApp() {},
+  firestore() {
+    return {
+      collection() {
+        return {
+          where() { return this; },
+          get() {
+            const error = new Error(${JSON.stringify(providerCanary)});
+            error.stack = ${JSON.stringify(`synthetic stack ${providerCanary}`)};
+            return Promise.reject(error);
+          },
+        };
+      },
+    };
+  },
+};
+`,
+    );
+
+    const result = runSitemapGenerator(fixture, {
+      FIREBASE_SERVICE_ACCOUNT: '{}',
+    });
+
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, 'sitemap_dynamic_events_unavailable\n');
+    assert.doesNotMatch(result.stdout, new RegExp(providerCanary, 'u'));
+    const sitemap = fs.readFileSync(
+      path.join(fixture.root, 'public/sitemap.xml'),
+      'utf8',
+    );
+    assert.match(sitemap, /<loc>https:\/\/runmprc\.com\/<\/loc>/u);
+    assert.doesNotMatch(sitemap, new RegExp(providerCanary, 'u'));
+  });
+
+  await t.test('fatal output errors fail closed without paths or stacks', () => {
+    const pathCanary = 'sitemap-fatal-path-canary';
+    const fixture = makeSitemapFixture(pathCanary);
+    const result = runSitemapGenerator(fixture);
+
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'No Firestore credentials; skipping dynamic event URLs\n'
+        + 'sitemap_generation_failed\n',
+    );
+    assert.doesNotMatch(result.stderr, new RegExp(pathCanary, 'u'));
+    assert.doesNotMatch(result.stderr, /ENOENT|Error:|generate-sitemap\.js/iu);
+  });
+});
 
 test('safe synthetic nested reports pass and source outside explicit roots is ignored', () => {
   const { root, temporaryDirectory } = makeArtifactRoot();
