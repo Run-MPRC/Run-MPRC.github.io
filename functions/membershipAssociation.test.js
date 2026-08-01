@@ -637,6 +637,57 @@ describe('malformed command is denied malformed_command', () => {
   });
 });
 
+// ---- 7b. calendar-aware command timestamps -------------------------------
+
+describe('calendar-aware command timestamps', () => {
+  test.each([
+    ['non-leap February 29', '2025-02-29T00:00:00Z', '2025-03-01T00:00:00Z'],
+    ['February 30', '2026-02-30T00:00:00Z', '2026-03-01T00:00:00Z'],
+    ['February 31', '2026-02-31T00:00:00Z', '2026-03-01T00:00:00Z'],
+    ['April 31', '2026-04-31T00:00:00Z', '2026-05-01T00:00:00Z'],
+    ['June 31', '2026-06-31T00:00:00Z', '2026-07-01T00:00:00Z'],
+    ['September 31', '2026-09-31T00:00:00Z', '2026-10-01T00:00:00Z'],
+    ['November 31', '2026-11-31T00:00:00Z', '2026-12-01T00:00:00Z'],
+    ['non-leap century February 29', '1900-02-29T00:00:00Z', '1900-03-01T00:00:00Z'],
+    ['future non-leap century February 29', '2100-02-29T00:00:00Z', '2100-03-01T00:00:00Z'],
+  ])('an impossible asOf (%s) is malformed before it can associate', (_label, asOf, deadline) => {
+    const verdict = classifyMembershipAssociation(state(), command({ asOf, deadline }));
+    const sharedMalformed = classifyMembershipAssociation(state(), command({ asOf: null }));
+
+    expect(verdict).toBe(sharedMalformed);
+    expect(verdict).toEqual({ decision: 'denied', reason: 'malformed_command' });
+    expect(Object.isFrozen(verdict)).toBe(true);
+    expect(verdict).not.toHaveProperty('next');
+  });
+
+  test.each([
+    ['non-leap February 29', '2025-02-28T00:00:00Z', '2025-02-29T00:00:00Z'],
+    ['February 30', '2026-02-28T00:00:00Z', '2026-02-30T00:00:00Z'],
+    ['April 31', '2026-04-30T00:00:00Z', '2026-04-31T00:00:00Z'],
+    ['September 31', '2026-09-30T00:00:00Z', '2026-09-31T00:00:00Z'],
+  ])('an impossible deadline (%s) is malformed even when it sorts after asOf', (_label, asOf, deadline) => {
+    expect(classifyMembershipAssociation(state(), command({ asOf, deadline })))
+      .toEqual({ decision: 'denied', reason: 'malformed_command' });
+  });
+
+  test.each([
+    ['ordinary February last day', '2025-02-28T00:00:00Z', '2025-03-01T00:00:00Z'],
+    ['leap day', '2024-02-29T00:00:00Z', '2024-03-01T00:00:00Z'],
+    ['divisible-by-400 century leap day', '2000-02-29T00:00:00Z', '2000-03-01T00:00:00Z'],
+    ['30-day month last day', '2026-04-30T00:00:00Z', '2026-05-01T00:00:00Z'],
+    ['31-day month last day', '2026-07-31T00:00:00Z', '2026-08-01T00:00:00Z'],
+  ])('a real boundary instant (%s) remains valid and associates', (_label, asOf, deadline) => {
+    expect(classifyMembershipAssociation(state(), command({ asOf, deadline })).reason).toBe('associated');
+  });
+
+  test('a real leap day remains valid when used as the exclusive deadline', () => {
+    expect(classifyMembershipAssociation(state(), command({
+      asOf: '2024-02-28T23:59:59Z',
+      deadline: '2024-02-29T00:00:00Z',
+    })).reason).toBe('associated');
+  });
+});
+
 // ---- 8. malformed state -------------------------------------------------
 
 describe('malformed state is denied malformed_state', () => {

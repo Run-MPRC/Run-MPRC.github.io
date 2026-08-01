@@ -154,8 +154,9 @@ const IDENTITY_HAS_LETTER = /[A-Za-z]/;
 const HANDLE_PATTERN = /^[A-Za-z0-9._-]{1,256}$/;
 // A term is a short label that may be all digits (e.g. '2026').
 const TERM_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
-// A fixed-width UTC instant. Fixed-width UTC strings compare lexically as they do
-// chronologically, so staleness is decided by string comparison with no clock.
+// A fixed-width UTC instant restricted to real calendar dates. Fixed-width UTC
+// strings over real dates compare lexically as they do chronologically, so
+// staleness is decided by string comparison with no clock.
 const UTC_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$/;
 
 function isIdentityString(value) {
@@ -176,13 +177,18 @@ function isUtcTimestamp(value) {
   if (typeof value !== 'string') return false;
   const match = UTC_TIMESTAMP_PATTERN.exec(value);
   if (!match) return false;
+  const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const hour = Number(match[4]);
   const minute = Number(match[5]);
   const second = Number(match[6]);
   if (month < 1 || month > 12) return false;
-  if (day < 1 || day > 31) return false;
+  // Reject impossible days so lexical ordering remains equivalent to real
+  // chronological ordering. Malformed commands deny before any association.
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const DAYS_IN_MONTH = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (day < 1 || day > DAYS_IN_MONTH[month - 1]) return false;
   if (hour > 23) return false;
   if (minute > 59) return false;
   if (second > 59) return false;
