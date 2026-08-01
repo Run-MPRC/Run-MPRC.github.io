@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-002A-ROLLBACK-2026-08-01",
   "issueNumber": 473,
   "previewBranch": "codex/issue-473-netlify-rollback",

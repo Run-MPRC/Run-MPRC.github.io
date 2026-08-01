@@ -206,10 +206,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the exact prior website artifact for rollback', () => {
+test('Netlify manifest retains the exact rollback provenance and is paused', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(loaded.manifest.releaseId, 'WEB-002A-ROLLBACK-2026-08-01');
   assert.equal(loaded.manifest.issueNumber, 473);
   assert.equal(
