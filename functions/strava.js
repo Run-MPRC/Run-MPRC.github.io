@@ -152,7 +152,7 @@ function isValidStravaStatsRequest(data) {
   return isExactPlainRecord(data, []);
 }
 
-function isConfirmedStravaDisconnectResponse(response) {
+function isConfirmedStravaHttpSuccess(response) {
   if (isPlainJsonRecord(response)) {
     return selectedOwnDataValue(response, 'ok', true) === true;
   }
@@ -825,7 +825,7 @@ async function exchangeCode(code) {
   } catch (_error) {
     throw stravaAuthorizationError('unavailable');
   }
-  if (!resp || resp.ok !== true) {
+  if (!isConfirmedStravaHttpSuccess(resp)) {
     throw stravaAuthorizationError('invalid-argument');
   }
   let response;
@@ -864,7 +864,7 @@ async function refreshToken(refresh) {
   } catch (_error) {
     throw stravaRefreshError('unavailable');
   }
-  if (!resp || resp.ok !== true) {
+  if (!isConfirmedStravaHttpSuccess(resp)) {
     throw stravaRefreshError('failed-precondition');
   }
   let response;
@@ -1052,7 +1052,7 @@ exports.stravaFetchStats = functions
       throw stravaDataError('unavailable');
     }
 
-    if (!activitiesResp || !activitiesResp.ok) {
+    if (!isConfirmedStravaHttpSuccess(activitiesResp)) {
       throw stravaDataError('internal');
     }
     let rawActivities;
@@ -1067,7 +1067,7 @@ exports.stravaFetchStats = functions
     }
 
     let projectedStats = null;
-    if (statsResp && statsResp.ok) {
+    if (isConfirmedStravaHttpSuccess(statsResp)) {
       let rawStats;
       try {
         rawStats = await statsResp.json();
@@ -1145,7 +1145,7 @@ exports.stravaDisconnect = functions
           console.warn('strava_disconnect_revoke_failed');
           throw stravaDisconnectError();
         }
-        if (!isConfirmedStravaDisconnectResponse(revokeResponse)) {
+        if (!isConfirmedStravaHttpSuccess(revokeResponse)) {
           throw stravaDisconnectError();
         }
       }
