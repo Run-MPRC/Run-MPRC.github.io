@@ -3813,42 +3813,49 @@ describe('stripeWebhook', () => {
         'livemode_mismatch',
         (event) => { event.livemode = true; },
         { _milliseconds: eventCreated * 1000 },
+        null,
       ],
       [
         'embedded Charge realm',
         'charge_livemode_mismatch',
         (event) => { event.data.object.livemode = true; },
         { _milliseconds: eventCreated * 1000 },
+        null,
       ],
       [
         'Charge status',
         'charge_status_mismatch',
         (event) => { event.data.object.status = 'pending'; },
         { _milliseconds: eventCreated * 1000 },
+        null,
       ],
       [
         'metadata schema',
         'metadata_schema_version_mismatch',
         (event) => { setMetadataSchema(event.data.object, '2'); },
         { _milliseconds: eventCreated * 1000 },
+        null,
       ],
       [
         'outer Event time',
         'invalid_event_created',
-        (event) => { event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1; },
+        (event) => { event.created = -1; },
         null,
+        -1000,
       ],
       [
         'embedded Charge time',
         'invalid_charge_created',
         (event) => { event.data.object.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1; },
         { _milliseconds: eventCreated * 1000 },
+        (FIRESTORE_TIMESTAMP_MAX_SECONDS + 1) * 1000,
       ],
     ])('keeps %s precedence over chronology', async (
       label,
       reason,
       mutate,
       expectedStripeCreatedAt,
+      rejectedTimestampMillis,
     ) => {
       const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
       const { event, businessPath } = refundChargeCreatedFixture(
@@ -3868,9 +3875,9 @@ describe('stripeWebhook', () => {
       });
       expectOnlyEventLedgerReads(event);
       expect(Timestamp.now).not.toHaveBeenCalled();
-      expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(
-        (FIRESTORE_TIMESTAMP_MAX_SECONDS + 1) * 1000,
-      );
+      if (rejectedTimestampMillis !== null) {
+        expect(Timestamp.fromMillis).not.toHaveBeenCalledWith(rejectedTimestampMillis);
+      }
     });
 
     test.each(REFUND_CHARGE_CREATED_DOMAINS)(
