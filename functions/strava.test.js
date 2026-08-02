@@ -1511,6 +1511,68 @@ describe('Strava authorization exchange failure boundary', () => {
     expectNoSideEffects();
   });
 
+  describe('OAUTH-001A2J authorization response-status admission', () => {
+    test('rejects an ok accessor without invoking or exposing it', async () => {
+      const statusFailure = new Error(
+        'authorization-ok-canary client_secret=provider-secret-canary',
+      );
+      const okGetter = jest.fn(() => {
+        throw statusFailure;
+      });
+      const json = jest.fn();
+      const response = { json };
+      Object.defineProperty(response, 'ok', {
+        configurable: true,
+        enumerable: true,
+        get: okGetter,
+      });
+      fetchMock.mockResolvedValue(response);
+
+      const rejection = await captureFailure(() => stravaExchangeCode({
+        code: CODE,
+        state: STATE,
+      }, CONTEXT));
+
+      expect(rejection).not.toBe(statusFailure);
+      expect(publicError(rejection)).toEqual({
+        code: 'invalid-argument',
+        message: FIXED_AUTHORIZATION_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify(publicError(rejection)))
+        .not.toMatch(/authorization-ok-canary|provider-secret-canary/i);
+      expect(okGetter).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+      expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+      expectNoSideEffects();
+    });
+
+    test('accepts a genuine successful Node Response', async () => {
+      const json = jest.fn().mockResolvedValue(validExchangeResponse());
+      const response = new Response(null, { status: 200 });
+      Object.defineProperty(response, 'json', {
+        configurable: true,
+        value: json,
+      });
+      fetchMock.mockResolvedValue(response);
+
+      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
+
+      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(response.bodyUsed).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__getWrites()).toEqual(expectedExchangeWrites());
+      expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+      expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+      expect(Timestamp.now).toHaveBeenCalledTimes(3);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+  });
+
   test('turns a transport failure into one fixed unavailable result', async () => {
     fetchMock.mockRejectedValue(Object.assign(
       new Error('transport-canary https://provider.example.test/?code=secret-canary'),
@@ -3178,6 +3240,43 @@ describe('Strava token refresh failure boundary', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
+  });
+
+  describe('OAUTH-001A2J refresh response-status admission', () => {
+    test('rejects an ok accessor without invoking or exposing it', async () => {
+      seedExpiredConnection();
+      const statusFailure = new Error(
+        'refresh-ok-canary refresh_token=provider-secret-canary',
+      );
+      const okGetter = jest.fn(() => {
+        throw statusFailure;
+      });
+      const json = jest.fn();
+      const response = { json };
+      Object.defineProperty(response, 'ok', {
+        configurable: true,
+        enumerable: true,
+        get: okGetter,
+      });
+      fetchMock.mockResolvedValue(response);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(rejection).not.toBe(statusFailure);
+      expect(publicError(rejection)).toEqual({
+        code: 'failed-precondition',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify(publicError(rejection)))
+        .not.toMatch(/refresh-ok-canary|provider-secret-canary/i);
+      expect(okGetter).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expectNoWritesOrLogs();
+    });
   });
 
   test('turns a refresh transport failure into one fixed unavailable result', async () => {
@@ -5472,6 +5571,180 @@ describe('Strava activity data failure boundary', () => {
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
+  });
+
+  describe('OAUTH-001A2J Strava response-status admission', () => {
+    test('rejects an activities ok accessor without invoking or exposing it', async () => {
+      seedFreshConnection();
+      const statusFailure = new Error(
+        'activities-ok-canary access_token=provider-secret-canary',
+      );
+      const okGetter = jest.fn(() => {
+        throw statusFailure;
+      });
+      const activitiesJson = jest.fn();
+      const activitiesResponse = { json: activitiesJson };
+      Object.defineProperty(activitiesResponse, 'ok', {
+        configurable: true,
+        enumerable: true,
+        get: okGetter,
+      });
+      const statsJson = jest.fn();
+      fetchMock
+        .mockResolvedValueOnce(activitiesResponse)
+        .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(rejection).not.toBe(statusFailure);
+      expect(publicError(rejection)).toEqual({
+        code: 'internal',
+        message: FIXED_DATA_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(JSON.stringify(publicError(rejection)))
+        .not.toMatch(/activities-ok-canary|provider-secret-canary/i);
+      expect(okGetter).not.toHaveBeenCalled();
+      expect(activitiesJson).not.toHaveBeenCalled();
+      expect(statsJson).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
+
+    test('rejects a resolved activities Proxy without inspecting it after then lookup', async () => {
+      seedFreshConnection();
+      const activitiesJson = jest.fn();
+      const getTrap = jest.fn((_target, key) => {
+        if (key === 'then') return undefined;
+        throw new Error(`activities-response-canary ${String(key)}`);
+      });
+      const response = new Proxy({ ok: true, json: activitiesJson }, {
+        get: getTrap,
+        getOwnPropertyDescriptor: jest.fn(() => {
+          throw new Error('activities-response-canary descriptor');
+        }),
+        getPrototypeOf: jest.fn(() => {
+          throw new Error('activities-response-canary prototype');
+        }),
+        ownKeys: jest.fn(() => {
+          throw new Error('activities-response-canary keys');
+        }),
+      });
+      const statsJson = jest.fn();
+      fetchMock
+        .mockResolvedValueOnce(response)
+        .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(rejection)).toEqual({
+        code: 'internal',
+        message: FIXED_DATA_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      const requestedKeys = getTrap.mock.calls.map(([, key]) => key);
+      expect(requestedKeys.length).toBeGreaterThanOrEqual(1);
+      expect(requestedKeys.every((key) => key === 'then')).toBe(true);
+      expect(activitiesJson).not.toHaveBeenCalled();
+      expect(statsJson).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expectNoWritesOrLogs();
+    });
+
+    test('contains an already-revoked activities Proxy as transport unavailable before status admission', async () => {
+      seedFreshConnection();
+      const { proxy: activitiesResponse, revoke } = Proxy.revocable({ ok: true }, {});
+      revoke();
+      const statsJson = jest.fn();
+      fetchMock
+        .mockResolvedValueOnce(activitiesResponse)
+        .mockResolvedValueOnce({ ok: true, json: statsJson });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(rejection)).toEqual({
+        code: 'unavailable',
+        message: FIXED_DATA_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(statsJson).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
+
+    test('rejects a statistics Proxy revoked after Promise fulfillment without inspecting it', async () => {
+      seedFreshConnection();
+      const activitiesJson = jest.fn().mockResolvedValue([validProviderActivity()]);
+      const statsJson = jest.fn();
+      const { proxy: statsResponse, revoke } = Proxy.revocable({
+        ok: true,
+        json: statsJson,
+      }, {});
+      const fulfilledStatsResponse = Promise.resolve(statsResponse);
+      revoke();
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockReturnValueOnce(fulfilledStatsResponse);
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.recentActivities).toHaveLength(1);
+      expect(result.yearToDate).toBeNull();
+      expect(result.allTime).toBeNull();
+      expect(activitiesJson).toHaveBeenCalledTimes(1);
+      expect(statsJson).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
+
+    test('treats a statistics ok accessor as optional failure without invoking it', async () => {
+      seedFreshConnection();
+      const activitiesJson = jest.fn().mockResolvedValue([validProviderActivity()]);
+      const statsJson = jest.fn();
+      const okGetter = jest.fn(() => {
+        throw new Error('statistics-ok-canary access_token=provider-secret-canary');
+      });
+      const statsResponse = { json: statsJson };
+      Object.defineProperty(statsResponse, 'ok', {
+        configurable: true,
+        enumerable: true,
+        get: okGetter,
+      });
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockResolvedValueOnce(statsResponse);
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.recentActivities).toHaveLength(1);
+      expect(result.yearToDate).toBeNull();
+      expect(result.allTime).toBeNull();
+      expect(okGetter).not.toHaveBeenCalled();
+      expect(activitiesJson).toHaveBeenCalledTimes(1);
+      expect(statsJson).not.toHaveBeenCalled();
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    });
   });
 
   test('turns an activities transport failure into one fixed unavailable result', async () => {
