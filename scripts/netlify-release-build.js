@@ -301,8 +301,8 @@ function main() {
 if (require.main === module) {
   try {
     main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : 'Release build failed.');
+  } catch {
+    console.error('netlify_release_build_failed');
     process.exitCode = 1;
   }
 }
