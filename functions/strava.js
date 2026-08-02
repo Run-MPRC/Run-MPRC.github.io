@@ -3,7 +3,7 @@ const admin = require('firebase-admin');
 const { Timestamp } = require('firebase-admin/firestore');
 const { createHash, randomBytes, timingSafeEqual } = require('node:crypto');
 const { URL: NodeURL, URLSearchParams: NodeURLSearchParams } = require('node:url');
-const { types: { isProxy } } = require('node:util');
+const { TextDecoder, types: { isProxy, isUint8Array } } = require('node:util');
 const { requireAppCheck } = require('./stripeHelpers');
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
@@ -17,6 +17,8 @@ const STRAVA_OAUTH_STATE_LENGTH = 43;
 const STRAVA_OAUTH_STATE_LIFETIME_SECONDS = 600;
 const STRAVA_OAUTH_STATE_SCHEMA_VERSION = 1;
 const STRAVA_TOKEN_MAX_LENGTH = 2_048;
+const STRAVA_TOKEN_RESPONSE_MAX_BYTES = 65_536;
+const STRAVA_RESPONSE_MAX_CHUNKS = 4_096;
 const STRAVA_SCOPE_MAX_LENGTH = 1_024;
 const STRAVA_PROFILE_TEXT_MAX_LENGTH = 1_024;
 const STRAVA_PROFILE_URL_MAX_LENGTH = 2_048;
@@ -32,6 +34,7 @@ const STRAVA_DISCONNECT_ERROR_MESSAGE = 'Strava disconnect could not be confirme
 const VISIBLE_ASCII_PATTERN = /^[\x21-\x7e]+$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/u;
+const CONTENT_LENGTH_PATTERN = /^(?:0|[1-9][0-9]*)$/u;
 const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5b\x5d-\x7e]+(?: [\x21\x23-\x5b\x5d-\x7e]+)*$/;
 const PROFILE_WHITESPACE_OR_BACKSLASH_PATTERN = /[\s\\]/u;
 const HTTPS_PREFIX_PATTERN = /^https:\/\//iu;
@@ -43,18 +46,67 @@ const objectPrototype = Object.prototype;
 const arrayIsArray = Array.isArray;
 const arrayPrototype = Array.prototype;
 const arrayPush = Array.prototype.push;
+const bufferConcat = Buffer.concat;
+const bufferFrom = Buffer.from;
+const jsonParse = JSON.parse;
+const numberFromString = Number;
 const numberIsFinite = Number.isFinite;
 const numberIsSafeInteger = Number.isSafeInteger;
+const promiseConstructor = Promise;
+const promiseResolve = Promise.resolve;
+const promiseThen = Promise.prototype.then;
 const reflectApply = Reflect.apply;
 const reflectHas = Reflect.has;
 const reflectOwnKeys = Reflect.ownKeys;
 const regexpTest = RegExp.prototype.test;
 const stringCharCodeAt = String.prototype.charCodeAt;
+const textDecoderDecode = TextDecoder.prototype.decode;
+const typedArrayPrototype = objectGetPrototypeOf(Uint8Array.prototype);
+const typedArrayByteLengthGetter = objectGetOwnPropertyDescriptor(
+  typedArrayPrototype,
+  'byteLength',
+)?.get;
 const NATIVE_RESPONSE_PROTOTYPE = typeof Response === 'function'
   ? Response.prototype
   : null;
 const NATIVE_RESPONSE_OK_GETTER = NATIVE_RESPONSE_PROTOTYPE
   ? objectGetOwnPropertyDescriptor(NATIVE_RESPONSE_PROTOTYPE, 'ok')?.get
+  : null;
+const NATIVE_RESPONSE_HEADERS_GETTER = NATIVE_RESPONSE_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_RESPONSE_PROTOTYPE, 'headers')?.get
+  : null;
+const NATIVE_RESPONSE_BODY_GETTER = NATIVE_RESPONSE_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_RESPONSE_PROTOTYPE, 'body')?.get
+  : null;
+const NATIVE_RESPONSE_BODY_USED_GETTER = NATIVE_RESPONSE_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_RESPONSE_PROTOTYPE, 'bodyUsed')?.get
+  : null;
+const NATIVE_HEADERS_PROTOTYPE = typeof Headers === 'function'
+  ? Headers.prototype
+  : null;
+const NATIVE_HEADERS_GET = NATIVE_HEADERS_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_HEADERS_PROTOTYPE, 'get')?.value
+  : null;
+const NATIVE_READABLE_STREAM_PROTOTYPE = typeof ReadableStream === 'function'
+  ? ReadableStream.prototype
+  : null;
+const NATIVE_STREAM_GET_READER = NATIVE_READABLE_STREAM_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_READABLE_STREAM_PROTOTYPE, 'getReader')?.value
+  : null;
+const NATIVE_STREAM_CANCEL = NATIVE_READABLE_STREAM_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_READABLE_STREAM_PROTOTYPE, 'cancel')?.value
+  : null;
+const NATIVE_READER_PROTOTYPE = typeof ReadableStreamDefaultReader === 'function'
+  ? ReadableStreamDefaultReader.prototype
+  : null;
+const NATIVE_READER_READ = NATIVE_READER_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_READER_PROTOTYPE, 'read')?.value
+  : null;
+const NATIVE_READER_CANCEL = NATIVE_READER_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_READER_PROTOTYPE, 'cancel')?.value
+  : null;
+const NATIVE_READER_RELEASE_LOCK = NATIVE_READER_PROTOTYPE
+  ? objectGetOwnPropertyDescriptor(NATIVE_READER_PROTOTYPE, 'releaseLock')?.value
   : null;
 const INVALID_SELECTED_VALUE = Symbol('invalid-selected-value');
 const MISSING_SELECTED_VALUE = Symbol('missing-selected-value');
@@ -178,6 +230,183 @@ function isConfirmedStravaHttpSuccess(response) {
     return reflectApply(NATIVE_RESPONSE_OK_GETTER, response, []) === true;
   } catch (_error) {
     return false;
+  }
+}
+
+function isExactNativeValue(value, prototype) {
+  if (
+    prototype === null
+    || value === null
+    || typeof value !== 'object'
+    || isProxy(value)
+  ) {
+    return false;
+  }
+  try {
+    return objectGetPrototypeOf(value) === prototype;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function suppressPromiseRejection(value) {
+  try {
+    const promise = reflectApply(promiseResolve, promiseConstructor, [value]);
+    reflectApply(promiseThen, promise, [undefined, () => undefined]);
+  } catch (_error) {
+    // Best-effort cleanup must never replace the fixed caller result.
+  }
+}
+
+function cancelNativeStream(stream) {
+  if (typeof NATIVE_STREAM_CANCEL !== 'function') return;
+  try {
+    suppressPromiseRejection(reflectApply(NATIVE_STREAM_CANCEL, stream, []));
+  } catch (_error) {
+    // Best-effort cleanup must never replace the fixed caller result.
+  }
+}
+
+function cancelNativeReader(reader) {
+  if (typeof NATIVE_READER_CANCEL !== 'function') return;
+  try {
+    suppressPromiseRejection(reflectApply(NATIVE_READER_CANCEL, reader, []));
+  } catch (_error) {
+    // Best-effort cleanup must never replace the fixed caller result.
+  }
+}
+
+function releaseNativeReader(reader) {
+  if (typeof NATIVE_READER_RELEASE_LOCK !== 'function') return;
+  try {
+    reflectApply(NATIVE_READER_RELEASE_LOCK, reader, []);
+  } catch (_error) {
+    // Lock cleanup must never replace the fixed caller result.
+  }
+}
+
+function nativeResponseParts(response) {
+  if (
+    !isExactNativeValue(response, NATIVE_RESPONSE_PROTOTYPE)
+    || typeof NATIVE_RESPONSE_HEADERS_GETTER !== 'function'
+    || typeof NATIVE_RESPONSE_BODY_GETTER !== 'function'
+    || typeof NATIVE_RESPONSE_BODY_USED_GETTER !== 'function'
+    || typeof NATIVE_HEADERS_GET !== 'function'
+    || typeof NATIVE_STREAM_GET_READER !== 'function'
+    || typeof NATIVE_READER_READ !== 'function'
+    || typeof typedArrayByteLengthGetter !== 'function'
+  ) {
+    return null;
+  }
+
+  try {
+    const headers = reflectApply(NATIVE_RESPONSE_HEADERS_GETTER, response, []);
+    const body = reflectApply(NATIVE_RESPONSE_BODY_GETTER, response, []);
+    const bodyUsed = reflectApply(NATIVE_RESPONSE_BODY_USED_GETTER, response, []);
+    if (
+      bodyUsed !== false
+      || !isExactNativeValue(headers, NATIVE_HEADERS_PROTOTYPE)
+      || !isExactNativeValue(body, NATIVE_READABLE_STREAM_PROTOTYPE)
+    ) {
+      return null;
+    }
+    return objectFreeze({ body, headers });
+  } catch (_error) {
+    return null;
+  }
+}
+
+function declaredContentLength(headers, maximumBytes) {
+  const value = reflectApply(NATIVE_HEADERS_GET, headers, ['content-length']);
+  if (value === null) return null;
+  if (typeof value !== 'string' || !patternMatches(CONTENT_LENGTH_PATTERN, value)) {
+    throw new Error('invalid Strava response length');
+  }
+  const length = reflectApply(numberFromString, undefined, [value]);
+  if (!numberIsSafeInteger(length) || length > maximumBytes) {
+    throw new Error('invalid Strava response length');
+  }
+  return length;
+}
+
+function streamReadResult(record) {
+  if (
+    record === null
+    || typeof record !== 'object'
+    || isProxy(record)
+    || !hasExactOwnKeys(record, ['value', 'done'])
+  ) {
+    return null;
+  }
+  const value = selectedOwnDataValue(record, 'value', true);
+  const done = selectedOwnDataValue(record, 'done', true);
+  if (typeof done !== 'boolean') return null;
+  if (done === true) {
+    return value === undefined ? objectFreeze({ done: true }) : null;
+  }
+  return objectFreeze({ done: false, value });
+}
+
+async function readBoundedStravaJson(response, maximumBytes) {
+  let body = null;
+  let reader = null;
+  let reachedEnd = false;
+  try {
+    if (!numberIsSafeInteger(maximumBytes) || maximumBytes <= 0) {
+      throw new Error('invalid Strava response ceiling');
+    }
+    const parts = nativeResponseParts(response);
+    if (!parts) throw new Error('invalid Strava response body');
+    body = parts.body;
+    declaredContentLength(parts.headers, maximumBytes);
+
+    reader = reflectApply(NATIVE_STREAM_GET_READER, body, []);
+    if (!isExactNativeValue(reader, NATIVE_READER_PROTOTYPE)) {
+      throw new Error('invalid Strava response reader');
+    }
+
+    const chunks = [];
+    let chunkCount = 0;
+    let totalBytes = 0;
+    for (;;) {
+      const record = streamReadResult(await reflectApply(NATIVE_READER_READ, reader, []));
+      if (!record) throw new Error('invalid Strava response read');
+      if (record.done) {
+        reachedEnd = true;
+        break;
+      }
+
+      chunkCount += 1;
+      if (chunkCount > STRAVA_RESPONSE_MAX_CHUNKS) {
+        throw new Error('invalid Strava response chunks');
+      }
+      const chunk = record.value;
+      if (!isUint8Array(chunk) || isProxy(chunk)) {
+        throw new Error('invalid Strava response chunk');
+      }
+      const chunkBytes = reflectApply(typedArrayByteLengthGetter, chunk, []);
+      if (chunkBytes > maximumBytes - totalBytes) {
+        throw new Error('invalid Strava response size');
+      }
+      reflectApply(arrayPush, chunks, [reflectApply(bufferFrom, Buffer, [chunk])]);
+      totalBytes += chunkBytes;
+    }
+
+    const bytes = reflectApply(bufferConcat, Buffer, [chunks, totalBytes]);
+    const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
+    const text = reflectApply(textDecoderDecode, decoder, [bytes]);
+    return reflectApply(jsonParse, undefined, [text]);
+  } catch (_error) {
+    if (!reachedEnd) {
+      if (reader) {
+        cancelNativeReader(reader);
+      } else if (body) {
+        cancelNativeStream(body);
+      }
+    }
+    throw new Error('Invalid Strava provider JSON response.');
+  } finally {
+    if (reader) releaseNativeReader(reader);
   }
 }
 
@@ -836,7 +1065,7 @@ async function exchangeCode(code) {
   }
   let response;
   try {
-    response = await resp.json();
+    response = await readBoundedStravaJson(resp, STRAVA_TOKEN_RESPONSE_MAX_BYTES);
   } catch (_error) {
     throw stravaAuthorizationError('unavailable');
   }
@@ -875,7 +1104,7 @@ async function refreshToken(refresh) {
   }
   let response;
   try {
-    response = await resp.json();
+    response = await readBoundedStravaJson(resp, STRAVA_TOKEN_RESPONSE_MAX_BYTES);
   } catch (_error) {
     throw stravaRefreshError('unavailable');
   }
@@ -1199,3 +1428,11 @@ exports.stravaDisconnect = functions
     }
     return { ok: true };
   });
+
+// Not re-exported by functions/index.js; keeps hostile projector cases directly testable.
+exports.__testOnlyStravaProviderBoundaries = objectFreeze({
+  readBoundedStravaJson,
+  snapshotAuthorizationExchangeResponse,
+  snapshotRefreshTokenResponse,
+  tokenResponseMaxBytes: STRAVA_TOKEN_RESPONSE_MAX_BYTES,
+});
