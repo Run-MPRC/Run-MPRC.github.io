@@ -83,11 +83,19 @@ exports.listMyRegistrations = functions.https.onCall(async (data, context) => {
     }
   }));
 
-  const registrations = Array.from(results.values()).sort((a, b) => {
-    const ta = a.createdAt?._seconds || 0;
-    const tb = b.createdAt?._seconds || 0;
-    return tb - ta;
-  });
+  let registrations;
+  try {
+    registrations = Array.from(results.values()).sort((a, b) => {
+      const ta = a.createdAt?._seconds || 0;
+      const tb = b.createdAt?._seconds || 0;
+      return tb - ta;
+    });
+  } catch {
+    throw new functions.https.HttpsError(
+      'unavailable',
+      'Registration data could not be loaded.',
+    );
+  }
 
   return { registrations, events };
 });
