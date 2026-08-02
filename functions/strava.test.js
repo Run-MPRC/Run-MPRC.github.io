@@ -434,11 +434,18 @@ const { Timestamp } = require('firebase-admin/firestore');
 const { createHash } = require('node:crypto');
 const { requireAppCheck } = require('./stripeHelpers');
 const {
+  __testOnlyStravaProviderBoundaries,
   stravaBeginAuthorization,
   stravaDisconnect,
   stravaExchangeCode,
   stravaFetchStats,
 } = require('./strava');
+const {
+  readBoundedStravaJson,
+  snapshotAuthorizationExchangeResponse,
+  snapshotRefreshTokenResponse,
+  tokenResponseMaxBytes,
+} = __testOnlyStravaProviderBoundaries;
 
 const FIXED_AUTHORIZATION_ERROR = 'Strava authorization could not be completed.';
 const FIXED_REFRESH_ERROR = 'Strava connection could not be refreshed.';
@@ -459,6 +466,7 @@ const CONTEXT = Object.freeze({
 const CODE = 'synthetic_authorization_code';
 const STATE = 'A'.repeat(43);
 const MAX_AUTHORIZATION_CODE_LENGTH = 1_024;
+const MAX_STRAVA_TOKEN_RESPONSE_BYTES = 65_536;
 const MAX_TOKEN_LENGTH = 2_048;
 const MAX_SCOPE_LENGTH = 1_024;
 const MAX_PROFILE_TEXT_LENGTH = 1_024;
@@ -492,6 +500,415 @@ async function captureFailure(action) {
 function sha256Hex(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
+
+function nativeChunkedResponse(chunks, {
+  cancel = jest.fn(),
+  headers,
+  onChunk,
+  status = 200,
+  stayOpen = false,
+} = {}) {
+  const chunkRead = jest.fn((chunk, index) => onChunk?.(chunk, index));
+  let chunkIndex = 0;
+  let streamController;
+  const body = new ReadableStream({
+    start(controller) {
+      streamController = controller;
+    },
+    pull(controller) {
+      if (chunkIndex < chunks.length) {
+        const chunk = chunks[chunkIndex];
+        chunkRead(chunk, chunkIndex);
+        chunkIndex += 1;
+        controller.enqueue(chunk);
+        return;
+      }
+      if (!stayOpen) controller.close();
+    },
+    cancel,
+  }, { highWaterMark: 0 });
+  return {
+    cancel,
+    chunkRead,
+    close: () => streamController.close(),
+    response: new Response(body, { headers, status }),
+  };
+}
+
+function nativeJsonResponse(value, { headers, onBodyRead, status = 200 } = {}) {
+  const bytes = Buffer.from(JSON.stringify(value), 'utf8');
+  const native = nativeChunkedResponse([bytes], {
+    headers,
+    onChunk: onBodyRead,
+    status,
+  });
+  return { ...native, bodyRead: native.chunkRead, bytes };
+}
+
+function paddedJsonBytes(value, byteLength) {
+  const serialized = Buffer.from(JSON.stringify(value), 'utf8');
+  if (serialized.byteLength > byteLength) {
+    throw new Error('Requested fixture length is shorter than its JSON document.');
+  }
+  return Buffer.concat([
+    serialized,
+    Buffer.alloc(byteLength - serialized.byteLength, 0x20),
+  ]);
+}
+
+function isolatedStravaBoundariesWithPatch(target, key, replacement) {
+  const descriptor = Object.getOwnPropertyDescriptor(target, key);
+  let isolatedBoundaries;
+  Object.defineProperty(target, key, { ...descriptor, value: replacement });
+  try {
+    jest.isolateModules(() => {
+      ({ __testOnlyStravaProviderBoundaries: isolatedBoundaries } = require('./strava'));
+    });
+  } finally {
+    Object.defineProperty(target, key, descriptor);
+  }
+  return isolatedBoundaries;
+}
+
+describe('OAUTH-001A2K bounded native Strava token JSON reader', () => {
+  test('uses the named 64 KiB token-response ceiling and reads ordinary JSON bytes', async () => {
+    const native = nativeJsonResponse({ ok: true });
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .resolves.toEqual({ ok: true });
+    expect(tokenResponseMaxBytes).toBe(MAX_STRAVA_TOKEN_RESPONSE_BYTES);
+    expect(native.bodyRead).toHaveBeenCalledTimes(1);
+    expect(native.response.bodyUsed).toBe(true);
+  });
+
+  test.each([
+    ['one byte below', MAX_STRAVA_TOKEN_RESPONSE_BYTES - 1],
+    ['exactly at', MAX_STRAVA_TOKEN_RESPONSE_BYTES],
+  ])('accepts a valid JSON document %s the byte ceiling', async (_case, byteLength) => {
+    const bytes = paddedJsonBytes({ admitted: true }, byteLength);
+    const native = nativeChunkedResponse([bytes]);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .resolves.toEqual({ admitted: true });
+    expect(bytes).toHaveLength(byteLength);
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
+    expect(native.cancel).not.toHaveBeenCalled();
+  });
+
+  test('rejects and cancels a one-chunk body one byte over the ceiling', async () => {
+    const bytes = paddedJsonBytes({ admitted: false }, MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1);
+    const native = nativeChunkedResponse([bytes]);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    await Promise.resolve();
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
+    expect(native.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['one overflowing chunk', [Buffer.alloc(MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1)], []],
+    [
+      'a final overflowing chunk',
+      [Buffer.alloc(MAX_STRAVA_TOKEN_RESPONSE_BYTES), Buffer.alloc(1)],
+      [MAX_STRAVA_TOKEN_RESPONSE_BYTES],
+    ],
+  ])('does not copy %s', async (_case, chunks, expectedCopiedChunkSizes) => {
+    const copiedChunkSizes = [];
+    const originalBufferFrom = Buffer.from;
+    const instrumentedBufferFrom = function instrumentedBufferFrom(value, ...rest) {
+      if (value instanceof Uint8Array && rest.length === 0) {
+        copiedChunkSizes.push(value.byteLength);
+      }
+      return Reflect.apply(originalBufferFrom, Buffer, [value, ...rest]);
+    };
+    const isolated = isolatedStravaBoundariesWithPatch(
+      Buffer,
+      'from',
+      instrumentedBufferFrom,
+    );
+    copiedChunkSizes.length = 0;
+    const native = nativeChunkedResponse(chunks);
+
+    await expect(isolated.readBoundedStravaJson(
+      native.response,
+      isolated.tokenResponseMaxBytes,
+    )).rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    await Promise.resolve();
+    expect(copiedChunkSizes).toEqual(expectedCopiedChunkSizes);
+    expect(native.chunkRead).toHaveBeenCalledTimes(chunks.length);
+    expect(native.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  test('accepts absent, truthful, and underreported Content-Length values', async () => {
+    const ordinaryBytes = Buffer.from('{"admitted":true}', 'utf8');
+    const cases = [
+      nativeChunkedResponse([ordinaryBytes]),
+      nativeChunkedResponse([ordinaryBytes], {
+        headers: { 'Content-Length': String(ordinaryBytes.byteLength) },
+      }),
+      nativeChunkedResponse([ordinaryBytes], { headers: { 'Content-Length': '1' } }),
+    ];
+
+    for (const native of cases) {
+      await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+        .resolves.toEqual({ admitted: true });
+      expect(native.chunkRead).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  test('rejects a declared over-limit length before reading the body', async () => {
+    const native = nativeChunkedResponse([Buffer.from('{}')], {
+      headers: { 'Content-Length': String(MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1) },
+    });
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    await Promise.resolve();
+    expect(native.chunkRead).not.toHaveBeenCalled();
+    expect(native.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  test('still rejects actual overflow behind an exact but dishonest Content-Length', async () => {
+    const bytes = paddedJsonBytes({}, MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1);
+    const native = nativeChunkedResponse([bytes], {
+      headers: { 'Content-Length': String(MAX_STRAVA_TOKEN_RESPONSE_BYTES) },
+    });
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['negative', '-1'],
+    ['fractional', '1.5'],
+    ['leading-zero', '01'],
+    ['signed', '+1'],
+    ['unsafe', '9007199254740992'],
+    ['non-decimal', '1e2'],
+  ])('rejects a %s Content-Length before body reads', async (_case, contentLength) => {
+    const native = nativeChunkedResponse([Buffer.from('{}')], {
+      headers: { 'Content-Length': contentLength },
+    });
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    expect(native.chunkRead).not.toHaveBeenCalled();
+  });
+
+  test('decodes a multibyte UTF-8 scalar split across chunks', async () => {
+    const bytes = Buffer.from(JSON.stringify({ runner: '🏃' }), 'utf8');
+    const scalar = Buffer.from('🏃', 'utf8');
+    const splitIndex = bytes.indexOf(scalar) + 2;
+    const native = nativeChunkedResponse([
+      bytes.subarray(0, splitIndex),
+      bytes.subarray(splitIndex),
+    ]);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .resolves.toEqual({ runner: '🏃' });
+    expect(native.chunkRead).toHaveBeenCalledTimes(2);
+  });
+
+  test('matches native JSON BOM handling', async () => {
+    const bytes = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('{"admitted":true}', 'utf8'),
+    ]);
+    const native = nativeChunkedResponse([bytes]);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .resolves.toEqual({ admitted: true });
+  });
+
+  test('counts UTF-8 bytes rather than JavaScript characters', async () => {
+    const text = JSON.stringify({ value: 'é'.repeat(32_766) });
+    const bytes = Buffer.from(text, 'utf8');
+    const native = nativeChunkedResponse([bytes]);
+
+    expect(text.length).toBeLessThan(MAX_STRAVA_TOKEN_RESPONSE_BYTES);
+    expect(bytes.byteLength).toBeGreaterThan(MAX_STRAVA_TOKEN_RESPONSE_BYTES);
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+  });
+
+  test('rejects malformed UTF-8 before JSON parsing', async () => {
+    const native = nativeChunkedResponse([Buffer.from([0x7b, 0xc3, 0x28, 0x7d])]);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+  });
+
+  test('rejects empty, null, locked, and already-used bodies', async () => {
+    const empty = nativeChunkedResponse([]);
+    const nullBody = new Response(null, { status: 200 });
+    const locked = nativeJsonResponse({ admitted: true });
+    const lock = locked.response.body.getReader();
+    const used = nativeJsonResponse({ admitted: true });
+    await used.response.text();
+
+    try {
+      for (const response of [empty.response, nullBody, locked.response, used.response]) {
+        await expect(readBoundedStravaJson(response, tokenResponseMaxBytes))
+          .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+      }
+    } finally {
+      lock.releaseLock();
+    }
+  });
+
+  test.each([
+    ['a string', '{}'],
+    ['an ArrayBuffer', new ArrayBuffer(2)],
+    ['a non-byte typed array', new Uint16Array([123])],
+    ['a proxied Uint8Array', new Proxy(new Uint8Array([123, 125]), {})],
+  ])('rejects %s stream chunks', async (_case, chunk) => {
+    const native = nativeChunkedResponse([chunk]);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+  });
+
+  test.each([
+    ['an undefined record', undefined],
+    ['a missing value', { done: false }],
+    ['a non-boolean done', { value: Buffer.from('{}'), done: 0 }],
+    ['an extra field', { value: Buffer.from('{}'), done: false, extra: true }],
+    ['a terminal value', { value: Buffer.from('{}'), done: true }],
+  ])('rejects %s returned by the native reader', async (_case, record) => {
+    const isolated = isolatedStravaBoundariesWithPatch(
+      ReadableStreamDefaultReader.prototype,
+      'read',
+      function malformedRead() {
+        return Promise.resolve(record);
+      },
+    );
+    const native = nativeChunkedResponse([Buffer.from('{}')]);
+
+    await expect(isolated.readBoundedStravaJson(
+      native.response,
+      isolated.tokenResponseMaxBytes,
+    )).rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+  });
+
+  test('rejects an accessor-backed reader result without invoking it', async () => {
+    const valueRead = jest.fn(() => Buffer.from('{}'));
+    const record = { done: false };
+    Object.defineProperty(record, 'value', {
+      configurable: true,
+      enumerable: true,
+      get: valueRead,
+    });
+    const isolated = isolatedStravaBoundariesWithPatch(
+      ReadableStreamDefaultReader.prototype,
+      'read',
+      function accessorRead() {
+        return Promise.resolve(record);
+      },
+    );
+    const native = nativeChunkedResponse([Buffer.from('{}')]);
+
+    await expect(isolated.readBoundedStravaJson(
+      native.response,
+      isolated.tokenResponseMaxBytes,
+    )).rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    expect(valueRead).not.toHaveBeenCalled();
+  });
+
+  test('rejects a stream read failure without exposing its reason', async () => {
+    const response = new Response(new ReadableStream({
+      pull() {
+        throw new Error('provider-read-canary https://provider.test/token');
+      },
+    }, { highWaterMark: 0 }), { status: 200 });
+
+    await expect(readBoundedStravaJson(response, tokenResponseMaxBytes))
+      .rejects.toEqual(new Error('Invalid Strava provider JSON response.'));
+  });
+
+  test.each([
+    ['throws', () => { throw new Error('cancel-throw-canary'); }],
+    ['rejects', () => Promise.reject(new Error('cancel-reject-canary'))],
+    ['never settles', () => new Promise(() => {})],
+  ])('keeps the fixed result when cancellation %s', async (_case, cancelBehavior) => {
+    const cancel = jest.fn(cancelBehavior);
+    const native = nativeChunkedResponse(
+      [Buffer.alloc(MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1)],
+      { cancel },
+    );
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toEqual(new Error('Invalid Strava provider JSON response.'));
+    await Promise.resolve();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not let a lock-release failure replace valid parsed JSON', async () => {
+    const isolated = isolatedStravaBoundariesWithPatch(
+      ReadableStreamDefaultReader.prototype,
+      'releaseLock',
+      function failingReleaseLock() {
+        throw new Error('release-lock-canary');
+      },
+    );
+    const native = nativeJsonResponse({ admitted: true });
+
+    await expect(isolated.readBoundedStravaJson(
+      native.response,
+      isolated.tokenResponseMaxBytes,
+    )).resolves.toEqual({ admitted: true });
+  });
+
+  test('rejects and cancels on the 4,097th zero-byte chunk', async () => {
+    const chunks = Array.from({ length: 4_097 }, () => new Uint8Array(0));
+    const native = nativeChunkedResponse(chunks);
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    await Promise.resolve();
+    expect(native.chunkRead).toHaveBeenCalledTimes(4_097);
+    expect(native.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not parse until the final stream read reaches end', async () => {
+    const native = nativeChunkedResponse([Buffer.from('{"admitted":true}')], {
+      stayOpen: true,
+    });
+    let settled = false;
+    const result = readBoundedStravaJson(native.response, tokenResponseMaxBytes)
+      .finally(() => { settled = true; });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+
+    native.close();
+    await expect(result).resolves.toEqual({ admitted: true });
+  });
+
+  test('does not invoke an override or a plain mock JSON method', async () => {
+    const native = nativeJsonResponse({ admitted: true });
+    const nativeJson = jest.fn(() => {
+      throw new Error('native override canary');
+    });
+    Object.defineProperty(native.response, 'json', {
+      configurable: true,
+      value: nativeJson,
+    });
+    const plainJson = jest.fn().mockResolvedValue({ admitted: true });
+
+    await expect(readBoundedStravaJson(native.response, tokenResponseMaxBytes))
+      .resolves.toEqual({ admitted: true });
+    await expect(readBoundedStravaJson(
+      { ok: true, json: plainJson },
+      tokenResponseMaxBytes,
+    )).rejects.toThrow(/^Invalid Strava provider JSON response\.$/u);
+    expect(nativeJson).not.toHaveBeenCalled();
+    expect(plainJson).not.toHaveBeenCalled();
+  });
+});
 
 function validOAuthStateRecord({
   state = STATE,
@@ -831,17 +1248,184 @@ describe('Strava authorization exchange failure boundary', () => {
   }
 
   function mockExchangeResponse(response) {
-    const json = jest.fn().mockResolvedValue(response);
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json,
-    });
-    return json;
+    const native = nativeJsonResponse(response);
+    fetchMock.mockResolvedValue(native.response);
+    return native.bodyRead;
   }
 
   function mockSuccessfulExchange() {
     return mockExchangeResponse(validExchangeResponse());
   }
+
+  function oversizedNativeExchangeResponse() {
+    const serialized = Buffer.from(JSON.stringify(validExchangeResponse()), 'utf8');
+    const bytes = Buffer.concat([
+      serialized,
+      Buffer.alloc(MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1 - serialized.length, 0x20),
+    ]);
+    const chunks = [
+      bytes.subarray(0, MAX_STRAVA_TOKEN_RESPONSE_BYTES),
+      bytes.subarray(MAX_STRAVA_TOKEN_RESPONSE_BYTES),
+    ];
+    const cancel = jest.fn();
+    const chunkRead = jest.fn();
+    let chunkIndex = 0;
+    const body = new ReadableStream({
+      pull(controller) {
+        if (chunkIndex < chunks.length) {
+          chunkRead();
+          controller.enqueue(chunks[chunkIndex]);
+          chunkIndex += 1;
+          return;
+        }
+        controller.close();
+      },
+      cancel,
+    }, { highWaterMark: 0 });
+    const response = new Response(body, { status: 200 });
+    Object.defineProperty(response, 'json', {
+      configurable: true,
+      value: async () => JSON.parse(await Response.prototype.text.call(response)),
+    });
+
+    expect(bytes).toHaveLength(MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1);
+    expect(chunks.map((chunk) => chunk.byteLength)).toEqual([
+      MAX_STRAVA_TOKEN_RESPONSE_BYTES,
+      1,
+    ]);
+    expect(response.headers.has('content-length')).toBe(false);
+    return { cancel, chunkRead, response };
+  }
+
+  test('OAUTH-001A2K cancels an oversized chunked authorization response before parsing', async () => {
+    const { cancel, chunkRead, response } = oversizedNativeExchangeResponse();
+    fetchMock.mockResolvedValue(response);
+
+    const outcome = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT).then(
+      (value) => ({ kind: 'fulfilled', value }),
+      (error) => ({ error: publicError(error), kind: 'rejected' }),
+    );
+    await Promise.resolve();
+
+    expect({
+      cancelCount: cancel.mock.calls.length,
+      connectionExists: admin.__hasDocument(CONNECTION_PATH),
+      logCallCounts: consoleSpies.map((spy) => spy.mock.calls.length),
+      outcome,
+      secretExists: admin.__hasDocument(SECRET_PATH),
+      stateExists: admin.__hasDocument(STATE_PATH),
+      transactionDeletes: admin.__getTransactionDeletes(),
+      writeCount: admin.__getWrites().length,
+    }).toEqual({
+      cancelCount: 1,
+      connectionExists: false,
+      logCallCounts: [0, 0, 0, 0, 0],
+      outcome: {
+        error: {
+          cause: undefined,
+          code: 'unavailable',
+          details: undefined,
+          message: FIXED_AUTHORIZATION_ERROR,
+        },
+        kind: 'rejected',
+      },
+      secretExists: false,
+      stateExists: false,
+      transactionDeletes: [STATE_PATH],
+      writeCount: 0,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(chunkRead).toHaveBeenCalledTimes(2);
+    expect(response.bodyUsed).toBe(true);
+    expectNoSideEffects();
+  });
+
+  test('OAUTH-001A2K persists and returns an authorization reply at the exact byte ceiling', async () => {
+    const bytes = paddedJsonBytes(validExchangeResponse(), MAX_STRAVA_TOKEN_RESPONSE_BYTES);
+    const native = nativeChunkedResponse([bytes], {
+      headers: { 'Content-Length': String(MAX_STRAVA_TOKEN_RESPONSE_BYTES) },
+    });
+    fetchMock.mockResolvedValue(native.response);
+
+    const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
+
+    expect(result).toEqual({ ok: true, athleteId: 123456 });
+    expect(bytes).toHaveLength(MAX_STRAVA_TOKEN_RESPONSE_BYTES);
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
+    expect(admin.__getWrites()).toEqual(expectedExchangeWrites());
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(Timestamp.now).toHaveBeenCalledTimes(3);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('OAUTH-001A2K keeps bounded invalid authorization schema on fixed internal', async () => {
+    const native = nativeJsonResponse({ access_token: 'synthetic-incomplete-token' });
+    fetchMock.mockResolvedValue(native.response);
+
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(native.bodyRead).toHaveBeenCalledTimes(1);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('OAUTH-001A2K does not let a plain successful mock bypass the native body reader', async () => {
+    const json = jest.fn().mockResolvedValue(validExchangeResponse());
+    fetchMock.mockResolvedValue({ ok: true, json });
+
+    const error = await captureFailure(() => stravaExchangeCode({
+      code: CODE,
+      state: STATE,
+    }, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_AUTHORIZATION_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(json).not.toHaveBeenCalled();
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('OAUTH-001A2K waits for stream end before authorization persistence or result', async () => {
+    const native = nativeChunkedResponse([
+      Buffer.from(JSON.stringify(validExchangeResponse()), 'utf8'),
+    ], { stayOpen: true });
+    fetchMock.mockResolvedValue(native.response);
+    let settled = false;
+
+    const exchange = stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT)
+      .finally(() => { settled = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
+    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+
+    native.close();
+    await expect(exchange).resolves.toEqual({ ok: true, athleteId: 123456 });
+    expect(admin.__getWrites()).toEqual(expectedExchangeWrites());
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
 
   function expectedExchangeWrites() {
     return [
@@ -921,23 +1505,10 @@ describe('Strava authorization exchange failure boundary', () => {
   }
 
   async function expectInvalidSuccessfulResponse(response) {
-    const json = mockExchangeResponse(response);
-
-    const error = await captureFailure(() => stravaExchangeCode({
-      code: CODE,
-      state: STATE,
-    }, CONTEXT));
-
-    expect(publicError(error)).toEqual({
-      code: 'internal',
-      message: FIXED_AUTHORIZATION_ERROR,
-      details: undefined,
-      cause: undefined,
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(json).toHaveBeenCalledTimes(1);
-    expect(admin.__hasDocument(STATE_PATH)).toBe(false);
-    expect(admin.__getTransactionDeletes()).toEqual([STATE_PATH]);
+    expect(snapshotAuthorizationExchangeResponse(response)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__hasDocument(STATE_PATH)).toBe(true);
+    expect(admin.__getTransactionDeletes()).toEqual([]);
     expectNoSideEffects();
   }
 
@@ -1618,19 +2189,22 @@ describe('Strava authorization exchange failure boundary', () => {
     });
 
     test('accepts a genuine successful Node Response', async () => {
-      const json = jest.fn().mockResolvedValue(validExchangeResponse());
-      const response = new Response(null, { status: 200 });
-      Object.defineProperty(response, 'json', {
+      const native = nativeJsonResponse(validExchangeResponse());
+      const json = jest.fn(() => {
+        throw new Error('native json override must not run');
+      });
+      Object.defineProperty(native.response, 'json', {
         configurable: true,
         value: json,
       });
-      fetchMock.mockResolvedValue(response);
+      fetchMock.mockResolvedValue(native.response);
 
       const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
 
       expect(result).toEqual({ ok: true, athleteId: 123456 });
-      expect(json).toHaveBeenCalledTimes(1);
-      expect(response.bodyUsed).toBe(false);
+      expect(json).not.toHaveBeenCalled();
+      expect(native.bodyRead).toHaveBeenCalledTimes(1);
+      expect(native.response.bodyUsed).toBe(true);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(admin.__getWrites()).toEqual(expectedExchangeWrites());
       expect(admin.__hasDocument(STATE_PATH)).toBe(false);
@@ -1665,10 +2239,9 @@ describe('Strava authorization exchange failure boundary', () => {
   });
 
   test('turns malformed provider JSON into one fixed unavailable result', async () => {
-    const json = jest.fn().mockRejectedValue(
-      new Error('json-canary access_token=provider-secret-canary'),
-    );
-    fetchMock.mockResolvedValue({ ok: true, json });
+    const providerBytes = Buffer.from('{"access_token":"provider-secret-canary"', 'utf8');
+    const native = nativeChunkedResponse([providerBytes]);
+    fetchMock.mockResolvedValue(native.response);
 
     const error = await captureFailure(() => stravaExchangeCode({
       code: CODE,
@@ -1683,7 +2256,7 @@ describe('Strava authorization exchange failure boundary', () => {
     });
     expect(JSON.stringify(publicError(error)))
       .not.toMatch(/json-canary|provider-secret-canary/i);
-    expect(json).toHaveBeenCalledTimes(1);
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
     expectNoSideEffects();
   });
 
@@ -1699,7 +2272,7 @@ describe('Strava authorization exchange failure boundary', () => {
       await expectInvalidSuccessfulResponse(response);
     });
 
-    test('rejects a transparent root Proxy before validator-controlled reflection', async () => {
+    test('rejects a transparent root Proxy without a then lookup or reflection trap', async () => {
       const observedGetKeys = [];
       const secondThenFailure = new Error(
         'second-then-canary access_token=provider-secret-canary',
@@ -1729,33 +2302,21 @@ describe('Strava authorization exchange failure boundary', () => {
 
       await expectInvalidSuccessfulResponse(response);
 
-      expect(observedGetKeys).toEqual(['then']);
+      expect(observedGetKeys).toEqual([]);
       Object.values(reflectionTraps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
     });
 
-    test('keeps a throwing root then trap inside the existing unavailable JSON boundary', async () => {
+    test('rejects a root Proxy with a throwing then trap without invoking it', async () => {
       const thenFailure = new Error('root-then-canary access_token=provider-secret-canary');
-      const response = new Proxy(validExchangeResponse(), {
-        get: (_target, key) => {
-          if (key === 'then') throw thenFailure;
-          throw new Error('unexpected root Proxy read');
-        },
+      const get = jest.fn((_target, key) => {
+        if (key === 'then') throw thenFailure;
+        throw new Error('unexpected root Proxy read');
       });
-      mockExchangeResponse(response);
+      const response = new Proxy(validExchangeResponse(), { get });
 
-      const error = await captureFailure(() => stravaExchangeCode({
-        code: CODE,
-        state: STATE,
-      }, CONTEXT));
+      await expectInvalidSuccessfulResponse(response);
 
-      expect(publicError(error)).toEqual({
-        code: 'unavailable',
-        message: FIXED_AUTHORIZATION_ERROR,
-        details: undefined,
-        cause: undefined,
-      });
-      expect(JSON.stringify(publicError(error))).not.toMatch(/root-then-canary|provider-secret/i);
-      expectNoSideEffects();
+      expect(get).not.toHaveBeenCalled();
     });
 
     test.each([
@@ -1963,13 +2524,12 @@ describe('Strava authorization exchange failure boundary', () => {
       });
 
       try {
-        mockExchangeResponse(response);
-        const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
+        const projected = snapshotAuthorizationExchangeResponse(response);
 
-        expect(result).toEqual({ ok: true, athleteId: 123456 });
-        expect(admin.__getWrites()[1].data.firstName).toBeNull();
-        expect(Timestamp.now).toHaveBeenCalledTimes(3);
-        consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+        expect(projected).toMatchObject({ athlete: { firstName: null } });
+        expect(Object.isFrozen(projected)).toBe(true);
+        expect(Object.isFrozen(projected.athlete)).toBe(true);
+        expectNoSideEffects();
       } finally {
         delete Object.prototype.firstname;
       }
@@ -2078,14 +2638,16 @@ describe('Strava authorization exchange failure boundary', () => {
       const response = validExchangeResponse();
       Object.freeze(response.athlete);
       Object.freeze(response);
-      mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
+      const projected = snapshotAuthorizationExchangeResponse(response);
 
-      expect(result).toEqual({ ok: true, athleteId: 123456 });
-      expect(admin.__getWrites()).toHaveLength(2);
-      expect(Timestamp.now).toHaveBeenCalledTimes(3);
-      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(projected).toMatchObject({
+        accessToken: 'access_token_test',
+        athlete: { firstName: 'Synthetic', id: 123456 },
+      });
+      expect(Object.isFrozen(projected)).toBe(true);
+      expect(Object.isFrozen(projected.athlete)).toBe(true);
+      expectNoSideEffects();
     });
 
     test('accepts non-enumerable selected own data descriptors', async () => {
@@ -2102,15 +2664,16 @@ describe('Strava authorization exchange failure boundary', () => {
         value: response.athlete.firstname,
         writable: false,
       });
-      mockExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
+      const projected = snapshotAuthorizationExchangeResponse(response);
 
-      expect(result).toEqual({ ok: true, athleteId: 123456 });
-      expect(admin.__getWrites()[0].data.access_token).toBe('access_token_test');
-      expect(admin.__getWrites()[1].data.firstName).toBe('Synthetic');
-      expect(Timestamp.now).toHaveBeenCalledTimes(3);
-      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(projected).toMatchObject({
+        accessToken: 'access_token_test',
+        athlete: { firstName: 'Synthetic' },
+      });
+      expect(Object.isFrozen(projected)).toBe(true);
+      expect(Object.isFrozen(projected.athlete)).toBe(true);
+      expectNoSideEffects();
     });
 
     test('ignores unknown hostile fields without enumeration or access', async () => {
@@ -2131,15 +2694,17 @@ describe('Strava authorization exchange failure boundary', () => {
         enumerable: true,
         get: unknownSymbolGetter,
       });
-      mockExchangeResponse(response);
+      const projected = snapshotAuthorizationExchangeResponse(response);
 
-      const result = await stravaExchangeCode({ code: CODE, state: STATE }, CONTEXT);
-
-      expect(result).toEqual({ ok: true, athleteId: 123456 });
+      expect(projected).toMatchObject({
+        accessToken: 'access_token_test',
+        athlete: { id: 123456 },
+      });
       expect(unknownGetter).not.toHaveBeenCalled();
       expect(unknownSymbolGetter).not.toHaveBeenCalled();
-      expect(admin.__getWrites()).toHaveLength(2);
-      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(Object.isFrozen(projected)).toBe(true);
+      expect(Object.isFrozen(projected.athlete)).toBe(true);
+      expectNoSideEffects();
     });
   });
 
@@ -2624,9 +3189,9 @@ describe('Strava token refresh failure boundary', () => {
   }
 
   function mockRefreshResponse(response) {
-    const json = jest.fn().mockResolvedValue(response);
-    fetchMock.mockResolvedValueOnce({ ok: true, json });
-    return json;
+    const native = nativeJsonResponse(response);
+    fetchMock.mockResolvedValueOnce(native.response);
+    return native.bodyRead;
   }
 
   function mockValidRefreshFlow(response = validRefreshResponse()) {
@@ -2664,33 +3229,9 @@ describe('Strava token refresh failure boundary', () => {
   }
 
   async function expectInvalidSuccessfulRefresh(response) {
-    seedExpiredConnection();
-    const json = mockRefreshResponse(response);
-
-    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
-
-    expect(publicError(error)).toEqual({
-      code: 'internal',
-      message: FIXED_REFRESH_ERROR,
-      details: undefined,
-      cause: undefined,
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://www.strava.com/api/v3/oauth/token',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: 'strava_client_test',
-          client_secret: 'strava_secret_test',
-          refresh_token: 'synthetic_refresh_token_test',
-          grant_type: 'refresh_token',
-        }),
-      },
-    );
-    expect(json).toHaveBeenCalledTimes(1);
-    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expect(snapshotRefreshTokenResponse(response)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getReads()).toEqual([]);
     expectNoWritesOrLogs();
   }
 
@@ -3165,12 +3706,11 @@ describe('Strava token refresh failure boundary', () => {
         scope: 'read',
       });
       seedExpiredConnection();
-      const json = jest.fn().mockImplementation(async () => {
-        admin.__setDocument(SECRET_PATH, newerSecret);
-        return validRefreshResponse();
+      const native = nativeJsonResponse(validRefreshResponse(), {
+        onBodyRead: () => admin.__setDocument(SECRET_PATH, newerSecret),
       });
       fetchMock
-        .mockResolvedValueOnce({ ok: true, json })
+        .mockResolvedValueOnce(native.response)
         .mockResolvedValueOnce({
           ok: true,
           json: jest.fn().mockResolvedValue([]),
@@ -3187,7 +3727,7 @@ describe('Strava token refresh failure boundary', () => {
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
       expectRefusedMutation(rejection);
-      expect(json).toHaveBeenCalledTimes(1);
+      expect(native.bodyRead).toHaveBeenCalledTimes(1);
       expect(admin.__getDocument(SECRET_PATH)).toBe(newerSecret);
     });
 
@@ -3202,31 +3742,29 @@ describe('Strava token refresh failure boundary', () => {
     ) => {
       const changedSecret = Object.freeze({ ...EXPIRED_SECRET, [field]: value });
       seedExpiredConnection();
-      const json = jest.fn().mockImplementation(async () => {
-        admin.__setDocument(SECRET_PATH, changedSecret);
-        return validRefreshResponse();
+      const native = nativeJsonResponse(validRefreshResponse(), {
+        onBodyRead: () => admin.__setDocument(SECRET_PATH, changedSecret),
       });
-      fetchMock.mockResolvedValueOnce({ ok: true, json });
+      fetchMock.mockResolvedValueOnce(native.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
       expectRefusedMutation(rejection);
-      expect(json).toHaveBeenCalledTimes(1);
+      expect(native.bodyRead).toHaveBeenCalledTimes(1);
       expect(admin.__getDocument(SECRET_PATH)).toBe(changedSecret);
     });
 
     test('refuses when the stored secret is deleted during provider refresh', async () => {
       seedExpiredConnection();
-      const json = jest.fn().mockImplementation(async () => {
-        admin.__removeDocument(SECRET_PATH);
-        return validRefreshResponse();
+      const native = nativeJsonResponse(validRefreshResponse(), {
+        onBodyRead: () => admin.__removeDocument(SECRET_PATH),
       });
-      fetchMock.mockResolvedValueOnce({ ok: true, json });
+      fetchMock.mockResolvedValueOnce(native.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
       expectRefusedMutation(rejection);
-      expect(json).toHaveBeenCalledTimes(1);
+      expect(native.bodyRead).toHaveBeenCalledTimes(1);
       expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
     });
 
@@ -3241,16 +3779,15 @@ describe('Strava token refresh failure boundary', () => {
         get: unknownGetter,
       });
       seedExpiredConnection();
-      const json = jest.fn().mockImplementation(async () => {
-        admin.__setDocument(SECRET_PATH, malformedSecret);
-        return validRefreshResponse();
+      const native = nativeJsonResponse(validRefreshResponse(), {
+        onBodyRead: () => admin.__setDocument(SECRET_PATH, malformedSecret),
       });
-      fetchMock.mockResolvedValueOnce({ ok: true, json });
+      fetchMock.mockResolvedValueOnce(native.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
       expectRefusedMutation(rejection);
-      expect(json).toHaveBeenCalledTimes(1);
+      expect(native.bodyRead).toHaveBeenCalledTimes(1);
       expect(unknownGetter).not.toHaveBeenCalled();
       expect(admin.__getDocument(SECRET_PATH)).toBe(malformedSecret);
     });
@@ -3410,16 +3947,15 @@ describe('Strava token refresh failure boundary', () => {
     test('maps a secret-reference failure after refresh validation to one fixed result', async () => {
       const { failure, probes } = hostilePersistenceFailure();
       seedExpiredConnection();
-      const json = jest.fn().mockImplementation(async () => {
-        admin.__setDocumentReferenceFailure(SECRET_PATH, failure);
-        return validRefreshResponse();
+      const native = nativeJsonResponse(validRefreshResponse(), {
+        onBodyRead: () => admin.__setDocumentReferenceFailure(SECRET_PATH, failure),
       });
-      fetchMock.mockResolvedValueOnce({ ok: true, json });
+      fetchMock.mockResolvedValueOnce(native.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
       expectFixedPersistenceFailure(rejection, probes);
-      expect(json).toHaveBeenCalledTimes(1);
+      expect(native.bodyRead).toHaveBeenCalledTimes(1);
       expect(Timestamp.now).not.toHaveBeenCalled();
       expect(admin.__getTransactionRunAttempts()).toBe(0);
       expect(admin.__getTransactionReads()).toEqual([]);
@@ -3639,10 +4175,9 @@ describe('Strava token refresh failure boundary', () => {
 
   test('turns malformed refresh JSON into one fixed unavailable result', async () => {
     seedExpiredConnection();
-    const json = jest.fn().mockRejectedValue(
-      new Error('json-canary access_token=provider-secret-canary'),
-    );
-    fetchMock.mockResolvedValue({ ok: true, json });
+    const providerBytes = Buffer.from('{"access_token":"provider-secret-canary"', 'utf8');
+    const native = nativeChunkedResponse([providerBytes]);
+    fetchMock.mockResolvedValue(native.response);
 
     const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
@@ -3654,10 +4189,65 @@ describe('Strava token refresh failure boundary', () => {
     });
     expect(JSON.stringify(publicError(error)))
       .not.toMatch(/json-canary|provider-secret-canary/i);
-    expect(json).toHaveBeenCalledTimes(1);
+    expect(native.chunkRead).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
+  });
+
+  test('OAUTH-001A2K rejects refresh byte overflow before CAS or downstream bearer use', async () => {
+    seedExpiredConnection();
+    const bytes = paddedJsonBytes(
+      validRefreshResponse(),
+      MAX_STRAVA_TOKEN_RESPONSE_BYTES + 1,
+    );
+    const native = nativeChunkedResponse([
+      bytes.subarray(0, MAX_STRAVA_TOKEN_RESPONSE_BYTES),
+      bytes.subarray(MAX_STRAVA_TOKEN_RESPONSE_BYTES),
+    ]);
+    fetchMock.mockResolvedValue(native.response);
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+    await Promise.resolve();
+
+    expect(publicError(error)).toEqual({
+      code: 'unavailable',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(native.chunkRead).toHaveBeenCalledTimes(2);
+    expect(native.cancel).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(admin.__getTransactionSetAttempts()).toEqual([]);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('OAUTH-001A2K keeps bounded invalid refresh schema on fixed internal', async () => {
+    seedExpiredConnection();
+    const native = nativeJsonResponse({ access_token: 'synthetic-incomplete-token' });
+    fetchMock.mockResolvedValue(native.response);
+
+    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+    expect(publicError(error)).toEqual({
+      code: 'internal',
+      message: FIXED_REFRESH_ERROR,
+      details: undefined,
+      cause: undefined,
+    });
+    expect(native.bodyRead).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(admin.__getWrites()).toEqual([]);
+    expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    expect(Timestamp.now).not.toHaveBeenCalled();
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 
   describe('stored token validation before refresh or bearer use', () => {
@@ -4105,7 +4695,7 @@ describe('Strava token refresh failure boundary', () => {
       await expectInvalidSuccessfulRefresh(response);
     });
 
-    test('rejects a transparent root Proxy after exactly one promise then lookup', async () => {
+    test('rejects a transparent root Proxy without a then lookup or reflection trap', async () => {
       const observedGetKeys = [];
       const secondThenFailure = new Error(
         'second-then-canary access_token=provider-secret-canary',
@@ -4135,36 +4725,22 @@ describe('Strava token refresh failure boundary', () => {
 
       await expectInvalidSuccessfulRefresh(response);
 
-      expect(observedGetKeys).toEqual(['then']);
+      expect(observedGetKeys).toEqual([]);
       Object.values(reflectionTraps).forEach((trap) => expect(trap).not.toHaveBeenCalled());
     });
 
-    test('keeps a throwing first root then lookup inside the unavailable JSON boundary', async () => {
-      seedExpiredConnection();
-      const response = new Proxy(validRefreshResponse(), {
-        get: (_target, key) => {
-          if (key === 'then') {
-            throw new Error('root-then-canary refresh_token=provider-secret-canary');
-          }
-          throw new Error('unexpected root Proxy read');
-        },
+    test('rejects a root Proxy with a throwing then trap without invoking it', async () => {
+      const get = jest.fn((_target, key) => {
+        if (key === 'then') {
+          throw new Error('root-then-canary refresh_token=provider-secret-canary');
+        }
+        throw new Error('unexpected root Proxy read');
       });
-      const json = mockRefreshResponse(response);
+      const response = new Proxy(validRefreshResponse(), { get });
 
-      const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+      await expectInvalidSuccessfulRefresh(response);
 
-      expect(publicError(error)).toEqual({
-        code: 'unavailable',
-        message: FIXED_REFRESH_ERROR,
-        details: undefined,
-        cause: undefined,
-      });
-      expect(JSON.stringify(publicError(error)))
-        .not.toMatch(/root-then-canary|provider-secret/i);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(json).toHaveBeenCalledTimes(1);
-      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
-      expectNoWritesOrLogs();
+      expect(get).not.toHaveBeenCalled();
     });
 
     test.each([
@@ -4319,17 +4895,18 @@ describe('Strava token refresh failure boundary', () => {
         enumerable: true,
         get: unknownSymbolGetter,
       });
-      seedExpiredConnection();
-      mockValidRefreshFlow(response);
 
-      await stravaFetchStats({}, CONTEXT);
+      const projected = snapshotRefreshTokenResponse(response);
 
+      expect(projected).toEqual({
+        accessToken: 'refreshed_access_token_test',
+        refreshToken: 'refreshed_refresh_token_test',
+        expiresAt: 1_900_000_000,
+      });
       unknownGetters.forEach(({ getter }) => expect(getter).not.toHaveBeenCalled());
       expect(unknownSymbolGetter).not.toHaveBeenCalled();
-      expect(admin.__getWrites()).toHaveLength(1);
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(Timestamp.now).toHaveBeenCalledTimes(1);
-      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(Object.isFrozen(projected)).toBe(true);
+      expectNoWritesOrLogs();
     });
 
     test.each([
@@ -4371,19 +4948,16 @@ describe('Strava token refresh failure boundary', () => {
         writable: false,
       });
       Object.freeze(response);
-      seedExpiredConnection();
-      mockValidRefreshFlow(response);
 
-      await stravaFetchStats({}, CONTEXT);
+      const projected = snapshotRefreshTokenResponse(response);
 
-      expect(admin.__getWrites()[0].data).toMatchObject({
-        access_token: 'refreshed_access_token_test',
-        refresh_token: 'refreshed_refresh_token_test',
-        expires_at: 1_900_000_000,
+      expect(projected).toEqual({
+        accessToken: 'refreshed_access_token_test',
+        refreshToken: 'refreshed_refresh_token_test',
+        expiresAt: 1_900_000_000,
       });
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(Timestamp.now).toHaveBeenCalledTimes(1);
-      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(Object.isFrozen(projected)).toBe(true);
+      expectNoWritesOrLogs();
     });
 
     test('persists an unchanged returned refresh token as the latest token', async () => {
@@ -4464,15 +5038,13 @@ describe('Strava token refresh failure boundary', () => {
 
   test('preserves successful refresh, secret update, and downstream stats result', async () => {
     seedExpiredConnection();
+    const nativeRefresh = nativeJsonResponse({
+      access_token: 'refreshed_access_token_test',
+      refresh_token: 'refreshed_refresh_token_test',
+      expires_at: 1_900_000_000,
+    });
     fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue({
-          access_token: 'refreshed_access_token_test',
-          refresh_token: 'refreshed_refresh_token_test',
-          expires_at: 1_900_000_000,
-        }),
-      })
+      .mockResolvedValueOnce(nativeRefresh.response)
       .mockResolvedValueOnce({
         ok: true,
         json: jest.fn().mockResolvedValue([{
