@@ -1864,7 +1864,7 @@ describe('Strava authorization service boundary', () => {
 
   test('sends the captured code and state in one exact exchange request', async () => {
     const callable = jest.fn().mockResolvedValue({
-      data: { ok: true, athleteId: null },
+      data: { ok: true, athleteId: 123456 },
     });
     (httpsCallable as jest.Mock).mockReturnValue(callable);
 
@@ -1872,7 +1872,7 @@ describe('Strava authorization service boundary', () => {
       app,
       'synthetic-code',
       STRAVA_AUTHORIZATION_STATE,
-    )).resolves.toEqual({ ok: true, athleteId: null });
+    )).resolves.toEqual({ ok: true, athleteId: 123456 });
 
     expect(getFunctions).toHaveBeenCalledWith(app);
     expect(httpsCallable).toHaveBeenCalledWith(functions, 'stravaExchangeCode');
@@ -1881,6 +1881,336 @@ describe('Strava authorization service boundary', () => {
       code: 'synthetic-code',
       state: STRAVA_AUTHORIZATION_STATE,
     });
+  });
+});
+
+describe('OAUTH-001C1J exact Strava exchange confirmation service contract', () => {
+  const functions = { name: 'synthetic-functions' };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getFunctions as jest.Mock).mockReturnValue(functions);
+  });
+
+  test.each([
+    ['minimum', { ok: true, athleteId: 1 }, 1],
+    [
+      'maximum in reverse key order',
+      { athleteId: Number.MAX_SAFE_INTEGER, ok: true },
+      Number.MAX_SAFE_INTEGER,
+    ],
+  ])('sends one exact request and projects a fresh frozen %s confirmation', async (
+    _case,
+    received,
+    athleteId,
+  ) => {
+    const callable = jest.fn().mockResolvedValue({ data: received });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    const confirmation = await ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    );
+
+    expect(confirmation).toEqual({ ok: true, athleteId });
+    expect(confirmation).not.toBe(received);
+    expect(Object.isFrozen(confirmation)).toBe(true);
+    expect(Object.getPrototypeOf(confirmation)).toBe(Object.prototype);
+    expect(Reflect.ownKeys(confirmation)).toEqual(['ok', 'athleteId']);
+    expect(getFunctions).toHaveBeenCalledWith(app);
+    expect(httpsCallable).toHaveBeenCalledWith(functions, 'stravaExchangeCode');
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(callable).toHaveBeenCalledWith({
+      code: 'synthetic-code',
+      state: STRAVA_AUTHORIZATION_STATE,
+    });
+  });
+
+  test('returns independent safe confirmations across repeated valid calls', async () => {
+    const received = { ok: true, athleteId: 612 };
+    const callable = jest.fn().mockResolvedValue({ data: received });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    const first = await ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    );
+    const second = await ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    );
+
+    expect(first).toEqual({ ok: true, athleteId: 612 });
+    expect(second).toEqual({ ok: true, athleteId: 612 });
+    expect(first).not.toBe(second);
+    expect(first).not.toBe(received);
+    expect(second).not.toBe(received);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(second)).toBe(true);
+    expect(callable).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    ['undefined data', undefined],
+    ['null data', null],
+    ['a true primitive', true],
+    ['a false primitive', false],
+    ['a string', 'confirmed'],
+    ['a number', 612],
+    ['a bigint', BigInt(612)],
+    ['a symbol', Symbol('exchange-confirmation')],
+    ['a function', () => true],
+    ['a boxed Boolean', Object(true)],
+    ['a missing confirmation', {}],
+    ['a missing athlete ID', { ok: true }],
+    ['a false confirmation', { ok: false, athleteId: 612 }],
+    ['a string confirmation', { ok: 'true', athleteId: 612 }],
+    ['a numeric confirmation', { ok: 1, athleteId: 612 }],
+    ['a null confirmation', { ok: null, athleteId: 612 }],
+    ['a null athlete ID', { ok: true, athleteId: null }],
+    ['a string athlete ID', { ok: true, athleteId: '612' }],
+    ['a bigint athlete ID', { ok: true, athleteId: BigInt(612) }],
+    ['a zero athlete ID', { ok: true, athleteId: 0 }],
+    ['a negative athlete ID', { ok: true, athleteId: -1 }],
+    ['a fractional athlete ID', { ok: true, athleteId: 1.5 }],
+    ['a NaN athlete ID', { ok: true, athleteId: Number.NaN }],
+    ['an infinite athlete ID', { ok: true, athleteId: Number.POSITIVE_INFINITY }],
+    [
+      'an unsafe athlete ID',
+      { ok: true, athleteId: Number.MAX_SAFE_INTEGER + 1 },
+    ],
+    ['an array', [{ ok: true, athleteId: 612 }]],
+    ['a Date', new Date(0)],
+    [
+      'a null-prototype record',
+      Object.assign(Object.create(null), { ok: true, athleteId: 612 }),
+    ],
+    [
+      'a custom-prototype record',
+      Object.assign(Object.create({}), { ok: true, athleteId: 612 }),
+    ],
+    [
+      'inherited confirmation fields',
+      Object.create({ ok: true, athleteId: 612 }),
+    ],
+    ['an extra enumerable key', { ok: true, athleteId: 612, extra: true }],
+    [
+      'an extra non-enumerable key',
+      Object.defineProperty({ ok: true, athleteId: 612 }, 'extra', { value: true }),
+    ],
+    [
+      'an extra symbol key',
+      { ok: true, athleteId: 612, [Symbol('extra')]: true },
+    ],
+    [
+      'a non-enumerable confirmation',
+      Object.defineProperty({ athleteId: 612 }, 'ok', { value: true }),
+    ],
+    [
+      'a non-enumerable athlete ID',
+      Object.defineProperty({ ok: true }, 'athleteId', { value: 612 }),
+    ],
+  ])('rejects %s with one fixed result', async (_case, data) => {
+    const callable = jest.fn().mockResolvedValue({ data });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+
+    expect(callable).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['ok', 'athleteId'])('rejects an own %s getter without invoking it', async (field) => {
+    const selectedGetter = jest.fn(() => (field === 'ok' ? true : 612));
+    const data = { ok: true, athleteId: 612 } as Record<string, unknown>;
+    Object.defineProperty(data, field, {
+      enumerable: true,
+      get: selectedGetter,
+    });
+    const callable = jest.fn().mockResolvedValue({ data });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+
+    expect(selectedGetter).not.toHaveBeenCalled();
+  });
+
+  test('rejects extra and inherited getters without invoking them', async () => {
+    const extraGetter = jest.fn(() => 'private-extra-canary');
+    const inheritedGetter = jest.fn(() => 'private-inherited-canary');
+    const extra = Object.defineProperty({ ok: true, athleteId: 612 }, 'extra', {
+      enumerable: true,
+      get: extraGetter,
+    });
+    const inherited = Object.assign(Object.create(Object.defineProperty({}, 'extra', {
+      enumerable: true,
+      get: inheritedGetter,
+    })), { ok: true, athleteId: 612 });
+    const callable = jest.fn()
+      .mockResolvedValueOnce({ data: extra })
+      .mockResolvedValueOnce({ data: inherited });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+
+    expect(extraGetter).not.toHaveBeenCalled();
+    expect(inheritedGetter).not.toHaveBeenCalled();
+  });
+
+  test('does not coerce selected confirmation fields', async () => {
+    const hooks = {
+      toString: jest.fn(() => '612'),
+      valueOf: jest.fn(() => 612),
+      [Symbol.toPrimitive]: jest.fn(() => 612),
+    };
+    const callable = jest.fn().mockResolvedValue({
+      data: { ok: true, athleteId: hooks },
+    });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+
+    expect(hooks.toString).not.toHaveBeenCalled();
+    expect(hooks.valueOf).not.toHaveBeenCalled();
+    expect(hooks[Symbol.toPrimitive]).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['an undefined callable result', undefined],
+    ['a null callable result', null],
+    ['a callable result without data', {}],
+  ])('contains %s inside the fixed response boundary', async (_case, result) => {
+    const callable = jest.fn().mockResolvedValue(result);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+  });
+
+  test('contains an exceptional callable data read inside the fixed response boundary', async () => {
+    const dataGetter = jest.fn(() => {
+      throw new Error('exchange-data-getter-canary token=private-canary');
+    });
+    const result = Object.defineProperty({}, 'data', {
+      enumerable: true,
+      get: dataGetter,
+    });
+    const callable = jest.fn().mockResolvedValue(result);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+
+    expect(dataGetter).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    [
+      'prototype reflection',
+      () => new Proxy({ ok: true, athleteId: 612 }, {
+        getPrototypeOf: () => {
+          throw new Error('exchange-prototype-canary token=private-canary');
+        },
+      }),
+    ],
+    [
+      'own-key reflection',
+      () => new Proxy({ ok: true, athleteId: 612 }, {
+        ownKeys: () => {
+          throw new Error('exchange-keys-canary token=private-canary');
+        },
+      }),
+    ],
+    [
+      'descriptor reflection',
+      () => new Proxy({ ok: true, athleteId: 612 }, {
+        getOwnPropertyDescriptor: () => {
+          throw new Error('exchange-descriptor-canary token=private-canary');
+        },
+      }),
+    ],
+    [
+      'revoked Proxy reflection',
+      () => {
+        const { proxy, revoke } = Proxy.revocable({ ok: true, athleteId: 612 }, {});
+        revoke();
+        return proxy;
+      },
+    ],
+  ])('contains exceptional %s', async (_case, makeData) => {
+    const callable = jest.fn().mockResolvedValue({ data: makeData() });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toThrow('Invalid Strava exchange response.');
+  });
+
+  test('projects but never retains a transparent Proxy that presents the exact contract', async () => {
+    const data = new Proxy({ ok: true, athleteId: 612 }, {});
+    const callable = jest.fn().mockResolvedValue({ data });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    const confirmation = await ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    );
+
+    expect(confirmation).toEqual({ ok: true, athleteId: 612 });
+    expect(confirmation).not.toBe(data);
+    expect(Object.isFrozen(confirmation)).toBe(true);
+  });
+
+  test('preserves a transport rejection without inspecting it', async () => {
+    const messageGetter = jest.fn(() => {
+      throw new Error('exchange-transport-message-getter-canary');
+    });
+    const rejection = Object.defineProperty({}, 'message', {
+      configurable: true,
+      get: messageGetter,
+    });
+    const callable = jest.fn().mockRejectedValue(rejection);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaExchangeCode(
+      app,
+      'synthetic-code',
+      STRAVA_AUTHORIZATION_STATE,
+    )).rejects.toBe(rejection);
+
+    expect(messageGetter).not.toHaveBeenCalled();
   });
 });
 
@@ -3250,7 +3580,7 @@ describe('Strava callback error boundary', () => {
     });
     (stravaExchangeCode as jest.Mock).mockResolvedValue({
       ok: true,
-      athleteId: null,
+      athleteId: 123456,
     });
   });
 
@@ -3684,7 +4014,7 @@ describe('Strava callback error boundary', () => {
     test('makes one exchange across StrictMode replay and ordinary rerenders', async () => {
       let finishExchange: (() => void) | undefined;
       (stravaExchangeCode as jest.Mock).mockReturnValueOnce(new Promise((resolve) => {
-        finishExchange = () => resolve({ ok: true, athleteId: null });
+        finishExchange = () => resolve({ ok: true, athleteId: 123456 });
       }));
       const page = renderBrowserStravaCallback(undefined, true, true);
 
@@ -4005,7 +4335,7 @@ describe('Strava callback error boundary', () => {
       });
       (stravaExchangeCode as jest.Mock).mockReturnValueOnce(new Promise((resolve, reject) => {
         settleExchange = outcome === 'resolve'
-          ? () => resolve({ ok: true, athleteId: null })
+          ? () => resolve({ ok: true, athleteId: 123456 })
           : () => reject(Object.defineProperty({}, 'message', {
             get() {
               throw new Error('obsolete-context-private-canary');
@@ -4074,7 +4404,7 @@ describe('Strava callback error boundary', () => {
         isLoading: false,
       });
       (stravaExchangeCode as jest.Mock).mockReturnValueOnce(new Promise((resolve) => {
-        finishExchange = () => resolve({ ok: true, athleteId: null });
+        finishExchange = () => resolve({ ok: true, athleteId: 123456 });
       }));
       const page = renderBrowserStravaCallback();
       await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
@@ -4132,7 +4462,7 @@ describe('Strava callback error boundary', () => {
       const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
         .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
       (stravaExchangeCode as jest.Mock).mockReturnValueOnce(new Promise((resolve) => {
-        finishExchange = () => resolve({ ok: true, athleteId: null });
+        finishExchange = () => resolve({ ok: true, athleteId: 123456 });
       }));
       const page = renderBrowserStravaCallback();
       await waitFor(() => expect(stravaExchangeCode).toHaveBeenCalledTimes(1));
@@ -4227,7 +4557,7 @@ describe('Strava callback error boundary', () => {
     const calls: string[] = [];
     (stravaExchangeCode as jest.Mock).mockImplementation(async () => {
       calls.push('exchange');
-      return { ok: true, athleteId: null };
+      return { ok: true, athleteId: 123456 };
     });
 
     renderStravaCallback();
@@ -4241,6 +4571,45 @@ describe('Strava callback error boundary', () => {
     );
     expect(stravaExchangeCode).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('callback-navigation-type')).toHaveTextContent('REPLACE');
+  });
+
+  test('OAUTH-001C1J keeps the callback on its fixed failure screen for an actual-service non-confirmation', async () => {
+    const functions = { name: 'exchange-composition-functions' };
+    const callable = jest.fn().mockResolvedValue({
+      data: { ok: false, athleteId: 612 },
+    });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+    (getFunctions as jest.Mock).mockReturnValue(functions);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+    (stravaExchangeCode as jest.Mock).mockImplementationOnce(
+      (firebaseApp, code, state) => ActualStravaService.stravaExchangeCode(
+        firebaseApp,
+        code,
+        state,
+      ),
+    );
+
+    renderStravaCallback();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(STRAVA_CALLBACK_FAILURE);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.queryByText('Account destination')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('Invalid Strava exchange response.');
+    expect(window.location.pathname).toBe('/account/strava/callback');
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
+    expect(getFunctions).toHaveBeenCalledWith(app);
+    expect(httpsCallable).toHaveBeenCalledWith(functions, 'stravaExchangeCode');
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(callable).toHaveBeenCalledWith({
+      code: 'synthetic-code',
+      state: 'synthetic-state',
+    });
+    expect(stravaExchangeCode).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 
   test('does not navigate while the exchange result is pending', async () => {
