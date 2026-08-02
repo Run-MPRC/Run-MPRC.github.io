@@ -940,6 +940,48 @@ Residual work remains under #106: current-clock freshness and skew policy, Check
 
 PAY-003A10 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only evidence-ordering boundary adds no officer screen, task, field, permission, approval, topology, or available recovery step. The remaining root design, security, implementation, operations, issue, and officer guides stay compatible.
 
+### PAY-003A11 Checkout payment-time projection — SOURCE ONLY, NOT LIVE
+
+PAY-003A11 [#586](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/586) closes the Checkout receipt-clock residual left after PAY-003A8 through A10. Its purpose is to ensure that a newly admitted supported Checkout payment transition which fills a missing `paidAt` uses the already admitted outer Stripe Event `created` second, not the webhook receipt or server clock. The Event value is admitted provider evidence time; this source does not prove an exact underlying payment-occurrence time or canonical provider truth. Existing `paidAt` remains authoritative. This changes no Event admission, business outcome, status transition, provider binding, money check, or operational clock.
+
+Approvers are the platform owner and payment reviewer. Prerequisites are verified webhook signature handling; the processed-Event ledger; PAY-003A8 outer Event-time admission; PAY-003A9 and A10 refund-evidence compatibility; signed synthetic fixtures; the existing Checkout lifecycle, metadata, target, ownership, binding, mode, money, payment-status, PaymentIntent, and predecessor-state checks; and the existing nullable `paidAt` field. A new supported Checkout Event keeps this order:
+
+1. Return an exact processed-Event replay without changing its stored result.
+2. Check the outer Event realm.
+3. Check the Checkout Session lifecycle.
+4. Check an explicit claimed-MPRC metadata schema version.
+5. Check the outer Event-created value.
+6. Resolve the target and validate ownership and provider bindings.
+7. Validate mode, money, payment status, PaymentIntent, and predecessor state.
+8. Select the existing successful-payment branch and outcome.
+9. Only when that branch must fill a missing `paidAt`, persist `Timestamp.fromMillis(event.created * 1000)`; otherwise preserve the existing value.
+
+The projection applies only to the three existing missing-`paidAt` fallbacks: ordinary payment confirmation; payment observed after `partially_refunded` or `refunded`; and payment observed after `fulfilled` or `transferred`. Their current statuses, review flags, and outcomes remain unchanged. `updatedAt`, audit and action time, ledger processing and expiry, provider-binding creation, payment exceptions, refunds, and other operational timestamps remain server or action-clock values. Already-paid records, exact replay, unpaid completion, asynchronous failure, expiry, and paid-after-cancellation do not gain a new `paidAt` path.
+
+```mermaid
+flowchart TD
+    A["Verified supported Checkout Event"] --> B{"Already in the processed-Event ledger?"}
+    B -- "Yes" --> C["Return the stored result without changes"]
+    B -- "No" --> D{"Earlier admission, target, binding, money, and state checks pass?"}
+    D -- "No" --> E["Keep the existing earlier outcome"]
+    D -- "Yes" --> F{"Successful-payment branch writes a missing paidAt?"}
+    F -- "No" --> G["Keep the existing value or no-write path"]
+    F -- "Yes" --> H["Project the admitted Event-created second"]
+    H --> I["Persist the existing outcome with server-clock operational times"]
+```
+
+Text alternative: replay returns the stored result first; a new Checkout Event keeps every earlier admission or business outcome; only an existing successful-payment branch that needs to fill a missing payment time uses the admitted Event time, while existing payment time and operational server times remain unchanged.
+
+The expected result is admitted provider-evidence time in a newly filled Checkout `paidAt` and unchanged payment, refund, and fulfillment behavior. Success proof requires separately named synthetic tests for registration and order completion; delayed asynchronous success; payment observed after partially-refunded, refunded, fulfilled, and transferred states; existing-`paidAt` preservation in all three branch families; refund-first Charge-derived `paidAt` preservation; exact replay; admitted epoch and Firestore-maximum Event seconds; unpaid completion, failure, expiry, and paid-after-cancellation exclusions; unchanged outcomes and statuses; and proof that `updatedAt`, audit and action, binding, ledger processing and expiry, exception, and refund times still use the applicable server or action clock. The complete webhook and Functions suites and prior PAY-003A8, A9, and A10 matrices must remain green.
+
+Stop the merge if receipt or server time still supplies a missing Checkout `paidAt`; if Event time is projected before its existing admission; if an existing `paidAt` is overwritten; if any branch outcome, status, or review result changes; if an excluded path gains `paidAt`; if an operational timestamp changes to provider Event time; if replay or history is repaired; or if a test needs a real credential, provider object or call, payment or refund, customer or member record, or production service. Escalate to the platform owner and payment reviewer. Undo is one small reviewed revert of the three Checkout `paidAt` substitutions, the separately named A11 tests, and this section. Do not edit a provider object, processed ledger, order, registration, or payment field as an undo path.
+
+There is no schema, Rule, index, package, workflow, API, provider-configuration, migration, backfill, or history-reprocessing change. Newly delivered admitted Checkout Events change only the value used when one of the three existing successful-payment branches fills missing `paidAt`. Existing values, processed-Event replay, target resolution, bindings, money checks, and business outcomes remain compatible. Historical receipt-clock values and already-paid records with missing time are not inspected or repaired.
+
+Residual work remains under #106: Checkout Session-created admission and chronology; current-clock freshness and skew; already-paid missing-time repair; paid-after-cancellation policy; other Charge and Dispute decisions; provider endpoint and API-version proof; provider retrieval and history repair; PAY-003B/C; reconciliation; alerts; protected release; and live verification. This child proves no provider truth, payment or refund success, historical correctness, or production behavior.
+
+PAY-003A11 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only evidence-time projection adds no officer screen, task, field, permission, approval, topology, or available recovery step. The remaining root design, security, implementation, operations, issue, and officer guides stay compatible.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines
