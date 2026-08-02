@@ -355,6 +355,43 @@ const DISPUTE_EVENT_CREATED_CASES = [
     value,
   ])
 ));
+const DISPUTE_CREATED_DOMAINS = ['registration', 'order'];
+const DISPUTE_CREATED_LIFECYCLES = [
+  ['created', 'charge.dispute.created', 'needs_response', 'dispute_needs_response'],
+  ['updated', 'charge.dispute.updated', 'under_review', 'dispute_under_review'],
+  ['closed', 'charge.dispute.closed', 'won', 'dispute_won'],
+];
+const INVALID_DISPUTE_CREATED_CASES = [
+  ['missing', 'delete', undefined],
+  ['null', 'value', null],
+  ['negative', 'value', -1],
+  ['fractional', 'value', 1.5],
+  ['string', 'value', 'hostile-dispute-created-do-not-log'],
+  ['boolean', 'value', true],
+  ['object', 'value', { marker: 'hostile-dispute-created-do-not-log' }],
+  ['array', 'value', ['hostile-dispute-created-do-not-log']],
+  ['NaN serialized as null', 'value', Number.NaN],
+  ['positive infinity serialized as null', 'value', Number.POSITIVE_INFINITY],
+  ['negative infinity serialized as null', 'value', Number.NEGATIVE_INFINITY],
+  ['Firestore maximum plus one', 'value', FIRESTORE_TIMESTAMP_MAX_SECONDS + 1],
+  ['maximum safe integer', 'value', Number.MAX_SAFE_INTEGER],
+  ['unsafe integer', 'value', Number.MAX_SAFE_INTEGER + 1],
+];
+const DISPUTE_CREATED_CASES = DISPUTE_CREATED_LIFECYCLES.flatMap(
+  ([lifecycle, type, status]) => DISPUTE_CREATED_DOMAINS.flatMap(
+    (domain) => INVALID_DISPUTE_CREATED_CASES.map(
+      ([evidence, mutation, value]) => [
+        lifecycle,
+        domain,
+        evidence,
+        type,
+        status,
+        mutation,
+        value,
+      ],
+    ),
+  ),
+);
 const NON_DISPUTE_EVENT_TYPES = [
   ['Checkout completed', 'checkout.session.completed'],
   ['Checkout async success', 'checkout.session.async_payment_succeeded'],
@@ -457,7 +494,11 @@ function stripeEvent(id, type, object) {
       ...object,
     };
   } else if (PROVIDER_OBJECT_REALM_EVENT_TYPES.has(type)) {
-    providerObject = { livemode: false, ...object };
+    providerObject = {
+      created: 1_799_999_900,
+      livemode: false,
+      ...object,
+    };
   }
   return {
     id,
@@ -747,6 +788,59 @@ function checkoutSessionCreatedFixture(
   };
 }
 
+function disputeCreatedFixture(
+  domain,
+  type,
+  status,
+  suffix,
+  { missingTarget = false } = {},
+) {
+  const registration = domain === 'registration';
+  const businessPath = registration
+    ? 'events/race-1/registrations/reg-1'
+    : 'orders/order-1';
+  const paymentIntentId = `pi_pay003a14_${domain}_${suffix}`;
+  const chargeId = `ch_pay003a14_${domain}_${suffix}`;
+  const amount = registration ? 5000 : 2000;
+  const metadata = registration ? {
+    schemaVersion: '1',
+    eventId: missingTarget ? 'race-missing' : 'race-1',
+    registrationId: missingTarget ? 'registration-missing' : 'reg-1',
+  } : {
+    schemaVersion: '1',
+    type: 'merch',
+    orderId: missingTarget ? 'order-missing' : 'order-1',
+  };
+
+  if (!missingTarget) {
+    const record = {
+      status: 'paid',
+      paymentStatus: 'paid',
+      stripePaymentIntentId: paymentIntentId,
+      stripeChargeId: chargeId,
+      stripeAmountTotalCents: amount,
+    };
+    if (registration) seedRegistration(record);
+    else seedOrder(record);
+  }
+
+  return {
+    businessPath: missingTarget ? null : businessPath,
+    event: stripeEvent(
+      `evt_pay003a14_${suffix}`,
+      type,
+      orderDispute({
+        id: `dp_pay003a14_${domain}_${suffix}`,
+        charge: chargeId,
+        payment_intent: paymentIntentId,
+        amount,
+        metadata,
+        status,
+      }),
+    ),
+  };
+}
+
 function signedRequest(event, signatureOverride) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signedPayload = createSignedStripePayload({
@@ -809,6 +903,11 @@ function setRefundChargeStatus(charge, mutation, value) {
 function setDisputeStatus(dispute, mutation, value) {
   if (mutation === 'delete') delete dispute.status;
   else dispute.status = value;
+}
+
+function setDisputeCreated(dispute, mutation, value) {
+  if (mutation === 'delete') delete dispute.created;
+  else dispute.created = value;
 }
 
 function setEventCreated(event, mutation, value) {
@@ -931,6 +1030,28 @@ function expectedDisputeStatusQuarantine(bindingPaths = []) {
     ledger: {
       status: 'processed',
       outcome: 'needs_review:invalid_dispute_status',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    },
+    bindingPaths,
+  };
+}
+
+function expectedDisputeCreatedQuarantine(bindingPaths = []) {
+  return {
+    httpStatus: null,
+    response: {
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:invalid_dispute_created',
+      requiresReview: true,
+    },
+    businessUnchanged: true,
+    ledger: {
+      status: 'processed',
+      outcome: 'needs_review:invalid_dispute_created',
       requiresReview: true,
       targetType: null,
       targetPath: null,
@@ -2052,7 +2173,7 @@ describe('stripeWebhook', () => {
       ['created', 'charge.dispute.created', 'needs_response', 'dispute_needs_response'],
       ['updated', 'charge.dispute.updated', 'under_review', 'dispute_under_review'],
       ['closed', 'charge.dispute.closed', 'won', 'dispute_won'],
-    ])('leaves %s Dispute embedded-created evidence unchanged', async (
+    ])('leaves valid %s Dispute embedded-created evidence unchanged', async (
       lifecycle,
       type,
       status,
@@ -2064,7 +2185,7 @@ describe('stripeWebhook', () => {
         type,
         orderDispute({
           id: `dp_pay003a12_${lifecycle}`,
-          created: -1,
+          created: 0,
           status,
         }),
       );
@@ -2663,6 +2784,659 @@ describe('stripeWebhook', () => {
       const response = await deliver(event);
 
       expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'ignored:unsupported_event',
+      }));
+    });
+  });
+
+  describe('PAY-003A14 Dispute-created admission', () => {
+    test.each(DISPUTE_CREATED_CASES)(
+      'quarantines %s %s with %s Dispute-created evidence',
+      async (
+        lifecycle,
+        domain,
+        evidence,
+        type,
+        status,
+        mutation,
+        value,
+      ) => {
+      const slug = (lifecycle + '_' + domain + '_' + evidence)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = disputeCreatedFixture(
+        domain,
+        type,
+        status,
+        'invalid_' + slug,
+      );
+      const before = storedCopy(businessPath);
+      setDisputeCreated(event.data.object, mutation, value);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeCreatedQuarantine());
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        stripeCreatedAt: { _milliseconds: event.created * 1000 },
+      });
+      expectOnlyEventLedgerReads(event);
+      expectOnlyEventLedgerTimestamps(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        'Stripe event requires review',
+        {
+          eventId: event.id,
+          eventType: type,
+          outcome: 'needs_review:invalid_dispute_created',
+          targetType: null,
+        },
+      );
+      expect(JSON.stringify({
+        response: response.json.mock.calls,
+        ledger: admin.__get('stripeEvents/' + event.id),
+        logs: consoleError.mock.calls,
+      })).not.toContain('hostile-dispute-created-do-not-log');
+      },
+    );
+
+    test.each(DISPUTE_CREATED_DOMAINS)(
+      'defensively rejects a post-parser Proxy for %s without coercion',
+      async (domain) => {
+        const { event, businessPath } = disputeCreatedFixture(
+          domain,
+          'charge.dispute.updated',
+          'under_review',
+          'proxy_' + domain,
+        );
+        const before = storedCopy(businessPath);
+        const trap = jest.fn(() => {
+          throw new Error('Dispute-created Proxy trap must not run');
+        });
+        event.data.object.created = new Proxy({}, {
+          get: trap,
+          getOwnPropertyDescriptor: trap,
+          ownKeys: trap,
+        });
+
+        const response = await deliverMockedConstructedEvent(event);
+
+        expect(refundAdmissionObservation({
+          response,
+          event,
+          businessSnapshots: [[businessPath, before]],
+        })).toEqual(expectedDisputeCreatedQuarantine());
+        expectOnlyEventLedgerReads(event);
+        expectOnlyEventLedgerTimestamps(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expect(trap).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each([
+      ['metadata-only claim', {}, {}],
+      [
+        'client-reference-only claim',
+        {
+          metadata: { schemaVersion: '1' },
+          client_reference_id: 'mprc:order:order-1',
+        },
+        {},
+      ],
+      [
+        'matching dual claim',
+        { client_reference_id: 'mprc:order:order-1' },
+        {},
+      ],
+      ['legacy PaymentIntent fallback', { metadata: {} }, {}],
+      [
+        'legacy Charge fallback',
+        { metadata: {}, payment_intent: 'pi_pay003a14_unowned' },
+        { stripePaymentIntentId: null },
+      ],
+    ])('blocks invalid Dispute time before %s work', async (
+      label,
+      disputePatch,
+      recordPatch,
+    ) => {
+      seedPaidDisputeOrder(recordPatch);
+      const businessPath = 'orders/order-1';
+      const before = storedCopy(businessPath);
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const event = stripeEvent(
+        'evt_pay003a14_route_' + slug,
+        'charge.dispute.updated',
+        orderDispute({
+          id: 'dp_pay003a14_route_' + slug,
+          created: -1,
+          status: 'under_review',
+          ...disputePatch,
+        }),
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks invalid Dispute time before unmatched target handling', async () => {
+      const event = stripeEvent(
+        'evt_pay003a14_unmatched',
+        'charge.dispute.updated',
+        orderDispute({
+          id: 'dp_pay003a14_unmatched',
+          charge: 'ch_pay003a14_unmatched',
+          payment_intent: 'pi_pay003a14_unmatched',
+          metadata: {},
+          created: -1,
+          status: 'under_review',
+        }),
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({ response, event }))
+        .toEqual(expectedDisputeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks invalid Dispute time before ambiguous legacy fallback', async () => {
+      const paymentIntentId = 'pi_pay003a14_ambiguous';
+      seedPaidDisputeOrder({ stripePaymentIntentId: paymentIntentId });
+      seedRegistration({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: paymentIntentId,
+        stripeChargeId: 'ch_pay003a14_registration_ambiguous',
+        stripeAmountTotalCents: 5000,
+      });
+      const snapshots = [
+        ['orders/order-1', storedCopy('orders/order-1')],
+        [
+          'events/race-1/registrations/reg-1',
+          storedCopy('events/race-1/registrations/reg-1'),
+        ],
+      ];
+      const event = stripeEvent(
+        'evt_pay003a14_ambiguous',
+        'charge.dispute.updated',
+        orderDispute({
+          id: 'dp_pay003a14_ambiguous',
+          charge: 'ch_pay003a14_ambiguous',
+          payment_intent: paymentIntentId,
+          metadata: {},
+          created: -1,
+          status: 'under_review',
+        }),
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: snapshots,
+      })).toEqual(expectedDisputeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each([
+      ['malformed reference', (event) => {
+        Object.assign(event.data.object.metadata, {
+          eventId: 'race-1',
+          registrationId: 'reg-1',
+        });
+      }],
+      ['conflicting reference', (event) => {
+        event.data.object.client_reference_id = 'mprc:order:order-other';
+      }],
+    ])('keeps invalid Dispute time ahead of %s handling', async (label, mutate) => {
+      const slug = label.replace(/[^a-z]+/g, '_');
+      const { event, businessPath } = disputeCreatedFixture(
+        'order',
+        'charge.dispute.updated',
+        'under_review',
+        'reference_' + slug,
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each(DISPUTE_CREATED_DOMAINS)(
+      'processes invalid Dispute time before a claimed missing %s target',
+      async (domain) => {
+        const { event } = disputeCreatedFixture(
+          domain,
+          'charge.dispute.updated',
+          'under_review',
+          'invalid_missing_' + domain,
+          { missingTarget: true },
+        );
+        event.data.object.created = -1;
+
+        const response = await deliver(event);
+
+        expect(refundAdmissionObservation({ response, event }))
+          .toEqual(expectedDisputeCreatedQuarantine());
+        expectOnlyEventLedgerReads(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(DISPUTE_CREATED_DOMAINS)(
+      'keeps a valid Dispute time with a claimed missing %s target retryable',
+      async (domain) => {
+        const { event } = disputeCreatedFixture(
+          domain,
+          'charge.dispute.updated',
+          'under_review',
+          'valid_missing_' + domain,
+          { missingTarget: true },
+        );
+
+        const response = await deliver(event);
+
+        expect(response.status).toHaveBeenCalledWith(500);
+        expect(admin.__get('stripeEvents/' + event.id)).toBeUndefined();
+        providerBindingPaths(event).forEach((path) => {
+          expect(admin.__get(path)).toBeUndefined();
+        });
+      },
+    );
+
+    test.each([
+      [
+        'outer Event realm',
+        'livemode_mismatch',
+        (event) => { event.livemode = true; },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'embedded Dispute realm',
+        'dispute_livemode_mismatch',
+        (event) => { event.data.object.livemode = true; },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'Event/status compatibility',
+        'invalid_dispute_status',
+        (event) => { event.data.object.status = 'hostile-dispute-status-do-not-log'; },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'metadata schema',
+        'metadata_schema_version_mismatch',
+        (event) => { setMetadataSchema(event.data.object, '2'); },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'outer Event time',
+        'invalid_event_created',
+        (event) => { event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1; },
+        null,
+      ],
+    ])('keeps %s precedence over invalid Dispute time', async (
+      label,
+      reason,
+      mutate,
+      expectedStripeCreatedAt,
+    ) => {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = disputeCreatedFixture(
+        'order',
+        'charge.dispute.updated',
+        'under_review',
+        'precedence_' + slug,
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+      expect(admin.__get('stripeEvents/' + event.id)).toMatchObject({
+        stripeCreatedAt: expectedStripeCreatedAt,
+      });
+      expectOnlyEventLedgerReads(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['object binding', (event) => { event.data.object.object = 'charge'; }],
+      ['currency', (event) => { event.data.object.currency = 'cad'; }],
+      ['amount', (event) => { event.data.object.amount = 0; }],
+      ['PaymentIntent binding', (event) => {
+        event.data.object.payment_intent = 'pi_pay003a14_other';
+      }],
+      ['Charge binding', (event) => { event.data.object.charge = 'ch_pay003a14_other'; }],
+    ])('keeps invalid Dispute time ahead of %s evaluation', async (label, mutate) => {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = disputeCreatedFixture(
+        'order',
+        'charge.dispute.updated',
+        'under_review',
+        'later_' + slug,
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('keeps invalid Dispute time ahead of predecessor-state evaluation', async () => {
+      const { event, businessPath } = disputeCreatedFixture(
+        'order',
+        'charge.dispute.updated',
+        'under_review',
+        'later_predecessor',
+      );
+      seedOrder({
+        status: 'paid',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: event.data.object.payment_intent,
+        stripeChargeId: event.data.object.charge,
+        stripeAmountTotalCents: 2000,
+        disputeStatus: 'won',
+        lastDisputeEventCreated: event.created + 1,
+      });
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedDisputeCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks invalid Dispute time before provider-binding conflict reads', async () => {
+      const { event, businessPath } = disputeCreatedFixture(
+        'order',
+        'charge.dispute.updated',
+        'under_review',
+        'binding_conflict',
+      );
+      event.data.object.created = -1;
+      const bindingPath = 'stripeObjectBindings/dispute:' + event.data.object.id;
+      admin.__seed(bindingPath, {
+        providerObjectType: 'dispute',
+        providerObjectId: event.data.object.id,
+        targetType: 'registration',
+        targetPath: 'events/other/registrations/other',
+        sentinel: 'preserve',
+      });
+      const beforeBusiness = storedCopy(businessPath);
+      const beforeBinding = storedCopy(bindingPath);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, beforeBusiness]],
+      })).toEqual(expectedDisputeCreatedQuarantine([bindingPath]));
+      expect(admin.__get(bindingPath)).toEqual(beforeBinding);
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each(DISPUTE_CREATED_DOMAINS)(
+      'deduplicates rejected %s Dispute time without target work',
+      async (domain) => {
+        const { event, businessPath } = disputeCreatedFixture(
+          domain,
+          'charge.dispute.updated',
+          'under_review',
+          'replay_' + domain,
+        );
+        const before = storedCopy(businessPath);
+        event.data.object.created = -1;
+
+        const firstResponse = await deliver(event);
+        const ledgerPath = 'stripeEvents/' + event.id;
+        const afterFirstLedger = storedCopy(ledgerPath);
+        const replayResponse = await deliver(event);
+
+        expect(refundAdmissionObservation({
+          response: firstResponse,
+          event,
+          businessSnapshots: [[businessPath, before]],
+        })).toEqual(expectedDisputeCreatedQuarantine());
+        expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+          received: true,
+          duplicate: true,
+          outcome: 'needs_review:invalid_dispute_created',
+        }));
+        expect(admin.__get(businessPath)).toEqual(before);
+        expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+        expect(admin.__readOperations()).toEqual([
+          { kind: 'document', path: ledgerPath },
+          { kind: 'document', path: ledgerPath },
+          { kind: 'document', path: ledgerPath },
+        ]);
+        expect(Timestamp.fromMillis).toHaveBeenCalledTimes(3);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expect(consoleError).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test('preserves a richer processed Event before Dispute-time admission', async () => {
+      const { event, businessPath } = disputeCreatedFixture(
+        'order',
+        'charge.dispute.updated',
+        'under_review',
+        'already_processed',
+      );
+      event.data.object.created = -1;
+      const ledgerPath = 'stripeEvents/' + event.id;
+      admin.__seed(ledgerPath, {
+        status: 'processed',
+        outcome: 'legacy_processed_outcome',
+        targetPath: 'orders/legacy-target',
+        sentinel: { preserve: true },
+      });
+      const beforeBusiness = storedCopy(businessPath);
+      const beforeLedger = storedCopy(ledgerPath);
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: true,
+        outcome: 'legacy_processed_outcome',
+      }));
+      expect(admin.__get(businessPath)).toEqual(beforeBusiness);
+      expect(admin.__get(ledgerPath)).toEqual(beforeLedger);
+      expect(admin.__readOperations()).toEqual([
+        { kind: 'document', path: ledgerPath },
+      ]);
+      providerBindingPaths(event).forEach((path) => {
+        expect(admin.__get(path)).toBeUndefined();
+      });
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(Timestamp.fromMillis).not.toHaveBeenCalled();
+      expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    test.each(DISPUTE_CREATED_LIFECYCLES.flatMap(
+      ([lifecycle, type, status, outcome]) => DISPUTE_CREATED_DOMAINS.flatMap(
+        (domain) => [
+          [lifecycle, domain, 'Unix epoch', type, status, outcome, 0],
+          [
+            lifecycle,
+            domain,
+            'Firestore maximum',
+            type,
+            status,
+            outcome,
+            FIRESTORE_TIMESTAMP_MAX_SECONDS,
+          ],
+        ],
+      ),
+    ))('admits the inclusive %s %s %s Dispute-created boundary', async (
+      lifecycle,
+      domain,
+      boundary,
+      type,
+      status,
+      outcome,
+      disputeCreated,
+    ) => {
+      const slug = (lifecycle + '_' + domain + '_' + boundary)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = disputeCreatedFixture(
+        domain,
+        type,
+        status,
+        'valid_' + slug,
+      );
+      event.data.object.created = disputeCreated;
+      if (disputeCreated === FIRESTORE_TIMESTAMP_MAX_SECONDS) {
+        event.created = disputeCreated;
+      }
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome,
+      }));
+      expect(admin.__get(businessPath)).toMatchObject({
+        disputeStatus: status,
+        stripeDisputeId: event.data.object.id,
+      });
+      expect(admin.__get('stripeEvents/' + event.id)).toMatchObject({
+        targetPath: businessPath,
+        outcome,
+        stripeCreatedAt: { _milliseconds: event.created * 1000 },
+      });
+    });
+
+    test.each(DISPUTE_CREATED_LIFECYCLES.flatMap(
+      ([lifecycle, type, status, outcome]) => DISPUTE_CREATED_DOMAINS.map(
+        (domain) => [lifecycle, domain, type, status, outcome],
+      ),
+    ))('keeps later valid %s %s Dispute time compatible', async (
+      lifecycle,
+      domain,
+      type,
+      status,
+      outcome,
+    ) => {
+      const { event, businessPath } = disputeCreatedFixture(
+        domain,
+        type,
+        status,
+        'later_' + lifecycle + '_' + domain,
+      );
+      event.data.object.created = event.created + 1;
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+      expect(admin.__get('stripeEvents/' + event.id)).toMatchObject({
+        targetPath: businessPath,
+        outcome,
+      });
+    });
+
+    test.each([
+      [
+        'invalid Checkout Session time',
+        'checkout.session.completed',
+        () => registrationSession({ created: -1 }),
+        'needs_review:invalid_checkout_session_created',
+      ],
+      [
+        'later Checkout Session time',
+        'checkout.session.completed',
+        () => registrationSession({ created: 1_800_000_001 }),
+        'needs_review:invalid_checkout_session_event_chronology',
+      ],
+      [
+        'invalid refund Charge time',
+        'charge.refunded',
+        () => orderRefundCharge({ created: -1 }),
+        'needs_review:invalid_charge_created',
+      ],
+      [
+        'later refund Charge time',
+        'charge.refunded',
+        () => orderRefundCharge({ created: 1_800_000_001 }),
+        'needs_review:invalid_charge_event_chronology',
+      ],
+    ])('keeps %s on its existing outcome', async (
+      label,
+      type,
+      providerObject,
+      outcome,
+    ) => {
+      if (type === 'charge.refunded') {
+        seedPaidDisputeOrder();
+      } else {
+        seedRegistration();
+      }
+      const event = stripeEvent(
+        'evt_pay003a14_non_dispute_' + label.replace(/[^a-z]+/g, '_'),
+        type,
+        providerObject(),
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+    });
+
+    test.each([
+      ['customer Event', 'customer.created'],
+      ['unsupported dispute-like Event', 'charge.dispute.reopened'],
+    ])('leaves an unsupported %s unchanged', async (label, type) => {
+      const event = stripeEvent(
+        'evt_pay003a14_unsupported_' + label.replace(/[^a-z]+/g, '_'),
+        type,
+        {
+          id: 'obj_pay003a14_unsupported_' + label.replace(/[^a-z]+/g, '_'),
+          object: 'dispute',
+          created: -1,
+        },
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
         outcome: 'ignored:unsupported_event',
       }));
     });
@@ -5379,12 +6153,12 @@ describe('stripeWebhook', () => {
     }));
   });
 
-  test('PAY-003A9 leaves Dispute-created evidence outside this child', async () => {
+  test('PAY-003A9 keeps valid Dispute-created evidence compatible', async () => {
     seedPaidDisputeOrder();
     const event = stripeEvent(
       'evt_pay003a9_dispute_compatibility',
       'charge.dispute.updated',
-      orderDispute({ created: -1, status: 'under_review' }),
+      orderDispute({ created: 0, status: 'under_review' }),
     );
 
     const response = await deliver(event);

@@ -173,6 +173,14 @@ function validateEventAdmission(event, expectedLivemode) {
       reason: 'invalid_event_created',
     };
   }
+  if (DISPUTE_EVENT_TYPES.has(event.type)
+    && !isValidStripeCreated(event.data?.object?.created)) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'invalid_dispute_created',
+    };
+  }
   if (CHECKOUT_EVENT_TYPES.has(event.type)
     && !isValidStripeCreated(event.data?.object?.created)) {
     return {
