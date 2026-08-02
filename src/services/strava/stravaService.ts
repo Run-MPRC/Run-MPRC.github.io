@@ -13,6 +13,11 @@ export type StravaAuthorizationChallenge = Readonly<{
   expiresInSeconds: 600;
 }>;
 
+export type StravaExchangeConfirmation = Readonly<{
+  ok: true;
+  athleteId: number;
+}>;
+
 export type StravaDisconnectConfirmation = Readonly<{
   ok: true;
 }>;
@@ -96,6 +101,47 @@ function readStravaAuthorizationChallenge(value: unknown): StravaAuthorizationCh
   }
 }
 
+function readStravaExchangeConfirmation(value: unknown): StravaExchangeConfirmation {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('invalid');
+    }
+    if (Object.getPrototypeOf(value) !== Object.prototype) {
+      throw new Error('invalid');
+    }
+    const keys = Reflect.ownKeys(value);
+    if (
+      keys.length !== 2
+      || !keys.includes('ok')
+      || !keys.includes('athleteId')
+    ) {
+      throw new Error('invalid');
+    }
+    const okDescriptor = Object.getOwnPropertyDescriptor(value, 'ok');
+    const athleteIdDescriptor = Object.getOwnPropertyDescriptor(value, 'athleteId');
+    if (
+      okDescriptor === undefined
+      || athleteIdDescriptor === undefined
+      || okDescriptor.enumerable !== true
+      || athleteIdDescriptor.enumerable !== true
+      || !Object.prototype.hasOwnProperty.call(okDescriptor, 'value')
+      || !Object.prototype.hasOwnProperty.call(athleteIdDescriptor, 'value')
+      || okDescriptor.value !== true
+      || typeof athleteIdDescriptor.value !== 'number'
+      || !Number.isSafeInteger(athleteIdDescriptor.value)
+      || athleteIdDescriptor.value <= 0
+    ) {
+      throw new Error('invalid');
+    }
+    return Object.freeze({
+      ok: true,
+      athleteId: athleteIdDescriptor.value,
+    });
+  } catch {
+    throw new Error('Invalid Strava exchange response.');
+  }
+}
+
 function readStravaDisconnectConfirmation(value: unknown): StravaDisconnectConfirmation {
   try {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -156,14 +202,18 @@ export async function stravaExchangeCode(
   app: FirebaseApp,
   code: string,
   state: string,
-): Promise<{ ok: boolean; athleteId: number | null }> {
+): Promise<StravaExchangeConfirmation> {
   const functions = getFunctions(app);
-  const callable = httpsCallable<{ code: string; state: string }, any>(
+  const callable = httpsCallable<{ code: string; state: string }, unknown>(
     functions,
     'stravaExchangeCode',
   );
   const result = await callable({ code, state });
-  return result.data;
+  try {
+    return readStravaExchangeConfirmation(result.data);
+  } catch {
+    throw new Error('Invalid Strava exchange response.');
+  }
 }
 
 export async function stravaFetchStats(app: FirebaseApp): Promise<StravaStatsResult> {

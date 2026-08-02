@@ -1426,37 +1426,51 @@ This small diagram records the changed account-read boundary. It adds no new dat
 
 **Status: NOT AVAILABLE YET**
 
-**Purpose:** give a member one plain next step when a Strava connection fails without showing a provider message, callback detail, or technical error on the page.
+**Purpose:** give a member one plain next step when a Strava connection fails or the website receives an invalid success answer, without showing a provider message, callback detail, or technical error on the page or falsely returning to My Account.
 
 **Approver:** membership lead plus platform/security owner.
 
-**Prerequisites:** issue [#242](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/242) must be merged for source review. Calling the wording live also requires a protected website publication and an exact revision check on `runmprc.com`. This source change does not deploy Firebase, contact Strava, change provider settings, use production data, or prove live behavior.
+**Prerequisites:** issues [#242](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/242) and [#612](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/612) must be merged for the current source review. Calling this protection live also requires a protected website publication and an exact revision check on `runmprc.com`. These source changes do not deploy Firebase, contact Strava, change provider settings, use production data, or prove live behavior.
+
+```mermaid
+flowchart LR
+    A["Made-up request is rejected"] --> F["Show the fixed failure and stay on the cleaned callback page"]
+    B["Made-up answer arrives without a request error"] --> C{"Exactly the two approved visible plain fields?"}
+    C -- "No or check fails" --> F
+    C -- "Yes" --> D["Copy the two approved values into a new result that cannot change"]
+    D --> E["Return to My Account"]
+```
+
+Text alternative: a rejected made-up request uses the fixed failure and stays on the cleaned callback page; an answer delivered without a request error does the same when it is invalid or its check fails, and returns to My Account only when it has exactly the two approved visible plain fields, which the website copies into a new result that cannot change.
 
 Officer review steps after the source merge:
 
 1. Keep the callback wording marked **NOT AVAILABLE YET**.
-2. Ask the platform owner for the exact #242 issue, pull request, merged commit, and synthetic frontend test result.
-3. Confirm the tests use only made-up callback values and a mocked exchange result.
+2. Ask the platform owner for the exact #242 and #612 issues, pull requests, merged commits, and synthetic frontend test results.
+3. Confirm the tests use only made-up callback values and mocked rejected, valid, or invalid exchange answers.
 4. Confirm a signed-out visitor sees only the fixed sign-in instruction.
 5. Confirm a made-up provider query failure shows `We could not connect Strava. Please return to My Account and try again.`
-6. Confirm a made-up exchange failure shows the same sentence.
-7. Confirm no made-up provider detail appears on the page or in browser console output.
-8. Confirm a missing code or state stops in the page before exchange, and a rejected server state uses the same fixed connection-failure result.
-9. Confirm only a successful exchange returns to My Account, and the visible `Back to account` link still works without an exchange.
-10. Confirm the failure sentence is announced as an urgent screen-reader alert.
-11. Record website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
+6. Confirm a made-up request error, or an answer delivered without a request error that is not exactly `ok` set to `true` plus a positive whole-number Strava athlete field named `athleteId` that the website can represent exactly, shows the same sentence and stays on the cleaned callback page.
+7. Confirm missing fields, extra fields, hidden fields, fields that run code when read, invalid athlete numbers, and exceptional answer checks use the same fixed failure without navigating.
+8. Confirm no made-up provider detail, invalid answer detail, or technical error appears on the page or in browser console output.
+9. Confirm a missing code or state stops in the page before exchange, and a rejected server state uses the same fixed connection-failure result.
+10. Confirm only the exact made-up two-field confirmation returns to My Account.
+11. Confirm the website copies those two approved values into a new result that cannot be changed instead of keeping the received answer.
+12. Confirm the visible `Back to account` link still works without an exchange.
+13. Confirm the failure sentence is announced as an urgent screen-reader alert.
+14. Record source, tests, merge, website publication, `runmprc.com`, Firebase, Strava, production-data, and live-behavior evidence as separate results.
 
-**Expected result:** the reviewed source uses one fixed, actionable sentence for both a callback query failure and an exchange failure. It does not inspect, display, or log the rejected exchange value. Existing sign-in, missing-code, missing-state, server-rejection, success, and Back-to-account behavior stays in place. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange, #443 adds source-only App Check readiness after that cleanup, and #441 adds the source-only server state decision. None erases earlier browser, provider, hosting, or network copies or completes issue #88.
+**Expected result:** the reviewed source uses one fixed, actionable sentence for a callback query failure, a request error, or an answer delivered without a request error that does not present exactly the two approved success fields. It does not open, inspect, display, or log a rejected request value. For an answer delivered without a request error, it checks only the structure needed to admit that answer, copies the approved values into a new result that cannot be changed, and does not keep the received answer. Only that exact result returns to My Account. Existing sign-in, missing-code, missing-state, server-rejection, exact-success, and Back-to-account behavior stays in place. A valid-looking browser answer is not independent proof that Strava exchanged the code or that Firebase saved the connection. The separate OAUTH-001C1G child adds source-only cleanup of the current browser entry before callback-specific checks or exchange, #443 adds source-only App Check readiness after that cleanup, and #441 adds the source-only server state decision. None erases earlier browser, provider, hosting, or network copies or completes issue #88.
 
-**Stop conditions:** any real member or Strava account; a request for a callback URL, authorization code, state value, provider error, private browser history, or screenshot containing private values; a real provider call; a production Firebase or Strava change; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the wording is live.
+**Stop conditions:** any real member or Strava account; a request for a callback URL, authorization code, state value, provider answer, provider error, private browser history, or screenshot containing private values; a real provider call; a production Firebase or Strava change; an invalid fulfilled answer that returns to My Account; a raw detail in the page or console; or a claim that source, tests, merge, or a green workflow proves the wording or connection is live.
 
-**Success proof:** for source completion, record the exact #242 issue, reviewed pull request, merged commit, intended old-source failures, green synthetic callback tests, relevant full checks, and independent privacy review. For live availability, separately record the approved website publication, the published revision, and a dated `runmprc.com` check that uses no real account or callback value. Record Firebase deployment, Strava/provider configuration, and production-data actions as **not performed** for this frontend-only change.
+**Success proof:** for source completion, record the exact #242 and #612 issues, reviewed pull requests, merged commits, intended old-source failures, green synthetic service and callback tests, relevant full checks, and independent security, lifecycle, privacy, test-quality, and backup-officer reviews. For live availability, separately record the approved website publication, the published revision, and a dated `runmprc.com` check that uses no real account or callback value. Record Firebase deployment, Strava/provider configuration, and production-data actions as **not performed** for this frontend-only change.
 
 **Undo:** before publication, use one reviewed frontend revert or safe roll-forward. After publication, use the same protected website release path and verify the replacement revision on `runmprc.com`. Do not undo by changing a member account, callback value, Firebase record, or Strava setting.
 
 **Escalation:** membership lead plus platform/security owner. Add the privacy owner and use the private incident path if any callback or provider detail appeared. Do not copy the detail into an issue, message, screenshot, or AI tool.
 
-For #242 alone, page structure, data movement, permissions, account ownership, and deployment topology were unchanged. The separate #335 procedure and diagram below record the later current-address data-order change.
+Issue #612 changes the local path from a received answer to navigation or failure, so the small diagram above records that decision. It does not change the full system's page structure, service-to-service data movement, permissions, account ownership, provider configuration, or deployment topology. The separate #335 procedure and diagram below record the current-address data-order change.
 
 ## Strava callback current-address cleanup — SOURCE ONLY, NOT LIVE
 
