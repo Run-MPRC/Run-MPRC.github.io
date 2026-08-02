@@ -1006,6 +1006,28 @@ function expectedCheckoutSessionCreatedQuarantine(bindingPaths = []) {
   };
 }
 
+function expectedCheckoutSessionEventChronologyQuarantine(bindingPaths = []) {
+  return {
+    httpStatus: null,
+    response: {
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:invalid_checkout_session_event_chronology',
+      requiresReview: true,
+    },
+    businessUnchanged: true,
+    ledger: {
+      status: 'processed',
+      outcome: 'needs_review:invalid_checkout_session_event_chronology',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    },
+    bindingPaths,
+  };
+}
+
 function expectedChargeEventChronologyQuarantine(bindingPaths = []) {
   return {
     httpStatus: null,
@@ -1418,7 +1440,7 @@ describe('stripeWebhook', () => {
       const event = eventAt(
         `evt_pay003a11_${label.replace(/[^a-z]+/gi, '_').toLowerCase()}`,
         'checkout.session.completed',
-        session(),
+        session({ created }),
         created,
       );
 
@@ -2062,6 +2084,581 @@ describe('stripeWebhook', () => {
         'customer.created',
         { id: 'cus_pay003a12_unsupported', object: 'customer', created: -1 },
       );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'ignored:unsupported_event',
+      }));
+    });
+  });
+
+  describe('PAY-003A13 Checkout Session/Event chronology', () => {
+    const eventCreated = 1_800_000_000;
+
+    function laterCheckoutFixture(domain, type, suffix, options = {}) {
+      const fixture = checkoutSessionCreatedFixture(domain, type, suffix, options);
+      fixture.event.created = eventCreated;
+      fixture.event.data.object.created = eventCreated + 1;
+      return fixture;
+    }
+
+    test.each(CHECKOUT_SESSION_CREATED_LIFECYCLES.flatMap(
+      ([lifecycle, type, paymentStatus]) => (
+        CHECKOUT_SESSION_CREATED_DOMAINS.map((domain) => [
+          lifecycle,
+          domain,
+          type,
+          paymentStatus,
+        ])
+      ),
+    ))('rejects later %s %s Session time before target work', async (
+      lifecycle,
+      domain,
+      type,
+      paymentStatus,
+    ) => {
+      const slug = `${lifecycle}_${domain}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = laterCheckoutFixture(
+        domain,
+        type,
+        `chronology_${slug}`,
+      );
+      event.data.object.payment_status = paymentStatus;
+      const before = storedCopy(businessPath);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        stripeCreatedAt: { _milliseconds: eventCreated * 1000 },
+      });
+      expectOnlyEventLedgerReads(event);
+      expectOnlyEventLedgerTimestamps(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        'Stripe event requires review',
+        {
+          eventId: event.id,
+          eventType: type,
+          outcome: 'needs_review:invalid_checkout_session_event_chronology',
+          targetType: null,
+        },
+      );
+      expect(JSON.stringify({
+        response: response.json.mock.calls,
+        ledger: admin.__get(`stripeEvents/${event.id}`),
+        logs: consoleError.mock.calls,
+      })).not.toContain(String(event.data.object.created));
+    });
+
+    test.each([
+      ['metadata-only claim', {}, {}],
+      [
+        'client-reference-only claim',
+        {
+          metadata: {},
+          client_reference_id: 'mprc:registration:race-1:reg-1',
+        },
+        {},
+      ],
+      [
+        'matching dual claim',
+        { client_reference_id: 'mprc:registration:race-1:reg-1' },
+        {},
+      ],
+      ['legacy Session fallback', { metadata: {} }, {}],
+      [
+        'Payment Link binding',
+        { payment_link: 'plink_pay003a13_later' },
+        { stripePaymentLinkId: 'plink_pay003a13_expected' },
+      ],
+    ])('blocks impossible chronology before %s work', async (
+      label,
+      sessionPatch,
+      recordPatch,
+    ) => {
+      seedRegistration(recordPatch);
+      const businessPath = 'events/race-1/registrations/reg-1';
+      const before = storedCopy(businessPath);
+      const session = registrationSession(sessionPatch);
+      session.created = eventCreated + 1;
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const event = stripeEvent(
+        `evt_pay003a13_reference_${slug}`,
+        'checkout.session.completed',
+        session,
+      );
+      event.created = eventCreated;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks impossible chronology before ambiguous legacy fallback', async () => {
+      seedRegistration({ stripeSessionId: 'cs_pay003a13_ambiguous' });
+      seedOrder({ stripeSessionId: 'cs_pay003a13_ambiguous' });
+      const snapshots = [
+        [
+          'events/race-1/registrations/reg-1',
+          storedCopy('events/race-1/registrations/reg-1'),
+        ],
+        ['orders/order-1', storedCopy('orders/order-1')],
+      ];
+      const event = stripeEvent(
+        'evt_pay003a13_ambiguous_fallback',
+        'checkout.session.completed',
+        registrationSession({
+          id: 'cs_pay003a13_ambiguous',
+          metadata: {},
+          created: eventCreated + 1,
+        }),
+      );
+      event.created = eventCreated;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: snapshots,
+      })).toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('keeps chronology ahead of malformed reference handling', async () => {
+      const event = stripeEvent(
+        'evt_pay003a13_malformed_reference',
+        'checkout.session.completed',
+        registrationSession({
+          created: eventCreated + 1,
+          metadata: { schemaVersion: '1', eventId: 'race-1' },
+        }),
+      );
+      event.created = eventCreated;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({ response, event }))
+        .toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'makes impossible chronology durable before a missing %s target',
+      async (domain) => {
+        const { event } = laterCheckoutFixture(
+          domain,
+          'checkout.session.completed',
+          `chronology_missing_${domain}`,
+          { missingTarget: true },
+        );
+
+        const response = await deliver(event);
+
+        expect(refundAdmissionObservation({ response, event }))
+          .toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+        expect(response.status).not.toHaveBeenCalledWith(500);
+        expectOnlyEventLedgerReads(event);
+        expectOnlyEventLedgerTimestamps(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'keeps equal chronology with a claimed missing %s target retryable',
+      async (domain) => {
+        const { event } = checkoutSessionCreatedFixture(
+          domain,
+          'checkout.session.completed',
+          `chronology_valid_missing_${domain}`,
+          { missingTarget: true },
+        );
+        event.created = eventCreated;
+        event.data.object.created = eventCreated;
+
+        const response = await deliver(event);
+
+        expect(response.status).toHaveBeenCalledWith(500);
+        expect(admin.__get(`stripeEvents/${event.id}`)).toBeUndefined();
+        providerBindingPaths(event).forEach((path) => {
+          expect(admin.__get(path)).toBeUndefined();
+        });
+      },
+    );
+
+    test.each([
+      [
+        'outer Event realm',
+        'livemode_mismatch',
+        (event) => { event.livemode = true; },
+        { _milliseconds: eventCreated * 1000 },
+      ],
+      [
+        'embedded Session realm',
+        'checkout_session_livemode_mismatch',
+        (event) => { event.data.object.livemode = true; },
+        { _milliseconds: eventCreated * 1000 },
+      ],
+      [
+        'Session lifecycle',
+        'checkout_session_status_mismatch',
+        (event) => { event.data.object.status = 'open'; },
+        { _milliseconds: eventCreated * 1000 },
+      ],
+      [
+        'metadata schema',
+        'metadata_schema_version_mismatch',
+        (event) => { setMetadataSchema(event.data.object, '2'); },
+        { _milliseconds: eventCreated * 1000 },
+      ],
+      [
+        'outer Event time',
+        'invalid_event_created',
+        (event) => { event.created = -1; },
+        null,
+      ],
+      [
+        'embedded Session time',
+        'invalid_checkout_session_created',
+        (event) => {
+          event.data.object.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1;
+        },
+        { _milliseconds: eventCreated * 1000 },
+      ],
+    ])('keeps %s precedence over chronology', async (
+      label,
+      reason,
+      mutate,
+      expectedStripeCreatedAt,
+    ) => {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = laterCheckoutFixture(
+        'registration',
+        'checkout.session.completed',
+        `chronology_precedence_${slug}`,
+      );
+      const before = storedCopy(businessPath);
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        stripeCreatedAt: expectedStripeCreatedAt,
+      });
+      expectOnlyEventLedgerReads(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['object binding', (event) => { event.data.object.object = 'charge'; }],
+      ['mode', (event) => { event.data.object.mode = 'subscription'; }],
+      ['money', (event) => { event.data.object.amount_total = 4999; }],
+      ['payment status', (event) => { event.data.object.payment_status = 'unknown'; }],
+      [
+        'PaymentIntent binding',
+        (event) => { event.data.object.payment_intent = 'pi_pay003a13_other'; },
+      ],
+    ])('keeps chronology ahead of %s evaluation', async (label, mutate) => {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = laterCheckoutFixture(
+        'registration',
+        'checkout.session.completed',
+        `chronology_later_${slug}`,
+      );
+      const before = storedCopy(businessPath);
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('keeps chronology ahead of predecessor-state evaluation', async () => {
+      const { event, businessPath } = laterCheckoutFixture(
+        'registration',
+        'checkout.session.completed',
+        'chronology_later_predecessor',
+      );
+      seedRegistration({ status: 'cancelled', paymentStatus: 'cancelled' });
+      const before = storedCopy(businessPath);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks chronology before provider-binding conflict reads', async () => {
+      const { event, businessPath } = laterCheckoutFixture(
+        'registration',
+        'checkout.session.completed',
+        'chronology_binding_conflict',
+      );
+      const bindingPath = 'stripeObjectBindings/checkout_session:cs_reg_1';
+      admin.__seed(bindingPath, {
+        targetType: 'order',
+        targetPath: 'orders/order-other',
+        sentinel: 'preserve',
+      });
+      const beforeBusiness = storedCopy(businessPath);
+      const beforeBinding = storedCopy(bindingPath);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, beforeBusiness]],
+      })).toEqual(expectedCheckoutSessionEventChronologyQuarantine([bindingPath]));
+      expect(admin.__get(bindingPath)).toEqual(beforeBinding);
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'deduplicates rejected %s chronology without target work',
+      async (domain) => {
+        const { event, businessPath } = laterCheckoutFixture(
+          domain,
+          'checkout.session.completed',
+          `chronology_replay_${domain}`,
+        );
+        const before = storedCopy(businessPath);
+
+        const firstResponse = await deliver(event);
+        const ledgerPath = `stripeEvents/${event.id}`;
+        const afterFirstLedger = storedCopy(ledgerPath);
+        const replayResponse = await deliver(event);
+
+        expect(refundAdmissionObservation({
+          response: firstResponse,
+          event,
+          businessSnapshots: [[businessPath, before]],
+        })).toEqual(expectedCheckoutSessionEventChronologyQuarantine());
+        expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+          received: true,
+          duplicate: true,
+          outcome: 'needs_review:invalid_checkout_session_event_chronology',
+        }));
+        expect(admin.__get(businessPath)).toEqual(before);
+        expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+        expect(admin.__readOperations()).toEqual([
+          { kind: 'document', path: ledgerPath },
+          { kind: 'document', path: ledgerPath },
+          { kind: 'document', path: ledgerPath },
+        ]);
+        expectOnlyEventLedgerTimestamps(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expect(consoleError).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test('preserves a richer processed Event before chronology admission', async () => {
+      const { event, businessPath } = laterCheckoutFixture(
+        'order',
+        'checkout.session.completed',
+        'chronology_already_processed',
+      );
+      const ledgerPath = `stripeEvents/${event.id}`;
+      admin.__seed(ledgerPath, {
+        status: 'processed',
+        outcome: 'legacy_processed_outcome',
+        targetPath: 'orders/legacy-target',
+        sentinel: { preserve: true },
+      });
+      const beforeBusiness = storedCopy(businessPath);
+      const beforeLedger = storedCopy(ledgerPath);
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: true,
+        outcome: 'legacy_processed_outcome',
+      }));
+      expect(admin.__get(businessPath)).toEqual(beforeBusiness);
+      expect(admin.__get(ledgerPath)).toEqual(beforeLedger);
+      expect(admin.__readOperations()).toEqual([
+        { kind: 'document', path: ledgerPath },
+      ]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(Timestamp.fromMillis).not.toHaveBeenCalled();
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_LIFECYCLES.flatMap(
+      ([lifecycle, type, paymentStatus, outcome]) => (
+        CHECKOUT_SESSION_CREATED_DOMAINS.flatMap((domain) => [
+          [lifecycle, domain, 'equal', type, paymentStatus, outcome, eventCreated],
+          [lifecycle, domain, 'earlier', type, paymentStatus, outcome, eventCreated - 1],
+        ])
+      ),
+    ))('admits %s %s with %s Session/Event chronology', async (
+      lifecycle,
+      domain,
+      chronology,
+      type,
+      paymentStatus,
+      outcome,
+      sessionCreated,
+    ) => {
+      const slug = `${lifecycle}_${domain}_${chronology}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        domain,
+        type,
+        `chronology_valid_${slug}`,
+      );
+      event.created = eventCreated;
+      event.data.object.created = sessionCreated;
+      event.data.object.payment_status = paymentStatus;
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome,
+      }));
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        targetPath: businessPath,
+        stripeCreatedAt: { _milliseconds: eventCreated * 1000 },
+        outcome,
+      });
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS.flatMap((domain) => [
+      [domain, 'Unix epoch', 0],
+      [domain, 'Firestore maximum', FIRESTORE_TIMESTAMP_MAX_SECONDS],
+    ]))('admits equal %s chronology at the %s boundary', async (
+      domain,
+      boundary,
+      created,
+    ) => {
+      const slug = `${domain}_${boundary}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        domain,
+        'checkout.session.completed',
+        `chronology_boundary_${slug}`,
+      );
+      event.created = created;
+      event.data.object.created = created;
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'payment_confirmed',
+      }));
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        targetPath: businessPath,
+        stripeCreatedAt: { _milliseconds: created * 1000 },
+      });
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'keeps the outer Event time as paidAt for an earlier %s Session',
+      async (domain) => {
+        const { event, businessPath } = checkoutSessionCreatedFixture(
+          domain,
+          'checkout.session.completed',
+          `chronology_paid_at_${domain}`,
+        );
+        if (domain === 'registration') seedRegistration({ paidAt: null });
+        else seedOrder({ paidAt: null });
+        event.created = eventCreated;
+        event.data.object.created = eventCreated - 10;
+
+        const response = await deliver(event);
+
+        expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+          outcome: 'payment_confirmed',
+        }));
+        expect(admin.__get(businessPath).paidAt).toEqual({
+          _milliseconds: eventCreated * 1000,
+        });
+      },
+    );
+
+    test('keeps refund Charge chronology on its existing reason', async () => {
+      const { event, businessPath } = refundChargeCreatedFixture(
+        'order',
+        'pay003a13_non_checkout_refund',
+      );
+      const before = storedCopy(businessPath);
+      event.created = eventCreated;
+      event.data.object.created = eventCreated + 1;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedChargeEventChronologyQuarantine());
+    });
+
+    test.each([
+      ['created', 'charge.dispute.created', 'needs_response', 'dispute_needs_response'],
+      ['updated', 'charge.dispute.updated', 'under_review', 'dispute_under_review'],
+      ['closed', 'charge.dispute.closed', 'won', 'dispute_won'],
+    ])('leaves later %s Dispute embedded time unchanged', async (
+      lifecycle,
+      type,
+      status,
+      outcome,
+    ) => {
+      seedPaidDisputeOrder();
+      const event = stripeEvent(
+        `evt_pay003a13_dispute_${lifecycle}`,
+        type,
+        orderDispute({
+          id: `dp_pay003a13_${lifecycle}`,
+          created: eventCreated + 1,
+          status,
+        }),
+      );
+      event.created = eventCreated;
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        targetPath: 'orders/order-1',
+        outcome,
+      });
+    });
+
+    test('leaves unsupported embedded chronology unchanged', async () => {
+      const event = stripeEvent(
+        'evt_pay003a13_unsupported',
+        'customer.created',
+        {
+          id: 'cus_pay003a13_unsupported',
+          object: 'customer',
+          created: eventCreated + 1,
+        },
+      );
+      event.created = eventCreated;
 
       const response = await deliver(event);
 
@@ -4350,6 +4947,7 @@ describe('stripeWebhook', () => {
     const slug = `${lifecycle}_${boundary}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
     const { event } = nonDisputeEventFixture(type, `valid_${slug}`);
     event.created = eventCreated;
+    event.data.object.created = eventCreated;
 
     const response = await deliver(event);
 
@@ -5067,12 +5665,12 @@ describe('stripeWebhook', () => {
       expect(consoleError).not.toHaveBeenCalled();
     });
 
-    test('leaves Checkout Session chronology outside this child', async () => {
+    test('leaves valid equal Checkout Session chronology to its own admission child', async () => {
       seedRegistration();
       const event = stripeEvent(
         'evt_pay003a10_checkout_compatibility',
         'checkout.session.completed',
-        registrationSession({ created: eventCreated + 1 }),
+        registrationSession({ created: eventCreated }),
       );
       event.created = eventCreated;
 
