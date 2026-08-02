@@ -51,7 +51,7 @@ function buildEnvironment(home, sourceEnvironment = process.env) {
 function run(command, args, options = {}) {
   execFileSync(command, args, {
     ...options,
-    stdio: 'inherit',
+    stdio: 'ignore',
   });
 }
 
@@ -92,7 +92,7 @@ function fetchAndVerifySource(manifest, temporaryDirectory) {
       cwd: temporaryDirectory,
       encoding: 'utf8',
       env: gitEnvironment,
-      stdio: ['ignore', 'pipe', 'inherit'],
+      stdio: ['ignore', 'pipe', 'ignore'],
     },
   ).trim();
   const fetchedTree = execFileSync(
@@ -102,7 +102,7 @@ function fetchAndVerifySource(manifest, temporaryDirectory) {
       cwd: temporaryDirectory,
       encoding: 'utf8',
       env: gitEnvironment,
-      stdio: ['ignore', 'pipe', 'inherit'],
+      stdio: ['ignore', 'pipe', 'ignore'],
     },
   ).trim();
   if (fetchedCommit !== manifest.sourceCommit

@@ -63,30 +63,45 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 
 ### Netlify release-build failure output — SOURCE ONLY, NOT LIVE
 
-**Purpose:** confirm that the final source wrapper reports a failed release preparation with one fixed code. The code does not say why preparation failed. It does not prove that Netlify published anything.
+**Purpose:** confirm that the final source wrapper reports a failed release preparation with one fixed code and does not pass through child-command output. The code does not say why preparation failed. It does not prove that Netlify published anything.
 
 **Approver:** platform owner plus security reviewer. This is not an officer-operated release control.
 
-**Prerequisites:** issue #582; one exact pull request and commit; synthetic tests with made-up canaries; the inactive temporary Netlify manifest; a reviewed undo; and confirmation that nobody ran a production release or contacted a provider to test this source change.
+**Prerequisites:** issues #582 and #596; one exact pull request and commit for each source boundary; synthetic tests with made-up canaries and local fake commands; the inactive temporary Netlify manifest; a reviewed undo; and confirmation that nobody ran a production release or contacted a provider to test either source change.
 
-1. Ask the platform maintainer for the exact issue, pull request, and commit.
+```mermaid
+flowchart LR
+    Child["Git, npm, tar, or frontend-build command"] --> Hidden["Discard child output"]
+    Hidden --> Result{"Child succeeds?"}
+    Result -- "No" --> Fixed["Parent writes the fixed failure code and stops"]
+    Result -- "Yes" --> Evidence["Parent may write final prepared evidence"]
+    Outside["Netlify platform output outside this process"] -. "Not covered" .-> Separate["Separate provider boundary"]
+```
+
+In words: the builder discards command output; a command failure leaves only the fixed parent code, while success may produce the existing final parent evidence. Netlify platform output outside the builder remains separate.
+
+1. Ask the platform maintainer for the exact issues, pull requests, and commits.
 2. Confirm the failure tests used only made-up values.
-3. Confirm each synthetic failure stopped before release or provider work.
-4. Read the redacted test summary.
-5. Confirm the wrapper's complete stderr line is `netlify_release_build_failed`.
-6. Confirm the subprocess exit was unsuccessful.
-7. Confirm no thrown message, stack, path, URL, token-shaped canary, or trap canary appeared.
-8. Confirm the full artifact-safety and release-workflow checks passed.
-9. Confirm review found the existing cleanup and successful evidence line unchanged.
-10. Record source, tests, merge, Netlify publication, website publication, `runmprc.com` verification, Firebase, provider, production data, and live behavior as separate states.
+3. Confirm the child-output tests used local fake commands and no network.
+4. Confirm the fake generic command covered both exit failure and signal termination.
+5. Confirm the two fake Git reads covered `rev-parse` and `show` failures.
+6. Confirm each synthetic failure stopped before release or provider work.
+7. Read the redacted test summary.
+8. Confirm every failed wrapper's complete stderr line is `netlify_release_build_failed`.
+9. Confirm every failed wrapper had empty stdout and an unsuccessful status.
+10. Confirm no child output, thrown message, stack, path, URL, token-shaped canary, or trap canary appeared.
+11. Confirm source contains no inherited child-output setting.
+12. Confirm the full artifact-safety and release-workflow checks passed.
+13. Confirm review found exact Git comparison, cleanup, artifacts, and the successful parent evidence line unchanged.
+14. Record source, tests, merge, Netlify publication, website publication, `runmprc.com` verification, Firebase, provider, production data, and live behavior as separate states.
 
-**Expected result:** the outer wrapper does not read or echo its caught value. The fixed code means only that preparation failed. Child commands still write their own output, so this check does not prove that the complete Netlify build log is safe.
+**Expected result:** the outer wrapper does not read or echo its caught value. Child commands write no bytes to the wrapper's output. Required Git commit and tree values remain internal. A failure leaves only the fixed parent code. The code means only that preparation failed. This check does not cover Netlify platform output outside the builder or prove that the complete provider log is safe.
 
-**Stop conditions:** stop if anyone asks for a real credential, private provider value, production run, or raw log. Stop if output contains a thrown value, stack, path, URL, token-shaped value, or private data. Stop if anyone calls the whole build log sanitized or treats the fixed code as publication proof.
+**Stop conditions:** stop if anyone asks for a real credential, private provider value, production run, or raw log. Stop if a failed wrapper has stdout, more than the fixed stderr code, or a successful status. Stop if output contains child detail, a thrown value, stack, path, URL, token-shaped value, or private data. Stop if anyone calls the whole provider log sanitized or treats the fixed code as publication proof.
 
-**Success proof:** keep the old-source failure summary, green synthetic subprocess results, complete artifact-safety and release-workflow results, reviewed commit, and separate statements for every delivery state. State plainly that Netlify, the website, `runmprc.com`, Firebase, outside providers, production data, and live behavior were not changed or verified unless each has separate dated proof.
+**Success proof:** keep the old-source failure summaries, green synthetic wrapper and fake-command results, the no-inherited-output check, complete artifact-safety and release-workflow results, reviewed commits, and separate statements for every delivery state. State plainly that Netlify, the website, `runmprc.com`, Firebase, outside providers, production data, and live behavior were not changed or verified unless each has separate dated proof.
 
-**Undo:** use one reviewed revert or safe roll-forward pull request. Never restore raw caught-error logging. Never rerun production only to discover the cause.
+**Undo:** use one reviewed revert or safe roll-forward pull request. Never restore raw caught-error logging or inherited child output. Never rerun production only to discover the cause.
 
 **Escalation:** contact the platform and security owners. If an earlier log may contain a sensitive value, use the private incident path. Do not copy the value into GitHub, a screenshot, email, or an AI tool.
 
