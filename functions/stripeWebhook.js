@@ -181,6 +181,14 @@ function validateEventAdmission(event, expectedLivemode) {
       reason: 'invalid_charge_created',
     };
   }
+  if (event.type === 'charge.refunded'
+    && event.data.object.created > event.created) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'invalid_charge_event_chronology',
+    };
+  }
   return modeValidation;
 }
 
