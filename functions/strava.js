@@ -24,7 +24,6 @@ const STRAVA_RECENT_ACTIVITY_LIMIT = 5;
 const STRAVA_ACTIVITY_NAME_MAX_LENGTH = 1_024;
 const STRAVA_ACTIVITY_TYPE_MAX_LENGTH = 128;
 const STRAVA_ACTIVITY_DATE_MAX_LENGTH = 64;
-const STRAVA_LONG_MAX_AS_NUMBER = 9_223_372_036_854_776_000;
 const STRAVA_REFRESH_ERROR_MESSAGE = 'Strava connection could not be refreshed.';
 const STRAVA_DATA_ERROR_MESSAGE = 'Strava activity data could not be loaded.';
 const STRAVA_STATS_REQUEST_ERROR_MESSAGE = 'Strava statistics request is invalid.';
@@ -45,7 +44,6 @@ const arrayIsArray = Array.isArray;
 const arrayPrototype = Array.prototype;
 const arrayPush = Array.prototype.push;
 const numberIsFinite = Number.isFinite;
-const numberIsInteger = Number.isInteger;
 const numberIsSafeInteger = Number.isSafeInteger;
 const reflectApply = Reflect.apply;
 const reflectHas = Reflect.has;
@@ -344,14 +342,6 @@ function isFiniteNumberInRange(value, maximum) {
     && value <= maximum;
 }
 
-function isPositiveIntegerInRange(value, maximum) {
-  return typeof value === 'number'
-    && numberIsFinite(value)
-    && numberIsInteger(value)
-    && value > 0
-    && value <= maximum;
-}
-
 function hasLoneSurrogate(value) {
   for (let index = 0; index < value.length; index += 1) {
     const codeUnit = reflectApply(stringCharCodeAt, value, [index]);
@@ -515,7 +505,7 @@ function snapshotProviderActivity(record) {
     (value) => isBoundedVisibleAscii(value, STRAVA_ACTIVITY_DATE_MAX_LENGTH),
   );
   if (
-    !isPositiveIntegerInRange(id, STRAVA_LONG_MAX_AS_NUMBER)
+    !isPositiveSafeInteger(id)
     || !isBoundedActivityName(name)
     || type === INVALID_SELECTED_VALUE
     || !isFiniteNumberInRange(distance, Number.MAX_SAFE_INTEGER)

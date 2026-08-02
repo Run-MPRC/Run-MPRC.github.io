@@ -4890,6 +4890,45 @@ describe('Strava activity data failure boundary', () => {
       });
     });
 
+    describe('OAUTH-001A2H precision-safe activity IDs', () => {
+      test('rejects the first precision-unsafe integer before statistics JSON', async () => {
+        await expectInvalidSuccessfulProviderData({
+          activities: [validProviderActivity({
+            id: Number.MAX_SAFE_INTEGER + 1,
+          })],
+          invalidSurface: 'activities',
+        });
+      });
+
+      test('preserves the safe-integer ceiling as an exact numeric result', async () => {
+        seedFreshConnection();
+        const { activitiesJson, statsJson } = mockSuccessfulProviderData({
+          activities: [validProviderActivity({
+            id: Number.MAX_SAFE_INTEGER,
+          })],
+        });
+
+        const result = await stravaFetchStats({}, CONTEXT);
+
+        expect(result.recentActivities[0]).toEqual({
+          id: Number.MAX_SAFE_INTEGER,
+          name: 'Synthetic Morning Run',
+          type: 'Run',
+          distanceMeters: 5000.5,
+          movingTimeSeconds: 1500,
+          startDate: '2026-01-02T12:00:00Z',
+        });
+        expect(typeof result.recentActivities[0].id).toBe('number');
+        expect(activitiesJson).toHaveBeenCalledTimes(1);
+        expect(statsJson).toHaveBeenCalledTimes(1);
+        expectTwoFreshBearerReads();
+        expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+        expect(admin.__getDeletes()).toEqual([]);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expectNoWritesOrLogs();
+      });
+    });
+
     test.each([
       ['id', 987654],
       ['name', 'Synthetic Morning Run'],
@@ -4961,11 +5000,11 @@ describe('Strava activity data failure boundary', () => {
       expectNoWritesOrLogs();
     });
 
-    test('accepts exact bounds, five dense entries, and the rounded signed-Long ceiling', async () => {
+    test('accepts exact bounds, five dense entries, and the safe-integer activity ceiling', async () => {
       seedFreshConnection();
-      const longId = MAX_STRAVA_LONG_AS_NUMBER;
+      const safeId = Number.MAX_SAFE_INTEGER;
       const activities = Array.from({ length: 5 }, (_unused, index) => validProviderActivity({
-        id: index === 0 ? longId : index + 1,
+        id: index === 0 ? safeId : index + 1,
         name: index === 0 ? '🏃'.repeat(MAX_ACTIVITY_NAME_LENGTH / 2) : `Run ${index}`,
         type: index === 0 ? 't'.repeat(MAX_ACTIVITY_TYPE_LENGTH) : undefined,
         sport_type: index === 0 ? 'ignored' : 'Run',
@@ -4979,7 +5018,7 @@ describe('Strava activity data failure boundary', () => {
 
       expect(result.recentActivities).toHaveLength(5);
       expect(result.recentActivities[0]).toEqual({
-        id: longId,
+        id: safeId,
         name: '🏃'.repeat(MAX_ACTIVITY_NAME_LENGTH / 2),
         type: 't'.repeat(MAX_ACTIVITY_TYPE_LENGTH),
         distanceMeters: Number.MAX_SAFE_INTEGER,
