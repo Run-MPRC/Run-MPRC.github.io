@@ -46,6 +46,9 @@ jest.mock('firebase-admin', () => {
   const transactionDeletes = [];
   const transactionGetFailures = new Map();
   const transactionReads = [];
+  const transactionSetAttempts = [];
+  const transactionSetFailures = new Map();
+  const transactionSets = [];
   let transactionBeforeCommitHook;
   let transactionRetryHook;
   let transactionRunAttempts = 0;
@@ -68,6 +71,28 @@ jest.mock('firebase-admin', () => {
       documents.set(operation.path, operation.data);
       bumpVersion(operation.path);
     }
+  }
+
+  function applyTransactionSet(operation) {
+    transactionSets.push(operation);
+    writes.push(operation);
+    if (operation.options && operation.options.merge === true) {
+      const current = documents.get(operation.path);
+      const currentDescriptors = current && typeof current === 'object'
+        ? Object.getOwnPropertyDescriptors(current)
+        : {};
+      const updateDescriptors = Object.getOwnPropertyDescriptors(operation.data);
+      Reflect.ownKeys(updateDescriptors).forEach((key) => {
+        delete currentDescriptors[key];
+      });
+      documents.set(operation.path, Object.create(
+        current && typeof current === 'object' ? Object.getPrototypeOf(current) : Object.prototype,
+        { ...currentDescriptors, ...updateDescriptors },
+      ));
+    } else {
+      documents.set(operation.path, operation.data);
+    }
+    bumpVersion(operation.path);
   }
 
   function document(path) {
@@ -181,6 +206,7 @@ jest.mock('firebase-admin', () => {
         for (let attempt = 0; attempt < 5; attempt += 1) {
           const readVersions = new Map();
           const stagedDeletes = [];
+          const stagedSets = [];
           const transaction = {
             get: async (ref) => {
               transactionReads.push(ref.path);
@@ -204,6 +230,15 @@ jest.mock('firebase-admin', () => {
               stagedDeletes.push(ref.path);
               return transaction;
             },
+            set: (ref, data, options) => {
+              const operation = { path: ref.path, data, options };
+              transactionSetAttempts.push(operation);
+              if (transactionSetFailures.has(ref.path)) {
+                throw transactionSetFailures.get(ref.path);
+              }
+              stagedSets.push(operation);
+              return transaction;
+            },
           };
 
           const result = await updateFunction(transaction);
@@ -223,10 +258,17 @@ jest.mock('firebase-admin', () => {
             continue;
           }
 
+          for (const operation of stagedSets) {
+            if (writeFailures.has(operation.path)) {
+              throw writeFailures.get(operation.path);
+            }
+          }
+
           for (const path of stagedDeletes) {
             transactionDeletes.push(path);
             applyDelete(path);
           }
+          stagedSets.forEach(applyTransactionSet);
           if (transactionCommitPostApplyFailure) {
             throw transactionCommitPostApplyFailure;
           }
@@ -277,6 +319,9 @@ jest.mock('firebase-admin', () => {
       transactionDeletes.splice(0, transactionDeletes.length);
       transactionGetFailures.clear();
       transactionReads.splice(0, transactionReads.length);
+      transactionSetAttempts.splice(0, transactionSetAttempts.length);
+      transactionSetFailures.clear();
+      transactionSets.splice(0, transactionSets.length);
       transactionBeforeCommitHook = undefined;
       transactionRetryHook = undefined;
       transactionRunAttempts = 0;
@@ -298,6 +343,8 @@ jest.mock('firebase-admin', () => {
     __getTransactionDeletes: () => [...transactionDeletes],
     __getTransactionReads: () => [...transactionReads],
     __getTransactionRunAttempts: () => transactionRunAttempts,
+    __getTransactionSetAttempts: () => [...transactionSetAttempts],
+    __getTransactionSets: () => [...transactionSets],
     __getWrites: () => [...writes],
     __hasDocument: (path) => documents.has(path),
     __setBatchCommitFailure: (error) => {
@@ -343,6 +390,9 @@ jest.mock('firebase-admin', () => {
     },
     __setTransactionRunFailure: (error) => {
       transactionRunFailure = error;
+    },
+    __setTransactionSetFailure: (path, error) => {
+      transactionSetFailures.set(path, error);
     },
     __setWriteFailure: (path, error) => writeFailures.set(path, error),
   };
@@ -2543,6 +2593,19 @@ describe('Strava token refresh failure boundary', () => {
     };
   }
 
+  function expectedRefreshWrite() {
+    return {
+      path: SECRET_PATH,
+      data: {
+        access_token: 'refreshed_access_token_test',
+        refresh_token: 'refreshed_refresh_token_test',
+        expires_at: 1_900_000_000,
+        updatedAt: expect.any(Object),
+      },
+      options: { merge: true },
+    };
+  }
+
   function mockRefreshResponse(response) {
     const json = jest.fn().mockResolvedValue(response);
     fetchMock.mockResolvedValueOnce({ ok: true, json });
@@ -3056,6 +3119,191 @@ describe('Strava token refresh failure boundary', () => {
     });
   });
 
+  describe('OAUTH-001A1H stale refreshed-secret persistence boundary', () => {
+    function expectRefusedMutation(rejection) {
+      expect(publicError(rejection)).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    }
+
+    test('refuses an older refresh response after the stored token tuple rotates', async () => {
+      const newerSecret = Object.freeze({
+        access_token: 'newer_access_token_test',
+        refresh_token: 'newer_refresh_token_test',
+        expires_at: 1_950_000_000,
+        scope: 'read',
+      });
+      seedExpiredConnection();
+      const json = jest.fn().mockImplementation(async () => {
+        admin.__setDocument(SECRET_PATH, newerSecret);
+        return validRefreshResponse();
+      });
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue([]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            ytd_run_totals: { distance: 0, count: 0 },
+            ytd_ride_totals: { distance: 0, count: 0 },
+            all_run_totals: { distance: 0, count: 0 },
+          }),
+        });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectRefusedMutation(rejection);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(newerSecret);
+    });
+
+    test.each([
+      ['access token', 'access_token', 'different_access_token_test'],
+      ['refresh token', 'refresh_token', 'different_refresh_token_test'],
+      ['expiry', 'expires_at', 1_950_000_000],
+    ])('refuses when only the stored %s changes during provider refresh', async (
+      _case,
+      field,
+      value,
+    ) => {
+      const changedSecret = Object.freeze({ ...EXPIRED_SECRET, [field]: value });
+      seedExpiredConnection();
+      const json = jest.fn().mockImplementation(async () => {
+        admin.__setDocument(SECRET_PATH, changedSecret);
+        return validRefreshResponse();
+      });
+      fetchMock.mockResolvedValueOnce({ ok: true, json });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectRefusedMutation(rejection);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(changedSecret);
+    });
+
+    test('refuses when the stored secret is deleted during provider refresh', async () => {
+      seedExpiredConnection();
+      const json = jest.fn().mockImplementation(async () => {
+        admin.__removeDocument(SECRET_PATH);
+        return validRefreshResponse();
+      });
+      fetchMock.mockResolvedValueOnce({ ok: true, json });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectRefusedMutation(rejection);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
+    });
+
+    test('refuses malformed replacement state without inspecting unknown fields', async () => {
+      const unknownGetter = jest.fn(() => {
+        throw new Error('stale-refresh-malformed-unknown-canary');
+      });
+      const malformedSecret = { access_token: 'replacement_access_token_test' };
+      Object.defineProperty(malformedSecret, 'provider_debug', {
+        configurable: true,
+        enumerable: true,
+        get: unknownGetter,
+      });
+      seedExpiredConnection();
+      const json = jest.fn().mockImplementation(async () => {
+        admin.__setDocument(SECRET_PATH, malformedSecret);
+        return validRefreshResponse();
+      });
+      fetchMock.mockResolvedValueOnce({ ok: true, json });
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectRefusedMutation(rejection);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(unknownGetter).not.toHaveBeenCalled();
+      expect(admin.__getDocument(SECRET_PATH)).toBe(malformedSecret);
+    });
+
+    test('rechecks and refuses changed state after a transaction conflict', async () => {
+      const newerSecret = Object.freeze({
+        access_token: 'conflicting_access_token_test',
+        refresh_token: 'conflicting_refresh_token_test',
+        expires_at: 1_960_000_000,
+        scope: 'read',
+      });
+      const retryHook = jest.fn();
+      let beforeCommitCalls = 0;
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setTransactionBeforeCommitHook(() => {
+        beforeCommitCalls += 1;
+        if (beforeCommitCalls === 1) {
+          admin.__setDocument(SECRET_PATH, newerSecret);
+        }
+      });
+      admin.__setTransactionRetryHook(retryHook);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expect(publicError(rejection)).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH, SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([expectedRefreshWrite()]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(newerSecret);
+      expect(retryHook).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+
+    test('persists once and continues when the stored tuple is unchanged', async () => {
+      seedExpiredConnection();
+      mockValidRefreshFlow();
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      const expectedWrite = expectedRefreshWrite();
+      expect(result).toMatchObject({ connected: true });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([expectedWrite]);
+      expect(admin.__getTransactionSets()).toEqual([expectedWrite]);
+      expect(admin.__getWrites()).toEqual([expectedWrite]);
+      expect(admin.__getDocument(SECRET_PATH)).toEqual({
+        ...EXPIRED_SECRET,
+        access_token: 'refreshed_access_token_test',
+        refresh_token: 'refreshed_refresh_token_test',
+        expires_at: 1_900_000_000,
+        updatedAt: expect.any(Object),
+      });
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    });
+  });
+
   describe('OAUTH-001A1E refreshed-secret persistence boundary', () => {
     function hostilePersistenceFailure() {
       const probes = [
@@ -3078,19 +3326,6 @@ describe('Strava token refresh failure boundary', () => {
         toJSON: { configurable: true, enumerable: true, get: probes[2] },
       });
       return { failure, probes };
-    }
-
-    function expectedRefreshWrite() {
-      return {
-        path: SECRET_PATH,
-        data: {
-          access_token: 'refreshed_access_token_test',
-          refresh_token: 'refreshed_refresh_token_test',
-          expires_at: 1_900_000_000,
-          updatedAt: expect.any(Object),
-        },
-        options: { merge: true },
-      };
     }
 
     function expectFixedPersistenceFailure(rejection, probes) {
@@ -3128,8 +3363,7 @@ describe('Strava token refresh failure boundary', () => {
       expect(admin.__getBatchSetAttempts()).toEqual([]);
       expect(admin.__getBatchCommitAttempts()).toEqual([]);
       expect(admin.__getDeletes()).toEqual([]);
-      expect(admin.__getTransactionRunAttempts()).toBe(0);
-      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
       expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
       consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
     }
@@ -3146,7 +3380,10 @@ describe('Strava token refresh failure boundary', () => {
 
       expectFixedPersistenceFailure(rejection, probes);
       expect(Timestamp.now).toHaveBeenCalledTimes(1);
-      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionSets()).toEqual([]);
       expect(admin.__getWrites()).toEqual([]);
       expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
       expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
@@ -3166,9 +3403,84 @@ describe('Strava token refresh failure boundary', () => {
       expectFixedPersistenceFailure(rejection, probes);
       expect(json).toHaveBeenCalledTimes(1);
       expect(Timestamp.now).not.toHaveBeenCalled();
-      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionSets()).toEqual([]);
       expect(admin.__getWrites()).toEqual([]);
       expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps a transaction-start rejection to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setTransactionRunFailure(failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps a transaction-read rejection to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setTransactionGetFailure(SECRET_PATH, failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps a transaction-set staging rejection to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setTransactionSetFailure(SECRET_PATH, failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([expectedRefreshWrite()]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
+    });
+
+    test('maps a transaction-commit rejection to one fixed result', async () => {
+      const { failure, probes } = hostilePersistenceFailure();
+      seedExpiredConnection();
+      mockRefreshResponse(validRefreshResponse());
+      admin.__setTransactionCommitFailure(failure);
+
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+
+      expectFixedPersistenceFailure(rejection, probes);
+      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([expectedRefreshWrite()]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
       expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
     });
 
@@ -3182,7 +3494,10 @@ describe('Strava token refresh failure boundary', () => {
 
       expectFixedPersistenceFailure(rejection, probes);
       expect(Timestamp.now).toHaveBeenCalledTimes(1);
-      expect(admin.__getDirectSetAttempts()).toEqual([expectedRefreshWrite()]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([expectedRefreshWrite()]);
+      expect(admin.__getTransactionSets()).toEqual([]);
       expect(admin.__getWrites()).toEqual([]);
       expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
       expect(admin.__getDocument(SECRET_PATH)).toBe(EXPIRED_SECRET);
@@ -3192,14 +3507,17 @@ describe('Strava token refresh failure boundary', () => {
       const { failure, probes } = hostilePersistenceFailure();
       seedExpiredConnection();
       mockRefreshResponse(validRefreshResponse());
-      admin.__setDirectSetPostApplyFailure(SECRET_PATH, failure);
+      admin.__setTransactionCommitPostApplyFailure(failure);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
       expectFixedPersistenceFailure(rejection, probes);
       const expectedWrite = expectedRefreshWrite();
       expect(Timestamp.now).toHaveBeenCalledTimes(1);
-      expect(admin.__getDirectSetAttempts()).toEqual([expectedWrite]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([expectedWrite]);
+      expect(admin.__getTransactionSets()).toEqual([expectedWrite]);
       expect(admin.__getWrites()).toEqual([expectedWrite]);
       expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
       expect(admin.__getDocument(SECRET_PATH)).toEqual({
@@ -3654,7 +3972,7 @@ describe('Strava token refresh failure boundary', () => {
       consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
     });
 
-    test('uses the refresh projection after the raw record mutates during clock access', async () => {
+    test('uses the refresh projection then refuses a raw stored tuple mutation', async () => {
       const secret = validStoredSecret();
       secret.expires_at = NOW_SECONDS + 60;
       seedStoredSecret(secret);
@@ -3666,8 +3984,14 @@ describe('Strava token refresh failure boundary', () => {
       });
       mockValidRefreshFlow();
 
-      await stravaFetchStats({}, CONTEXT);
+      const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
+      expect(publicError(rejection)).toEqual({
+        code: 'internal',
+        message: FIXED_REFRESH_ERROR,
+        details: undefined,
+        cause: undefined,
+      });
       expect(fetchMock).toHaveBeenNthCalledWith(
         1,
         'https://www.strava.com/api/v3/oauth/token',
@@ -3682,19 +4006,15 @@ describe('Strava token refresh failure boundary', () => {
           }),
         },
       );
-      expect(admin.__getWrites()).toEqual([{
-        path: SECRET_PATH,
-        data: {
-          access_token: 'refreshed_access_token_test',
-          refresh_token: 'refreshed_refresh_token_test',
-          expires_at: 1_900_000_000,
-          updatedAt: expect.any(Object),
-        },
-        options: { merge: true },
-      }]);
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__getDirectSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionSetAttempts()).toEqual([]);
+      expect(admin.__getTransactionSets()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
       expect(dateNowSpy).toHaveBeenCalledTimes(1);
-      expect(Timestamp.now).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
       consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
     });
 
