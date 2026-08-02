@@ -149,7 +149,7 @@ function runSitemapGenerator(fixture, environment = {}) {
   });
 }
 
-function makeNetlifyReleaseBuilderFixture(loadManifestBody) {
+function makeNetlifyReleaseBuilderFixture(loadManifestBody, fakeGit = null) {
   const { root } = makeArtifactRoot('netlify-release-builder-fixture');
   const script = path.join(root, 'scripts/netlify-release-build.js');
   fs.mkdirSync(path.dirname(script), { recursive: true });
@@ -161,12 +161,41 @@ function makeNetlifyReleaseBuilderFixture(loadManifestBody) {
       + `    throw new Error('unused synthetic authorization');\n  },\n`
       + `  loadManifest() {\n${loadManifestBody}\n  },\n};\n`,
   );
-  return { root, script };
+  let binaryDirectory;
+  if (fakeGit) {
+    binaryDirectory = path.join(root, 'synthetic-bin');
+    const fakeGitPath = writeArtifact(
+      root,
+      'synthetic-bin/git',
+      `#!${process.execPath}\n'use strict';\n`
+        + `const args = process.argv.slice(2);\n`
+        + `const operation = ['init', 'fetch', 'rev-parse', 'show', 'archive']\n`
+        + `  .find((candidate) => args.includes(candidate)) || 'unknown';\n`
+        + `if (operation === ${JSON.stringify(fakeGit.failureStage)}) {\n`
+        + `  process.stdout.write(${JSON.stringify(fakeGit.stdoutCanary)});\n`
+        + `  process.stderr.write(${JSON.stringify(fakeGit.stderrCanary)});\n`
+        + (fakeGit.signal
+          ? `  process.kill(process.pid, ${JSON.stringify(fakeGit.signal)});\n`
+          : '  process.exit(23);\n')
+        + `}\n`
+        + `if (operation === 'rev-parse') {\n`
+        + `  process.stdout.write(${JSON.stringify(`${fakeGit.commit}\n`)});\n`
+        + `}\n`
+        + `if (operation === 'show') {\n`
+        + `  process.stdout.write(${JSON.stringify(`${fakeGit.tree}\n`)});\n`
+        + `}\n`,
+    );
+    fs.chmodSync(fakeGitPath, 0o755);
+  }
+  return { binaryDirectory, root, script };
 }
 
 function runNetlifyReleaseBuilder(fixture) {
   const env = { ...process.env };
   delete env.NETLIFY;
+  if (fixture.binaryDirectory) {
+    env.PATH = `${fixture.binaryDirectory}${path.delimiter}${env.PATH}`;
+  }
   return spawnSync(process.execPath, [fixture.script, '--local'], {
     cwd: fixture.root,
     encoding: 'utf8',
@@ -493,6 +522,103 @@ test('WEB-PRIVACY-001AA release-wrapper caught failures use one fixed code', asy
       });
     });
   }
+});
+
+test('WEB-PRIVACY-001AB release child diagnostics stay inside the process', async (t) => {
+  const fixedFailure = 'netlify_release_build_failed\n';
+  const sourceCommit = 'a'.repeat(40);
+  const sourceTree = 'b'.repeat(40);
+  const pathCanary = '/synthetic/private/netlify-child-output-canary';
+  const tokenCanary = ['s', 'k', '_', 'live', '_', 'C'.repeat(24)].join('');
+  const authorization = JSON.stringify({
+    ok: true,
+    manifest: {
+      active: true,
+      releaseId: 'synthetic-child-output-release',
+      sourceCommit,
+      sourceRef: 'refs/heads/synthetic-child-output',
+      sourceRepository: 'https://example.test/synthetic.git',
+      sourceTree,
+    },
+  });
+  const cases = [
+    {
+      name: 'generic child exit output is discarded',
+      failureStage: 'init',
+    },
+    {
+      name: 'generic child signal output is discarded',
+      failureStage: 'init',
+      signal: 'SIGTERM',
+    },
+    {
+      name: 'rev-parse stderr is discarded',
+      failureStage: 'rev-parse',
+    },
+    {
+      name: 'show stderr is discarded after required stdout capture',
+      failureStage: 'show',
+    },
+  ];
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, () => {
+      const stdoutCanary = `${pathCanary}-${scenario.failureStage}-stdout\n`;
+      const stderrCanary = `${tokenCanary}-${scenario.failureStage}-stderr\n`;
+      const fixture = makeNetlifyReleaseBuilderFixture(
+        `    return ${authorization};`,
+        {
+          commit: sourceCommit,
+          failureStage: scenario.failureStage,
+          signal: scenario.signal,
+          stderrCanary,
+          stdoutCanary,
+          tree: sourceTree,
+        },
+      );
+      const result = runNetlifyReleaseBuilder(fixture);
+
+      assert.equal(result.error, undefined);
+      assert.equal(result.signal, null);
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.equal(result.stderr, fixedFailure);
+      [pathCanary, tokenCanary].forEach((canary) => {
+        assert.doesNotMatch(
+          `${result.stdout}\n${result.stderr}`,
+          new RegExp(canary, 'u'),
+        );
+      });
+    });
+  }
+
+  await t.test('invalid captured Git values remain private and fail closed', () => {
+    const invalidCommit = 'captured-git-value-canary';
+    const fixture = makeNetlifyReleaseBuilderFixture(
+      `    return ${authorization};`,
+      {
+        commit: invalidCommit,
+        failureStage: 'never',
+        stderrCanary: 'unused-stderr-canary',
+        stdoutCanary: 'unused-stdout-canary',
+        tree: sourceTree,
+      },
+    );
+    const result = runNetlifyReleaseBuilder(fixture);
+
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, fixedFailure);
+    assert.doesNotMatch(result.stderr, new RegExp(invalidCommit, 'u'));
+  });
+
+  await t.test('builder source contains no inherited child stdio', () => {
+    const source = fs.readFileSync(NETLIFY_RELEASE_BUILDER, 'utf8');
+    assert.doesNotMatch(source, /stdio:\s*['"]inherit['"]/u);
+    assert.doesNotMatch(source, /['"]inherit['"]/u);
+  });
 });
 
 test('safe synthetic nested reports pass and source outside explicit roots is ignored', () => {
