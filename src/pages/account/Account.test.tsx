@@ -1884,7 +1884,7 @@ describe('Strava authorization service boundary', () => {
   });
 });
 
-describe('Strava disconnect empty-request service contract', () => {
+describe('OAUTH-001B10 exact Strava disconnect confirmation service contract', () => {
   const functions = { name: 'synthetic-functions' };
 
   beforeEach(() => {
@@ -1892,13 +1892,18 @@ describe('Strava disconnect empty-request service contract', () => {
     (getFunctions as jest.Mock).mockReturnValue(functions);
   });
 
-  test('sends one exact empty request and preserves the callable result', async () => {
-    const callable = jest.fn().mockResolvedValue({ data: { ok: true } });
+  test('sends one exact empty request and returns a fresh frozen confirmation', async () => {
+    const received = Object.freeze({ ok: true });
+    const callable = jest.fn().mockResolvedValue({ data: received });
     (httpsCallable as jest.Mock).mockReturnValue(callable);
 
-    await expect(ActualStravaService.stravaDisconnect(app))
-      .resolves.toEqual({ ok: true });
+    const confirmation = await ActualStravaService.stravaDisconnect(app);
 
+    expect(confirmation).toEqual({ ok: true });
+    expect(confirmation).not.toBe(received);
+    expect(Object.isFrozen(confirmation)).toBe(true);
+    expect(Object.getPrototypeOf(confirmation)).toBe(Object.prototype);
+    expect(Reflect.ownKeys(confirmation)).toEqual(['ok']);
     expect(getFunctions).toHaveBeenCalledWith(app);
     expect(httpsCallable).toHaveBeenCalledWith(functions, 'stravaDisconnect');
     expect(callable).toHaveBeenCalledTimes(1);
@@ -1906,6 +1911,203 @@ describe('Strava disconnect empty-request service contract', () => {
     const [request] = callable.mock.calls[0];
     expect(Object.getPrototypeOf(request)).toBe(Object.prototype);
     expect(Reflect.ownKeys(request)).toEqual([]);
+  });
+
+  test('returns independent safe confirmations across repeated valid calls', async () => {
+    const received = { ok: true };
+    const callable = jest.fn().mockResolvedValue({ data: received });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    const first = await ActualStravaService.stravaDisconnect(app);
+    const second = await ActualStravaService.stravaDisconnect(app);
+
+    expect(first).toEqual({ ok: true });
+    expect(second).toEqual({ ok: true });
+    expect(first).not.toBe(second);
+    expect(first).not.toBe(received);
+    expect(second).not.toBe(received);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(second)).toBe(true);
+    expect(callable).toHaveBeenCalledTimes(2);
+    expect(callable.mock.calls).toEqual([[{}], [{}]]);
+  });
+
+  test.each([
+    ['undefined data', undefined],
+    ['null data', null],
+    ['a true primitive', true],
+    ['a false primitive', false],
+    ['a string', 'true'],
+    ['a number', 1],
+    ['a function', () => true],
+    ['a boxed Boolean', Object(true)],
+    ['a missing confirmation', {}],
+    ['a false confirmation', { ok: false }],
+    ['a string confirmation', { ok: 'true' }],
+    ['a numeric confirmation', { ok: 1 }],
+    ['a null confirmation', { ok: null }],
+    ['an array', [{ ok: true }]],
+    ['a Date', new Date(0)],
+    ['a null-prototype record', Object.assign(Object.create(null), { ok: true })],
+    ['a custom-prototype record', Object.assign(Object.create({}), { ok: true })],
+    ['an inherited confirmation', Object.create({ ok: true })],
+    ['an extra enumerable key', { ok: true, extra: true }],
+    [
+      'an extra non-enumerable key',
+      Object.defineProperty({ ok: true }, 'extra', { value: true }),
+    ],
+    ['an extra symbol key', { ok: true, [Symbol('extra')]: true }],
+    [
+      'a non-enumerable confirmation',
+      Object.defineProperty({}, 'ok', { value: true }),
+    ],
+  ])('rejects %s with one fixed result', async (_case, data) => {
+    const callable = jest.fn().mockResolvedValue({ data });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(callable).toHaveBeenCalledWith({});
+  });
+
+  test('rejects an own confirmation getter without invoking it', async () => {
+    const okGetter = jest.fn(() => true);
+    const data = Object.defineProperty({}, 'ok', {
+      enumerable: true,
+      get: okGetter,
+    });
+    const callable = jest.fn().mockResolvedValue({ data });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+
+    expect(okGetter).not.toHaveBeenCalled();
+  });
+
+  test('rejects extra and inherited getters without invoking them', async () => {
+    const extraGetter = jest.fn(() => 'private-extra-canary');
+    const inheritedGetter = jest.fn(() => 'private-inherited-canary');
+    const extra = Object.defineProperty({ ok: true }, 'extra', {
+      enumerable: true,
+      get: extraGetter,
+    });
+    const inherited = Object.assign(Object.create(Object.defineProperty({}, 'extra', {
+      enumerable: true,
+      get: inheritedGetter,
+    })), { ok: true });
+    const callable = jest.fn()
+      .mockResolvedValueOnce({ data: extra })
+      .mockResolvedValueOnce({ data: inherited });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+
+    expect(extraGetter).not.toHaveBeenCalled();
+    expect(inheritedGetter).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['an undefined callable result', undefined],
+    ['a null callable result', null],
+    ['a callable result without data', {}],
+  ])('contains %s inside the fixed response boundary', async (_case, result) => {
+    const callable = jest.fn().mockResolvedValue(result);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+  });
+
+  test('contains an exceptional callable data read inside the fixed response boundary', async () => {
+    const dataGetter = jest.fn(() => {
+      throw new Error('disconnect-data-getter-canary token=private-canary');
+    });
+    const result = Object.defineProperty({}, 'data', {
+      enumerable: true,
+      get: dataGetter,
+    });
+    const callable = jest.fn().mockResolvedValue(result);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+
+    expect(dataGetter).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    [
+      'prototype reflection',
+      () => new Proxy({ ok: true }, {
+        getPrototypeOf: () => {
+          throw new Error('disconnect-prototype-canary token=private-canary');
+        },
+      }),
+    ],
+    [
+      'own-key reflection',
+      () => new Proxy({ ok: true }, {
+        ownKeys: () => {
+          throw new Error('disconnect-keys-canary token=private-canary');
+        },
+      }),
+    ],
+    [
+      'descriptor reflection',
+      () => new Proxy({ ok: true }, {
+        getOwnPropertyDescriptor: () => {
+          throw new Error('disconnect-descriptor-canary token=private-canary');
+        },
+      }),
+    ],
+    [
+      'revoked Proxy reflection',
+      () => {
+        const { proxy, revoke } = Proxy.revocable({ ok: true }, {});
+        revoke();
+        return proxy;
+      },
+    ],
+  ])('contains exceptional %s', async (_case, makeData) => {
+    const callable = jest.fn().mockResolvedValue({ data: makeData() });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app))
+      .rejects.toThrow('Invalid Strava disconnect response.');
+  });
+
+  test('projects but never retains a transparent Proxy that presents the exact contract', async () => {
+    const data = new Proxy({ ok: true }, {});
+    const callable = jest.fn().mockResolvedValue({ data });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    const confirmation = await ActualStravaService.stravaDisconnect(app);
+
+    expect(confirmation).toEqual({ ok: true });
+    expect(confirmation).not.toBe(data);
+    expect(Object.isFrozen(confirmation)).toBe(true);
+  });
+
+  test('preserves a transport rejection without inspecting it', async () => {
+    const messageGetter = jest.fn(() => {
+      throw new Error('disconnect-transport-message-getter-canary');
+    });
+    const rejection = Object.defineProperty({}, 'message', {
+      configurable: true,
+      get: messageGetter,
+    });
+    const callable = jest.fn().mockRejectedValue(rejection);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(ActualStravaService.stravaDisconnect(app)).rejects.toBe(rejection);
+
+    expect(messageGetter).not.toHaveBeenCalled();
   });
 });
 
@@ -2769,6 +2971,38 @@ describe('Strava disconnect browser failure boundary', () => {
     expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
     expect(stravaDisconnect).toHaveBeenCalledWith(app);
     expect(stravaDisconnect).toHaveBeenCalledTimes(1);
+    consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  test('OAUTH-001B10 keeps the connected view when the actual service rejects a fulfilled non-confirmation', async () => {
+    const functions = { name: 'disconnect-composition-functions' };
+    const callable = jest.fn().mockResolvedValue({ data: { ok: false } });
+    const consoleSpies = ['debug', 'error', 'info', 'log', 'warn']
+      .map((method) => jest.spyOn(console, method as any).mockImplementation(() => undefined));
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (getFunctions as jest.Mock).mockReturnValue(functions);
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+    (stravaDisconnect as jest.Mock).mockImplementationOnce(
+      (firebaseApp) => ActualStravaService.stravaDisconnect(firebaseApp),
+    );
+
+    renderActualStravaSection();
+    expect(await screen.findByText('Synthetic Morning Run')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(STRAVA_DISCONNECT_FAILURE);
+    expect(document.body).toHaveTextContent('Synthetic Athlete');
+    expect(document.body).toHaveTextContent('Synthetic Morning Run');
+    expect(document.body).not.toHaveTextContent('Invalid Strava disconnect response.');
+    expect(screen.queryByRole('button', { name: 'Connect Strava' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+    expect(getFunctions).toHaveBeenCalledWith(app);
+    expect(httpsCallable).toHaveBeenCalledWith(functions, 'stravaDisconnect');
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(callable).toHaveBeenCalledWith({});
+    expect(stravaDisconnect).toHaveBeenCalledTimes(1);
+    expect(stravaDisconnect).toHaveBeenCalledWith(app);
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 

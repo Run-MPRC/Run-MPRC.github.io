@@ -13,6 +13,10 @@ export type StravaAuthorizationChallenge = Readonly<{
   expiresInSeconds: 600;
 }>;
 
+export type StravaDisconnectConfirmation = Readonly<{
+  ok: true;
+}>;
+
 export interface StravaConnection {
   provider: 'strava';
   athleteId: number | null;
@@ -92,6 +96,33 @@ function readStravaAuthorizationChallenge(value: unknown): StravaAuthorizationCh
   }
 }
 
+function readStravaDisconnectConfirmation(value: unknown): StravaDisconnectConfirmation {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('invalid');
+    }
+    if (Object.getPrototypeOf(value) !== Object.prototype) {
+      throw new Error('invalid');
+    }
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== 1 || keys[0] !== 'ok') {
+      throw new Error('invalid');
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, 'ok');
+    if (
+      descriptor === undefined
+      || descriptor.enumerable !== true
+      || !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+      || descriptor.value !== true
+    ) {
+      throw new Error('invalid');
+    }
+    return Object.freeze({ ok: true });
+  } catch {
+    throw new Error('Invalid Strava disconnect response.');
+  }
+}
+
 export function buildStravaAuthorizeUrl(
   clientId: string,
   redirectUri: string,
@@ -145,14 +176,20 @@ export async function stravaFetchStats(app: FirebaseApp): Promise<StravaStatsRes
   return result.data;
 }
 
-export async function stravaDisconnect(app: FirebaseApp): Promise<{ ok: boolean }> {
+export async function stravaDisconnect(
+  app: FirebaseApp,
+): Promise<StravaDisconnectConfirmation> {
   const functions = getFunctions(app);
-  const callable = httpsCallable<Record<string, never>, { ok: boolean }>(
+  const callable = httpsCallable<Record<string, never>, unknown>(
     functions,
     'stravaDisconnect',
   );
   const result = await callable({});
-  return result.data;
+  try {
+    return readStravaDisconnectConfirmation(result.data);
+  } catch {
+    throw new Error('Invalid Strava disconnect response.');
+  }
 }
 
 export async function getStravaConnection(
