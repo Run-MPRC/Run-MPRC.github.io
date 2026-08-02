@@ -1143,3 +1143,216 @@ describe('DATA-001A8 registration event snapshot/projection failure boundary', (
     expect(admin.__eventSnapshotStages()).toEqual(['exists:synthetic-event']);
   });
 });
+
+describe('DATA-001A9 registration-sort failure boundary', () => {
+  beforeEach(() => {
+    admin.__reset();
+    admin.firestore.mockClear();
+    firebaseFunctions.__resetLoggerCalls();
+    requireAppCheck.mockReset();
+  });
+
+  test.each([
+    ['nested seconds access', 1, 0],
+    ['numeric coercion', 2, 1],
+  ])('maps hostile %s failure to one fixed result', async (
+    stage,
+    expectedSecondsReads,
+    expectedCoercionReads,
+  ) => {
+    let hostileReads = 0;
+    const hostileFailureTarget = Object.create(null);
+    Object.defineProperty(hostileFailureTarget, inspect.custom, {
+      value: () => {
+        hostileReads += 1;
+        throw new Error('hostile registration-sort formatter was inspected');
+      },
+    });
+    const hostileFailure = new Proxy(hostileFailureTarget, {
+      get() {
+        hostileReads += 1;
+        throw new Error('hostile registration-sort getter was inspected');
+      },
+      getOwnPropertyDescriptor() {
+        hostileReads += 1;
+        throw new Error('hostile registration-sort descriptor was inspected');
+      },
+      ownKeys() {
+        hostileReads += 1;
+        throw new Error('hostile registration-sort keys were inspected');
+      },
+    });
+    let secondsReads = 0;
+    let coercionReads = 0;
+    const coercibleSeconds = Object.create(null);
+    Object.defineProperty(coercibleSeconds, Symbol.toPrimitive, {
+      value: () => {
+        coercionReads += 1;
+        throw hostileFailure;
+      },
+    });
+    const documents = [
+      registrationDocument({
+        createdSeconds: 1_800_000_010,
+        eventId: 'synthetic-sort-event',
+        id: 'synthetic-sort-registration-a',
+      }),
+      registrationDocument({
+        createdSeconds: 1_800_000_020,
+        eventId: 'synthetic-sort-event',
+        id: 'synthetic-sort-registration-b',
+      }),
+    ];
+    documents.forEach((document) => {
+      const createdAt = document.data().createdAt;
+      document.data.mockClear();
+      Object.defineProperty(createdAt, '_seconds', {
+        configurable: true,
+        get() {
+          secondsReads += 1;
+          if (stage === 'nested seconds access') throw hostileFailure;
+          return coercibleSeconds;
+        },
+      });
+    });
+    admin.__seedRegistrations(documents);
+    admin.__seedEvent('synthetic-sort-event', {
+      location: 'Synthetic Sort Park',
+      slug: 'synthetic-sort-event',
+      startAt: { _seconds: 1_900_000_000 },
+      title: 'Synthetic Sort Event',
+    });
+    const logSpies = ['debug', 'error', 'info', 'log', 'warn'].map((method) => (
+      jest.spyOn(console, method).mockImplementation(() => {})
+    ));
+
+    let caught;
+    let logCalls;
+    let resolved;
+    try {
+      try {
+        resolved = await listMyRegistrations({}, CONTEXT);
+      } catch (error) {
+        caught = error;
+      }
+    } finally {
+      logCalls = logSpies.map((spy) => spy.mock.calls.length);
+      logSpies.forEach((spy) => spy.mockRestore());
+    }
+    const rawFailureEscaped = caught === hostileFailure;
+    const publicFailure = caught && !rawFailureEscaped ? {
+      causeAbsent: caught.cause === undefined,
+      code: caught.code,
+      detailsAbsent: caught.details === undefined,
+      message: caught.message,
+    } : null;
+
+    expect({
+      coercionReads,
+      eventCollectionCalls: admin.__eventCollectionCalls(),
+      eventLookupStages: admin.__eventLookupStages(),
+      eventReads: admin.__eventReads(),
+      eventSnapshotStages: admin.__eventSnapshotStages(),
+      functionLoggerCalls: firebaseFunctions.__loggerCalls(),
+      hostileReads,
+      logCalls,
+      publicFailure,
+      queries: admin.__queries(),
+      queryStages: admin.__registrationQueryStages(),
+      rawFailureEscaped,
+      registrationDataCalls: documents.map(
+        (document) => document.data.mock.calls.length,
+      ),
+      resolved,
+      secondsReads,
+    }).toEqual({
+      coercionReads: expectedCoercionReads,
+      eventCollectionCalls: 1,
+      eventLookupStages: [
+        'collection',
+        'doc:synthetic-sort-event',
+        'get:synthetic-sort-event',
+      ],
+      eventReads: ['synthetic-sort-event'],
+      eventSnapshotStages: [
+        'exists:synthetic-sort-event',
+        'data:synthetic-sort-event',
+      ],
+      functionLoggerCalls: 0,
+      hostileReads: 0,
+      logCalls: [0, 0, 0, 0, 0],
+      publicFailure: {
+        causeAbsent: true,
+        code: 'unavailable',
+        detailsAbsent: true,
+        message: 'Registration data could not be loaded.',
+      },
+      queries: [{
+        field: 'uid',
+        operator: '==',
+        value: CONTEXT.auth.uid,
+      }],
+      queryStages: ['firestore', 'collectionGroup', 'where', 'get'],
+      rawFailureEscaped: false,
+      registrationDataCalls: [2, 2],
+      resolved: undefined,
+      secondsReads: expectedSecondsReads,
+    });
+    expect(requireAppCheck).toHaveBeenCalledTimes(1);
+    expect(requireAppCheck).toHaveBeenCalledWith(CONTEXT);
+    expect(admin.firestore).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves descending created-time order and missing-time fallback', async () => {
+    const missingTime = registrationDocument({
+      createdSeconds: 1_800_000_030,
+      eventId: 'synthetic-sort-event',
+      id: 'synthetic-sort-registration-missing',
+    });
+    const missingTimeRecord = missingTime.data();
+    delete missingTimeRecord.createdAt;
+    missingTime.data.mockClear();
+    admin.__seedRegistrations([
+      missingTime,
+      registrationDocument({
+        createdSeconds: 1_800_000_010,
+        eventId: 'synthetic-sort-event',
+        id: 'synthetic-sort-registration-older',
+      }),
+      registrationDocument({
+        createdSeconds: 1_800_000_020,
+        eventId: 'synthetic-sort-event',
+        id: 'synthetic-sort-registration-newer',
+      }),
+    ]);
+    admin.__seedEvent('synthetic-sort-event', {
+      location: 'Synthetic Sort Park',
+      slug: 'synthetic-sort-event',
+      startAt: { _seconds: 1_900_000_000 },
+      title: 'Synthetic Sort Event',
+    });
+
+    const result = await listMyRegistrations({}, CONTEXT);
+
+    expect(result.registrations.map(({ createdAt, id }) => ({ createdAt, id }))).toEqual([
+      {
+        createdAt: { _seconds: 1_800_000_020 },
+        id: 'synthetic-sort-registration-newer',
+      },
+      {
+        createdAt: { _seconds: 1_800_000_010 },
+        id: 'synthetic-sort-registration-older',
+      },
+      {
+        createdAt: null,
+        id: 'synthetic-sort-registration-missing',
+      },
+    ]);
+    expect(admin.__eventReads()).toEqual(['synthetic-sort-event']);
+    expect(admin.__eventSnapshotStages()).toEqual([
+      'exists:synthetic-sort-event',
+      'data:synthetic-sort-event',
+    ]);
+    expect(firebaseFunctions.__loggerCalls()).toBe(0);
+  });
+});
