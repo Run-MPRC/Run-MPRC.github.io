@@ -542,6 +542,9 @@ function snapshotProviderActivities(response) {
     if (record === INVALID_SELECTED_VALUE) return null;
     const activity = snapshotProviderActivity(record);
     if (!activity) return null;
+    for (let acceptedIndex = 0; acceptedIndex < activities.length; acceptedIndex += 1) {
+      if (activities[acceptedIndex].id === activity.id) return null;
+    }
     reflectApply(arrayPush, activities, [activity]);
   }
   return objectFreeze(activities);
