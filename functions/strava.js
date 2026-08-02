@@ -715,6 +715,12 @@ function snapshotStoredTokenSecret(record) {
   return objectFreeze({ accessToken, refreshToken, expiresAt });
 }
 
+function storedTokenSecretsMatch(left, right) {
+  return left.accessToken === right.accessToken
+    && left.refreshToken === right.refreshToken
+    && left.expiresAt === right.expiresAt;
+}
+
 function snapshotStoredDisconnectAccessToken(record) {
   if (!isPlainJsonRecord(record)) return null;
 
@@ -905,14 +911,24 @@ async function getFreshAccessToken(uid) {
   }
   const refreshed = await refreshToken(stored.refreshToken);
   try {
-    const secretRef = secretDocRef(uid);
-    const updatedAt = Timestamp.now();
-    await secretRef.set({
-      access_token: refreshed.accessToken,
-      refresh_token: refreshed.refreshToken,
-      expires_at: refreshed.expiresAt,
-      updatedAt,
-    }, { merge: true });
+    const db = admin.firestore();
+    const secretRef = secretDocRef(uid, db);
+    const persisted = await db.runTransaction(async (transaction) => {
+      const currentSnapshot = await transaction.get(secretRef);
+      if (!currentSnapshot.exists) return false;
+      const current = snapshotStoredTokenSecret(currentSnapshot.data());
+      if (!current || !storedTokenSecretsMatch(current, stored)) return false;
+
+      const updatedAt = Timestamp.now();
+      transaction.set(secretRef, {
+        access_token: refreshed.accessToken,
+        refresh_token: refreshed.refreshToken,
+        expires_at: refreshed.expiresAt,
+        updatedAt,
+      }, { merge: true });
+      return true;
+    });
+    if (persisted !== true) throw stravaRefreshError('internal');
   } catch (_error) {
     throw stravaRefreshError('internal');
   }
