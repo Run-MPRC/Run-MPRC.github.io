@@ -395,6 +395,54 @@ const REFUND_CHARGE_CREATED_CASES = REFUND_CHARGE_CREATED_DOMAINS.flatMap(
     ([evidence, mutation, value]) => [domain, evidence, mutation, value],
   ),
 );
+const CHECKOUT_SESSION_CREATED_DOMAINS = ['registration', 'order'];
+const CHECKOUT_SESSION_CREATED_LIFECYCLES = [
+  ['completed', 'checkout.session.completed', 'paid', 'payment_confirmed'],
+  [
+    'async success',
+    'checkout.session.async_payment_succeeded',
+    'paid',
+    'payment_confirmed',
+  ],
+  [
+    'async failure',
+    'checkout.session.async_payment_failed',
+    'unpaid',
+    'payment_failed',
+  ],
+  ['expired', 'checkout.session.expired', 'unpaid', 'payment_expired'],
+];
+const INVALID_CHECKOUT_SESSION_CREATED_CASES = [
+  ['missing', 'delete', undefined],
+  ['null', 'value', null],
+  ['negative', 'value', -1],
+  ['fractional', 'value', 1.5],
+  ['string', 'value', 'hostile-session-created-do-not-log'],
+  ['boolean', 'value', true],
+  ['object', 'value', { marker: 'hostile-session-created-do-not-log' }],
+  ['array', 'value', ['hostile-session-created-do-not-log']],
+  ['NaN serialized as null', 'value', Number.NaN],
+  ['positive infinity serialized as null', 'value', Number.POSITIVE_INFINITY],
+  ['negative infinity serialized as null', 'value', Number.NEGATIVE_INFINITY],
+  ['Firestore maximum plus one', 'value', FIRESTORE_TIMESTAMP_MAX_SECONDS + 1],
+  ['maximum safe integer', 'value', Number.MAX_SAFE_INTEGER],
+  ['unsafe integer', 'value', Number.MAX_SAFE_INTEGER + 1],
+];
+const CHECKOUT_SESSION_CREATED_CASES = CHECKOUT_SESSION_CREATED_LIFECYCLES.flatMap(
+  ([lifecycle, type, paymentStatus]) => (
+    CHECKOUT_SESSION_CREATED_DOMAINS.flatMap((domain) => (
+      INVALID_CHECKOUT_SESSION_CREATED_CASES.map(([evidence, mutation, value]) => [
+        lifecycle,
+        domain,
+        evidence,
+        type,
+        paymentStatus,
+        mutation,
+        value,
+      ])
+    ))
+  ),
+);
 
 function stripeEvent(id, type, object) {
   const checkoutStatus = CHECKOUT_SESSION_STATUS_BY_EVENT_TYPE[type];
@@ -430,6 +478,7 @@ function registrationSession(overrides = {}) {
   return {
     id: 'cs_reg_1',
     object: 'checkout.session',
+    created: 1_600_000_000,
     mode: 'payment',
     metadata: {
       schemaVersion: '1',
@@ -455,6 +504,7 @@ function orderSession(overrides = {}) {
   return {
     id: 'cs_order_1',
     object: 'checkout.session',
+    created: 1_600_000_000,
     mode: 'payment',
     metadata: {
       schemaVersion: '1',
@@ -655,6 +705,48 @@ function refundChargeCreatedFixture(
   };
 }
 
+function checkoutSessionCreatedFixture(
+  domain,
+  type,
+  suffix,
+  { missingTarget = false } = {},
+) {
+  const registration = domain === 'registration';
+  const businessPath = registration
+    ? 'events/race-1/registrations/reg-1'
+    : 'orders/order-1';
+  const session = registration ? registrationSession : orderSession;
+  const metadata = registration ? {
+    schemaVersion: '1',
+    eventId: missingTarget ? 'race-missing' : 'race-1',
+    registrationId: missingTarget ? 'registration-missing' : 'reg-1',
+    priceTier: 'nonMember',
+  } : {
+    schemaVersion: '1',
+    type: 'merch',
+    orderId: missingTarget ? 'order-missing' : 'order-1',
+    productSlug: 'hat',
+  };
+  const paymentStatus = type === 'checkout.session.async_payment_failed'
+    || type === 'checkout.session.expired'
+    ? 'unpaid'
+    : 'paid';
+
+  if (!missingTarget) {
+    if (registration) seedRegistration();
+    else seedOrder();
+  }
+
+  return {
+    businessPath: missingTarget ? null : businessPath,
+    event: stripeEvent(
+      `evt_pay003a12_${suffix}`,
+      type,
+      session({ metadata, payment_status: paymentStatus }),
+    ),
+  };
+}
+
 function signedRequest(event, signatureOverride) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signedPayload = createSignedStripePayload({
@@ -727,6 +819,11 @@ function setEventCreated(event, mutation, value) {
 function setChargeCreated(charge, mutation, value) {
   if (mutation === 'delete') delete charge.created;
   else charge.created = value;
+}
+
+function setCheckoutSessionCreated(session, mutation, value) {
+  if (mutation === 'delete') delete session.created;
+  else session.created = value;
 }
 
 function providerBindingPaths(event) {
@@ -878,6 +975,28 @@ function expectedChargeCreatedQuarantine(bindingPaths = []) {
     ledger: {
       status: 'processed',
       outcome: 'needs_review:invalid_charge_created',
+      requiresReview: true,
+      targetType: null,
+      targetPath: null,
+      targetSource: null,
+    },
+    bindingPaths,
+  };
+}
+
+function expectedCheckoutSessionCreatedQuarantine(bindingPaths = []) {
+  return {
+    httpStatus: null,
+    response: {
+      received: true,
+      duplicate: false,
+      outcome: 'needs_review:invalid_checkout_session_created',
+      requiresReview: true,
+    },
+    businessUnchanged: true,
+    ledger: {
+      status: 'processed',
+      outcome: 'needs_review:invalid_checkout_session_created',
       requiresReview: true,
       targetType: null,
       targetPath: null,
@@ -1394,6 +1513,561 @@ describe('stripeWebhook', () => {
           _milliseconds: event.created * 1000,
         });
       }
+    });
+  });
+
+  describe('PAY-003A12 Checkout Session-created admission', () => {
+    test.each(CHECKOUT_SESSION_CREATED_CASES)(
+      'quarantines %s %s with %s Session-created evidence',
+      async (lifecycle, domain, evidence, type, paymentStatus, mutation, value) => {
+        const slug = `${lifecycle}_${domain}_${evidence}`
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_');
+        const { event, businessPath } = checkoutSessionCreatedFixture(
+          domain,
+          type,
+          `invalid_${slug}`,
+        );
+        event.data.object.payment_status = paymentStatus;
+        setCheckoutSessionCreated(event.data.object, mutation, value);
+        const before = storedCopy(businessPath);
+
+        const response = await deliver(event);
+
+        expect(refundAdmissionObservation({
+          response,
+          event,
+          businessSnapshots: [[businessPath, before]],
+        })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+        expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+          stripeCreatedAt: { _milliseconds: event.created * 1000 },
+        });
+        expectOnlyEventLedgerReads(event);
+        expectOnlyEventLedgerTimestamps(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expect(consoleError).toHaveBeenCalledWith(
+          'Stripe event requires review',
+          {
+            eventId: event.id,
+            eventType: type,
+            outcome: 'needs_review:invalid_checkout_session_created',
+            targetType: null,
+          },
+        );
+        expect(JSON.stringify({
+          response: response.json.mock.calls,
+          ledger: admin.__get(`stripeEvents/${event.id}`),
+          logs: consoleError.mock.calls,
+        })).not.toContain('hostile-session-created-do-not-log');
+      },
+    );
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'defensively rejects a post-parser Proxy for %s without coercion',
+      async (domain) => {
+        const { event, businessPath } = checkoutSessionCreatedFixture(
+          domain,
+          'checkout.session.completed',
+          `proxy_${domain}`,
+        );
+        const before = storedCopy(businessPath);
+        const trap = jest.fn(() => {
+          throw new Error('Session-created Proxy trap must not run');
+        });
+        event.data.object.created = new Proxy({}, {
+          get: trap,
+          getOwnPropertyDescriptor: trap,
+          ownKeys: trap,
+        });
+
+        const response = await deliverMockedConstructedEvent(event);
+
+        expect(refundAdmissionObservation({
+          response,
+          event,
+          businessSnapshots: [[businessPath, before]],
+        })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+        expectOnlyEventLedgerReads(event);
+        expectOnlyEventLedgerTimestamps(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expect(trap).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each([
+      ['metadata-only claim', {}, {}],
+      [
+        'client-reference-only claim',
+        {
+          metadata: {},
+          client_reference_id: 'mprc:registration:race-1:reg-1',
+        },
+        {},
+      ],
+      [
+        'matching dual claim',
+        { client_reference_id: 'mprc:registration:race-1:reg-1' },
+        {},
+      ],
+      ['legacy Session fallback', { metadata: {} }, {}],
+      [
+        'Payment Link binding',
+        { payment_link: 'plink_pay003a12_later' },
+        { stripePaymentLinkId: 'plink_pay003a12_expected' },
+      ],
+    ])('blocks invalid Session time before %s work', async (
+      label,
+      sessionPatch,
+      recordPatch,
+    ) => {
+      seedRegistration(recordPatch);
+      const businessPath = 'events/race-1/registrations/reg-1';
+      const before = storedCopy(businessPath);
+      const session = registrationSession(sessionPatch);
+      session.created = -1;
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const event = stripeEvent(
+        `evt_pay003a12_reference_${slug}`,
+        'checkout.session.completed',
+        session,
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks invalid Session time before ambiguous legacy fallback', async () => {
+      seedRegistration({ stripeSessionId: 'cs_pay003a12_ambiguous' });
+      seedOrder({ stripeSessionId: 'cs_pay003a12_ambiguous' });
+      const snapshots = [
+        [
+          'events/race-1/registrations/reg-1',
+          storedCopy('events/race-1/registrations/reg-1'),
+        ],
+        ['orders/order-1', storedCopy('orders/order-1')],
+      ];
+      const event = stripeEvent(
+        'evt_pay003a12_ambiguous_fallback',
+        'checkout.session.completed',
+        registrationSession({
+          id: 'cs_pay003a12_ambiguous',
+          metadata: {},
+          created: -1,
+        }),
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: snapshots,
+      })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('keeps invalid Session time ahead of malformed reference handling', async () => {
+      const event = stripeEvent(
+        'evt_pay003a12_malformed_reference',
+        'checkout.session.completed',
+        registrationSession({
+          created: -1,
+          metadata: { schemaVersion: '1', eventId: 'race-1' },
+        }),
+      );
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({ response, event }))
+        .toEqual(expectedCheckoutSessionCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'processes invalid Session time before a claimed missing %s target',
+      async (domain) => {
+        const { event } = checkoutSessionCreatedFixture(
+          domain,
+          'checkout.session.completed',
+          `invalid_missing_${domain}`,
+          { missingTarget: true },
+        );
+        event.data.object.created = -1;
+
+        const response = await deliver(event);
+
+        expect(refundAdmissionObservation({ response, event }))
+          .toEqual(expectedCheckoutSessionCreatedQuarantine());
+        expectOnlyEventLedgerReads(event);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'keeps a valid Session time with a claimed missing %s target retryable',
+      async (domain) => {
+        const { event } = checkoutSessionCreatedFixture(
+          domain,
+          'checkout.session.completed',
+          `valid_missing_${domain}`,
+          { missingTarget: true },
+        );
+        event.data.object.created = 0;
+
+        const response = await deliver(event);
+
+        expect(response.status).toHaveBeenCalledWith(500);
+        expect(admin.__get(`stripeEvents/${event.id}`)).toBeUndefined();
+        providerBindingPaths(event).forEach((path) => {
+          expect(admin.__get(path)).toBeUndefined();
+        });
+      },
+    );
+
+    test.each([
+      [
+        'outer Event realm',
+        'livemode_mismatch',
+        (event) => { event.livemode = true; },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'embedded Session realm',
+        'checkout_session_livemode_mismatch',
+        (event) => { event.data.object.livemode = true; },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'Session lifecycle',
+        'checkout_session_status_mismatch',
+        (event) => { event.data.object.status = 'open'; },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'metadata schema',
+        'metadata_schema_version_mismatch',
+        (event) => { setMetadataSchema(event.data.object, '2'); },
+        { _milliseconds: 1_800_000_000_000 },
+      ],
+      [
+        'outer Event time',
+        'invalid_event_created',
+        (event) => { event.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1; },
+        null,
+      ],
+    ])('keeps %s precedence over invalid Session time', async (
+      label,
+      reason,
+      mutate,
+      expectedStripeCreatedAt,
+    ) => {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        'registration',
+        'checkout.session.completed',
+        `precedence_${slug}`,
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = FIRESTORE_TIMESTAMP_MAX_SECONDS + 1;
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expectCompatibilityQuarantine({ response, event, businessPath, before, reason });
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        stripeCreatedAt: expectedStripeCreatedAt,
+      });
+      expectOnlyEventLedgerReads(event);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['object binding', (event) => { event.data.object.object = 'charge'; }],
+      ['mode', (event) => { event.data.object.mode = 'subscription'; }],
+      ['money', (event) => { event.data.object.amount_total = 4999; }],
+      ['payment status', (event) => { event.data.object.payment_status = 'unknown'; }],
+      [
+        'PaymentIntent binding',
+        (event) => { event.data.object.payment_intent = 'pi_pay003a12_other'; },
+      ],
+    ])('keeps invalid Session time ahead of %s evaluation', async (label, mutate) => {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        'registration',
+        'checkout.session.completed',
+        `later_${slug}`,
+      );
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+      mutate(event);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('keeps invalid Session time ahead of predecessor-state evaluation', async () => {
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        'registration',
+        'checkout.session.completed',
+        'later_predecessor',
+      );
+      seedRegistration({ status: 'cancelled', paymentStatus: 'cancelled' });
+      const before = storedCopy(businessPath);
+      event.data.object.created = -1;
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, before]],
+      })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test('blocks invalid Session time before provider-binding conflict reads', async () => {
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        'registration',
+        'checkout.session.completed',
+        'binding_conflict',
+      );
+      event.data.object.created = -1;
+      const bindingPath = 'stripeObjectBindings/checkout_session:cs_reg_1';
+      admin.__seed(bindingPath, {
+        targetType: 'order',
+        targetPath: 'orders/order-other',
+        sentinel: 'preserve',
+      });
+      const beforeBusiness = storedCopy(businessPath);
+      const beforeBinding = storedCopy(bindingPath);
+
+      const response = await deliver(event);
+
+      expect(refundAdmissionObservation({
+        response,
+        event,
+        businessSnapshots: [[businessPath, beforeBusiness]],
+      })).toEqual(expectedCheckoutSessionCreatedQuarantine([bindingPath]));
+      expect(admin.__get(bindingPath)).toEqual(beforeBinding);
+      expectOnlyEventLedgerReads(event);
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS)(
+      'deduplicates rejected %s Session time without target work',
+      async (domain) => {
+        const { event, businessPath } = checkoutSessionCreatedFixture(
+          domain,
+          'checkout.session.completed',
+          `replay_${domain}`,
+        );
+        const before = storedCopy(businessPath);
+        event.data.object.created = -1;
+
+        const firstResponse = await deliver(event);
+        const ledgerPath = `stripeEvents/${event.id}`;
+        const afterFirstLedger = storedCopy(ledgerPath);
+        const replayResponse = await deliver(event);
+
+        expect(refundAdmissionObservation({
+          response: firstResponse,
+          event,
+          businessSnapshots: [[businessPath, before]],
+        })).toEqual(expectedCheckoutSessionCreatedQuarantine());
+        expect(replayResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+          received: true,
+          duplicate: true,
+          outcome: 'needs_review:invalid_checkout_session_created',
+        }));
+        expect(admin.__get(businessPath)).toEqual(before);
+        expect(admin.__get(ledgerPath)).toEqual(afterFirstLedger);
+        expect(admin.__readOperations()).toEqual([
+          { kind: 'document', path: ledgerPath },
+          { kind: 'document', path: ledgerPath },
+          { kind: 'document', path: ledgerPath },
+        ]);
+        expect(Timestamp.fromMillis).toHaveBeenCalledTimes(3);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expect(consoleError).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test('preserves a richer processed Event before Session-time admission', async () => {
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        'order',
+        'checkout.session.completed',
+        'already_processed',
+      );
+      event.data.object.created = -1;
+      const ledgerPath = `stripeEvents/${event.id}`;
+      admin.__seed(ledgerPath, {
+        status: 'processed',
+        outcome: 'legacy_processed_outcome',
+        targetPath: 'orders/legacy-target',
+        sentinel: { preserve: true },
+      });
+      const before = storedCopy(businessPath);
+      const beforeLedger = storedCopy(ledgerPath);
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: true,
+        outcome: 'legacy_processed_outcome',
+      }));
+      expect(admin.__get(businessPath)).toEqual(before);
+      expect(admin.__get(ledgerPath)).toEqual(beforeLedger);
+      expect(admin.__readOperations()).toEqual([
+        { kind: 'document', path: ledgerPath },
+      ]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(Timestamp.fromMillis).not.toHaveBeenCalled();
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_DOMAINS.flatMap((domain) => [
+      [domain, 'Unix epoch', 0],
+      [domain, 'Firestore maximum', FIRESTORE_TIMESTAMP_MAX_SECONDS],
+    ]))('admits the inclusive %s %s Session-created boundary', async (
+      domain,
+      boundary,
+      sessionCreated,
+    ) => {
+      const slug = `${domain}_${boundary}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        domain,
+        'checkout.session.completed',
+        `valid_${slug}`,
+      );
+      event.data.object.created = sessionCreated;
+      if (sessionCreated === FIRESTORE_TIMESTAMP_MAX_SECONDS) {
+        event.created = sessionCreated;
+      }
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome: 'payment_confirmed',
+      }));
+      expect(admin.__get(businessPath)).toMatchObject({
+        status: 'paid',
+        paymentStatus: 'paid',
+      });
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        targetPath: businessPath,
+        stripeCreatedAt: { _milliseconds: event.created * 1000 },
+      });
+    });
+
+    test.each(CHECKOUT_SESSION_CREATED_LIFECYCLES.flatMap(
+      ([lifecycle, type, paymentStatus, outcome]) => (
+        CHECKOUT_SESSION_CREATED_DOMAINS.map((domain) => [
+          lifecycle,
+          domain,
+          type,
+          paymentStatus,
+          outcome,
+        ])
+      ),
+    ))('preserves valid %s %s behavior', async (
+      lifecycle,
+      domain,
+      type,
+      paymentStatus,
+      outcome,
+    ) => {
+      const slug = `${lifecycle}_${domain}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { event, businessPath } = checkoutSessionCreatedFixture(
+        domain,
+        type,
+        `compatible_${slug}`,
+      );
+      event.data.object.payment_status = paymentStatus;
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome,
+      }));
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        targetPath: businessPath,
+        outcome,
+      });
+    });
+
+    test('leaves refund Charge-created admission unchanged', async () => {
+      const { event, businessPath } = refundChargeCreatedFixture(
+        'order',
+        'pay003a12_non_checkout',
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'partially_refunded',
+      }));
+      expect(admin.__get(businessPath)).toMatchObject({
+        paymentStatus: 'partially_refunded',
+      });
+    });
+
+    test.each([
+      ['created', 'charge.dispute.created', 'needs_response', 'dispute_needs_response'],
+      ['updated', 'charge.dispute.updated', 'under_review', 'dispute_under_review'],
+      ['closed', 'charge.dispute.closed', 'won', 'dispute_won'],
+    ])('leaves %s Dispute embedded-created evidence unchanged', async (
+      lifecycle,
+      type,
+      status,
+      outcome,
+    ) => {
+      seedPaidDisputeOrder();
+      const event = stripeEvent(
+        `evt_pay003a12_dispute_${lifecycle}`,
+        type,
+        orderDispute({
+          id: `dp_pay003a12_${lifecycle}`,
+          created: -1,
+          status,
+        }),
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+      expect(admin.__get(`stripeEvents/${event.id}`)).toMatchObject({
+        targetPath: 'orders/order-1',
+        outcome,
+      });
+    });
+
+    test('leaves unsupported embedded-created evidence unchanged', async () => {
+      const event = stripeEvent(
+        'evt_pay003a12_unsupported',
+        'customer.created',
+        { id: 'cus_pay003a12_unsupported', object: 'customer', created: -1 },
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'ignored:unsupported_event',
+      }));
     });
   });
 
@@ -4092,12 +4766,12 @@ describe('stripeWebhook', () => {
     },
   );
 
-  test('PAY-003A9 leaves Checkout Session-created evidence outside this child', async () => {
+  test('PAY-003A9 keeps valid Checkout Session-created evidence compatible', async () => {
     seedRegistration();
     const event = stripeEvent(
       'evt_pay003a9_checkout_compatibility',
       'checkout.session.completed',
-      registrationSession({ created: -1 }),
+      registrationSession({ created: 0 }),
     );
 
     const response = await deliver(event);

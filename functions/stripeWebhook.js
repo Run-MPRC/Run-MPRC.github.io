@@ -173,6 +173,14 @@ function validateEventAdmission(event, expectedLivemode) {
       reason: 'invalid_event_created',
     };
   }
+  if (CHECKOUT_EVENT_TYPES.has(event.type)
+    && !isValidStripeCreated(event.data?.object?.created)) {
+    return {
+      ok: false,
+      expected: expectedLivemode,
+      reason: 'invalid_checkout_session_created',
+    };
+  }
   if (event.type === 'charge.refunded'
     && !isValidStripeCreated(event.data?.object?.created)) {
     return {
