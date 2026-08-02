@@ -38,6 +38,7 @@ jest.mock('firebase-admin', () => {
   const readFailures = new Map();
   const readSnapshots = new Map();
   const reads = [];
+  const snapshotUpdateTimes = new WeakMap();
   let transactionCommitFailure;
   let transactionCommitPostApplyFailure;
   const transactionCommitAttempts = [];
@@ -95,6 +96,27 @@ jest.mock('firebase-admin', () => {
     bumpVersion(operation.path);
   }
 
+  function makeSnapshotUpdateTime(path, version) {
+    const updateTime = {
+      isEqual: (other) => {
+        const otherIdentity = snapshotUpdateTimes.get(other);
+        return otherIdentity !== undefined
+          && otherIdentity.path === path
+          && otherIdentity.version === version;
+      },
+    };
+    snapshotUpdateTimes.set(updateTime, Object.freeze({ path, version }));
+    return Object.freeze(updateTime);
+  }
+
+  function makeDocumentSnapshot(path, exists, data, version) {
+    return {
+      exists,
+      data: () => data,
+      updateTime: exists ? makeSnapshotUpdateTime(path, version) : undefined,
+    };
+  }
+
   function document(path) {
     if (documentReferenceFailures.has(path)) {
       throw documentReferenceFailures.get(path);
@@ -121,10 +143,8 @@ jest.mock('firebase-admin', () => {
         }
         const exists = documents.has(path);
         const data = documents.get(path);
-        return {
-          exists,
-          data: () => data,
-        };
+        const version = documentVersions.get(path) || 0;
+        return makeDocumentSnapshot(path, exists, data, version);
       },
       set: async (data, options) => {
         const operation = { path, data, options };
@@ -217,10 +237,7 @@ jest.mock('firebase-admin', () => {
               const exists = documents.has(ref.path);
               const data = documents.get(ref.path);
               readVersions.set(ref.path, version);
-              return {
-                exists,
-                data: () => data,
-              };
+              return makeDocumentSnapshot(ref.path, exists, data, version);
             },
             delete: (ref) => {
               transactionDeleteAttempts.push(ref.path);
@@ -2823,6 +2840,7 @@ describe('Strava token refresh failure boundary', () => {
       expectFixedReadFailure(rejection, probes);
       expect(data).toHaveBeenCalledTimes(1);
     });
+
   });
 
   test('stops when the Strava connection record is missing', async () => {
@@ -6282,16 +6300,22 @@ describe('Strava disconnect failure log boundary', () => {
   }
 
   function expectLocalDeletes() {
-    const operations = [
-      { type: 'delete', path: SECRET_PATH },
-      { type: 'delete', path: CONNECTION_PATH },
-    ];
     expect(admin.__getDeletes()).toEqual([]);
-    expect(admin.__getBatchCreateAttempts()).toBe(1);
-    expect(admin.__getBatchDeleteAttempts()).toEqual([SECRET_PATH, CONNECTION_PATH]);
-    expect(admin.__getBatchDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+    expect(admin.__getBatchCreateAttempts()).toBe(0);
+    expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+    expect(admin.__getBatchDeletes()).toEqual([]);
     expect(admin.__getBatchSetAttempts()).toEqual([]);
-    expect(admin.__getBatchCommitAttempts()).toEqual([operations]);
+    expect(admin.__getBatchCommitAttempts()).toEqual([]);
+    expect(admin.__getTransactionRunAttempts()).toBe(1);
+    expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([
+      SECRET_PATH,
+      CONNECTION_PATH,
+    ]);
+    expect(admin.__getTransactionDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
+    expect(admin.__getTransactionCommitAttempts()).toEqual([
+      [SECRET_PATH, CONNECTION_PATH],
+    ]);
     expect(admin.__getWrites()).toEqual([]);
     expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
     expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
@@ -6303,6 +6327,11 @@ describe('Strava disconnect failure log boundary', () => {
     expect(admin.__getBatchDeleteAttempts()).toEqual([]);
     expect(admin.__getBatchDeletes()).toEqual([]);
     expect(admin.__getBatchCommitAttempts()).toEqual([]);
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(admin.__getTransactionReads()).toEqual([]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+    expect(admin.__getTransactionDeletes()).toEqual([]);
+    expect(admin.__getTransactionCommitAttempts()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
     expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
@@ -6321,6 +6350,13 @@ describe('Strava disconnect failure log boundary', () => {
     Object.values(consoleSpies).forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
 
+  function expectFixedCleanupWarning() {
+    expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+    expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_CLEANUP_WARNING);
+    ['debug', 'error', 'info', 'log']
+      .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
+  }
+
   function expectNoDisconnectSideEffects() {
     expect(admin.__getReads()).toEqual([]);
     expect(admin.__getDeletes()).toEqual([]);
@@ -6328,6 +6364,11 @@ describe('Strava disconnect failure log boundary', () => {
     expect(admin.__getBatchDeleteAttempts()).toEqual([]);
     expect(admin.__getBatchDeletes()).toEqual([]);
     expect(admin.__getBatchCommitAttempts()).toEqual([]);
+    expect(admin.__getTransactionRunAttempts()).toBe(0);
+    expect(admin.__getTransactionReads()).toEqual([]);
+    expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+    expect(admin.__getTransactionDeletes()).toEqual([]);
+    expect(admin.__getTransactionCommitAttempts()).toEqual([]);
     expect(admin.__getWrites()).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(dateNowSpy).not.toHaveBeenCalled();
@@ -7262,13 +7303,265 @@ describe('Strava disconnect failure log boundary', () => {
       expectFixedReadFailure(rejection, probes);
       expect(data).toHaveBeenCalledTimes(1);
     });
+
+  });
+
+  describe('OAUTH-001B9 stale disconnect cleanup fence', () => {
+    const replacementSecret = Object.freeze({
+      access_token: 'replacement_disconnect_access_token_test',
+      refresh_token: 'replacement_disconnect_refresh_token_test',
+      expires_at: 1_960_000_000,
+      scope: 'read',
+    });
+    const replacementConnection = Object.freeze({
+      provider: 'strava',
+      athleteId: 608,
+      firstName: 'Replacement',
+      lastName: 'Athlete',
+    });
+
+    function replaceConnectedAccount() {
+      admin.__setDocument(SECRET_PATH, replacementSecret);
+      admin.__setDocument(CONNECTION_PATH, replacementConnection);
+    }
+
+    function expectReplacementPreserved() {
+      expect(admin.__getDocument(SECRET_PATH)).toBe(replacementSecret);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(replacementConnection);
+      expect(admin.__getTransactionDeletes()).toEqual([]);
+      expect(admin.__getWrites()).toEqual([]);
+      expectFixedCleanupWarning();
+    }
+
+    function expectVersionReadRefused(rejection) {
+      expectFixedDisconnectError(rejection);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getTransactionRunAttempts()).toBe(0);
+      expect(admin.__getTransactionReads()).toEqual([]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getTransactionDeletes()).toEqual([]);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
+      expect(consoleSpies.warn).toHaveBeenCalledTimes(1);
+      expect(consoleSpies.warn).toHaveBeenCalledWith(FIXED_SECRET_READ_WARNING);
+      ['debug', 'error', 'info', 'log']
+        .forEach((method) => expect(consoleSpies[method]).not.toHaveBeenCalled());
+    }
+
+    test('refuses an existing initial snapshot without an immutable update time', async () => {
+      const data = jest.fn(() => ({
+        access_token: 'synthetic_disconnect_access_token_test',
+      }));
+      seedConnectedAccount();
+      admin.__setReadSnapshot(SECRET_PATH, { exists: true, data });
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectVersionReadRefused(rejection);
+      expect(data).toHaveBeenCalledTimes(1);
+    });
+
+    test('contains an exceptional initial update-time read before provider work', async () => {
+      const updateTime = jest.fn(() => {
+        throw new Error('disconnect-update-time-canary token=private-canary');
+      });
+      const snapshot = {
+        exists: true,
+        data: () => ({ access_token: 'synthetic_disconnect_access_token_test' }),
+      };
+      Object.defineProperty(snapshot, 'updateTime', {
+        configurable: true,
+        enumerable: true,
+        get: updateTime,
+      });
+      seedConnectedAccount();
+      admin.__setReadSnapshot(SECRET_PATH, snapshot);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectVersionReadRefused(rejection);
+      expect(updateTime).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify({
+        public: publicError(rejection),
+        logs: consoleSpies.warn.mock.calls,
+      })).not.toMatch(/update-time|private-canary/i);
+    });
+
+    test('preserves a newer reconnect committed while the observed token is being revoked', async () => {
+      let signalRevokeStarted;
+      let resolveRevoke;
+      const revokeStarted = new Promise((resolve) => {
+        signalRevokeStarted = resolve;
+      });
+      const revokeResponse = new Promise((resolve) => {
+        resolveRevoke = resolve;
+      });
+      seedConnectedAccount('observed_disconnect_access_token_test');
+      fetchMock.mockImplementationOnce(() => {
+        signalRevokeStarted();
+        return revokeResponse;
+      });
+
+      const pendingDisconnect = stravaDisconnect({}, CONTEXT);
+      await revokeStarted;
+      replaceConnectedAccount();
+      resolveRevoke({ ok: true });
+
+      const rejection = await captureFailure(() => pendingDisconnect);
+
+      expectFixedDisconnectError(rejection);
+      expectSupportedRevokeRequest('observed_disconnect_access_token_test');
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getTransactionCommitAttempts()).toEqual([[]]);
+      expectReplacementPreserved();
+    });
+
+    test('retries a conflicting cleanup and preserves the version that won the race', async () => {
+      const retryHook = jest.fn();
+      let beforeCommitCalls = 0;
+      seedConnectedAccount('observed_disconnect_access_token_test');
+      fetchMock.mockResolvedValue({ ok: true });
+      admin.__setTransactionBeforeCommitHook(() => {
+        beforeCommitCalls += 1;
+        if (beforeCommitCalls === 1) replaceConnectedAccount();
+      });
+      admin.__setTransactionRetryHook(retryHook);
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(rejection);
+      expectSupportedRevokeRequest('observed_disconnect_access_token_test');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH, SECRET_PATH]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([
+        SECRET_PATH,
+        CONNECTION_PATH,
+      ]);
+      expect(admin.__getTransactionCommitAttempts()).toEqual([
+        [SECRET_PATH, CONNECTION_PATH],
+        [],
+      ]);
+      expect(retryHook).toHaveBeenCalledTimes(1);
+      expectReplacementPreserved();
+    });
+
+    test('preserves a byte-identical secret replacement with a newer update time', async () => {
+      const accessToken = 'identical_disconnect_access_token_test';
+      const replacement = Object.freeze({ access_token: accessToken });
+      let resolveRevoke;
+      seedConnectedAccount(accessToken);
+      fetchMock.mockReturnValueOnce(new Promise((resolve) => {
+        resolveRevoke = resolve;
+      }));
+
+      const pendingDisconnect = stravaDisconnect({}, CONTEXT);
+      await Promise.resolve();
+      admin.__setDocument(SECRET_PATH, replacement);
+      admin.__setDocument(CONNECTION_PATH, replacementConnection);
+      resolveRevoke({ ok: true });
+
+      const rejection = await captureFailure(() => pendingDisconnect);
+
+      expectFixedDisconnectError(rejection);
+      expectSupportedRevokeRequest(accessToken);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(replacement);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(replacementConnection);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getTransactionDeletes()).toEqual([]);
+      expectFixedCleanupWarning();
+    });
+
+    test('preserves a new connection when the initial secret read was absent', async () => {
+      replaceConnectedAccount();
+      admin.__setReadSnapshot(SECRET_PATH, {
+        exists: false,
+        data: () => undefined,
+      });
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(rejection);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getTransactionCommitAttempts()).toEqual([[]]);
+      expectReplacementPreserved();
+    });
+
+    test('preserves a repaired connection after a malformed secret cleanup conflicts', async () => {
+      let beforeCommitCalls = 0;
+      seedStoredSecret({ access_token: 'token with space' });
+      admin.__setDocument(CONNECTION_PATH, { provider: 'strava', connected: true });
+      admin.__setTransactionBeforeCommitHook(() => {
+        beforeCommitCalls += 1;
+        if (beforeCommitCalls === 1) replaceConnectedAccount();
+      });
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(rejection);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH, SECRET_PATH]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([
+        SECRET_PATH,
+        CONNECTION_PATH,
+      ]);
+      expect(admin.__getTransactionCommitAttempts()).toEqual([
+        [SECRET_PATH, CONNECTION_PATH],
+        [],
+      ]);
+      expectReplacementPreserved();
+    });
+
+    test('converges when the observed secret is already absent before cleanup', async () => {
+      seedConnectedAccount('observed_disconnect_access_token_test');
+      fetchMock.mockImplementationOnce(async () => {
+        admin.__removeDocument(SECRET_PATH);
+        return { ok: true };
+      });
+
+      const result = await stravaDisconnect({}, CONTEXT);
+
+      expect(result).toEqual({ ok: true });
+      expectSupportedRevokeRequest('observed_disconnect_access_token_test');
+      expectLocalDeletes();
+      expectNoLogs();
+    });
+
+    test('contains a snapshot-version comparison failure inside the fixed cleanup boundary', async () => {
+      const isEqual = jest.fn(() => {
+        throw new Error('disconnect-version-comparison-canary token=private-canary');
+      });
+      seedConnectedAccount('observed_disconnect_access_token_test');
+      admin.__setReadSnapshot(SECRET_PATH, {
+        exists: true,
+        data: () => ({ access_token: 'observed_disconnect_access_token_test' }),
+        updateTime: { isEqual },
+      });
+      fetchMock.mockResolvedValue({ ok: true });
+
+      const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
+
+      expectFixedDisconnectError(rejection);
+      expectSupportedRevokeRequest('observed_disconnect_access_token_test');
+      expect(isEqual).toHaveBeenCalledTimes(1);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual([]);
+      expect(admin.__getTransactionDeletes()).toEqual([]);
+      expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
+      expect(admin.__hasDocument(CONNECTION_PATH)).toBe(true);
+      expect(JSON.stringify({
+        public: publicError(rejection),
+        logs: consoleSpies.warn.mock.calls,
+      })).not.toMatch(/version-comparison|private-canary/i);
+      expectFixedCleanupWarning();
+    });
   });
 
   describe('OAUTH-001B7 atomic local disconnect cleanup', () => {
-    const cleanupOperations = [
-      { type: 'delete', path: SECRET_PATH },
-      { type: 'delete', path: CONNECTION_PATH },
-    ];
+    const cleanupOperations = [SECRET_PATH, CONNECTION_PATH];
 
     function hostileCleanupFailure() {
       const probes = [
@@ -7312,32 +7605,44 @@ describe('Strava disconnect failure log boundary', () => {
 
     test.each([
       [
-        'batch construction',
-        (failure) => admin.__setBatchCreationFailure(failure),
+        'transaction start',
+        (failure) => admin.__setTransactionRunFailure(failure),
+        [],
+        [],
+        [],
+      ],
+      [
+        'secret reread',
+        (failure) => admin.__setTransactionGetFailure(SECRET_PATH, failure),
+        [SECRET_PATH],
         [],
         [],
       ],
       [
         'secret delete staging',
-        (failure) => admin.__setBatchDeleteFailure(SECRET_PATH, failure),
+        (failure) => admin.__setTransactionDeleteFailure(SECRET_PATH, failure),
+        [SECRET_PATH],
         [SECRET_PATH],
         [],
       ],
       [
         'connection delete staging',
-        (failure) => admin.__setBatchDeleteFailure(CONNECTION_PATH, failure),
+        (failure) => admin.__setTransactionDeleteFailure(CONNECTION_PATH, failure),
+        [SECRET_PATH],
         [SECRET_PATH, CONNECTION_PATH],
         [],
       ],
       [
-        'pre-apply commit',
-        (failure) => admin.__setBatchCommitFailure(failure),
+        'pre-apply transaction commit',
+        (failure) => admin.__setTransactionCommitFailure(failure),
+        [SECRET_PATH],
         [SECRET_PATH, CONNECTION_PATH],
         [cleanupOperations],
       ],
     ])('maps %s failure to one fixed result and preserves both records', async (
       _stage,
       configure,
+      expectedReads,
       expectedDeleteAttempts,
       expectedCommitAttempts,
     ) => {
@@ -7350,11 +7655,16 @@ describe('Strava disconnect failure log boundary', () => {
 
       expectFixedCleanupFailure(rejection, probes);
       expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
-      expect(admin.__getBatchCreateAttempts()).toBe(1);
-      expect(admin.__getBatchDeleteAttempts()).toEqual(expectedDeleteAttempts);
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
       expect(admin.__getBatchDeletes()).toEqual([]);
       expect(admin.__getBatchSetAttempts()).toEqual([]);
-      expect(admin.__getBatchCommitAttempts()).toEqual(expectedCommitAttempts);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getTransactionRunAttempts()).toBe(1);
+      expect(admin.__getTransactionReads()).toEqual(expectedReads);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual(expectedDeleteAttempts);
+      expect(admin.__getTransactionDeletes()).toEqual([]);
+      expect(admin.__getTransactionCommitAttempts()).toEqual(expectedCommitAttempts);
       expect(admin.__getDeletes()).toEqual([]);
       expect(admin.__getWrites()).toEqual([]);
       expect(admin.__hasDocument(SECRET_PATH)).toBe(true);
@@ -7365,15 +7675,20 @@ describe('Strava disconnect failure log boundary', () => {
       const { failure, probes } = hostileCleanupFailure();
       seedConnectedAccount();
       fetchMock.mockResolvedValue({ ok: true });
-      admin.__setBatchCommitPostApplyFailure(failure);
+      admin.__setTransactionCommitPostApplyFailure(failure);
 
       const rejection = await captureFailure(() => stravaDisconnect({}, CONTEXT));
 
       expectFixedCleanupFailure(rejection, probes);
       expectSupportedRevokeRequest('synthetic_disconnect_access_token_test');
-      expect(admin.__getBatchDeleteAttempts()).toEqual([SECRET_PATH, CONNECTION_PATH]);
-      expect(admin.__getBatchDeletes()).toEqual([SECRET_PATH, CONNECTION_PATH]);
-      expect(admin.__getBatchCommitAttempts()).toEqual([cleanupOperations]);
+      expect(admin.__getBatchCreateAttempts()).toBe(0);
+      expect(admin.__getBatchDeleteAttempts()).toEqual([]);
+      expect(admin.__getBatchDeletes()).toEqual([]);
+      expect(admin.__getBatchCommitAttempts()).toEqual([]);
+      expect(admin.__getTransactionReads()).toEqual([SECRET_PATH]);
+      expect(admin.__getTransactionDeleteAttempts()).toEqual(cleanupOperations);
+      expect(admin.__getTransactionDeletes()).toEqual(cleanupOperations);
+      expect(admin.__getTransactionCommitAttempts()).toEqual([cleanupOperations]);
       expect(admin.__getDeletes()).toEqual([]);
       expect(admin.__hasDocument(SECRET_PATH)).toBe(false);
       expect(admin.__hasDocument(CONNECTION_PATH)).toBe(false);
