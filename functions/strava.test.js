@@ -4929,6 +4929,46 @@ describe('Strava activity data failure boundary', () => {
       });
     });
 
+    describe('OAUTH-001A2I unique activity IDs', () => {
+      test('rejects a repeated valid ID before statistics JSON', async () => {
+        await expectInvalidSuccessfulProviderData({
+          activities: [
+            validProviderActivity({ id: 987654 }),
+            validProviderActivity({
+              id: 987654,
+              name: 'Synthetic Evening Run',
+            }),
+          ],
+          invalidSurface: 'activities',
+        });
+      });
+
+      test('preserves distinct boundary IDs in provider order as numbers', async () => {
+        seedFreshConnection();
+        const { activitiesJson, statsJson } = mockSuccessfulProviderData({
+          activities: [
+            validProviderActivity({ id: 1 }),
+            validProviderActivity({ id: Number.MAX_SAFE_INTEGER }),
+          ],
+        });
+
+        const result = await stravaFetchStats({}, CONTEXT);
+
+        expect(result.recentActivities.map(({ id }) => id)).toEqual([
+          1,
+          Number.MAX_SAFE_INTEGER,
+        ]);
+        result.recentActivities.forEach(({ id }) => expect(typeof id).toBe('number'));
+        expect(activitiesJson).toHaveBeenCalledTimes(1);
+        expect(statsJson).toHaveBeenCalledTimes(1);
+        expectTwoFreshBearerReads();
+        expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+        expect(admin.__getDeletes()).toEqual([]);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expectNoWritesOrLogs();
+      });
+    });
+
     test.each([
       ['id', 987654],
       ['name', 'Synthetic Morning Run'],
