@@ -891,7 +891,7 @@ function successfulPaymentTransition({ event, session, target, record }) {
         paymentStatus: record.paymentStatus || status,
         stripeSessionId: record.stripeSessionId || session.id,
         stripePaymentIntentId: paymentIntentId || record.stripePaymentIntentId || null,
-        paidAt: record.paidAt || Timestamp.now(),
+        paidAt: record.paidAt || Timestamp.fromMillis(event.created * 1000),
         lastStripeEventId: event.id,
         updatedAt: Timestamp.now(),
         auditLog: auditPatch({
@@ -914,7 +914,7 @@ function successfulPaymentTransition({ event, session, target, record }) {
         paymentStatus: 'paid',
         stripeSessionId: record.stripeSessionId || session.id,
         stripePaymentIntentId: paymentIntentId || record.stripePaymentIntentId || null,
-        paidAt: record.paidAt || Timestamp.now(),
+        paidAt: record.paidAt || Timestamp.fromMillis(event.created * 1000),
         paymentReviewRequired: requiresReview,
         paymentReviewReason: requiresReview ? 'fulfilled_before_payment_confirmation' : null,
         lastStripeEventId: event.id,
@@ -966,7 +966,7 @@ function successfulPaymentTransition({ event, session, target, record }) {
     stripePaymentIntentId: paymentIntentId || record.stripePaymentIntentId || null,
     paymentReviewRequired: false,
     paymentReviewReason: null,
-    paidAt: record.paidAt || Timestamp.now(),
+    paidAt: record.paidAt || Timestamp.fromMillis(event.created * 1000),
     lastStripeEventId: event.id,
     updatedAt: Timestamp.now(),
     auditLog: auditPatch({

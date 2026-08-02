@@ -957,6 +957,446 @@ describe('stripeWebhook', () => {
     consoleError.mockClear();
   });
 
+  describe('PAY-003A11 Checkout payment-time projection', () => {
+    const eventCreated = 1_700_000_123;
+    const domains = [
+      [
+        'registration',
+        'events/race-1/registrations/reg-1',
+        seedRegistration,
+        registrationSession,
+      ],
+      ['order', 'orders/order-1', seedOrder, orderSession],
+    ];
+
+    function eventAt(id, type, session, created = eventCreated) {
+      const event = stripeEvent(id, type, session);
+      event.created = created;
+      return event;
+    }
+
+    function expectOperationalTime(value, providerTime) {
+      expect(value?._milliseconds).toEqual(expect.any(Number));
+      expect(value).not.toEqual(providerTime);
+    }
+
+    test.each([
+      ...domains,
+    ])('projects admitted Event time for a new %s payment confirmation', async (
+      domain,
+      businessPath,
+      seed,
+      session,
+    ) => {
+      // Current creators persist this nullable field explicitly.
+      seed({ paidAt: null });
+      const event = eventAt(
+        `evt_pay003a11_red_${domain}`,
+        'checkout.session.completed',
+        session({ created: 1_600_000_000 }),
+      );
+
+      const response = await deliver(event);
+      const record = admin.__get(businessPath);
+      const ledger = admin.__get(`stripeEvents/${event.id}`);
+      const expectedPaidAt = { _milliseconds: event.created * 1000 };
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        received: true,
+        duplicate: false,
+        outcome: 'payment_confirmed',
+      }));
+      expect(ledger).toMatchObject({
+        outcome: 'payment_confirmed',
+        targetPath: businessPath,
+        stripeCreatedAt: expectedPaidAt,
+      });
+      expect(record).toMatchObject({
+        status: 'paid',
+        paymentStatus: 'paid',
+        paidAt: expectedPaidAt,
+      });
+      expectOperationalTime(record.updatedAt, expectedPaidAt);
+      expectOperationalTime(record.auditLog[0].ts, expectedPaidAt);
+      expectOperationalTime(
+        admin.__get(`stripeObjectBindings/checkout_session:${event.data.object.id}`).createdAt,
+        expectedPaidAt,
+      );
+      expectOperationalTime(
+        admin.__get(
+          `stripeObjectBindings/payment_intent:${event.data.object.payment_intent}`,
+        ).createdAt,
+        expectedPaidAt,
+      );
+      expectOperationalTime(ledger.processedAt, expectedPaidAt);
+      expectOperationalTime(ledger.expiresAt, expectedPaidAt);
+      expect(Timestamp.now).toHaveBeenCalled();
+    });
+
+    test.each(domains)(
+      'uses the async-success Event time for delayed %s payment',
+      async (domain, businessPath, seed, session) => {
+        seed({ paidAt: null });
+        const pendingEvent = eventAt(
+          `evt_pay003a11_async_pending_${domain}`,
+          'checkout.session.completed',
+          session({ payment_status: 'unpaid' }),
+          eventCreated - 100,
+        );
+        const pendingResponse = await deliver(pendingEvent);
+
+        expect(pendingResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+          outcome: 'awaiting_payment',
+        }));
+        expect(admin.__get(businessPath).paidAt).toBeNull();
+
+        const successEvent = eventAt(
+          `evt_pay003a11_async_success_${domain}`,
+          'checkout.session.async_payment_succeeded',
+          session(),
+          eventCreated + 100,
+        );
+        const successResponse = await deliver(successEvent);
+        const record = admin.__get(businessPath);
+
+        expect(successResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+          outcome: 'payment_confirmed',
+        }));
+        expect(record).toMatchObject({
+          status: 'paid',
+          paymentStatus: 'paid',
+          paidAt: { _milliseconds: successEvent.created * 1000 },
+        });
+        expect(record.auditLog).toHaveLength(2);
+      },
+    );
+
+    test.each([
+      [
+        'partially_refunded',
+        'events/race-1/registrations/reg-1',
+        seedRegistration,
+        registrationSession,
+        'partially_refunded',
+        'payment_observed_after_partially_refunded',
+        false,
+      ],
+      [
+        'refunded',
+        'events/race-1/registrations/reg-1',
+        seedRegistration,
+        registrationSession,
+        'refunded',
+        'payment_observed_after_refunded',
+        false,
+      ],
+      [
+        'fulfilled',
+        'orders/order-1',
+        seedOrder,
+        orderSession,
+        null,
+        'needs_review:fulfilled_before_payment_confirmation',
+        true,
+      ],
+      [
+        'transferred',
+        'orders/order-1',
+        seedOrder,
+        orderSession,
+        null,
+        'payment_observed_after_transferred',
+        false,
+      ],
+    ])('projects Event time after the %s predecessor state', async (
+      status,
+      businessPath,
+      seed,
+      session,
+      paymentStatus,
+      outcome,
+      requiresReview,
+    ) => {
+      seed({ status, paymentStatus, paidAt: null });
+      const event = eventAt(
+        `evt_pay003a11_after_${status}`,
+        'checkout.session.completed',
+        session(),
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome,
+        requiresReview,
+      }));
+      expect(admin.__get(businessPath)).toMatchObject({
+        status,
+        paymentStatus: status === 'partially_refunded' || status === 'refunded'
+          ? status
+          : 'paid',
+        paidAt: { _milliseconds: event.created * 1000 },
+      });
+    });
+
+    test.each([
+      [
+        'ordinary confirmation',
+        'events/race-1/registrations/reg-1',
+        seedRegistration,
+        registrationSession,
+        { status: 'pending' },
+        'payment_confirmed',
+      ],
+      [
+        'payment observed after refund',
+        'events/race-1/registrations/reg-1',
+        seedRegistration,
+        registrationSession,
+        { status: 'refunded', paymentStatus: 'refunded' },
+        'payment_observed_after_refunded',
+      ],
+      [
+        'payment observed after fulfillment',
+        'orders/order-1',
+        seedOrder,
+        orderSession,
+        { status: 'fulfilled', paymentStatus: null },
+        'needs_review:fulfilled_before_payment_confirmation',
+      ],
+    ])('preserves existing paidAt during %s', async (
+      label,
+      businessPath,
+      seed,
+      session,
+      recordPatch,
+      outcome,
+    ) => {
+      const existingPaidAt = { _milliseconds: 1_500_000_000_000 };
+      seed({ ...recordPatch, paidAt: existingPaidAt });
+      const event = eventAt(
+        `evt_pay003a11_preserve_${label.replace(/[^a-z]+/g, '_')}`,
+        'checkout.session.completed',
+        session(),
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+      expect(admin.__get(businessPath).paidAt).toEqual(existingPaidAt);
+    });
+
+    test('preserves refund-first Charge time after later Checkout evidence', async () => {
+      seedRegistration({ paidAt: null });
+      const chargeCreated = 1_600_000_000;
+      const refundEvent = eventAt(
+        'evt_pay003a11_refund_first',
+        'charge.refunded',
+        {
+          id: 'ch_pay003a11_refund_first',
+          object: 'charge',
+          payment_intent: 'pi_reg_1',
+          amount: 5000,
+          amount_refunded: 500,
+          currency: 'usd',
+          created: chargeCreated,
+          metadata: {
+            schemaVersion: '1',
+            eventId: 'race-1',
+            registrationId: 'reg-1',
+          },
+          refunds: { data: [{ id: 're_pay003a11_refund_first' }] },
+        },
+        eventCreated,
+      );
+      await deliver(refundEvent);
+      const recordAfterRefund = admin.__get('events/race-1/registrations/reg-1');
+      expect(recordAfterRefund.paidAt).toEqual({
+        _milliseconds: chargeCreated * 1000,
+      });
+      expectOperationalTime(recordAfterRefund.refundedAt, {
+        _milliseconds: chargeCreated * 1000,
+      });
+
+      const checkoutEvent = eventAt(
+        'evt_pay003a11_checkout_after_refund',
+        'checkout.session.completed',
+        registrationSession(),
+        eventCreated + 100,
+      );
+      const response = await deliver(checkoutEvent);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'payment_observed_after_partially_refunded',
+      }));
+      expect(admin.__get('events/race-1/registrations/reg-1').paidAt).toEqual({
+        _milliseconds: chargeCreated * 1000,
+      });
+    });
+
+    test('keeps exact replay read-only instead of repairing missing paidAt', async () => {
+      const businessPath = 'events/race-1/registrations/reg-1';
+      seedRegistration({ status: 'paid', paymentStatus: 'paid', paidAt: null });
+      const event = eventAt(
+        'evt_pay003a11_processed_replay',
+        'checkout.session.completed',
+        registrationSession(),
+      );
+      const ledgerPath = `stripeEvents/${event.id}`;
+      admin.__seed(ledgerPath, {
+        status: 'processed',
+        outcome: 'payment_confirmed',
+        sentinel: 'preserve',
+      });
+      const beforeRecord = storedCopy(businessPath);
+      const beforeLedger = storedCopy(ledgerPath);
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        duplicate: true,
+        outcome: 'payment_confirmed',
+      }));
+      expect(admin.__get(businessPath)).toEqual(beforeRecord);
+      expect(admin.__get(ledgerPath)).toEqual(beforeLedger);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expect(Timestamp.fromMillis).not.toHaveBeenCalled();
+    });
+
+    test('does not repair an already-paid record with missing paidAt', async () => {
+      seedOrder({ status: 'paid', paymentStatus: 'paid', paidAt: null });
+      const event = eventAt(
+        'evt_pay003a11_already_paid_missing_time',
+        'checkout.session.completed',
+        orderSession(),
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'already_paid',
+      }));
+      expect(admin.__get('orders/order-1').paidAt).toBeNull();
+    });
+
+    test.each([
+      ['epoch', 0, 'events/race-1/registrations/reg-1', seedRegistration, registrationSession],
+      [
+        'Firestore maximum',
+        FIRESTORE_TIMESTAMP_MAX_SECONDS,
+        'orders/order-1',
+        seedOrder,
+        orderSession,
+      ],
+    ])('projects the admitted %s Event boundary exactly', async (
+      label,
+      created,
+      businessPath,
+      seed,
+      session,
+    ) => {
+      seed({ paidAt: null });
+      const event = eventAt(
+        `evt_pay003a11_${label.replace(/[^a-z]+/gi, '_').toLowerCase()}`,
+        'checkout.session.completed',
+        session(),
+        created,
+      );
+
+      const response = await deliver(event);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: 'payment_confirmed',
+      }));
+      expect(admin.__get(businessPath).paidAt).toEqual({
+        _milliseconds: created * 1000,
+      });
+    });
+
+    test.each([
+      [
+        'unpaid completion',
+        seedRegistration,
+        {},
+        'events/race-1/registrations/reg-1',
+        'checkout.session.completed',
+        () => registrationSession({ payment_status: 'unpaid' }),
+        'awaiting_payment',
+      ],
+      [
+        'async failure',
+        seedRegistration,
+        {},
+        'events/race-1/registrations/reg-1',
+        'checkout.session.async_payment_failed',
+        () => registrationSession({ payment_status: 'unpaid' }),
+        'payment_failed',
+      ],
+      [
+        'expiry',
+        seedOrder,
+        {},
+        'orders/order-1',
+        'checkout.session.expired',
+        () => orderSession({ payment_status: 'unpaid' }),
+        'payment_expired',
+      ],
+      [
+        'unpaid async success',
+        seedRegistration,
+        {},
+        'events/race-1/registrations/reg-1',
+        'checkout.session.async_payment_succeeded',
+        () => registrationSession({ payment_status: 'unpaid' }),
+        'needs_review:async_success_not_paid',
+      ],
+      [
+        'paid after cancellation',
+        seedRegistration,
+        { status: 'cancelled', paymentStatus: 'cancelled' },
+        'events/race-1/registrations/reg-1',
+        'checkout.session.completed',
+        registrationSession,
+        'needs_review:paid_after_cancellation',
+      ],
+      [
+        'unexpected paid comp',
+        seedRegistration,
+        { status: 'comp', paymentStatus: 'comp' },
+        'events/race-1/registrations/reg-1',
+        'checkout.session.completed',
+        registrationSession,
+        'needs_review:unexpected_payment_for_comp',
+      ],
+    ])('does not fabricate paidAt for %s', async (
+      label,
+      seed,
+      recordPatch,
+      businessPath,
+      type,
+      session,
+      outcome,
+    ) => {
+      seed({ ...recordPatch, paidAt: null });
+      const event = eventAt(
+        `evt_pay003a11_excluded_${label.replace(/[^a-z]+/g, '_')}`,
+        type,
+        session(),
+      );
+
+      const response = await deliver(event);
+      const record = admin.__get(businessPath);
+
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+      expect(record.paidAt).toBeNull();
+      if (outcome === 'needs_review:paid_after_cancellation') {
+        expectOperationalTime(record.paymentExceptionAt, {
+          _milliseconds: event.created * 1000,
+        });
+      }
+    });
+  });
+
   test('fails closed before persistence when expected Stripe mode is not configured', async () => {
     delete process.env.STRIPE_LIVEMODE_EXPECTED;
     seedRegistration();
