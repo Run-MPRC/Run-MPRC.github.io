@@ -1126,12 +1126,18 @@ exports.stravaDisconnect = functions
     }
     const { uid } = context.auth;
     let secretExists = false;
+    let secretUpdateTime = null;
     let accessToken = null;
     try {
       const secretSnap = await secretDocRef(uid).get();
       secretExists = secretSnap.exists;
       if (secretExists) {
-        accessToken = snapshotStoredDisconnectAccessToken(secretSnap.data());
+        const secretData = secretSnap.data();
+        secretUpdateTime = secretSnap.updateTime;
+        if (!secretUpdateTime || typeof secretUpdateTime.isEqual !== 'function') {
+          throw new Error('invalid disconnect secret version');
+        }
+        accessToken = snapshotStoredDisconnectAccessToken(secretData);
       }
     } catch (_error) {
       console.warn('strava_disconnect_secret_read_failed');
@@ -1168,10 +1174,25 @@ exports.stravaDisconnect = functions
     }
     try {
       const db = admin.firestore();
-      const cleanup = db.batch();
-      cleanup.delete(secretDocRef(uid, db));
-      cleanup.delete(connectionDocRef(uid, db));
-      await cleanup.commit();
+      const secretRef = secretDocRef(uid, db);
+      const connectionRef = connectionDocRef(uid, db);
+      const cleaned = await db.runTransaction(async (transaction) => {
+        const currentSecret = await transaction.get(secretRef);
+        if (currentSecret.exists) {
+          if (!secretExists) return false;
+          const currentUpdateTime = currentSecret.updateTime;
+          if (
+            !currentUpdateTime
+            || secretUpdateTime.isEqual(currentUpdateTime) !== true
+          ) {
+            return false;
+          }
+        }
+        transaction.delete(secretRef);
+        transaction.delete(connectionRef);
+        return true;
+      });
+      if (cleaned !== true) throw new Error('stale disconnect cleanup');
     } catch (_error) {
       console.warn('strava_disconnect_cleanup_failed');
       throw stravaDisconnectError();
