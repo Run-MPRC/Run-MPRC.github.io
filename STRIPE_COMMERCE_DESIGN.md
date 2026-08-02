@@ -982,6 +982,47 @@ Residual work remains under #106: Checkout Session-created admission and chronol
 
 PAY-003A11 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only evidence-time projection adds no officer screen, task, field, permission, approval, topology, or available recovery step. The remaining root design, security, implementation, operations, issue, and officer guides stay compatible.
 
+### PAY-003A12 Checkout Session-created admission — SOURCE ONLY, NOT LIVE
+
+PAY-003A12 [#588](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/588) closes the structural half of PAY-003A11's embedded Checkout-time residual. Its purpose is to reject a newly delivered supported Checkout Event when the embedded Checkout Session does not carry a usable `created` second. Stripe's Checkout Session contract and the installed Stripe SDK describe this as a required Unix timestamp. This source boundary does not prove the provider endpoint version, the exact time of payment, or production provider truth.
+
+The embedded value must be a primitive safe integer from Unix epoch second `0` through Firestore maximum second `253402300799`, inclusive. Missing, `null`, boolean, string, object, array, fractional, non-finite, negative, unsafe, or above-range evidence produces fixed target-free `needs_review:invalid_checkout_session_created`. The valid outer Event time remains the processed ledger's `stripeCreatedAt`; target fields remain null. The rejected value is not coerced, converted to a timestamp, stored, returned, or logged.
+
+Approvers are the platform owner and payment reviewer. Prerequisites are verified webhook signature handling; the processed-Event ledger; PAY-003A2 Checkout realm and lifecycle admission; PAY-003A4 metadata-version admission; PAY-003A8 outer Event-time admission; PAY-003A11 payment-time projection; signed synthetic fixtures; and the existing nullable ledger target fields. A new supported Checkout Event keeps this order:
+
+1. Return an exact processed-Event replay without changing its stored result.
+2. Check the outer Event realm.
+3. Check the embedded Checkout Session realm.
+4. Check the Session lifecycle required by the Event type.
+5. Check an explicit claimed-MPRC metadata schema version.
+6. Check the outer Event-created value.
+7. Check the embedded Checkout Session-created value.
+8. Only after those checks pass, resolve references and fallback targets.
+9. Then evaluate ownership, provider bindings, mode, money, payment status, PaymentIntent, and predecessor state.
+
+```mermaid
+flowchart TD
+    A["Verified supported Checkout Event"] --> B{"Already in the processed-Event ledger?"}
+    B -- "Yes" --> C["Return the stored result without changes"]
+    B -- "No" --> D{"Earlier realm, lifecycle, metadata, and outer-time checks pass?"}
+    D -- "No" --> E["Keep the existing earlier review result"]
+    D -- "Yes" --> F{"Session-created is a safe in-range integer?"}
+    F -- "No" --> G["Write fixed review with no target"]
+    F -- "Yes" --> H["Continue to target, binding, money, and state checks"]
+```
+
+Text alternative: replay returns its stored result first; a new Checkout Event keeps every earlier admission result; invalid embedded Session time writes a fixed review without target work, while valid time may continue to existing business checks.
+
+The expected result is durable, target-free review for unusable Session time and unchanged Checkout behavior for valid time. Success proof requires separately named registration and order tests across completion, asynchronous success, asynchronous failure, and expiry; missing and hostile shapes; parser-return Proxy evidence without coercion; inclusive epoch and Firestore-maximum boundaries; fixed redacted logs; valid outer ledger time; exact ledger-read and timestamp isolation; metadata, client-reference, matching-dual, legacy Session, Payment Link, ambiguous-target, binding-conflict, malformed-reference, claimed-missing-target, money, PaymentIntent, and predecessor isolation; every earlier admission precedence; valid missing-target retry; exact replay; richer historical-ledger preservation; and explicit refund, all Dispute lifecycle, unsupported Event, and Session/Event chronology exclusions. The complete webhook and Functions suites and prior PAY-003A2/A4/A8 through A11 matrices must remain green.
+
+Stop the merge if invalid Session time reaches a target or fallback query, provider binding, business read or mutation, money or state check, timestamp construction, response detail, ledger detail, or log; if a rejected value is coerced; if an earlier result changes; if either inclusive boundary regresses; if valid lifecycle behavior changes; if Session/Event chronology changes in this child; or if a test needs a real credential, provider object or call, payment, customer or member record, or production service. Escalate to the platform owner and payment reviewer. Undo is one small reviewed revert of the single admission predicate, fixed reason, fixture evidence, separately named tests, the one reconciled PAY-003A9 compatibility control, and this section. Do not edit a provider object, processed ledger, binding, order, registration, or payment field as an undo path.
+
+There is no schema, Rule, index, package, workflow, API, provider-configuration, migration, backfill, or history-reprocessing change. A newly delivered invalid or missing Session time changes from target-capable behavior to pre-target durable review. Valid new Events keep their current outcomes. Already-processed ledgers remain authoritative on replay. Existing business records, bindings, payment fields, and historical ledger rows are not inspected or repaired.
+
+Session/Event chronology remains deliberately compatible in this child. A structurally valid Session time later than the outer Event time still reaches existing processing; PAY-003A13 must own any later-versus-equal-or-earlier comparison and its compatibility changes. Other residual work remains under #106: current-clock freshness and skew; Session `expires_at`; endpoint API-version proof; provider retrieval and history repair; already-paid missing-time repair; paid-after-cancellation policy; other Charge and Dispute decisions; PAY-003B/C; reconciliation; alerts; protected release; and live verification. This child proves no provider truth, payment or refund success, historical correctness, or production behavior.
+
+PAY-003A12 delivery evidence must separately name source changed, synthetic tests passed, code merged, website published, `runmprc.com` verified, Firebase deployed and read back, Stripe/provider configured or acted on, production data changed, payment/refund/dispute activity, and live behavior verified. Source and synthetic tests prove none of the later states. Officer impact and officer documentation are both none: this server-only pre-target admission boundary adds no officer screen, task, field, permission, approval, topology, or available recovery step. The remaining root design, security, implementation, operations, issue, and officer guides stay compatible.
+
 Store actual total, discount, tax, shipping, Stripe customer reference if required, PaymentIntent ID, and Charge reference. An anomaly enters `payment_review`/quarantine and alerts operations; it never silently marks paid.
 
 ## 12. Payment and business state machines
