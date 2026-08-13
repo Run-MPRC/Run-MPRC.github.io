@@ -121,7 +121,7 @@ function isValidRevision(value: unknown): value is number {
     && !Object.is(value, -0);
 }
 
-function canonicalBase64DecodedBytes(value: unknown, maximum: number): number | null {
+function canonicalBase64DecodedBytes(value: unknown, maximum: number): string | null {
   if (
     typeof value !== 'string'
     || value.length === 0
@@ -137,10 +137,16 @@ function canonicalBase64DecodedBytes(value: unknown, maximum: number): number | 
       || decoded.length > maximum
       || btoa(decoded) !== value
     ) return null;
-    return decoded.length;
+    return decoded;
   } catch {
     return null;
   }
+}
+
+function hasWebPEnvelope(decodedBytes: string): boolean {
+  return decodedBytes.length >= 12
+    && decodedBytes.slice(0, 4) === 'RIFF'
+    && decodedBytes.slice(8, 12) === 'WEBP';
 }
 
 function readMutationState(value: unknown): MemberDirectoryMutationState {
@@ -173,9 +179,13 @@ function readPhoto(value: unknown): MemberDirectoryPhoto {
     'height',
     'version',
   ]);
+  const decodedBytes = data.contentType === 'image/webp'
+    ? canonicalBase64DecodedBytes(data.base64Data, MAX_RETURNED_PHOTO_BYTES)
+    : null;
   if (
     data.contentType !== 'image/webp'
-    || canonicalBase64DecodedBytes(data.base64Data, MAX_RETURNED_PHOTO_BYTES) === null
+    || decodedBytes === null
+    || !hasWebPEnvelope(decodedBytes)
     || data.width !== 256
     || data.height !== 256
     || typeof data.version !== 'string'

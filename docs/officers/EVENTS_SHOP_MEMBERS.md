@@ -2472,7 +2472,7 @@ flowchart TD
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; source-only #639 admits a returned saved photo only when its canonical decoded bytes total 12 through 65,536 with `RIFF` at bytes 0–3 and `WEBP` at bytes 8–11, maps every other returned byte shape to one fixed byte-free failure before the Account image path, preserves the version-scoped **Photo unavailable** fallback and Remove action for structurally admitted bytes the browser cannot display, and leaves outbound uploads unchanged; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -3040,6 +3040,106 @@ Officer source-review procedure for MEMBERS-DIRECTORY-001J [#637] profile-recove
 **Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #637 changes source only. Undo must not strand focus after a user-initiated recovery transition or permit a stale completion to move focus.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, recovery focus moved across applications or accounts, Reload sent a mutation, an initial failure stole unrelated focus, or connected behavior became available.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001K [#639] saved-photo response admission — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify from specialist-prepared evidence that the preserved connected Account interface rejects clearly mislabeled returned saved-photo bytes before they reach the page while retaining the existing safe display fallback for structurally admitted bytes the browser cannot decode, without connecting the feature, changing outbound uploads, using a real account or photo, or changing production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #637 is reviewed and merged. Ask the platform owner or testing specialist for the exact #639 source candidate, the named generated-only test output, the trustworthy old-source failure, and a redacted written synthetic-behavior report. The specialist runs the tests and records the evidence. The backup officer reviews that written evidence without a terminal or test harness. Keep the source-controlled availability value `false`. Do not sign in to production, use a real name or photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #639 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the testing specialist for the named MEMBERS-DIRECTORY-001K test output.
+6. Ask the testing specialist for the trustworthy old-source failure.
+7. Ask the testing specialist for the redacted written synthetic-behavior report.
+8. Confirm the report names the specialist who ran the tests.
+9. Confirm the evidence uses only a made-up account.
+10. Confirm the evidence uses only generated non-face image bytes.
+11. Confirm the source-controlled availability value remains byte-for-byte `false`.
+12. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+13. Confirm the named bridge imports the actual Account profile component.
+14. Confirm the named bridge imports the actual member-directory service.
+15. Confirm the named bridge mocks only Firebase Functions transport.
+16. Confirm the named bridge makes no real Firebase request.
+17. Confirm the old source admits canonical non-WebP bytes into the saved-thumbnail image path.
+18. Confirm the new source rejects those mislabeled returned bytes before creating a saved-thumbnail image.
+19. Confirm the new source rejects those mislabeled returned bytes before creating an image data URL.
+20. Confirm that rejection renders only the existing generic unavailable Account state.
+21. Confirm the service rejection is exactly **Invalid member directory response.**
+22. Confirm the fixed rejection contains no raw image bytes.
+23. Confirm the fixed rejection contains no provider value.
+24. Confirm the fixed rejection contains no caught detail.
+25. Confirm the source adds no logging path for the rejected value.
+26. Confirm canonical bytes with an exact 12-byte `RIFF`/`WEBP` envelope are admitted.
+27. Confirm canonical bytes with an exact 65,536-byte `RIFF`/`WEBP` envelope are admitted.
+28. Confirm empty returned bytes are rejected.
+29. Confirm a returned envelope shorter than 12 bytes is rejected.
+30. Confirm a returned envelope with the wrong bytes 0–3 is rejected.
+31. Confirm a returned envelope with the wrong bytes 8–11 is rejected.
+32. Confirm noncanonical returned base64 is rejected.
+33. Confirm a 65,537-byte returned envelope is rejected.
+34. Confirm the exact returned `image/webp` requirement remains.
+35. Confirm the exact returned 256×256 dimensions remain.
+36. Confirm the exact returned version requirement remains.
+37. Confirm the exact returned-photo object requirement remains.
+38. Confirm a returned-photo accessor is rejected generically.
+39. Confirm a hostile returned-photo object is rejected generically.
+40. Confirm a structurally admitted saved photo first uses the fixed WebP image type.
+41. Confirm a synthetic browser decode failure removes that saved image.
+42. Confirm a synthetic browser decode failure removes its data URL.
+43. Confirm the replacement says **Photo unavailable**.
+44. Confirm the replacement contains no image bytes.
+45. Confirm **Remove current saved photo** remains enabled.
+46. Confirm the display failure creates no additional callable.
+47. Confirm the existing fallback remains scoped to the failed photo version.
+48. Confirm a different later photo version retains its existing fresh render attempt.
+49. Confirm canonical non-RIFF outbound WebP upload bytes still reach the callable unchanged.
+50. Confirm outbound JPEG admission remains unchanged.
+51. Confirm outbound PNG admission remains unchanged.
+52. Confirm outbound WebP admission remains unchanged.
+53. Confirm the source diff changes no Account component.
+54. Confirm the source diff changes no People-finder page.
+55. Confirm the source diff changes no Function.
+56. Confirm the source diff changes no Rule.
+57. Confirm the source diff changes no index.
+58. Confirm the source diff changes no schema.
+59. Confirm the source diff changes no package.
+60. Confirm the source diff changes no workflow.
+61. Confirm the source diff changes no release control.
+62. Confirm the source diff adds no photo query.
+63. Confirm the source diff adds no face recognition.
+64. Confirm the source diff adds no image matching.
+65. Confirm the source diff adds no image embedding.
+66. Confirm the source diff adds no similarity scoring.
+67. Confirm the source diff adds no biometric processing.
+68. Confirm the default Account branch obtains no directory-service context.
+69. Confirm the default Account branch creates no directory request number.
+70. Confirm the default Account branch calls no directory service.
+71. Record the source change as its own state.
+72. Record the named test results as their own state.
+73. Record whether the change merged as its own state.
+74. Record whether any website artifact was published as its own state.
+75. Record the exact `runmprc.com` revision as its own state.
+76. Record whether Firebase was deployed as its own state.
+77. Record whether an outside provider was configured as its own state.
+78. Record whether an account or sign-in state changed as its own state.
+79. Record whether production data changed as its own state.
+80. Record whether connected behavior became available as its own state.
+81. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source admits an inbound returned saved photo only when its existing exact object, WebP MIME, dimensions, and version contract contains canonical decoded bytes from 12 through 65,536 with `RIFF` at bytes 0–3 and `WEBP` at bytes 8–11. Other returned bytes become only **Invalid member directory response.** and the generic unavailable Account state without a saved-thumbnail image, data URL, raw bytes, provider value, caught detail, or log. Structural admission is not full decoding. If the browser cannot display admitted bytes, the image and data URL leave the page, the version-scoped byte-free **Photo unavailable** fallback appears, and **Remove current saved photo** remains enabled without another callable. Outbound JPG, PNG, and WebP admission and exact upload bytes remain unchanged. Availability remains `false`; the default branch obtains no directory-service context, creates no request number, and calls no directory service; and live #623 remains inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real account, name, or photo; production sign-in; direct production Firebase access; malformed returned bytes that create a saved-thumbnail image or data URL; a rejection that renders or logs raw bytes, a provider value, or caught detail; admitted bytes outside 12 through 65,536; missing `RIFF` or `WEBP` checks; a browser decode failure that leaves the data URL rendered, omits **Photo unavailable**, or removes the Remove action; an extra callable caused by image failure; changed outbound JPG, PNG, or WebP admission or bytes; a photo query; face recognition, matching, embedding, similarity scoring, or biometric processing; a Function, Rule, index, schema, package, workflow, release-control, provider, account, sign-in, production-data, or website change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, or merge means the feature is live.
+
+**Success proof:** record the exact #639 issue, reviewed pull request and commit; trustworthy old-source failure; green separately named MEMBERS-DIRECTORY-001K focused tests; green full frontend tests; type-checking; scoped lint; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend, response-contract, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed service-and-documentation revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #639 changes source only. Undo must not turn clearly mislabeled returned bytes into a saved-thumbnail image or change outbound upload bytes.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, raw returned bytes or provider detail reached the page or a log, malformed bytes entered the saved-thumbnail image path, outbound uploads changed, or connected behavior became available.
 
 ## Admin screens — NOT AVAILABLE YET
 
