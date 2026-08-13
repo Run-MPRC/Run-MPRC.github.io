@@ -2440,13 +2440,25 @@ flowchart TD
     Send --> Readback["Refetch authoritative processed thumbnail or no-photo fallback"]
     Discard --> Preserved
     Readback --> Preserved
+    FinderDisposal["#631 connected People-finder disposal — SOURCE ONLY"] --> Completed["Completed validation, empty, fixed failure, or result-card state"]
+    Completed --> Clear["Clear query, prior messages/headings/cards/names/images; announce local clear; focus input; zero new request or call"]
+    FinderDisposal --> PhotoValue{"Returned photo value?"}
+    PhotoValue -- "null" --> Absent["No photo"]
+    PhotoValue -- "non-null" --> Render["Browser thumbnail render attempt"]
+    Render -- "fails" --> Unavailable["Remove image/data URL from page; Photo unavailable"]
+    Unavailable -. "different later photo version" .-> Fresh["Fresh render attempt"]
+    Clear --> Preserved
+    Absent --> Preserved
+    Unavailable --> Preserved
+    Fresh --> Preserved
+    Clear -. "does not cancel, erase, roll back, or recall" .-> Outside["Network work, browser memory/cache, query-free audit, and already seen or captured response"]
     Preserved -. "NOT LIVE; cannot be mounted until reviewed connection" .-> Later
     Later["Later #507 reviewed source flip"] --> Gates["Privacy, scoped authorization, staging, and backend-first readback"]
     Gates --> Connected["Future optional name search with voluntary thumbnails"]
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: synthetic local artifacts prove the signed-in Account preview and administrator-guarded People finder with every directory control disabled. #623 published the exact inert artifact. Completed signed-out public checks prove only its exact revision, normal guards, and absence of a directory request, not the protected layouts. #627 preserves accessible connected Account and People finder branches only in source behind the unchanged false availability value. #629 preserves a further source-only photo-review branch: a generated valid image is read locally into a centered-square draft labeled Selected photo — not uploaded yet; Cancel discards it without a request, while Save alone creates a request and sends the existing upload command before authoritative profile readback. The current saved photo remains separate and authoritative. A failed saved-thumbnail render shows a version-scoped Photo unavailable fallback without removing the Remove action. Neither connected-source branch is live or mounted. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -2674,6 +2686,91 @@ Officer review steps for MEMBERS-DIRECTORY-001F [#629] explicit photo review —
 **Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase or production-data undo is needed because #629 changes source only.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real photo or filename appeared, any bytes were sent before Save, finder visibility changed, or an unknown upload result could not be reconciled.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001G [#631] local People-finder disposal — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify that the preserved connected People-finder source truthfully distinguishes no supplied photo from a browser display failure and locally clears completed search displays without creating another request. This review does not connect the feature, inspect a real person, or change production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #629 is reviewed and merged. Ask the platform owner for the exact #631 source candidate, named generated-only test output, and a written synthetic-behavior report prepared by the platform owner or testing specialist. The evidence may use only made-up names such as **Casey Example** and **River Sample** plus generated non-face thumbnails. The backup officer reviews that evidence and does not operate a test harness. Keep the source-controlled availability value `false`. Do not sign in to production, enter a real name, select a real photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #631 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the platform owner for the named MEMBERS-DIRECTORY-001G test output.
+6. Ask the platform owner for the written synthetic-behavior report.
+7. Confirm the report names the platform owner or testing specialist who ran the test.
+8. Confirm the source-controlled availability value remains byte-for-byte `false`.
+9. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+10. Confirm the evidence uses only made-up names.
+11. Confirm the evidence uses only generated non-face thumbnails.
+12. Confirm the named test keeps the page behind the existing administrator guard.
+13. Confirm the named test finds no photo input or photo-query path.
+14. Confirm the named test reports **No photo** for a `null` photo value.
+15. Confirm the named test reports **No profile photo for Casey Example** as the matching accessible label.
+16. Confirm the named test reports **Photo unavailable** after a supplied generated thumbnail fails to render.
+17. Confirm the named test reports **Profile photo unavailable for River Sample** as the matching accessible label.
+18. Confirm the named test reports that the failed image leaves the rendered page.
+19. Confirm the named test reports that the failed image data URL leaves the rendered page.
+20. Confirm the named test reports a fresh render attempt for a different later photo version.
+21. Confirm the named test reports no Clear action while the page is idle.
+22. Confirm the named test reports no Clear action while a search is pending.
+23. Confirm the named test reports Clear after an empty result.
+24. Confirm the named test reports Clear after local validation.
+25. Confirm the named test reports Clear after the fixed search failure.
+26. Confirm the named test reports Clear after displayed result cards.
+27. Confirm the named test reports that Clear empties the name input.
+28. Confirm the named test reports that Clear removes the prior message.
+29. Confirm the named test reports that Clear removes the result heading.
+30. Confirm the named test reports that Clear removes every displayed card.
+31. Confirm the named test reports that Clear removes every displayed made-up name.
+32. Confirm the named test reports that Clear removes every displayed generated image.
+33. Confirm the named test reports that Clear removes every displayed image data URL.
+34. Confirm the named test reports **Search field and displayed result cards cleared.** in the persistent polite status region.
+35. Confirm the named test reports that focus returns to the persistent name input.
+36. Confirm the named test reports no new request number from Clear.
+37. Confirm the named test reports no new directory-service call from Clear.
+38. Confirm the named test reports that input editing still clears earlier results.
+39. Confirm the named test reports a native keyboard-operable Clear button.
+40. Confirm the named test reports at least a 44-pixel Clear-button height.
+41. Confirm the specialist's contrast record covers normal, hover, and focus states.
+42. Confirm the specialist's narrow-layout record covers a 320-pixel width without horizontal overflow.
+43. Confirm the named test reports no directory context in the default unavailable branch.
+44. Confirm the named test reports no request number in the default unavailable branch.
+45. Confirm the named test reports no directory-service call in the default unavailable branch.
+46. Confirm the named test reports that typing alone sends nothing.
+47. Confirm the test record keeps the existing pending-search fence green.
+48. Confirm the test record keeps the existing application-context fence green.
+49. Confirm the test record keeps the existing administrator-context fence green.
+50. Confirm the test record keeps the existing unmount fence green.
+51. Confirm the source diff retains the existing display-name and optional-thumbnail projection.
+52. Confirm the source diff adds no photo query.
+53. Confirm the source diff adds no face recognition or biometric processing.
+54. Confirm the source diff adds no result total, export, or roster authority.
+55. Confirm the source diff changes no service contract, Function, Rule, index, schema, package, workflow, or release control.
+56. Record the exact source change as its own state.
+57. Record every named test result as its own state.
+58. Record whether the change merged as its own state.
+59. Record whether any website artifact was published as its own state.
+60. Record the exact `runmprc.com` revision as its own state.
+61. Record whether Firebase was deployed as its own state.
+62. Record whether an outside provider was configured as its own state.
+63. Record whether an account or sign-in state changed as its own state.
+64. Record whether production data changed as its own state.
+65. Record whether connected or live People-finder behavior became available as its own state.
+66. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source uses **No photo** only for a `null` photo and uses **Photo unavailable** when a supplied generated thumbnail cannot render. The failed image/data URL leaves the rendered page, and a different later photo version receives a fresh attempt. Clear is offered only after completed validation, empty results, fixed failure, or result cards. It removes the query and prior displayed message, headings, cards, names, and images, uses the persistent polite status region to announce **Search field and displayed result cards cleared.**, focuses the persistent input, creates no request number, and makes no directory-service call. It is not available while idle or pending. Availability remains `false`; the default branch and live #623 preview remain inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real name or photo; a face or photo query; production sign-in; direct production Firebase access; Clear offered while idle, pending, or in the disabled preview; a new request number or service call caused by Clear; a failed supplied image that remains in the page or is mislabeled **No photo**; a later photo version that inherits an older failure; a query, prior message, result heading, card, name, image, or image data URL that remains displayed after Clear; missing input focus; an availability flip; a Function, Rule, index, schema, provider, account, sign-in, production-data, or website change; or a claim that local Clear cancels network work, erases browser memory/cache, rolls back the query-free audit, or recalls a result already returned, seen, or captured.
+
+**Success proof:** record the exact #631 issue, reviewed pull request and commit; green separately named MEMBERS-DIRECTORY-001G focused tests; green full frontend tests; type-checking; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend/accessibility, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #631 changes source only. Undo cannot recall a result already seen or captured and must not alter the query-free audit.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, a supplied image remained exposed after failure or Clear, Clear made a request, connected behavior became available, or the local result could not be removed from the rendered page.
 
 **Expected result:** production deploy `6a7e072f8f346b0008510d29` defaults to a visibly disabled preview that makes zero directory calls, accepts no file or name, and shows no person. Separate synthetic tests prove the protected disabled layouts and preserved connected source. Completed signed-out public readback proves only the exact revision, normal guards, and absence of a member-directory request. The backend and connected behavior remain unavailable. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
 
