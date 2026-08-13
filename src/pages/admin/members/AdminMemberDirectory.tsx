@@ -4,6 +4,7 @@ import React, {
 } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
+import '../../account/Account.css';
 import MEMBER_DIRECTORY_BACKEND_AVAILABLE from '../../../services/account/memberDirectoryAvailability';
 import { useServiceLocator } from '../../../services/ServiceLocatorContext';
 import {
@@ -40,7 +41,7 @@ type SearchState =
 function PhotoFallback({ displayName }: { displayName: string }) {
   return (
     <div
-      className="grid h-32 w-32 flex-none place-items-center rounded-lg border-2 border-gray-400 bg-gray-100 px-2 text-center text-sm font-semibold text-gray-700"
+      className="member-directory-admin__photo-fallback grid h-32 w-32 flex-none place-items-center rounded-lg border-2 border-gray-400 bg-gray-100 px-2 text-center text-sm font-semibold text-gray-700"
       role="img"
       aria-label={`No profile photo for ${displayName}`}
     >
@@ -134,11 +135,16 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
   }
 
   const pending = state.phase === 'pending';
+  const queryDescriptionIds = [
+    'member-directory-query-help',
+    validationMessage ? 'member-directory-query-validation' : null,
+    state.phase === 'unavailable' ? 'member-directory-search-failure' : null,
+  ].filter(Boolean).join(' ');
 
   return (
     <>
       <form
-        className="mt-6 min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-4"
+        className="member-directory-admin__search mt-6 min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-4"
         onSubmit={handleSearch}
         noValidate
       >
@@ -149,13 +155,13 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
           >
             <span
               id="member-directory-query-label"
-              className="block font-semibold text-gray-900"
+              className="member-directory-admin__label block font-semibold text-gray-900"
             >
               Search opted-in people by name
             </span>
             <span
               id="member-directory-query-help"
-              className="mt-1 block text-sm text-gray-700"
+              className="member-directory-admin__help mt-1 block text-sm text-gray-700"
             >
               Enter the beginning of a name or name part. Search runs only when you
               choose Search.
@@ -171,14 +177,15 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
               autoComplete="off"
               spellCheck={false}
               aria-labelledby="member-directory-query-label"
-              aria-describedby="member-directory-query-help"
-              className="mt-3 block min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900"
+              aria-describedby={queryDescriptionIds}
+              aria-invalid={validationMessage !== null}
+              className="member-directory-admin__input mt-3 block min-h-11 min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900"
             />
           </label>
           <button
             type="submit"
             disabled={pending}
-            className="min-h-11 rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
+            className="member-directory-admin__button min-h-11 w-full rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             {pending ? 'Searching...' : 'Search'}
           </button>
@@ -187,7 +194,8 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
 
       {validationMessage && (
         <p
-          className="mt-4 rounded border border-amber-600 bg-amber-50 p-3 text-sm text-amber-950"
+          id="member-directory-query-validation"
+          className="member-directory-admin__message member-directory-admin__message--warning mt-4 rounded border border-amber-600 bg-amber-50 p-3 text-sm text-amber-950"
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
@@ -204,7 +212,8 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
 
       {state.phase === 'unavailable' && (
         <p
-          className="mt-4 rounded border border-red-700 bg-red-50 p-3 text-sm text-red-900"
+          id="member-directory-search-failure"
+          className="member-directory-admin__message member-directory-admin__message--error mt-4 rounded border border-red-700 bg-red-50 p-3 text-sm text-red-900"
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
@@ -222,7 +231,15 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
 
       {state.phase === 'resolved' && state.results.length > 0 && (
         <section className="mt-6 min-w-0" aria-labelledby="member-directory-results-heading">
-          <h2 id="member-directory-results-heading" className="text-xl font-bold text-gray-900">
+          <p
+            className="text-sm text-gray-700"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Search complete. Matching result cards are available below.
+          </p>
+          <h2 id="member-directory-results-heading" className="mt-2 text-xl font-bold text-gray-900">
             Opted-in people
           </h2>
           <ul
@@ -232,7 +249,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
             {state.results.map((result) => (
               <li
                 key={result.entryRef}
-                className="min-w-0 overflow-hidden rounded-lg border border-gray-300 bg-white p-4 text-gray-900"
+                className="member-directory-admin__card min-w-0 overflow-hidden rounded-lg border border-gray-300 bg-white p-4 text-gray-900"
               >
                 <DirectoryPhoto
                   key={result.photo?.version ?? 'no-photo'}
@@ -265,7 +282,7 @@ function MemberDirectoryPreview() {
         </span>
       </div>
       <form
-        className="mt-4 min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-4"
+        className="member-directory-admin__search mt-4 min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-4"
         onSubmit={(event) => event.preventDefault()}
       >
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
@@ -275,13 +292,13 @@ function MemberDirectoryPreview() {
           >
             <span
               id="member-directory-query-label-preview"
-              className="block font-semibold text-gray-900"
+              className="member-directory-admin__label block font-semibold text-gray-900"
             >
               Search opted-in people by name
             </span>
             <span
               id="member-directory-query-help-preview"
-              className="mt-1 block text-sm text-gray-700"
+              className="member-directory-admin__help mt-1 block text-sm text-gray-700"
             >
               Name entry will be available after the protected backend is connected.
             </span>
@@ -295,14 +312,14 @@ function MemberDirectoryPreview() {
               autoComplete="off"
               aria-labelledby="member-directory-query-label-preview"
               aria-describedby="member-directory-search-preview-status member-directory-query-help-preview"
-              className="mt-3 block min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="member-directory-admin__input mt-3 block min-h-11 min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
           <button
             type="submit"
             disabled
             aria-describedby="member-directory-search-preview-status"
-            className="min-h-11 rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="member-directory-admin__button min-h-11 w-full rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             Search
           </button>

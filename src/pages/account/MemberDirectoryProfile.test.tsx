@@ -14,7 +14,9 @@ import {
   setMyMemberDirectoryPhoto,
   setMyMemberDirectoryVisibility,
 } from '../../services/account/memberDirectoryService';
-import MemberDirectoryProfile from './MemberDirectoryProfile';
+import MemberDirectoryProfile, {
+  isMemberDirectoryDisplayNameEligible,
+} from './MemberDirectoryProfile';
 
 jest.mock('../../services/account/memberDirectoryService', () => {
   const actual = jest.requireActual('../../services/account/memberDirectoryService');
@@ -67,23 +69,54 @@ function deferred<T>() {
 function renderProfile({
   firebaseApp = app,
   uid = 'synthetic-user',
-  hasDisplayName = true,
+  displayName = 'Synthetic Member',
   backendAvailable = true,
 }: {
   firebaseApp?: typeof app;
   uid?: string;
-  hasDisplayName?: boolean;
+  displayName?: string | null;
   backendAvailable?: boolean;
 } = {}) {
   return render(
     <MemberDirectoryProfile
       app={firebaseApp}
       uid={uid}
-      hasDisplayName={hasDisplayName}
+      displayName={displayName}
       backendAvailable={backendAvailable}
     />,
   );
 }
+
+describe('MEMBERS-DIRECTORY-001E display-name eligibility', () => {
+  test.each([
+    ['ordinary synthetic name', 'Synthetic Member'],
+    ['NFKC-normalized synthetic name', '\uff33\uff39\uff2e\uff34\uff28\uff25\uff34\uff29\uff23'],
+    ['combining-mark synthetic name', 'A\u0301B'],
+    ['one supplementary Unicode letter occupying two UTF-16 units', '\ud801\udc00'],
+    ['exact raw and canonical bound', 'x'.repeat(200)],
+  ])('accepts an eligible %s', (_label, displayName) => {
+    expect(isMemberDirectoryDisplayNameEligible(displayName)).toBe(true);
+  });
+
+  test.each([
+    ['missing name', null],
+    ['empty name', ''],
+    ['blank name', '   '],
+    ['one-unit Latin name text', 'A'],
+    ['one-unit non-Latin name text', '\u4e2d'],
+    ['one-unit lowercase expansion candidate', '\u00df'],
+    ['punctuation-only name', '--'],
+    ['punctuation around one-unit name text', '-A-'],
+    ['control character', 'Synthetic\u0085Member'],
+    ['format character', 'Synthetic\u200dMember'],
+    ['unpaired high surrogate', 'Synthetic\ud800Member'],
+    ['unpaired low surrogate', 'Synthetic\udc00Member'],
+    ['raw text over the UTF-16 bound', 'x'.repeat(201)],
+    ['NFKC expansion over the canonical bound', '\ufdfa'.repeat(12)],
+  ])('rejects an ineligible %s', (_label, displayName) => {
+    expect(isMemberDirectoryDisplayNameEligible(displayName)).toBe(false);
+  });
+});
 
 describe('My Account member directory profile', () => {
   beforeEach(() => {
@@ -121,7 +154,7 @@ describe('My Account member directory profile', () => {
       <MemberDirectoryProfile
         app={hostileApp}
         uid="synthetic-user"
-        hasDisplayName
+        displayName="Synthetic Member"
       />,
     );
 
@@ -135,7 +168,8 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'No photo or finder setting is read, uploaded, searched, or saved',
     );
-    expect(screen.getByLabelText('Profile photo preview')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Profile photo preview' }))
+      .toBeInTheDocument();
     const file = screen.getByLabelText('Add profile photo (not available yet)');
     const checkbox = screen.getByRole('checkbox', {
       name: 'Let authorized officers find me by name (not available yet)',
@@ -176,7 +210,7 @@ describe('My Account member directory profile', () => {
       <MemberDirectoryProfile
         app={app}
         uid="synthetic-user"
-        hasDisplayName={false}
+        displayName={null}
       />,
     );
 
@@ -187,7 +221,7 @@ describe('My Account member directory profile', () => {
     expect(checkbox.getAttribute('aria-describedby')).toContain(
       'member-directory-name-required-preview',
     );
-    expect(screen.getByText(/full name in the Profile section will also be required/i))
+    expect(screen.getByText(/eligible name in the Profile section will also be required/i))
       .toBeInTheDocument();
     expect(getMyMemberDirectoryProfile).not.toHaveBeenCalled();
   });
@@ -199,7 +233,8 @@ describe('My Account member directory profile', () => {
       level: 2,
       name: 'Profile photo and officer finder',
     })).toBeInTheDocument();
-    expect(await screen.findByLabelText('No profile photo')).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'No profile photo' }))
+      .toBeInTheDocument();
     expect(screen.getByRole('checkbox', {
       name: 'Let verified website administrators find me by name',
     })).not.toBeChecked();
@@ -308,7 +343,13 @@ describe('My Account member directory profile', () => {
 
     fireEvent.change(input, { target: { files: [makeFile()] } });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(message);
+    expect(alert).toHaveAttribute('id', 'member-directory-action-error');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.getAttribute('aria-describedby')).toContain(
+      'member-directory-action-error',
+    );
     expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
     expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
   });
@@ -389,16 +430,61 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('status')).not.toHaveTextContent('Officer finder is off.');
   });
 
-  test('requires a saved display name before opt-in while leaving photo upload available', async () => {
-    renderProfile({ hasDisplayName: false });
+  test.each([
+    ['missing', null],
+    ['one-unit', 'A'],
+    ['punctuation-only', '---'],
+    ['format-containing', 'Synthetic\u200dMember'],
+    ['canonical expansion beyond the bound', '\ufdfa'.repeat(12)],
+  ])(
+    'requires an eligible display name before opt-in for a %s name',
+    async (_label, displayName) => {
+      renderProfile({ displayName });
 
+      const checkbox = await screen.findByRole('checkbox', {
+        name: 'Let verified website administrators find me by name',
+      });
+      expect(checkbox).toBeDisabled();
+      expect(screen.getByText(/current Profile name is not eligible/i))
+        .toBeInTheDocument();
+      expect(screen.getByLabelText('Add profile photo')).toBeEnabled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+    },
+  );
+
+  test('recomputes new opt-in eligibility when the current saved name changes', async () => {
+    const view = renderProfile({ displayName: 'Synthetic Member' });
     const checkbox = await screen.findByRole('checkbox', {
       name: 'Let verified website administrators find me by name',
     });
-    expect(checkbox).toBeDisabled();
-    expect(screen.getByText(/add your full name in the Profile section/i))
+    expect(checkbox).toBeEnabled();
+    expect(screen.queryByText(/current Profile name is not eligible/i))
+      .not.toBeInTheDocument();
+
+    view.rerender(
+      <MemberDirectoryProfile
+        app={app}
+        uid="synthetic-user"
+        displayName="A"
+        backendAvailable
+      />,
+    );
+    expect(screen.getByRole('checkbox')).toBeDisabled();
+    expect(screen.getByText(/current Profile name is not eligible/i))
       .toBeInTheDocument();
-    expect(screen.getByLabelText('Add profile photo')).toBeEnabled();
+
+    view.rerender(
+      <MemberDirectoryProfile
+        app={app}
+        uid="synthetic-user"
+        displayName="Restored Synthetic Member"
+        backendAvailable
+      />,
+    );
+    expect(screen.getByRole('checkbox')).toBeEnabled();
+    expect(screen.queryByText(/current Profile name is not eligible/i))
+      .not.toBeInTheDocument();
+    expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
   });
 
   test('keeps controls available when a secure request ID cannot be created', async () => {
@@ -412,15 +498,27 @@ describe('My Account member directory profile', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /could not safely start that change/i,
     );
-    expect(screen.getByRole('checkbox')).toBeEnabled();
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeEnabled();
+    expect(checkbox).not.toHaveAttribute('aria-invalid');
+    expect(checkbox.getAttribute('aria-describedby')).toContain(
+      'member-directory-action-error',
+    );
     expect(screen.getByLabelText('Add profile photo')).toBeEnabled();
     expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
     expect(document.body).not.toHaveTextContent('synthetic crypto unavailable');
   });
 
-  test('keeps an existing opt-in removable but hidden when the display name is cleared', async () => {
-    (getMyMemberDirectoryProfile as jest.Mock).mockResolvedValue(PROFILE_WITH_PHOTO);
-    renderProfile({ hasDisplayName: false });
+  test('keeps an existing opt-in removable but hidden when the display name is ineligible', async () => {
+    const hiddenProfile = {
+      ...PROFILE_WITH_PHOTO,
+      revision: 5,
+      searchableByOfficers: false,
+    };
+    (getMyMemberDirectoryProfile as jest.Mock)
+      .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+      .mockResolvedValueOnce(hiddenProfile);
+    renderProfile({ displayName: 'Synthetic\u200dMember' });
 
     const checkbox = await screen.findByRole('checkbox', {
       name: 'Let verified website administrators find me by name',
@@ -430,9 +528,22 @@ describe('My Account member directory profile', () => {
     expect(checkbox.getAttribute('aria-describedby')).toContain(
       'member-directory-name-required',
     );
-    expect(screen.getByText(/officers cannot find you until you add a full name/i))
+    expect(screen.getByText(/officers cannot find you while your current Profile name is ineligible/i))
       .toBeInTheDocument();
     expect(screen.getByText(/you can still turn the setting off/i)).toBeInTheDocument();
+
+    fireEvent.click(checkbox);
+
+    await waitFor(() => expect(setMyMemberDirectoryVisibility).toHaveBeenCalledWith(
+      app,
+      {
+        requestId: REQUEST_ID,
+        expectedRevision: 4,
+        searchableByOfficers: false,
+      },
+    ));
+    expect(await screen.findByRole('checkbox')).not.toBeChecked();
+    expect(screen.getByRole('status')).toHaveTextContent('Officer finder is off.');
   });
 
   test('removes a photo without changing an enabled finder setting', async () => {
@@ -455,7 +566,8 @@ describe('My Account member directory profile', () => {
       expectedRevision: 4,
     }));
     expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
-    expect(await screen.findByLabelText('No profile photo')).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'No profile photo' }))
+      .toBeInTheDocument();
     expect(screen.getByRole('checkbox', {
       name: 'Let verified website administrators find me by name',
     })).toBeChecked();
@@ -580,7 +692,7 @@ describe('My Account member directory profile', () => {
       <MemberDirectoryProfile
         app={otherApp}
         uid="other-synthetic-user"
-        hasDisplayName
+        displayName="Other Synthetic Member"
         backendAvailable
       />,
     );
@@ -608,7 +720,7 @@ describe('My Account member directory profile', () => {
       <MemberDirectoryProfile
         app={otherApp}
         uid="other-synthetic-user"
-        hasDisplayName
+        displayName="Other Synthetic Member"
         backendAvailable
       />,
     );
@@ -620,6 +732,91 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(screen.queryByText('Officer finder is on.')).not.toBeInTheDocument();
   });
+
+  test.each([
+    ['application', otherApp, 'synthetic-user'],
+    ['account', app, 'other-synthetic-user'],
+  ])(
+    'makes a deferred file read inert after the %s changes',
+    async (_label, nextApp, nextUid) => {
+      const OriginalFileReader = globalThis.FileReader;
+      let completeRead: (() => void) | null = null;
+      class DeferredFileReader {
+        result: string | null = null;
+
+        onload: (() => void) | null = null;
+
+        onerror: (() => void) | null = null;
+
+        onabort: (() => void) | null = null;
+
+        readAsDataURL() {
+          completeRead = () => {
+            this.result = `data:image/png;base64,${btoa('deferred synthetic pixels')}`;
+            this.onload?.();
+          };
+        }
+      }
+      Object.defineProperty(globalThis, 'FileReader', {
+        configurable: true,
+        writable: true,
+        value: DeferredFileReader,
+      });
+
+      try {
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(DEFAULT_PROFILE)
+          .mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+        const view = renderProfile();
+        const input = await screen.findByLabelText('Add profile photo');
+
+        fireEvent.change(input, {
+          target: {
+            files: [new File(
+              ['deferred synthetic pixels'],
+              'deferred.png',
+              { type: 'image/png' },
+            )],
+          },
+        });
+        expect(await screen.findByRole('status')).toHaveTextContent(
+          'Saving profile photo...',
+        );
+
+        view.rerender(
+          <MemberDirectoryProfile
+            app={nextApp}
+            uid={nextUid}
+            displayName="Current Synthetic Member"
+            backendAvailable
+          />,
+        );
+        expect(await screen.findByRole('img', {
+          name: 'Your current profile thumbnail',
+        })).toBeInTheDocument();
+
+        await act(async () => {
+          if (completeRead === null) throw new Error('synthetic deferred read missing');
+          completeRead();
+          await Promise.resolve();
+        });
+
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('img', { name: 'Your current profile thumbnail' }))
+          .toHaveAttribute('src', `data:image/webp;base64,${PHOTO.base64Data}`);
+        expect(screen.getByRole('checkbox')).toBeChecked();
+        expect(screen.queryByText('Profile photo saved.')).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      } finally {
+        Object.defineProperty(globalThis, 'FileReader', {
+          configurable: true,
+          writable: true,
+          value: OriginalFileReader,
+        });
+      }
+    },
+  );
 
   test('ignores an initial load completion after unmount', async () => {
     const load = deferred<typeof DEFAULT_PROFILE>();
@@ -666,5 +863,12 @@ describe('My Account member directory profile', () => {
     expect(css).toMatch(
       /\.member-directory-profile__photo-actions\s*\{[\s\S]*flex:\s*1 1 15rem;[\s\S]*width:\s*100%;/,
     );
+    expect(css).toMatch(
+      /\.member-directory-profile__photo-actions input\[type='file'\]\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*2\.75rem;/,
+    );
+    expect(css).toMatch(
+      /\.member-directory-profile__visibility label\s*\{[\s\S]*min-height:\s*2\.75rem;/,
+    );
+    expect(css).toMatch(/@media \(max-width:\s*359px\)/);
   });
 });

@@ -1,8 +1,10 @@
 /* eslint-env jest */
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import React from 'react';
 import {
-  act, fireEvent, render, screen, waitFor,
+  act, fireEvent, render, screen, waitFor, within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useServiceLocator } from '../../../services/ServiceLocatorContext';
@@ -198,6 +200,50 @@ describe('Admin People finder', () => {
     expect(searchMemberDirectory).not.toHaveBeenCalled();
   });
 
+  test('ties validation and fixed search failures to the search input', async () => {
+    renderDirectory();
+
+    const input = queryInput();
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(input).toHaveAttribute(
+      'aria-describedby',
+      'member-directory-query-help',
+    );
+
+    submitSearch('x');
+
+    const validation = screen.getByRole('alert');
+    expect(validation).toHaveAttribute('id', 'member-directory-query-validation');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.getAttribute('aria-describedby')).toContain(
+      'member-directory-query-help',
+    );
+    expect(input.getAttribute('aria-describedby')).toContain(
+      'member-directory-query-validation',
+    );
+
+    fireEvent.change(input, { target: { value: 'synthetic' } });
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(input.getAttribute('aria-describedby')).not.toContain(
+      'member-directory-query-validation',
+    );
+
+    (searchMemberDirectory as jest.Mock).mockRejectedValue(new Error('synthetic'));
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+    const failure = await screen.findByText(
+      'We could not complete that people-finder search. No results are shown. Try again later.',
+    );
+    expect(failure).toHaveAttribute('id', 'member-directory-search-failure');
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(input.getAttribute('aria-describedby')).toContain(
+      'member-directory-query-help',
+    );
+    expect(input.getAttribute('aria-describedby')).toContain(
+      'member-directory-search-failure',
+    );
+  });
+
   test('normalizes one explicit request and blocks duplicate submissions while pending', async () => {
     const pending = deferred<{ schemaVersion: 1; results: [] }>();
     (searchMemberDirectory as jest.Mock).mockReturnValue(pending.promise);
@@ -258,6 +304,79 @@ describe('Admin People finder', () => {
     fireEvent.error(image);
     expect(screen.getByRole('img', { name: 'No profile photo for Synthetic Runner' }))
       .toHaveTextContent('No photo');
+  });
+
+  test('announces non-empty completion politely without exposing a result total', async () => {
+    (searchMemberDirectory as jest.Mock).mockResolvedValue({
+      schemaVersion: 1,
+      results: [
+        { entryRef: ENTRY_REF, displayName: 'Synthetic Runner', photo: null },
+        { entryRef: SECOND_ENTRY_REF, displayName: 'Second Synthetic', photo: null },
+      ],
+    });
+    renderDirectory();
+
+    submitSearch();
+
+    const completion = await screen.findByText(
+      'Search complete. Matching result cards are available below.',
+    );
+    expect(completion).toHaveAttribute('role', 'status');
+    expect(completion).toHaveAttribute('aria-live', 'polite');
+    expect(completion).toHaveAttribute('aria-atomic', 'true');
+    expect(completion).not.toHaveTextContent(/\b2\b|\btwo\b/i);
+    const results = screen.getByRole('list', {
+      name: 'Opted-in People finder results',
+    });
+    expect(results).toBeInTheDocument();
+    expect(within(results).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.queryByText(/\b2 results\b/i)).not.toBeInTheDocument();
+  });
+
+  test('keeps connected and preview search controls contained and touch-sized on narrow screens', () => {
+    const connected = renderDirectory();
+
+    const connectedInput = queryInput();
+    const connectedButton = screen.getByRole('button', { name: 'Search' });
+    expect(connectedInput).toHaveClass('min-h-11', 'min-w-0', 'w-full', 'max-w-full');
+    expect(connectedButton).toHaveClass('min-h-11', 'w-full', 'sm:w-auto');
+    expect(connectedInput.closest('form')).toHaveClass('min-w-0');
+    connected.unmount();
+
+    renderDirectory({ backendAvailable: false });
+    const previewInput = queryInput();
+    const previewButton = screen.getByRole('button', { name: 'Search' });
+    expect(previewInput).toBeDisabled();
+    expect(previewInput).toHaveClass('min-h-11', 'min-w-0', 'w-full', 'max-w-full');
+    expect(previewButton).toBeDisabled();
+    expect(previewButton).toHaveClass('min-h-11', 'w-full', 'sm:w-auto');
+    expect(previewInput.closest('form')).toHaveClass('min-w-0');
+  });
+
+  test('uses scoped explicit colors instead of unavailable Tailwind palette utilities', () => {
+    renderDirectory();
+
+    expect(queryInput()).toHaveClass('member-directory-admin__input');
+    expect(queryInput().closest('form')).toHaveClass(
+      'member-directory-admin__search',
+    );
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveClass(
+      'member-directory-admin__button',
+    );
+
+    const css = readFileSync(
+      join(__dirname, '../../account/Account.css'),
+      'utf8',
+    );
+    expect(css).toMatch(
+      /\.member-directory-admin__search,[\s\S]*background:\s*#f9fafb;/,
+    );
+    expect(css).toMatch(
+      /\.member-directory-admin__input\s*\{[\s\S]*color:\s*#111827;[\s\S]*background:\s*#fff;/,
+    );
+    expect(css).toMatch(
+      /\.member-directory-admin__button\s*\{[\s\S]*color:\s*#fff;[\s\S]*background:\s*#1e40af;/,
+    );
   });
 
   test('clears earlier results as soon as the next input changes', async () => {

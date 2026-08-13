@@ -14,15 +14,60 @@ import {
 } from '../../services/account/memberDirectoryService';
 
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_DISPLAY_NAME_CODE_UNITS = 200;
+const MIN_CANONICAL_DISPLAY_NAME_CODE_UNITS = 2;
+const CONTROL_OR_FORMAT_PATTERN = /[\p{Cc}\p{Cf}]/u;
+const DIRECTORY_TOKEN_PATTERN = /[\p{L}\p{N}][\p{L}\p{M}\p{N}]*/gu;
 const LOAD_FAILURE_MESSAGE = 'We could not load your profile photo and officer finder settings. No setting was changed. Reload settings to try again.';
 const UNKNOWN_CHANGE_MESSAGE = 'We could not confirm that change. Do not make another change yet. Reload settings to check what is currently saved.';
 const REJECTED_CHANGE_MESSAGE = 'That change was rejected before it was saved. Review the requirements and try again.';
 const REQUEST_UNAVAILABLE_MESSAGE = 'This browser could not safely start that change. No setting was changed. Reload the page and try again.';
 
+function hasForbiddenDisplayNameUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return true;
+    }
+  }
+  return CONTROL_OR_FORMAT_PATTERN.test(value);
+}
+
+export function isMemberDirectoryDisplayNameEligible(value: unknown): boolean {
+  if (
+    typeof value !== 'string'
+    || value.length === 0
+    || value.length > MAX_DISPLAY_NAME_CODE_UNITS
+    || hasForbiddenDisplayNameUnicode(value)
+  ) return false;
+
+  try {
+    const displayName = value.trim();
+    if (
+      displayName.length === 0
+      || displayName.length > MAX_DISPLAY_NAME_CODE_UNITS
+    ) return false;
+    const tokens = displayName
+      .normalize('NFKC')
+      .toLowerCase()
+      .match(DIRECTORY_TOKEN_PATTERN);
+    if (tokens === null) return false;
+    const canonical = tokens.join(' ');
+    return canonical.length >= MIN_CANONICAL_DISPLAY_NAME_CODE_UNITS
+      && canonical.length <= MAX_DISPLAY_NAME_CODE_UNITS;
+  } catch {
+    return false;
+  }
+}
+
 function MemberDirectoryProfilePreview({
-  hasDisplayName,
+  displayNameEligible,
 }: {
-  hasDisplayName: boolean;
+  displayNameEligible: boolean;
 }) {
   return (
     <section
@@ -57,6 +102,7 @@ function MemberDirectoryProfilePreview({
         <div className="member-directory-profile__photo">
           <div
             className="member-directory-profile__placeholder"
+            role="img"
             aria-label="Profile photo preview"
           >
             Photo preview
@@ -94,15 +140,19 @@ function MemberDirectoryProfilePreview({
               aria-describedby={[
                 'member-directory-preview-status',
                 'member-directory-privacy-description',
-                !hasDisplayName ? 'member-directory-name-required-preview' : null,
+                !displayNameEligible
+                  ? 'member-directory-name-required-preview'
+                  : null,
               ].filter(Boolean).join(' ')}
             />
             Let authorized officers find me by name (not available yet)
           </label>
-          {!hasDisplayName && (
+          {!displayNameEligible && (
             <p id="member-directory-name-required-preview">
-              A full name in the Profile section will also be required when the
-              finder is connected.
+              An eligible name in the Profile section will also be required when
+              the finder is connected. It must remain within the 200-character
+              limit after normalization, produce searchable name text at least two
+              characters long, and contain no control or format characters.
             </p>
           )}
         </div>
@@ -144,6 +194,13 @@ type MutationStart = {
   lifetime: symbol;
   operation: symbol;
   profile: MemberDirectoryProfileData;
+  action: 'visibility' | 'upload' | 'remove';
+};
+
+type ActionError = {
+  control: 'visibility' | 'file' | 'remove';
+  invalid: boolean;
+  message: string;
 };
 
 type MutationConfirmation = (
@@ -205,15 +262,15 @@ function readFileAsBase64(file: File): Promise<string> {
 function MemberDirectoryProfileAttempt({
   app,
   uid,
-  hasDisplayName,
+  displayNameEligible,
 }: {
   app: FirebaseApp;
   uid: string;
-  hasDisplayName: boolean;
+  displayNameEligible: boolean;
 }) {
   const [state, setState] = useState<ViewState>({ phase: 'loading' });
   const [reloadAttempt, setReloadAttempt] = useState(0);
-  const [fileError, setFileError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ActionError | null>(null);
   const lifetimeRef = useRef<symbol | null>(null);
   const loadRef = useRef<symbol | null>(null);
   const mutationRef = useRef<symbol | null>(null);
@@ -234,7 +291,7 @@ function MemberDirectoryProfileAttempt({
     let active = true;
     loadRef.current = load;
     mutationRef.current = null;
-    setFileError(null);
+    setActionError(null);
     setState({ phase: 'loading' });
 
     async function loadProfile() {
@@ -278,9 +335,10 @@ function MemberDirectoryProfileAttempt({
       lifetime: lifetimeRef.current,
       operation,
       profile: state.profile,
+      action,
     };
     mutationRef.current = operation;
-    setFileError(null);
+    setActionError(null);
     setState({ phase: 'pending', profile: state.profile, action });
     return start;
   }
@@ -310,17 +368,21 @@ function MemberDirectoryProfileAttempt({
           if (!mutationIsCurrent(start)) return;
           mutationRef.current = null;
           setState({ phase: 'ready', profile, confirmation: null });
-          setFileError(REJECTED_CHANGE_MESSAGE);
+          setActionError({
+            control: start.action === 'upload' ? 'file' : start.action,
+            invalid: false,
+            message: REJECTED_CHANGE_MESSAGE,
+          });
         } catch {
           if (!mutationIsCurrent(start)) return;
           mutationRef.current = null;
-          setFileError(null);
+          setActionError(null);
           setState({ phase: 'unavailable' });
         }
         return;
       }
       mutationRef.current = null;
-      setFileError(null);
+      setActionError(null);
       setState({ phase: 'unknown' });
     }
   }
@@ -331,7 +393,11 @@ function MemberDirectoryProfileAttempt({
     try {
       requestId = createMemberDirectoryRequestId();
     } catch {
-      setFileError(REQUEST_UNAVAILABLE_MESSAGE);
+      setActionError({
+        control: 'visibility',
+        invalid: false,
+        message: REQUEST_UNAVAILABLE_MESSAGE,
+      });
       return;
     }
     const start = startMutation('visibility');
@@ -352,7 +418,11 @@ function MemberDirectoryProfileAttempt({
     try {
       requestId = createMemberDirectoryRequestId();
     } catch {
-      setFileError(REQUEST_UNAVAILABLE_MESSAGE);
+      setActionError({
+        control: 'remove',
+        invalid: false,
+        message: REQUEST_UNAVAILABLE_MESSAGE,
+      });
       return;
     }
     const start = startMutation('remove');
@@ -371,15 +441,23 @@ function MemberDirectoryProfileAttempt({
     const input = event.currentTarget;
     const file = input.files?.[0] || null;
     input.value = '';
-    setFileError(null);
+    setActionError(null);
     if (file === null) return;
     const { type: contentType } = file;
     if (!isAcceptedUploadType(contentType)) {
-      setFileError('Choose a JPG, PNG, or WebP image.');
+      setActionError({
+        control: 'file',
+        invalid: true,
+        message: 'Choose a JPG, PNG, or WebP image.',
+      });
       return;
     }
     if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
-      setFileError('Choose a non-empty image that is 2 MiB or smaller.');
+      setActionError({
+        control: 'file',
+        invalid: true,
+        message: 'Choose a non-empty image that is 2 MiB or smaller.',
+      });
       return;
     }
 
@@ -387,7 +465,11 @@ function MemberDirectoryProfileAttempt({
     try {
       requestId = createMemberDirectoryRequestId();
     } catch {
-      setFileError(REQUEST_UNAVAILABLE_MESSAGE);
+      setActionError({
+        control: 'file',
+        invalid: false,
+        message: REQUEST_UNAVAILABLE_MESSAGE,
+      });
       return;
     }
 
@@ -400,7 +482,11 @@ function MemberDirectoryProfileAttempt({
       if (!mutationIsCurrent(start)) return;
       mutationRef.current = null;
       setState({ phase: 'ready', profile: start.profile, confirmation: null });
-      setFileError('We could not read that image. Choose the file again.');
+      setActionError({
+        control: 'file',
+        invalid: true,
+        message: 'We could not read that image. Choose the file again.',
+      });
       return;
     }
     if (!mutationIsCurrent(start)) return;
@@ -461,8 +547,9 @@ function MemberDirectoryProfileAttempt({
       {(state.phase === 'ready' || state.phase === 'pending') && (() => {
         const { profile } = state;
         const pending = state.phase === 'pending';
-        const finderNeedsName = !hasDisplayName && !profile.searchableByOfficers;
-        const finderHiddenWithoutName = !hasDisplayName && profile.searchableByOfficers;
+        const finderNeedsName = !displayNameEligible && !profile.searchableByOfficers;
+        const finderHiddenWithoutName = !displayNameEligible
+          && profile.searchableByOfficers;
         let pendingMessage = '';
         if (state.phase === 'pending') {
           if (state.action === 'upload') pendingMessage = 'Saving profile photo...';
@@ -480,7 +567,11 @@ function MemberDirectoryProfileAttempt({
                   alt="Your current profile thumbnail"
                 />
               ) : (
-                <div className="member-directory-profile__placeholder" aria-label="No profile photo">
+                <div
+                  className="member-directory-profile__placeholder"
+                  role="img"
+                  aria-label="No profile photo"
+                >
                   No photo
                 </div>
               )}
@@ -494,7 +585,17 @@ function MemberDirectoryProfileAttempt({
                   accept="image/jpeg,image/png,image/webp"
                   onChange={handlePhotoSelection}
                   disabled={pending}
-                  aria-describedby="member-directory-file-help member-directory-privacy-description"
+                  aria-invalid={actionError?.control === 'file'
+                    && actionError.invalid
+                    ? true
+                    : undefined}
+                  aria-describedby={[
+                    'member-directory-file-help',
+                    'member-directory-privacy-description',
+                    actionError?.control === 'file'
+                      ? 'member-directory-action-error'
+                      : null,
+                  ].filter(Boolean).join(' ')}
                 />
                 <span id="member-directory-file-help">
                   JPG, PNG, or WebP. Maximum 2 MiB. The saved thumbnail is processed
@@ -505,6 +606,9 @@ function MemberDirectoryProfileAttempt({
                     type="button"
                     onClick={handleRemovePhoto}
                     disabled={pending}
+                    aria-describedby={actionError?.control === 'remove'
+                      ? 'member-directory-action-error'
+                      : undefined}
                   >
                     Remove profile photo
                   </button>
@@ -520,29 +624,46 @@ function MemberDirectoryProfileAttempt({
                   checked={profile.searchableByOfficers}
                   onChange={handleVisibilityChange}
                   disabled={pending || finderNeedsName}
+                  aria-invalid={actionError?.control === 'visibility'
+                    && actionError.invalid
+                    ? true
+                    : undefined}
                   aria-describedby={[
                     'member-directory-privacy-description',
-                    !hasDisplayName ? 'member-directory-name-required' : null,
+                    !displayNameEligible ? 'member-directory-name-required' : null,
+                    actionError?.control === 'visibility'
+                      ? 'member-directory-action-error'
+                      : null,
                   ].filter(Boolean).join(' ')}
                 />
                 Let verified website administrators find me by name
               </label>
               {finderNeedsName && (
                 <p id="member-directory-name-required">
-                  Add your full name in the Profile section before turning this on.
+                  Your current Profile name is not eligible for officer-finder
+                  search. Before turning this on, save a name that remains within
+                  the 200-character limit after normalization, produces searchable
+                  name text at least two characters long, and contains no control
+                  or format characters.
                 </p>
               )}
               {finderHiddenWithoutName && (
                 <p id="member-directory-name-required">
-                  This setting is on, but officers cannot find you until you add a
-                  full name in the Profile section. You can still turn the setting off.
+                  This setting is on, but officers cannot find you while your current
+                  Profile name is ineligible. You can still turn the setting off.
+                  Save an eligible name in the Profile section to become findable again.
                 </p>
               )}
             </div>
 
-            {fileError && (
-              <p role="alert" aria-live="assertive" aria-atomic="true">
-                {fileError}
+            {actionError && (
+              <p
+                id="member-directory-action-error"
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+              >
+                {actionError.message}
               </p>
             )}
             {pendingMessage && (
@@ -565,16 +686,19 @@ function MemberDirectoryProfileAttempt({
 export default function MemberDirectoryProfile({
   app,
   uid,
-  hasDisplayName,
+  displayName,
   backendAvailable = MEMBER_DIRECTORY_BACKEND_AVAILABLE,
 }: {
   app: FirebaseApp;
   uid: string;
-  hasDisplayName: boolean;
+  displayName: string | null;
   backendAvailable?: boolean;
 }) {
+  const displayNameEligible = isMemberDirectoryDisplayNameEligible(displayName);
   if (!backendAvailable) {
-    return <MemberDirectoryProfilePreview hasDisplayName={hasDisplayName} />;
+    return (
+      <MemberDirectoryProfilePreview displayNameEligible={displayNameEligible} />
+    );
   }
 
   return (
@@ -582,7 +706,7 @@ export default function MemberDirectoryProfile({
       key={`${appIdentity(app)}:${uid}`}
       app={app}
       uid={uid}
-      hasDisplayName={hasDisplayName}
+      displayNameEligible={displayNameEligible}
     />
   );
 }
