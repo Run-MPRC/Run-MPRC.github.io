@@ -221,6 +221,12 @@ type MutationConfirmation = (
   profile: MemberDirectoryProfileData,
 ) => string;
 
+type RecoveryFocusIntent = {
+  lifetime: symbol;
+  source: 'mutation' | 'reload';
+  load: symbol | null;
+};
+
 function visibilityConfirmation(
   requested: boolean,
 ): MutationConfirmation {
@@ -320,9 +326,11 @@ function MemberDirectoryProfileAttempt({
   const loadRef = useRef<symbol | null>(null);
   const mutationRef = useRef<symbol | null>(null);
   const uncertainChangeRef = useRef(false);
+  const recoveryFocusIntentRef = useRef<RecoveryFocusIntent | null>(null);
   const photoReadRef = useRef<symbol | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const removePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const reloadButtonRef = useRef<HTMLButtonElement | null>(null);
   const savePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
   const postMutationFocusRef = useRef<'photo-input' | 'remove-result' | null>(null);
 
@@ -334,10 +342,26 @@ function MemberDirectoryProfileAttempt({
       loadRef.current = null;
       mutationRef.current = null;
       uncertainChangeRef.current = false;
+      recoveryFocusIntentRef.current = null;
       photoReadRef.current = null;
       postMutationFocusRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (state.phase !== 'unknown' && state.phase !== 'unavailable') return;
+    const intent = recoveryFocusIntentRef.current;
+    if (
+      intent === null
+      || intent.lifetime !== lifetimeRef.current
+      || (intent.source === 'reload'
+        && (intent.load === null || intent.load !== loadRef.current))
+    ) return;
+    const target = reloadButtonRef.current;
+    if (target === null) return;
+    recoveryFocusIntentRef.current = null;
+    target.focus();
+  }, [state.phase]);
 
   useEffect(() => {
     if (state.phase !== 'ready' || postMutationFocusRef.current === null) return;
@@ -368,6 +392,15 @@ function MemberDirectoryProfileAttempt({
     const preserveUncertainChange = uncertainChangeRef.current;
     let active = true;
     loadRef.current = load;
+    const focusIntent = recoveryFocusIntentRef.current;
+    if (
+      focusIntent !== null
+      && focusIntent.lifetime === lifetime
+      && focusIntent.source === 'reload'
+      && focusIntent.load === null
+    ) {
+      recoveryFocusIntentRef.current = { ...focusIntent, load };
+    }
     mutationRef.current = null;
     photoReadRef.current = null;
     postMutationFocusRef.current = null;
@@ -385,6 +418,7 @@ function MemberDirectoryProfileAttempt({
           || loadRef.current !== load
         ) return;
         uncertainChangeRef.current = false;
+        recoveryFocusIntentRef.current = null;
         setState({ phase: 'ready', profile, confirmation: null });
       } catch {
         if (
@@ -447,6 +481,7 @@ function MemberDirectoryProfileAttempt({
           if (!mutationIsCurrent(start)) return;
           mutationRef.current = null;
           uncertainChangeRef.current = false;
+          recoveryFocusIntentRef.current = null;
           setState({ phase: 'ready', profile, confirmation: null });
           setActionError({
             control: start.action === 'upload' ? 'file' : start.action,
@@ -459,6 +494,11 @@ function MemberDirectoryProfileAttempt({
           photoReadRef.current = null;
           setPhotoDraft(null);
           setActionError(null);
+          recoveryFocusIntentRef.current = {
+            lifetime: start.lifetime,
+            source: 'mutation',
+            load: null,
+          };
           setState({ phase: 'unavailable' });
         }
         return;
@@ -468,6 +508,11 @@ function MemberDirectoryProfileAttempt({
       setPhotoDraft(null);
       setActionError(null);
       uncertainChangeRef.current = true;
+      recoveryFocusIntentRef.current = {
+        lifetime: start.lifetime,
+        source: 'mutation',
+        load: null,
+      };
       setState({ phase: 'unknown' });
       return;
     }
@@ -485,6 +530,7 @@ function MemberDirectoryProfileAttempt({
         postMutationFocusRef.current = 'remove-result';
       }
       uncertainChangeRef.current = false;
+      recoveryFocusIntentRef.current = null;
       setState({ phase: 'ready', profile, confirmation: confirmation(profile) });
     } catch {
       if (!mutationIsCurrent(start)) return;
@@ -493,6 +539,11 @@ function MemberDirectoryProfileAttempt({
       setPhotoDraft(null);
       setActionError(null);
       uncertainChangeRef.current = true;
+      recoveryFocusIntentRef.current = {
+        lifetime: start.lifetime,
+        source: 'mutation',
+        load: null,
+      };
       setState({ phase: 'unknown' });
     }
   }
@@ -689,7 +740,16 @@ function MemberDirectoryProfileAttempt({
   }
 
   function reloadSettings() {
-    if (state.phase !== 'unknown' && state.phase !== 'unavailable') return;
+    const lifetime = lifetimeRef.current;
+    if (
+      (state.phase !== 'unknown' && state.phase !== 'unavailable')
+      || lifetime === null
+    ) return;
+    recoveryFocusIntentRef.current = {
+      lifetime,
+      source: 'reload',
+      load: null,
+    };
     setReloadAttempt((attempt) => attempt + 1);
   }
 
@@ -723,7 +783,7 @@ function MemberDirectoryProfileAttempt({
           <p role="alert" aria-live="assertive" aria-atomic="true">
             {state.phase === 'unknown' ? UNKNOWN_CHANGE_MESSAGE : LOAD_FAILURE_MESSAGE}
           </p>
-          <button type="button" onClick={reloadSettings}>
+          <button ref={reloadButtonRef} type="button" onClick={reloadSettings}>
             Reload settings
           </button>
         </div>
