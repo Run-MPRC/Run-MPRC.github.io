@@ -226,69 +226,68 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest retains the bounded containment provenance and is paused', () => {
+test('Netlify manifest pins the active bounded #623 interface release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, false);
-  assert.equal(loaded.manifest.releaseId, 'WEB-002A-CONTAINMENT-2026-08-01');
-  assert.equal(loaded.manifest.issueNumber, 473);
+  assert.equal(loaded.manifest.active, true);
+  assert.equal(
+    loaded.manifest.releaseId,
+    'WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13',
+  );
+  assert.equal(loaded.manifest.issueNumber, 623);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    'dee79511b6e371329aa129139729e112e7a51aad',
+    '019353361210021483f23003e09ee6924b78e67c',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    '39ab8649df411262c8109a3c81a57bc38f1e168b',
+    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    'd76b496cdc5e79015bc048cb961758abbe88b9ce',
+    '411aa6ec9a9459f5d923030533ffc7c007fe6908',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    'ed1b0833f25822cee80c99ded8753722b5608a3f',
+    '39ab8649df411262c8109a3c81a57bc38f1e168b',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
-    '6a6dc219a8136300081811db',
+    '6a6dc9ea588b0c0008036312',
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-473-permissions-containment-v2',
+    'refs/heads/codex/netlify-source-623-member-directory-preview',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-473-permissions-containment-release',
+    'codex/issue-623-netlify-release',
   );
-  assert.equal(loaded.manifest.expectedSiteFileCount, 60);
+  assert.equal(loaded.manifest.expectedSiteFileCount, 62);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    '07b10c7d5ff176a1ad893d7549b07042312df35f4a4126e8765824ca94eaefb8',
+    'd837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1',
   );
 });
 
-test('paused #473 authority agrees with the final incident and live record', () => {
+test('completed #473 records remain the current live predecessor truth', () => {
   assert.match(
     netlifyConfig,
-    /temporary production release manifest is inactive/i,
+    /#623 control-branch preview verifies its exact pinned source/i,
   );
   assert.match(
     netlifyConfig,
-    /Deploy Previews use[\s\S]{0,20}ordinary checked-out preview tree/i,
-  );
-  assert.doesNotMatch(
-    netlifyConfig,
-    /(?:active release-control PR|still verifies the pinned artifact)/i,
+    /Other[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
   const expectedTruth = new Map([
     [
       'IMPLEMENTATION_PLAN.md',
-      /bounded replacement \[#473\][^\n]*deploy `6a6dc9ea588b0c0008036312`[^\n]*manifest is inactive again/i,
+      /bounded replacement \[#473\][^\n]*deploy `6a6dc9ea588b0c0008036312`[^\n]*temporary manifest became inactive again/i,
     ],
     [
       'OFFICER_START_HERE.md',
-      /bounded replacement is now live as Netlify deploy `6a6dc9ea588b0c0008036312`[^\n]*manifest is inactive again/i,
+      /bounded replacement is still live as Netlify deploy `6a6dc9ea588b0c0008036312`[^\n]*#623 is a separate one-shot release under review/i,
     ],
     [
       'OPERATIONS_RUNBOOK.md',
@@ -304,7 +303,7 @@ test('paused #473 authority agrees with the final incident and live record', () 
     ],
     [
       'SYSTEM_DESIGN.md',
-      /used one bounded replacement exception[^\n]*6a6dc9ea588b0c0008036312[^\n]*manifest is inactive again/i,
+      /used one bounded replacement exception[^\n]*6a6dc9ea588b0c0008036312[^\n]*manifest became inactive again/i,
     ],
     [
       'docs/officers/ACCESS_CONTINUITY.md',
@@ -320,7 +319,7 @@ test('paused #473 authority agrees with the final incident and live record', () 
     ],
     [
       'docs/officers/README.md',
-      /bounded replacement is now live as deploy `6a6dc9ea588b0c0008036312`[^\n]*manifest is inactive again/i,
+      /bounded replacement remains live as deploy `6a6dc9ea588b0c0008036312`[^\n]*#623 is one separate[^\n]*release under review/i,
     ],
     [
       'docs/officers/REQUEST_A_CHANGE.md',
@@ -350,6 +349,33 @@ test('paused #473 authority agrees with the final incident and live record', () 
         `${relativePath} must not retain rollback-era #473 status`,
       );
     });
+  });
+
+  const pendingTruth = [
+    'IMPLEMENTATION_PLAN.md',
+    'OFFICER_START_HERE.md',
+    'OPERATIONS_RUNBOOK.md',
+    'SECURITY.md',
+    'SYSTEM_DESIGN.md',
+    'docs/officers/EVENTS_SHOP_MEMBERS.md',
+    'docs/officers/PUBLISH_AND_CHECK.md',
+    'docs/officers/README.md',
+  ].map((relativePath) => finalReleaseTruth.get(relativePath));
+  pendingTruth.forEach((record) => {
+    assert.match(record, /#623/);
+    assert.match(record, /(?:under review|not published)/i);
+    assert.match(record, /6a6dc9ea588b0c0008036312/);
+  });
+  [
+    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
+    '411aa6ec9a9459f5d923030533ffc7c007fe6908',
+    'd837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1',
+    '019353361210021483f23003e09ee6924b78e67c',
+  ].forEach((identifier) => {
+    [
+      finalReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
+      finalReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
+    ].forEach((record) => assert.match(record, new RegExp(identifier)));
   });
 
   const canonicalRecords = [

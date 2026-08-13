@@ -16,8 +16,8 @@
   command = "node ./scripts/netlify-release-build.js"
 
 [context.deploy-preview]
-  # The temporary production release manifest is inactive. Deploy Previews use
-  # the ordinary checked-out preview tree; production remains paused.
+  # The #623 control-branch preview verifies its exact pinned source. Other
+  # previews use their checked-out tree; production still needs the exact gate.
   command = "node ./scripts/netlify-release-build.js --preview"
 
 [[headers]]
