@@ -166,13 +166,13 @@ After the exact #118 and #153 live proofs exist:
 
 ### Verification link page — SOURCE ONLY, NOT LIVE
 
-**Status:** [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) is a verification-only source change. It is not a live procedure until the exact website revision is published, `runmprc.com` is verified, and [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119) proves a safe Firebase handler choice. Firebase uses one handler for verification, password reset, and email recovery. The partial route must not be enabled globally.
+**Status:** [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) is a verification-only source change. [#571](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/571) adds a source safeguard when the website's current sign-in service becomes unavailable or changes. Neither change makes this a live procedure. It remains unavailable until the exact website revision is published, `runmprc.com` is verified, and [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119) proves a safe Firebase handler choice. Firebase uses one handler for verification, password reset, and email recovery. The partial route must not be enabled globally.
 
 **Purpose:** let a member check one private verification link without exposing its code or letting an automated mail scanner change the account.
 
 **Approver:** identity/platform owner plus membership lead. The communications owner and a second Firebase owner approve the provider/template decision.
 
-**Prerequisites:** exact #194 merge and website proof; protected release proof; private #119 proof that reset and recovery links still work; an isolated Firebase project; a made-up account and safe email sink. A source test, preview, or real member link is not enough.
+**Prerequisites:** exact #194 and #571 merges and website proof; protected release proof; private #119 proof that reset and recovery links still work; an isolated Firebase project; a made-up account and safe email sink. A source test, preview, or real member link is not enough.
 
 ```mermaid
 flowchart LR
@@ -183,10 +183,12 @@ flowchart LR
     Result -- "Verified or already complete" --> Account["Continue to My Account"]
     Result -- "Different account" --> SignOut["Sign out; reopen original link"]
     Result -- "Cannot be used" --> New["Request one new email"]
-    Result -- "Temporary" --> Retry["Check connection; retry once"]
+    Result -- "Temporary on same page" --> Retry["Check connection; retry once"]
+    Context["Sign-in service changes after Checking begins"] --> Retire["Page retires this private link"]
+    Retire --> New
 ```
 
-In words: opening the page removes the private code but changes nothing; the member chooses one button, then follows one plain result without sharing the link or account details.
+In words: opening the page removes the private code but changes nothing; the member chooses one button, then follows one plain result. If the website's sign-in service is lost or changes after **Checking verification...** begins, the page hides the earlier result, retires this link, and asks for one new email. It never sends the same private code to a replacement service. An offline click stops before Checking begins and sends no request.
 
 Officer steps after every prerequisite has proof:
 
@@ -195,19 +197,24 @@ Officer steps after every prerequisite has proof:
 3. Ask them to confirm the address ends with `/auth/action` and contains no `?` or `#` before choosing anything.
 4. Ask them to choose **Verify email** once.
 5. If the page says verified or already complete, ask them to continue to My Account.
-6. If it says a different account is signed in, ask them to open My Account, sign out, and reopen the original message.
-7. If the link cannot be used, ask them to request one new verification email from My Account.
-8. If verification is temporarily unavailable, ask them to check the connection and use the one retry.
-9. If the second attempt is not clear, stop and open a redacted incident.
-10. Record only the time, clean route `/auth/action`, and exact plain result.
+6. If the page says a different account is signed in, ask them to open My Account.
+7. After step 6, ask them to sign out.
+8. After step 7, ask them to reopen the original message.
+9. If the link cannot be used, ask them to request one new verification email from My Account.
+10. If verification is temporarily unavailable, ask them to check the connection.
+11. After step 10, ask them to use **Try verification again** once on the same page.
+12. If **Verify email** reappears after **Checking verification...** began, do not choose it again.
+13. If the current attempt is not clear, stop.
+14. After step 13, open a redacted incident.
+15. Record only the time, clean route `/auth/action`, and exact plain result.
 
-**Expected result:** page load makes no action-code check and changes no account; the private query and fragment disappear; one deliberate action gives a fixed result; no address, code, provider error, role, membership, payment, or profile value appears or changes.
+**Expected result:** page load makes no action-code check and changes no account; the private query and fragment disappear; one deliberate action gives a fixed result; and no address, code, provider error, role, membership, payment, or profile value appears or changes. If the current website sign-in service is lost or replaced after **Checking verification...** begins, the old result disappears, the page makes this link unusable, and no replacement service receives its code. A request already sent through the earlier service cannot be cancelled, so the member must use one new email instead of reusing this link. An offline click never reaches Checking and makes no provider request.
 
-**Stop conditions:** the address still contains `?` or `#`; anyone asks for a link/code/address/screenshot; the page changes an account before the button; a non-verification action opens here; more than one retry; a real-member/provider test; or missing provider/live proof.
+**Stop conditions:** the address still contains `?` or `#`; anyone asks for a link/code/address/screenshot; the page changes an account before the button; **Verify email** reappears after **Checking verification...** began; an old result appears or changes after the link becomes unusable; a non-verification action opens here; more than one same-page temporary retry; a real-member/provider test; or missing provider/live proof.
 
-**Success proof:** exact #194 pull request and merge; green synthetic no-network tests; dated keyboard and screen-reader check; exact website publication and `runmprc.com` revision; private #119 staging proof for verification, reset, recovery, reuse, expiration, and rollback. Keep each proof separate.
+**Success proof:** exact #194 and #571 pull requests and merges; green synthetic no-network tests, including readiness loss, service replacement before and after a click, retired-link behavior, late old results, and same-service wrapper checks; dated keyboard and screen-reader check; exact website publication and `runmprc.com` revision; private #119 staging proof for verification, reset, recovery, reuse, expiration, and rollback. Keep each proof separate.
 
-**Undo:** publish one reviewed frontend revert or safe roll-forward. The Firebase owners separately restore the previously proven default/multi-mode handler. Never delete an account or edit verification state by hand.
+**Undo:** publish one reviewed frontend revert or safe roll-forward for #571. The Firebase owners separately restore the previously proven default/multi-mode handler. Never delete an account or edit verification state by hand.
 
 **Escalation:** identity/platform owner plus membership lead; add communications for sender/delivery, security for an exposed code or wrong mutation, and the provider owner for handler/template failure.
 

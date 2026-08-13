@@ -24,6 +24,24 @@ const mockUseServiceLocator = useServiceLocator as jest.MockedFunction<
 >;
 const verifyEmailAction = jest.fn();
 
+type VerificationIdentityService = {
+  verifyEmailAction: jest.Mock;
+};
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function createIdentityService(action: jest.Mock): VerificationIdentityService {
+  return { verifyEmailAction: action };
+}
+
 function RouterLocationWitness() {
   const currentLocation = useLocation();
   return (
@@ -51,20 +69,22 @@ function SameRouteNavigationProbe() {
   );
 }
 
-function setReadyServices() {
+function setServiceContext(
+  identityService: VerificationIdentityService | null,
+  isReady = identityService !== null,
+) {
   mockUseServiceLocator.mockReturnValue({
-    isReady: true,
-    services: {
-      identityService: { verifyEmailAction },
-    },
+    isReady,
+    services: identityService === null ? null : { identityService },
   } as unknown as ReturnType<typeof useServiceLocator>);
 }
 
-function renderAction(
-  target = '/auth/action?mode=verifyEmail&oobCode=synthetic-action-code',
-) {
-  window.history.replaceState(null, '', target);
-  return render(
+function setReadyServices() {
+  setServiceContext(createIdentityService(verifyEmailAction));
+}
+
+function ActionRouteTree() {
+  return (
     <BrowserRouter
       future={{
         v7_relativeSplatPath: true,
@@ -84,8 +104,15 @@ function renderAction(
         />
         <Route path="/account" element={<div>Fixed account destination</div>} />
       </Routes>
-    </BrowserRouter>,
+    </BrowserRouter>
   );
+}
+
+function renderAction(
+  target = '/auth/action?mode=verifyEmail&oobCode=synthetic-action-code',
+) {
+  window.history.replaceState(null, '', target);
+  return render(<ActionRouteTree />);
 }
 
 describe('VerifyEmailAction', () => {
@@ -361,6 +388,297 @@ describe('VerifyEmailAction', () => {
 
     expect(verifyEmailAction).toHaveBeenCalledTimes(1);
     expect(document.body).not.toHaveTextContent('Email verified.');
+  });
+
+  describe('AUTH-MAIL-002C2A current identity-service boundary', () => {
+    test('allows a current service after an offline click made no provider request', async () => {
+      const online = jest.spyOn(window.navigator, 'onLine', 'get')
+        .mockReturnValue(false);
+      const verifyA = jest.fn().mockResolvedValue('verified');
+      const verifyB = jest.fn().mockResolvedValue('already-complete');
+      setServiceContext(createIdentityService(verifyA));
+      const page = renderAction();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+      expect(verifyA).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Verification is temporarily unavailable.',
+      );
+
+      online.mockReturnValue(true);
+      setServiceContext(createIdentityService(verifyB));
+      page.rerender(<ActionRouteTree />);
+      const currentButton = screen.getByRole('button', { name: 'Verify email' });
+
+      expect(verifyA).not.toHaveBeenCalled();
+      expect(verifyB).not.toHaveBeenCalled();
+      expect(currentButton).toBeEnabled();
+      fireEvent.click(currentButton);
+      expect(verifyB).toHaveBeenCalledTimes(1);
+      expect(verifyB).toHaveBeenCalledWith('synthetic-action-code');
+      expect(await screen.findByText(
+        'Email verification is already complete.',
+      )).toBeInTheDocument();
+    });
+
+    test.each([
+      ['service replacement', createIdentityService(jest.fn()), true],
+      ['readiness loss and recovery', null, false],
+    ])(
+      'retires a provider-sent code after unavailable and %s',
+      async (_label, nextService, nextReady) => {
+        const verifyA = jest.fn().mockResolvedValue('unavailable');
+        const serviceA = createIdentityService(verifyA);
+        setServiceContext(serviceA);
+        const page = renderAction();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+        expect(await screen.findByText(
+          'Verification is temporarily unavailable.',
+        )).toBeInTheDocument();
+        expect(verifyA).toHaveBeenCalledTimes(1);
+
+        setServiceContext(nextService, nextReady);
+        page.rerender(<ActionRouteTree />);
+
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'This verification link cannot be used.',
+        );
+        expect(screen.queryByRole('button', {
+          name: /try verification|verify email|verification/i,
+        })).not.toBeInTheDocument();
+        if (nextService) {
+          expect(nextService.verifyEmailAction).not.toHaveBeenCalled();
+        } else {
+          setServiceContext(serviceA);
+          page.rerender(<ActionRouteTree />);
+          expect(screen.getByRole('status')).toHaveTextContent(
+            'This verification link cannot be used.',
+          );
+          expect(screen.queryByRole('button', {
+            name: /try verification|verify email|verification/i,
+          })).not.toBeInTheDocument();
+        }
+        expect(verifyA).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test.each([
+      ['readiness is lost', false, true],
+      ['services become unavailable', true, false],
+    ])(
+      'invalidates a pending result when %s',
+      async (_label, nextReady, keepServices) => {
+        const attemptA = createDeferred<string>();
+        const verifyA = jest.fn(() => attemptA.promise);
+        const serviceA = createIdentityService(verifyA);
+        setServiceContext(serviceA);
+        const page = renderAction();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+        expect(screen.getByRole('button', { name: 'Checking verification...' }))
+          .toBeDisabled();
+
+        setServiceContext(keepServices ? serviceA : null, nextReady);
+        page.rerender(<ActionRouteTree />);
+
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'This verification link cannot be used.',
+        );
+        expect(screen.queryByRole('button', { name: /verify email|verification/i }))
+          .not.toBeInTheDocument();
+        expect(screen.queryByText('Email verified.')).not.toBeInTheDocument();
+
+        setServiceContext(serviceA);
+        page.rerender(<ActionRouteTree />);
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'This verification link cannot be used.',
+        );
+        expect(screen.queryByRole('button', { name: /verify email|verification/i }))
+          .not.toBeInTheDocument();
+
+        await act(async () => {
+          attemptA.resolve('verified');
+          await attemptA.promise;
+        });
+
+        expect(verifyA).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'This verification link cannot be used.',
+        );
+        expect(screen.queryByText('Email verified.')).not.toBeInTheDocument();
+      },
+    );
+
+    test('retires a code on service replacement while a late old success stays inert', async () => {
+      const attemptA = createDeferred<string>();
+      const verifyA = jest.fn(() => attemptA.promise);
+      const verifyB = jest.fn().mockResolvedValue('verified');
+      setServiceContext(createIdentityService(verifyA));
+      const page = renderAction();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+
+      setServiceContext(createIdentityService(verifyB));
+      page.rerender(<ActionRouteTree />);
+
+      expect(verifyA).toHaveBeenCalledTimes(1);
+      expect(verifyB).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This verification link cannot be used.',
+      );
+      expect(screen.queryByRole('button', { name: /verify email|verification/i }))
+        .not.toBeInTheDocument();
+
+      await act(async () => {
+        attemptA.resolve('verified');
+        await attemptA.promise;
+      });
+
+      expect(verifyB).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This verification link cannot be used.',
+      );
+      expect(screen.queryByText('Email verified.')).not.toBeInTheDocument();
+    });
+
+    test('does not inspect a late hostile rejection after service replacement', async () => {
+      const attemptA = createDeferred<string>();
+      const verifyA = jest.fn(() => attemptA.promise);
+      const verifyB = jest.fn().mockResolvedValue('verified');
+      const hostileRead = jest.fn(() => {
+        throw new Error('hostile rejection property was read');
+      });
+      const hostileRejection = new Proxy({}, { get: hostileRead });
+      const consoleSpies = (['debug', 'error', 'info', 'log', 'warn'] as const)
+        .map((method) => jest.spyOn(console, method)
+          .mockImplementation(() => undefined));
+      setServiceContext(createIdentityService(verifyA));
+      const page = renderAction();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+      setServiceContext(createIdentityService(verifyB));
+      page.rerender(<ActionRouteTree />);
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This verification link cannot be used.',
+      );
+
+      await act(async () => {
+        attemptA.reject(hostileRejection);
+        try {
+          await attemptA.promise;
+        } catch {
+          // The component owns the rejection; the test only flushes its turn.
+        }
+      });
+
+      expect(hostileRead).not.toHaveBeenCalled();
+      consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+      expect(verifyB).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This verification link cannot be used.',
+      );
+      expect(screen.queryByText('Email verified.')).not.toBeInTheDocument();
+    });
+
+    test('does not reuse a sent code after A to B to A context changes', async () => {
+      const firstA = createDeferred<string>();
+      const verifyA = jest.fn(() => firstA.promise);
+      const serviceA = createIdentityService(verifyA);
+      const serviceB = createIdentityService(jest.fn());
+      setServiceContext(serviceA);
+      const page = renderAction();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+      setServiceContext(serviceB);
+      page.rerender(<ActionRouteTree />);
+      setServiceContext(serviceA);
+      page.rerender(<ActionRouteTree />);
+
+      expect(verifyA).toHaveBeenCalledTimes(1);
+      expect(serviceB.verifyEmailAction).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This verification link cannot be used.',
+      );
+      expect(screen.queryByRole('button', { name: /verify email|verification/i }))
+        .not.toBeInTheDocument();
+
+      await act(async () => {
+        firstA.resolve('verified');
+        await firstA.promise;
+      });
+
+      expect(verifyA).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This verification link cannot be used.',
+      );
+      expect(screen.queryByText('Email verified.')).not.toBeInTheDocument();
+    });
+
+    test('preserves a current result across a wrapper-only service change', async () => {
+      const serviceA = createIdentityService(verifyEmailAction);
+      setServiceContext(serviceA);
+      const page = renderAction();
+      fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+      expect(await screen.findByText('Email verified.')).toBeInTheDocument();
+
+      setServiceContext(serviceA);
+      page.rerender(<ActionRouteTree />);
+
+      expect(screen.getByText('Email verified.')).toBeInTheDocument();
+      expect(verifyEmailAction).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: 'Verify email' }))
+        .not.toBeInTheDocument();
+    });
+
+    test.each([
+      ['readiness loss', null, false],
+      ['service replacement', createIdentityService(jest.fn()), true],
+    ])(
+      'retires a code and hides a terminal result after %s',
+      async (_label, nextService, nextReady) => {
+        const serviceA = createIdentityService(verifyEmailAction);
+        setServiceContext(serviceA);
+        const page = renderAction();
+        fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+        expect(await screen.findByText('Email verified.')).toBeInTheDocument();
+
+        setServiceContext(nextService, nextReady);
+        page.rerender(<ActionRouteTree />);
+
+        expect(screen.queryByText('Email verified.')).not.toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'This verification link cannot be used.',
+        );
+        expect(screen.queryByRole('button', {
+          name: /verify email|verification/i,
+        })).not.toBeInTheDocument();
+        if (nextService) {
+          expect(nextService.verifyEmailAction).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    test('uses a replacement service when no provider attempt has started', async () => {
+      const verifyA = jest.fn().mockResolvedValue('verified');
+      const verifyB = jest.fn().mockResolvedValue('already-complete');
+      setServiceContext(createIdentityService(verifyA));
+      const page = renderAction();
+
+      setServiceContext(createIdentityService(verifyB));
+      page.rerender(<ActionRouteTree />);
+      const currentButton = screen.getByRole('button', { name: 'Verify email' });
+
+      expect(verifyA).not.toHaveBeenCalled();
+      expect(verifyB).not.toHaveBeenCalled();
+      expect(currentButton).toBeEnabled();
+      fireEvent.click(currentButton);
+      expect(verifyB).toHaveBeenCalledTimes(1);
+      expect(verifyB).toHaveBeenCalledWith('synthetic-action-code');
+      expect(await screen.findByText(
+        'Email verification is already complete.',
+      )).toBeInTheDocument();
+    });
   });
 
   test('uses a scoped 48px native action with visible keyboard focus', () => {
