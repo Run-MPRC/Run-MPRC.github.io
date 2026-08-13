@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
+import MEMBER_DIRECTORY_BACKEND_AVAILABLE from '../../services/account/memberDirectoryAvailability';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
 import AdminGuard from './AdminGuard';
 import { Event } from '../../types/events';
@@ -248,7 +249,9 @@ function Inner() {
             >
               <div className="font-semibold">People finder</div>
               <div className="text-sm text-gray-600">
-                Search opted-in names; view voluntary photos
+                {MEMBER_DIRECTORY_BACKEND_AVAILABLE
+                  ? 'Search opted-in names; view voluntary photos'
+                  : 'Interface preview; search not connected'}
               </div>
             </Link>
             <Link

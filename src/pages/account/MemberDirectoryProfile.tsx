@@ -1,5 +1,6 @@
 import { FirebaseApp } from 'firebase/app';
 import React, { useEffect, useRef, useState } from 'react';
+import MEMBER_DIRECTORY_BACKEND_AVAILABLE from '../../services/account/memberDirectoryAvailability';
 import {
   createMemberDirectoryRequestId,
   getMyMemberDirectoryProfile,
@@ -17,6 +18,98 @@ const LOAD_FAILURE_MESSAGE = 'We could not load your profile photo and officer f
 const UNKNOWN_CHANGE_MESSAGE = 'We could not confirm that change. Do not make another change yet. Reload settings to check what is currently saved.';
 const REJECTED_CHANGE_MESSAGE = 'That change was rejected before it was saved. Review the requirements and try again.';
 const REQUEST_UNAVAILABLE_MESSAGE = 'This browser could not safely start that change. No setting was changed. Reload the page and try again.';
+
+function MemberDirectoryProfilePreview({
+  hasDisplayName,
+}: {
+  hasDisplayName: boolean;
+}) {
+  return (
+    <section
+      className="member-directory-profile"
+      aria-labelledby="member-directory-profile-heading"
+    >
+      <h2 id="member-directory-profile-heading">Profile photo and officer finder</h2>
+      <div
+        id="member-directory-preview-status"
+        className="member-directory-profile__preview"
+        role="status"
+      >
+        <strong>Interface preview — not connected yet.</strong>
+        <span>
+          No photo or finder setting is read, uploaded, searched, or saved from
+          this preview.
+        </span>
+      </div>
+      <p>
+        When connected, you will be able to add an optional profile photo.
+        Uploading, replacing, or removing it will not turn on the officer finder.
+      </p>
+      <p id="member-directory-privacy-description">
+        When connected, authorized officers will be able to search by name and
+        see a voluntary thumbnail only after you turn on the separate finder
+        choice. A result will not prove current club membership, payment, or
+        eligibility. The finder will not accept a photo as a query or use facial
+        recognition or image matching.
+      </p>
+
+      <div className="member-directory-profile__controls">
+        <div className="member-directory-profile__photo">
+          <div
+            className="member-directory-profile__placeholder"
+            aria-label="Profile photo preview"
+          >
+            Photo preview
+          </div>
+          <div className="member-directory-profile__photo-actions">
+            <span
+              id="member-directory-photo-file-label-preview"
+              className="member-directory-profile__control-label"
+            >
+              Add profile photo (not available yet)
+            </span>
+            <input
+              id="member-directory-photo-file-preview"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled
+              aria-labelledby="member-directory-photo-file-label-preview"
+              aria-describedby="member-directory-preview-status member-directory-file-help-preview member-directory-privacy-description"
+            />
+            <span id="member-directory-file-help-preview">
+              JPG, PNG, or WebP up to 2 MiB will be supported after the protected
+              backend is connected.
+            </span>
+          </div>
+        </div>
+
+        <div className="member-directory-profile__visibility">
+          <label htmlFor="member-directory-searchable-preview">
+            <input
+              id="member-directory-searchable-preview"
+              type="checkbox"
+              checked={false}
+              disabled
+              readOnly
+              aria-describedby={[
+                'member-directory-preview-status',
+                'member-directory-privacy-description',
+                !hasDisplayName ? 'member-directory-name-required-preview' : null,
+              ].filter(Boolean).join(' ')}
+            />
+            Let authorized officers find me by name (not available yet)
+          </label>
+          {!hasDisplayName && (
+            <p id="member-directory-name-required-preview">
+              A full name in the Profile section will also be required when the
+              finder is connected.
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 const appIdentities = new WeakMap<object, number>();
 let nextAppIdentity = 1;
@@ -473,11 +566,17 @@ export default function MemberDirectoryProfile({
   app,
   uid,
   hasDisplayName,
+  backendAvailable = MEMBER_DIRECTORY_BACKEND_AVAILABLE,
 }: {
   app: FirebaseApp;
   uid: string;
   hasDisplayName: boolean;
+  backendAvailable?: boolean;
 }) {
+  if (!backendAvailable) {
+    return <MemberDirectoryProfilePreview hasDisplayName={hasDisplayName} />;
+  }
+
   return (
     <MemberDirectoryProfileAttempt
       key={`${appIdentity(app)}:${uid}`}

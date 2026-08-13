@@ -3,6 +3,7 @@ import React, {
 } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
+import MEMBER_DIRECTORY_BACKEND_AVAILABLE from '../../../services/account/memberDirectoryAvailability';
 import AdminGuard from '../AdminGuard';
 import { useServiceLocator } from '../../../services/ServiceLocatorContext';
 import { useAuth } from '../../../services/hooks/useAuth';
@@ -203,7 +204,9 @@ function Inner() {
             People finder
           </Link>
           {' '}
-          only to search people who opted in.
+          {MEMBER_DIRECTORY_BACKEND_AVAILABLE
+            ? 'only to search people who opted in.'
+            : 'to review the interface. Search is not connected yet.'}
         </p>
 
         {showAccountResults && (

@@ -70,13 +70,17 @@ function setContext(firebaseApp: typeof app | null = app, uid: string | null = '
   });
 }
 
-function renderDirectory() {
+function renderDirectory({
+  backendAvailable = true,
+}: {
+  backendAvailable?: boolean;
+} = {}) {
   return render(
     <MemoryRouter
       future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       initialEntries={['/admin/member-directory']}
     >
-      <AdminMemberDirectory />
+      <AdminMemberDirectory backendAvailable={backendAvailable} />
     </MemoryRouter>,
   );
 }
@@ -100,6 +104,57 @@ describe('Admin People finder', () => {
       schemaVersion: 1,
       results: [],
     });
+  });
+
+  test('defaults to a guarded inert preview without obtaining directory context', () => {
+    (useServiceLocator as jest.Mock).mockImplementation(() => {
+      throw new Error('preview-must-not-obtain-directory-context');
+    });
+    render(
+      <MemoryRouter
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        initialEntries={['/admin/member-directory']}
+      >
+        <AdminMemberDirectory />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'People finder' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Interface preview — search is not connected.',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No finder name is collected or sent, and no member-directory profiles or results are loaded.',
+    );
+    const input = queryInput();
+    const search = screen.getByRole('button', { name: 'Search' });
+    expect(input).toBeDisabled();
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input.getAttribute('aria-describedby')).toContain(
+      'member-directory-search-preview-status',
+    );
+    expect(search).toBeDisabled();
+    expect(search.getAttribute('aria-describedby')).toContain(
+      'member-directory-search-preview-status',
+    );
+    expect(screen.getByText(/when connected, search by the beginning/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/does not accept a photo as a query/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: 'Opted-in people' }))
+      .not.toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+
+    fireEvent.change(input, { target: { value: 'Synthetic Runner' } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+    expect(useServiceLocator).not.toHaveBeenCalled();
+    expect(createMemberDirectorySearchRequestId).not.toHaveBeenCalled();
+    expect(searchMemberDirectory).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent(
+      'preview-must-not-obtain-directory-context',
+    );
   });
 
   test('explains the bounded opt-in finder and waits for explicit submit', () => {
@@ -253,7 +308,7 @@ describe('Admin People finder', () => {
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
         initialEntries={['/admin/member-directory']}
       >
-        <AdminMemberDirectory />
+        <AdminMemberDirectory backendAvailable />
       </MemoryRouter>,
     );
     expect(queryInput()).toHaveValue('');
