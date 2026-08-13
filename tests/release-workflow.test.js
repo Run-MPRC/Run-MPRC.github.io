@@ -226,10 +226,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the active bounded #623 interface release', () => {
+test('Netlify manifest pins the inactive bounded #623 interface release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(
     loaded.manifest.releaseId,
     'WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13',
@@ -273,11 +273,11 @@ test('Netlify manifest pins the active bounded #623 interface release', () => {
 test('completed #473 records remain the current live predecessor truth', () => {
   assert.match(
     netlifyConfig,
-    /#623 control-branch preview verifies its exact pinned source/i,
+    /temporary #623 production authority is inactive again/i,
   );
   assert.match(
     netlifyConfig,
-    /Other[\s\S]{0,20}previews use their checked-out tree/i,
+    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
   const expectedTruth = new Map([

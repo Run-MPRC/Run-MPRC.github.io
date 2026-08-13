@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13",
   "issueNumber": 623,
   "previewBranch": "codex/issue-623-netlify-release",
