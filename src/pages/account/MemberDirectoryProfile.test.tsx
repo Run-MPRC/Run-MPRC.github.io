@@ -68,16 +68,19 @@ function renderProfile({
   firebaseApp = app,
   uid = 'synthetic-user',
   hasDisplayName = true,
+  backendAvailable = true,
 }: {
   firebaseApp?: typeof app;
   uid?: string;
   hasDisplayName?: boolean;
+  backendAvailable?: boolean;
 } = {}) {
   return render(
     <MemberDirectoryProfile
       app={firebaseApp}
       uid={uid}
       hasDisplayName={hasDisplayName}
+      backendAvailable={backendAvailable}
     />,
   );
 }
@@ -106,6 +109,87 @@ describe('My Account member directory profile', () => {
       searchableByOfficers: true,
       hasPhoto: false,
     });
+  });
+
+  test('defaults to an inert, explicitly unavailable interface preview', () => {
+    const hostileApp = new Proxy({}, {
+      get() {
+        throw new Error('preview-must-not-inspect-app');
+      },
+    }) as any;
+    render(
+      <MemberDirectoryProfile
+        app={hostileApp}
+        uid="synthetic-user"
+        hasDisplayName
+      />,
+    );
+
+    expect(screen.getByRole('heading', {
+      level: 2,
+      name: 'Profile photo and officer finder',
+    })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Interface preview — not connected yet.',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No photo or finder setting is read, uploaded, searched, or saved',
+    );
+    expect(screen.getByLabelText('Profile photo preview')).toBeInTheDocument();
+    const file = screen.getByLabelText('Add profile photo (not available yet)');
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Let authorized officers find me by name (not available yet)',
+    });
+    expect(file).toBeDisabled();
+    expect(file).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp');
+    expect(file.getAttribute('aria-describedby')).toContain(
+      'member-directory-preview-status',
+    );
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toBeChecked();
+    expect(checkbox.getAttribute('aria-describedby')).toContain(
+      'member-directory-preview-status',
+    );
+    expect(screen.getByText(/uploading, replacing, or removing it will not turn on/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/will not accept a photo as a query/i)).toBeInTheDocument();
+    expect(screen.getByText(/will not.*facial recognition or image matching/i))
+      .toBeInTheDocument();
+
+    fireEvent.change(file, {
+      target: {
+        files: [new File(['synthetic'], 'synthetic.png', { type: 'image/png' })],
+      },
+    });
+    fireEvent.click(checkbox);
+
+    expect(createMemberDirectoryRequestId).not.toHaveBeenCalled();
+    expect(getMyMemberDirectoryProfile).not.toHaveBeenCalled();
+    expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('preview-must-not-inspect-app');
+  });
+
+  test('describes the future name prerequisite without enabling preview controls', () => {
+    render(
+      <MemberDirectoryProfile
+        app={app}
+        uid="synthetic-user"
+        hasDisplayName={false}
+      />,
+    );
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Let authorized officers find me by name (not available yet)',
+    });
+    expect(checkbox).toBeDisabled();
+    expect(checkbox.getAttribute('aria-describedby')).toContain(
+      'member-directory-name-required-preview',
+    );
+    expect(screen.getByText(/full name in the Profile section will also be required/i))
+      .toBeInTheDocument();
+    expect(getMyMemberDirectoryProfile).not.toHaveBeenCalled();
   });
 
   test('loads missing settings as private by default with separate photo controls', async () => {
@@ -497,6 +581,7 @@ describe('My Account member directory profile', () => {
         app={otherApp}
         uid="other-synthetic-user"
         hasDisplayName
+        backendAvailable
       />,
     );
 
@@ -524,6 +609,7 @@ describe('My Account member directory profile', () => {
         app={otherApp}
         uid="other-synthetic-user"
         hasDisplayName
+        backendAvailable
       />,
     );
     expect(await screen.findByRole('img', { name: 'Your current profile thumbnail' }))
@@ -564,12 +650,21 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('button', { name: 'Remove profile photo' })).toBeEnabled();
   });
 
-  test('keeps the light panel heading readable and bounds the native file input', () => {
+  test('keeps the light panel readable and contains the native file input at 320px', () => {
     const css = readFileSync(join(__dirname, 'Account.css'), 'utf8');
 
     expect(css).toMatch(/\.member-directory-profile h2\s*\{[\s\S]*color:\s*#111827;/);
     expect(css).toMatch(
       /\.member-directory-profile__photo-actions,\s*\.member-directory-profile__photo-actions input\s*\{[\s\S]*min-width:\s*0;[\s\S]*max-width:\s*100%;/,
+    );
+    expect(css).toMatch(
+      /\.member-directory-profile__controls\s*\{[\s\S]*min-width:\s*0;[\s\S]*align-items:\s*stretch;/,
+    );
+    expect(css).toMatch(
+      /\.member-directory-profile__photo\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/,
+    );
+    expect(css).toMatch(
+      /\.member-directory-profile__photo-actions\s*\{[\s\S]*flex:\s*1 1 15rem;[\s\S]*width:\s*100%;/,
     );
   });
 });

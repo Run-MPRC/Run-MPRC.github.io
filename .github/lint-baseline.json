@@ -10,11 +10,11 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 119,
+  "scannedFileCount": 120,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 42,
+    ".ts": 43,
     ".tsx": 30
   },
   "errorCount": 113,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:bda71336dd9fbb242334c9aaf7f2be6d58bc55814540f730d90fe4809ec7e829",
+  "fingerprint": "sha256:b62532df877e1a1599273d0bdbf9876e75dae8be6e60ecadce601f854c283b6a",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -113,6 +113,7 @@
     "src/services/account/accountService.test.ts",
     "src/services/account/accountService.ts",
     "src/services/account/adminMembersService.ts",
+    "src/services/account/memberDirectoryAvailability.ts",
     "src/services/account/memberDirectorySearchService.test.ts",
     "src/services/account/memberDirectorySearchService.ts",
     "src/services/account/memberDirectoryService.test.ts",
@@ -247,9 +248,9 @@
     },
     {
       "file": "src/pages/admin/AdminHome.tsx",
-      "line": 196,
+      "line": 197,
       "column": 1,
-      "endLine": 196,
+      "endLine": 197,
       "endColumn": 114,
       "severity": 2,
       "ruleId": "max-len",

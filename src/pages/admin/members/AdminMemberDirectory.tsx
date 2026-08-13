@@ -4,6 +4,7 @@ import React, {
 } from 'react';
 import { Link } from 'react-router-dom';
 import SEO from '../../../components/SEO';
+import MEMBER_DIRECTORY_BACKEND_AVAILABLE from '../../../services/account/memberDirectoryAvailability';
 import { useServiceLocator } from '../../../services/ServiceLocatorContext';
 import {
   createMemberDirectorySearchRequestId,
@@ -249,7 +250,69 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
   );
 }
 
-function MemberDirectoryRoute() {
+function MemberDirectoryPreview() {
+  return (
+    <>
+      <div
+        id="member-directory-search-preview-status"
+        className="mt-6 max-w-3xl rounded-lg border-2 border-amber-700 bg-amber-50 p-4 text-amber-950"
+        role="status"
+      >
+        <strong className="block">Interface preview — search is not connected.</strong>
+        <span className="mt-1 block">
+          No finder name is collected or sent, and no member-directory profiles or
+          results are loaded.
+        </span>
+      </div>
+      <form
+        className="mt-4 min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-4"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+          <label
+            htmlFor="member-directory-name-query-preview"
+            className="block min-w-0 flex-1"
+          >
+            <span
+              id="member-directory-query-label-preview"
+              className="block font-semibold text-gray-900"
+            >
+              Search opted-in people by name
+            </span>
+            <span
+              id="member-directory-query-help-preview"
+              className="mt-1 block text-sm text-gray-700"
+            >
+              Name entry will be available after the protected backend is connected.
+            </span>
+            <input
+              id="member-directory-name-query-preview"
+              name="member-directory-name-query-preview"
+              type="text"
+              value=""
+              disabled
+              readOnly
+              autoComplete="off"
+              aria-labelledby="member-directory-query-label-preview"
+              aria-describedby="member-directory-search-preview-status member-directory-query-help-preview"
+              className="mt-3 block min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled
+            aria-describedby="member-directory-search-preview-status"
+            className="min-h-11 rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Search
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function ConnectedMemberDirectoryRoute() {
   const { services, isReady } = useServiceLocator();
   const { user } = useAuth();
   const app = isReady && services ? services.firebaseResources.app : null;
@@ -276,7 +339,17 @@ function MemberDirectoryRoute() {
   );
 }
 
-function Inner() {
+function MemberDirectoryRoute({ backendAvailable }: { backendAvailable: boolean }) {
+  return backendAvailable
+    ? <ConnectedMemberDirectoryRoute />
+    : <MemberDirectoryPreview />;
+}
+
+function Inner({ backendAvailable }: { backendAvailable: boolean }) {
+  const introduction = backendAvailable
+    ? 'Search by the beginning of a person\'s current display name or any name part. Only website-account holders who turned on the optional officer finder can appear. A result does not prove current club membership, payment, eligibility, or a website role.'
+    : 'When connected, search by the beginning of a person\'s current display name or any name part. Only website-account holders who turned on the optional officer finder can appear. A result does not prove current club membership, payment, eligibility, or a website role.';
+
   return (
     <>
       <SEO title="Admin — People finder" noindex />
@@ -286,25 +359,26 @@ function Inner() {
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">People finder</h1>
         <p className="mt-3 max-w-3xl text-gray-800">
-          Search by the beginning of a person&apos;s current display name or any name
-          part. Only website-account holders who turned on the optional officer finder
-          can appear. A result does not prove current club membership, payment,
-          eligibility, or a website role.
+          {introduction}
         </p>
         <p className="mt-2 max-w-3xl text-gray-800">
           Photos are voluntary. This page does not accept a photo as a query and does
           not use facial recognition, image matching, fuzzy matching, or a full account list.
         </p>
-        <MemberDirectoryRoute />
+        <MemberDirectoryRoute backendAvailable={backendAvailable} />
       </div>
     </>
   );
 }
 
-export default function AdminMemberDirectory() {
+export default function AdminMemberDirectory({
+  backendAvailable = MEMBER_DIRECTORY_BACKEND_AVAILABLE,
+}: {
+  backendAvailable?: boolean;
+}) {
   return (
     <AdminGuard>
-      <Inner />
+      <Inner backendAvailable={backendAvailable} />
     </AdminGuard>
   );
 }

@@ -5782,7 +5782,7 @@ describe('Admin dashboard summary load-failure boundary', () => {
       'Website accountsManage website roles; not a people finder',
     );
     expect(document.querySelector('a[href="/admin/member-directory"]')).toHaveTextContent(
-      'People finderSearch opted-in names; view voluntary photos',
+      'People finderInterface preview; search not connected',
     );
     expect(document.querySelector('a[href="/admin/products"]')).not.toBeNull();
     expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
@@ -9694,7 +9694,7 @@ describe('Admin People finder route', () => {
     });
   });
 
-  test('routes an authorized officer to the separate explicit-submit People finder', async () => {
+  test('routes an authorized officer to the disconnected People finder preview', async () => {
     renderAdminMemberDirectory();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'People finder' }))
@@ -9702,7 +9702,12 @@ describe('Admin People finder route', () => {
     expect(window.location.pathname).toBe('/admin/member-directory');
     expect(screen.getByRole('textbox', { name: 'Search opted-in people by name' }))
       .toHaveValue('');
-    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: 'Search opted-in people by name' }))
+      .toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Interface preview — search is not connected.',
+    );
     expect(screen.getByText(/does not accept a photo as a query/i)).toBeInTheDocument();
   });
 });

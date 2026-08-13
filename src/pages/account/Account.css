@@ -199,9 +199,27 @@
   gap: 0.75rem;
 }
 
+.member-directory-profile__controls {
+  min-width: 0;
+  align-items: stretch;
+}
+
 .member-directory-profile__controls,
 .member-directory-profile__warning {
   margin-top: 1rem;
+}
+
+.member-directory-profile__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 1rem 0;
+  padding: 0.75rem;
+  color: #422006;
+  background: #fffbeb;
+  border: 2px solid #b45309;
+  border-radius: 0.375rem;
+  line-height: 1.5;
 }
 
 .member-directory-profile__photo {
@@ -209,6 +227,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .member-directory-profile__photo img,
@@ -233,6 +253,7 @@
 }
 
 .member-directory-profile__photo-actions label,
+.member-directory-profile__control-label,
 .member-directory-profile__visibility label {
   font-weight: 700;
 }
@@ -250,9 +271,16 @@
   max-width: 100%;
 }
 
+.member-directory-profile__photo-actions {
+  flex: 1 1 15rem;
+  width: 100%;
+}
+
 .member-directory-profile__visibility {
   padding-top: 1rem;
   border-top: 1px solid #d1d5db;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .member-directory-profile__visibility input {
