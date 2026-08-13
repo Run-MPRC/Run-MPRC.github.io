@@ -18,7 +18,7 @@ const MAX_DISPLAY_NAME_CODE_UNITS = 200;
 const MIN_CANONICAL_DISPLAY_NAME_CODE_UNITS = 2;
 const CONTROL_OR_FORMAT_PATTERN = /[\p{Cc}\p{Cf}]/u;
 const DIRECTORY_TOKEN_PATTERN = /[\p{L}\p{N}][\p{L}\p{M}\p{N}]*/gu;
-const LOAD_FAILURE_MESSAGE = 'We could not load your profile photo and officer finder settings. No setting was changed. Reload settings to try again.';
+const LOAD_FAILURE_MESSAGE = 'We could not load your profile photo and officer finder settings. Reload settings to try again.';
 const UNKNOWN_CHANGE_MESSAGE = 'We could not confirm that change. Do not make another change yet. Reload settings to check what is currently saved.';
 const REJECTED_CHANGE_MESSAGE = 'That change was rejected before it was saved. Review the requirements and try again.';
 const REQUEST_UNAVAILABLE_MESSAGE = 'This browser could not safely start that change. No setting was changed. Reload the page and try again.';
@@ -319,6 +319,7 @@ function MemberDirectoryProfileAttempt({
   const lifetimeRef = useRef<symbol | null>(null);
   const loadRef = useRef<symbol | null>(null);
   const mutationRef = useRef<symbol | null>(null);
+  const uncertainChangeRef = useRef(false);
   const photoReadRef = useRef<symbol | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const removePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -332,6 +333,7 @@ function MemberDirectoryProfileAttempt({
       if (lifetimeRef.current === lifetime) lifetimeRef.current = null;
       loadRef.current = null;
       mutationRef.current = null;
+      uncertainChangeRef.current = false;
       photoReadRef.current = null;
       postMutationFocusRef.current = null;
     };
@@ -363,6 +365,7 @@ function MemberDirectoryProfileAttempt({
   useEffect(() => {
     const lifetime = lifetimeRef.current;
     const load = Symbol('member-directory-load');
+    const preserveUncertainChange = uncertainChangeRef.current;
     let active = true;
     loadRef.current = load;
     mutationRef.current = null;
@@ -381,6 +384,7 @@ function MemberDirectoryProfileAttempt({
           || lifetimeRef.current !== lifetime
           || loadRef.current !== load
         ) return;
+        uncertainChangeRef.current = false;
         setState({ phase: 'ready', profile, confirmation: null });
       } catch {
         if (
@@ -389,7 +393,9 @@ function MemberDirectoryProfileAttempt({
           || lifetimeRef.current !== lifetime
           || loadRef.current !== load
         ) return;
-        setState({ phase: 'unavailable' });
+        setState({
+          phase: preserveUncertainChange ? 'unknown' : 'unavailable',
+        });
       }
     }
 
@@ -440,6 +446,7 @@ function MemberDirectoryProfileAttempt({
           const profile = await getMyMemberDirectoryProfile(app);
           if (!mutationIsCurrent(start)) return;
           mutationRef.current = null;
+          uncertainChangeRef.current = false;
           setState({ phase: 'ready', profile, confirmation: null });
           setActionError({
             control: start.action === 'upload' ? 'file' : start.action,
@@ -460,6 +467,7 @@ function MemberDirectoryProfileAttempt({
       photoReadRef.current = null;
       setPhotoDraft(null);
       setActionError(null);
+      uncertainChangeRef.current = true;
       setState({ phase: 'unknown' });
       return;
     }
@@ -476,6 +484,7 @@ function MemberDirectoryProfileAttempt({
       } else if (start.action === 'remove') {
         postMutationFocusRef.current = 'remove-result';
       }
+      uncertainChangeRef.current = false;
       setState({ phase: 'ready', profile, confirmation: confirmation(profile) });
     } catch {
       if (!mutationIsCurrent(start)) return;
@@ -483,6 +492,7 @@ function MemberDirectoryProfileAttempt({
       photoReadRef.current = null;
       setPhotoDraft(null);
       setActionError(null);
+      uncertainChangeRef.current = true;
       setState({ phase: 'unknown' });
     }
   }

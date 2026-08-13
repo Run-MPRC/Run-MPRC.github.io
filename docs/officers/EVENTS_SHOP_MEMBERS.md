@@ -2472,7 +2472,7 @@ flowchart TD
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -2880,6 +2880,79 @@ Officer source-review procedure for MEMBERS-DIRECTORY-001H [#633] reviewed-repla
 **Undo:** before or after frontend-preview publication, use one reviewed frontend revert or safe roll-forward and read back the exact disabled state. The #621 preview changes no Firebase record to undo. After a future approved backend release, use the documented backend-first release path and verify opt-out/removal with a made-up account. Never undo by deleting or editing a real account or Firebase record manually.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real photo/name appeared, a visibility choice was wrong, or deletion could not be confirmed.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001I [#635] uncertain-change reload truth — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify from specialist-prepared evidence that a failed settings reload does not replace an uncertain-change warning with a false assurance. This review does not connect the feature, retry a mutation, use a real account or photo, or change production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #633 is reviewed and merged. Ask the platform owner or testing specialist for the exact #635 source candidate, the named generated-only test output, and a redacted written synthetic-behavior report. The specialist runs the tests and records the evidence. The backup officer reviews that written evidence without a terminal or test harness. Keep the source-controlled availability value `false`. Do not sign in to production, use a real name or photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #635 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the testing specialist for the named MEMBERS-DIRECTORY-001I test output.
+6. Ask the testing specialist for the redacted written synthetic-behavior report.
+7. Confirm the report names the specialist who ran the tests.
+8. Confirm the evidence uses only a made-up account.
+9. Confirm the evidence uses only generated non-face image bytes.
+10. Confirm the source-controlled availability value remains byte-for-byte `false`.
+11. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+12. Confirm an ordinary unknown visibility, upload, or removal outcome displays **We could not confirm that change**.
+13. Confirm a failed authoritative read after a resolved mutation displays the same warning.
+14. Confirm each warning tells the person not to make another change yet.
+15. Confirm the warning retains only **Reload settings** recovery.
+16. Confirm the photo mutation controls stay hidden while the outcome is uncertain.
+17. Confirm the finder mutation control stays hidden while the outcome is uncertain.
+18. Confirm an uncertain upload leaves no selected-photo data URL in the rendered page.
+19. Confirm the first failed Reload preserves the exact uncertain-change warning.
+20. Confirm a repeated failed Reload preserves the exact uncertain-change warning.
+21. Confirm neither failed Reload displays **No setting was changed**.
+22. Confirm a successful authoritative Reload clears the uncertain-change warning.
+23. Confirm that successful Reload shows the returned current photo state.
+24. Confirm that successful Reload shows the returned current finder setting.
+25. Confirm an initial profile-load failure displays the generic unavailable message.
+26. Confirm that generic unavailable message does not say **No setting was changed**.
+27. Confirm a failed confirming read after a definitive rejection remains generic unavailable.
+28. Confirm that definitive-rejection path is not elevated to known mutation uncertainty.
+29. Confirm Reload creates no directory request number.
+30. Confirm Reload calls no visibility mutation.
+31. Confirm Reload calls no photo upload mutation.
+32. Confirm Reload calls no photo removal mutation.
+33. Confirm Reload starts no automatic mutation retry.
+34. Confirm an application change resets the earlier component lifetime.
+35. Confirm an account change resets the earlier component lifetime.
+36. Confirm an older reload completion cannot change the new application or account state.
+37. Confirm the default Account branch obtains no directory context.
+38. Confirm the default Account branch creates no directory request number.
+39. Confirm the default Account branch calls no directory service.
+40. Confirm the source diff changes no Account wiring or People-finder page.
+41. Confirm the source diff changes no data movement or page structure.
+42. Confirm the source diff changes no client service contract.
+43. Confirm the source diff changes no Function, Rule, index, schema, package, workflow, or release control.
+44. Record the source change as its own state.
+45. Record the named test results as their own state.
+46. Record whether the change merged as its own state.
+47. Record whether any website artifact was published as its own state.
+48. Record the exact `runmprc.com` revision as its own state.
+49. Record whether Firebase was deployed as its own state.
+50. Record whether an outside provider was configured as its own state.
+51. Record whether an account or sign-in state changed as its own state.
+52. Record whether production data changed as its own state.
+53. Record whether connected behavior became available as its own state.
+54. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source preserves the fixed uncertain-change warning through failed and repeated **Reload settings** reads until one authoritative profile read succeeds. Mutation controls and discarded draft bytes stay absent while the outcome is uncertain. A successful read displays the returned current profile state. Initial profile-load failure and failed confirming read after definitive rejection remain generic unavailable without a global no-change promise. Reload creates no request ID, sends no visibility, upload, or removal mutation, and starts no mutation retry. Application and account lifetime fences keep older reloads inert. Availability remains `false`; the default branch obtains no directory context, creates no request ID, and calls no directory service; and live #623 remains inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real account, name, or photo; production sign-in; direct production Firebase access; a failed Reload that replaces uncertain-change truth with generic unavailable or **No setting was changed**; an initial or definitive-rejection load failure mislabeled as known mutation uncertainty; a discarded draft or data URL restored; a mutation control shown while uncertainty remains; a request number or visibility, upload, or removal mutation caused by Reload; an automatic mutation retry; an older reload changing a new application or account state; a data-flow or page-structure change; a Function, Rule, index, schema, service-contract, provider, account, sign-in, production-data, or website change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, or merge means the feature is live.
+
+**Success proof:** record the exact #635 issue, reviewed pull request and commit; trustworthy old-source failure; green separately named MEMBERS-DIRECTORY-001I focused tests; green full frontend tests; type-checking; scoped lint; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend/state, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #635 changes source only. Undo must not introduce a false no-change assurance or restore discarded draft bytes.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, a failed Reload hid uncertain-change truth, Reload sent a mutation, stale state crossed accounts, or connected behavior became available.
 
 ## Admin screens — NOT AVAILABLE YET
 
