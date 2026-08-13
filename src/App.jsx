@@ -4,6 +4,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import Home from './pages/home/Home';
 import About from './pages/about/About';
 import Contact from './pages/contact/Contact';
+import Suggestions from './pages/suggestions/Suggestions';
 import NotFound from './pages/notFound/NotFound';
 import Committee from './pages/officers/Committee';
 import Navbar from './components/Navbar';
@@ -86,6 +87,7 @@ function App() {
                 <Route path="account" element={<Account />} />
                 <Route path="account/strava/callback" element={<StravaCallback />} />
                 <Route path="contact" element={<Contact />} />
+                <Route path="suggestions" element={<Suggestions />} />
                 <Route path="joinus" element={<JoinUsConditionalRoute />} />
                 <Route path="committee" element={<Committee />} />
                 <Route path="login" element={<LoginForm />} />

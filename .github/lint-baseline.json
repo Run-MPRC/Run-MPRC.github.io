@@ -10,10 +10,10 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 118,
+  "scannedFileCount": 119,
   "scannedFilesByExtension": {
     ".js": 12,
-    ".jsx": 34,
+    ".jsx": 35,
     ".ts": 42,
     ".tsx": 30
   },
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:3eecd570ba0c4ada1a62f8a05be593a2ab81fa33d042654cfed303c7ac271791",
+  "fingerprint": "sha256:bda71336dd9fbb242334c9aaf7f2be6d58bc55814540f730d90fe4809ec7e829",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -106,6 +106,7 @@
     "src/pages/shop/Shop.tsx",
     "src/pages/shop/merchCheckoutRequest.test.ts",
     "src/pages/shop/merchCheckoutRequest.ts",
+    "src/pages/suggestions/Suggestions.jsx",
     "src/reportWebVitals.js",
     "src/services/ServiceLocatorContext.ts",
     "src/services/ServiceLocatorProvider.tsx",

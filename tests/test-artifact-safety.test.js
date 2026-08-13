@@ -463,6 +463,76 @@ test('WEB-PRIVACY-001Y sitemap failures expose only fixed log codes', async (t) 
   });
 });
 
+test('WEB-SUGGESTIONS-001A sitemap emits exactly one static Suggestions route', () => {
+  const fixture = makeSitemapFixture('suggestions-sitemap-fixture');
+  fs.mkdirSync(path.join(fixture.root, 'public'), { recursive: true });
+
+  const result = runSitemapGenerator(fixture);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0);
+  assert.equal(
+    result.stderr,
+    'No Firestore credentials; skipping dynamic event URLs\n',
+  );
+  const sitemap = fs.readFileSync(
+    path.join(fixture.root, 'public/sitemap.xml'),
+    'utf8',
+  );
+  const expectedSuggestionsBlock = [
+    '  <url>',
+    '    <loc>https://runmprc.com/suggestions</loc>',
+    '    <lastmod>DATE</lastmod>',
+    '    <changefreq>monthly</changefreq>',
+    '    <priority>0.6</priority>',
+    '  </url>',
+  ].join('\n');
+  const normalizedGeneratedSitemap = sitemap.replace(
+    /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/gu,
+    '<lastmod>DATE</lastmod>',
+  );
+  assert.equal(
+    literalCount(sitemap, '<loc>https://runmprc.com/suggestions</loc>'),
+    1,
+  );
+  assert.equal(literalCount(normalizedGeneratedSitemap, expectedSuggestionsBlock), 1);
+  assert.equal(
+    digestText(normalizedGeneratedSitemap.replace(
+      `${expectedSuggestionsBlock}\n`,
+      '',
+    )),
+    'c4ea47abda3cdab22f35ce402741ddc75080e9432b11d683e216775f056b0fda',
+  );
+  assert.equal(
+    literalCount(sitemap, '<loc>https://runmprc.com/contact</loc>'),
+    1,
+  );
+
+  const checkedInSitemap = fs.readFileSync(
+    path.join(REPOSITORY, 'public/sitemap.xml'),
+    'utf8',
+  );
+  const normalizedCheckedInSitemap = checkedInSitemap.replace(
+    /(<loc>https:\/\/runmprc\.com\/suggestions<\/loc>\n {4}<lastmod>)\d{4}-\d{2}-\d{2}(<\/lastmod>)/u,
+    '$1DATE$2',
+  );
+  assert.equal(
+    literalCount(checkedInSitemap, '<loc>https://runmprc.com/suggestions</loc>'),
+    1,
+  );
+  assert.equal(literalCount(normalizedCheckedInSitemap, expectedSuggestionsBlock), 1);
+  const checkedInSuggestionsBlock = expectedSuggestionsBlock.replace(
+    '<lastmod>DATE</lastmod>',
+    '<lastmod>2026-08-13</lastmod>',
+  );
+  assert.equal(literalCount(checkedInSitemap, checkedInSuggestionsBlock), 1);
+  assert.equal(
+    digestText(checkedInSitemap.replace(`${checkedInSuggestionsBlock}\n`, '')),
+    '255b2b94bcb837ad609f86e204641f8a9cb049a8ae4367855b516124f48cfc27',
+  );
+});
+
 test('WEB-PRIVACY-001AA release-wrapper caught failures use one fixed code', async (t) => {
   const fixedFailure = 'netlify_release_build_failed\n';
   const pathCanary = '/synthetic/private/netlify-release-path-canary';

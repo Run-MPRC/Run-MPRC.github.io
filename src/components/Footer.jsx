@@ -39,6 +39,7 @@ function Footer() {
           <Link to="/committee">Committee</Link>
           <Link to="/joinus">Join Us</Link>
           <Link to="/contact">Contact Us</Link>
+          <Link to="/suggestions">Suggestions</Link>
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
         </article>
