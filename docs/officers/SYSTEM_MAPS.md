@@ -86,7 +86,7 @@ flowchart TD
     Rules --> Functions["Deploy and verify named Functions"]
     Functions --> Pages["Pages branch without Netlify's domain claim"]
     Main -. "Ordinary Git production build paused" .-> Netlify
-    Main -. "Completed #473 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
+    Main -. "Completed #623 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> Netlify
     Netlify["Netlify — current live host; reusable protected publication unavailable"] --> Live["runmprc.com"]
@@ -94,7 +94,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify and the completed #473 exception is inactive; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify and the completed #623 exception is inactive; its deploy `6a7e072f8f346b0008510d29` remains live while completed #473 deploy `6a6dc9ea588b0c0008036312` is rollback history; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 
@@ -154,27 +154,24 @@ In words: a signed-in member gets their existing profile unchanged or one new pe
 
 Issue [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118) owns this repair, and [#178](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/178) owns the temporary phone-collection pause. Source code and local tests do not make either live. The website, server Function, database permissions, and made-up live check must each be proven separately.
 
-## Optional profile photo and officer people finder — SOURCE ONLY, NOT LIVE
+## Optional profile photo and officer People finder — INERT FRONTEND PREVIEW LIVE; BACKEND NOT LIVE
 
 ```mermaid
 flowchart TD
-    Account["Signed-in person's Account page"] --> ProfileServer["Private App Check profile actions"]
-    ProfileServer --> Preference{"Finder choice on?"}
-    ProfileServer --> Thumbnail["Private processed thumbnail\noriginal not retained"]
-    Preference -- "No, missing, or invalid name" --> Hidden["No finder entry"]
-    Preference -- "Yes, current valid name" --> Projection["Minimum server-only name-prefix projection"]
-    Officer["Verified admin types a name and selects Search"] --> Search["Private App Check search\nfixed rate and result bounds"]
-    Search --> Projection
-    Search --> Recheck["Re-read current name, choice, and thumbnail"]
-    Recheck --> Cards["Up to 24 voluntary name/photo cards"]
-    Search --> Audit["Minimal audit\nno query or result identities"]
-    Browser["Browser, including admin"] -. "direct access denied" .-> Projection
-    Cards -. "does not prove or change" .-> Records["Membership, role, registration, payment, or official roster"]
+    Account["Signed-in person's Account page"] --> Photo["Photo preview and disabled Choose photo control"]
+    Account --> Choice["Disabled default-off searchable choice"]
+    Admin["Existing admin guard"] --> Finder["People finder page"]
+    Finder --> Input["Disabled name input and Search button"]
+    Photo -. "No upload or request" .-> Backend["Directory backend — NOT LIVE"]
+    Choice -. "No save or request" .-> Backend
+    Input -. "No search or results" .-> Backend
+    Face["Face or photo search"] --> Never["Not authorized and not available"]
+    Finder -. "does not prove or change" .-> Records["Membership, role, registration, payment, or official roster"]
 ```
 
-In words: a signed-in person separately controls a private processed thumbnail and a default-off finder choice. A verified admin may explicitly search a name prefix, but the server returns at most 24 cards only after rechecking each person's current choice, display name, and thumbnail. Browsers cannot directly access the projection. A card does not prove membership or grant authority.
+In words: the live artifact contains the inert photo, searchable-setting, and People finder layouts, but every new control is disabled, no directory request or result is possible, and the backend is not live. Synthetic tests prove the protected Account and administrator layouts; production proof stayed signed out and confirmed only the normal guards and absence of a directory request. Face or photo search is neither authorized nor available, and seeing the interface proves no membership or authority.
 
-Issue [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) owns the source-only account slice. Issue [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) owns the source-only server search and officer page. Issue [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) still owns privacy approval, backend-first release, website publication, and live proof. No issue authorizes a photo query, facial recognition, similarity matching, or biometric processing. Every upload/search rate pseudonym and prefix digest is linkable, not anonymous, and remains private server state.
+Issue [#623](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/623) published only this bounded inert interface. Connected source from [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505) and [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506) was deliberately excluded from the production artifact. Issue [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507) still owns privacy approval, backend-first release, website publication of connected behavior, and live proof. No issue authorizes a photo query, facial recognition, similarity matching, or biometric processing. Do not use real names or photos to test the inert preview.
 
 ## Verification email action — SOURCE ONLY, NOT LIVE
 
