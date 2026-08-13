@@ -29,6 +29,69 @@ Helpful request:
 5. Ask AI to find every visible place using the old link.
 6. Test each changed button from the preview.
 
+## Suggestions page no-form preview — SOURCE ONLY, NOT LIVE
+
+**Purpose:** confirm that the Suggestions source shows only approved public
+information and opens the existing Contact page without adding an intake form.
+This procedure checks display of approved wording. It does not approve or change
+privacy or security policy.
+
+**Approver:** communications lead and privacy/security owner.
+
+**Before you start:** have the exact #618 pull request and preview link, plus the
+approved Suggestions wording. Stay signed out. Use phone and computer widths.
+Use no real suggestion, security evidence, or private information. Do not
+activate the email control on Contact.
+
+1. Open the exact `/suggestions` preview while signed out at a phone-sized width.
+2. Confirm that the address ends in `/suggestions`.
+3. Confirm that the page has one **Suggestions** heading.
+4. Confirm that the browser title identifies Suggestions.
+5. Compare the safety wording with the approved text.
+6. Confirm that the page says it has no suggestion form and submits no idea.
+7. Confirm that the email-retention disclosure identifies Contact as a separate existing channel.
+8. Confirm that the page promises no anonymity, confidentiality, reply, or implementation.
+9. Confirm that there is no textbox, upload, submit button, vote, or public idea list.
+10. Use Tab to reach **Go to Contact**.
+11. Confirm that focus is visible.
+12. Press Enter.
+13. Confirm that `/contact` opens.
+14. Do not activate the email control on Contact.
+15. Open the same preview at a normal computer width.
+16. Use the footer **Suggestions** link.
+17. Confirm that `/suggestions` opens.
+18. Confirm that no content is clipped or hidden.
+
+**Expected result:** the source preview shows fixed public information and one
+internal Contact action only. It creates no suggestion intake. This check does
+not prove that the mailbox is monitored, that an email is delivered or retained
+for a defined period, that a reply occurs, or that the page is live.
+
+**Stop conditions:** stop if the Suggestions page adds a form, external intake,
+or direct email link; makes an anonymity, confidentiality, reply, or
+implementation promise; requests private information or security evidence;
+diverges from the current `SECURITY.md` first-contact direction; requires
+sign-in; performs a provider action; opens the wrong route; hides keyboard
+focus; clips content; or changes the public website unexpectedly.
+
+**Success proof:** record the exact reviewed head, preview URL, check date,
+phone and computer widths, route, heading, title, no-form checklist, keyboard
+result, and pass or fail. Use redacted screenshots only.
+
+**Undo:** reject the pull request before merge, or ask the platform maintainer
+for one revert pull request after merge. No provider action or data cleanup is
+needed for this source-only page.
+
+**Escalation:** communications lead for wording; privacy/security owner for
+safety language; platform owner and accessibility reviewer for route, focus, or
+layout failures.
+
+Source, tests, merge, website publication, `runmprc.com` verification,
+Firebase deployment, outside-provider configuration, and production behavior
+are separate states. This procedure describes #618 source and preview behavior
+only. It is **NOT LIVE** until an approved exact website release is published
+and the same checks pass on `runmprc.com`.
+
 ## Photos
 
 1. Get permission to publish the photo.

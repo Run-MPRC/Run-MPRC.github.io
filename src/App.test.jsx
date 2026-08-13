@@ -1,6 +1,8 @@
 /* eslint-env jest */
 
 import React from 'react';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   act,
   fireEvent,
@@ -46,6 +48,38 @@ import {
 } from './services/shop/shopService';
 import { createJoinUsPageSchema } from './services/seo/structuredData';
 import App from './App';
+
+const PUBLIC_INDEX_SOURCE = readFileSync(
+  join(__dirname, '../public/index.html'),
+  'utf8',
+);
+const SUGGESTIONS_SOURCE = readFileSync(
+  join(__dirname, 'pages/suggestions/Suggestions.jsx'),
+  'utf8',
+);
+const SUGGESTIONS_CSS = readFileSync(
+  join(__dirname, 'pages/suggestions/suggestions.css'),
+  'utf8',
+);
+const HELMET_SHELL_SELECTORS = [
+  'title[data-rh="true"]',
+  'meta[data-rh="true"][name="title"]',
+  'meta[data-rh="true"][name="description"]',
+  'meta[data-rh="true"][name="keywords"]',
+  'meta[data-rh="true"][property="og:type"]',
+  'meta[data-rh="true"][property="og:url"]',
+  'meta[data-rh="true"][property="og:title"]',
+  'meta[data-rh="true"][property="og:description"]',
+  'meta[data-rh="true"][property="og:image"]',
+  'meta[data-rh="true"][property="og:site_name"]',
+  'meta[data-rh="true"][property="og:locale"]',
+  'meta[data-rh="true"][property="twitter:card"]',
+  'meta[data-rh="true"][property="twitter:url"]',
+  'meta[data-rh="true"][property="twitter:title"]',
+  'meta[data-rh="true"][property="twitter:description"]',
+  'meta[data-rh="true"][property="twitter:image"]',
+  'link[data-rh="true"][rel="canonical"]',
+];
 
 jest.mock('./services/ServiceLocatorProvider', () => function TestServiceLocatorProvider({
   children,
@@ -186,6 +220,167 @@ test('renders the MPRC home route without contacting Firebase', () => {
   } finally {
     consoleWarn.mockRestore();
   }
+});
+
+describe('WEB-SUGGESTIONS-001A static Suggestions page', () => {
+  let originalFetch;
+  let originalSendBeacon;
+
+  beforeEach(() => {
+    document.head.querySelectorAll('meta[data-rh], link[data-rh]')
+      .forEach((tag) => tag.remove());
+    const shell = new DOMParser().parseFromString(PUBLIC_INDEX_SOURCE, 'text/html');
+    HELMET_SHELL_SELECTORS.forEach((selector) => {
+      expect(shell.head.querySelectorAll(selector)).toHaveLength(1);
+    });
+    shell.head.querySelectorAll('meta[data-rh], link[data-rh]')
+      .forEach((tag) => document.head.appendChild(tag.cloneNode(true)));
+    originalFetch = global.fetch;
+    global.fetch = jest.fn();
+    originalSendBeacon = navigator.sendBeacon;
+    navigator.sendBeacon = jest.fn();
+    window.history.pushState({}, '', '/suggestions');
+  });
+
+  afterEach(() => {
+    if (originalFetch === undefined) delete global.fetch;
+    else global.fetch = originalFetch;
+    if (originalSendBeacon === undefined) delete navigator.sendBeacon;
+    else navigator.sendBeacon = originalSendBeacon;
+  });
+
+  test('renders the direct route, approved SEO, Contact action, and footer discovery', async () => {
+    render(<App />);
+
+    const main = screen.getByRole('main');
+    expect(main.textContent.replace(/\s+/gu, ' ').trim()).toBe([
+      'Help improve the club',
+      'Suggestions',
+      'We welcome short ideas about club runs, events, communications, accessibility, and the website.',
+      'Share an idea through Contact',
+      'This page does not submit or store your suggestion. It has no suggestion form or suggestion-specific tracking. Open Contact and choose its email link if you want to send an idea.',
+      "If you send an email, your email service and the club's existing email service may retain your address and message. The Contact email is not anonymous or confidential.",
+      'Keep private information out',
+      'Do not include passwords or verification codes, payment details, private member information, health information, emergency-contact details, or vulnerability evidence.',
+      'For a security or privacy problem, use Contact and write security report. Ask for a secure reply. Keep secrets, private records, payment references, and exploit details out of an ordinary suggestion.',
+      'We may not reply, and sending an idea does not promise that it will be implemented.',
+      'Go to Contact',
+    ].join(''));
+    expect(within(main).getByRole('heading', {
+      level: 1,
+      name: 'Suggestions',
+    })).toBeInTheDocument();
+    const pageLinks = within(main).getAllByRole('link');
+    expect(pageLinks).toHaveLength(1);
+    expect(pageLinks.map((link) => link.getAttribute('href'))).toEqual(['/contact']);
+    expect(pageLinks[0]).toHaveAccessibleName('Go to Contact');
+    expect(within(screen.getByRole('contentinfo')).getByRole('link', {
+      name: 'Suggestions',
+    })).toHaveAttribute('href', '/suggestions');
+    expect(SUGGESTIONS_CSS).toMatch(
+      /\.container\.suggestions__container\s*\{[^}]*max-width:\s*52rem;/u,
+    );
+
+    await waitFor(() => {
+      expect(document.title).toBe(
+        'Share a Suggestion - Mid-Peninsula Running Club | Bay Area Running Club',
+      );
+      expect(document.head.querySelectorAll('meta[name="description"]')).toHaveLength(1);
+      expect(document.head.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
+      expect(document.head.querySelectorAll('meta[property="og:url"]')).toHaveLength(1);
+      expect(document.head.querySelectorAll('meta[property="twitter:url"]')).toHaveLength(1);
+    });
+    expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute(
+      'content',
+      'Share a short idea with Mid-Peninsula Running Club through our existing Contact page. This Suggestions page has no form or new data store.',
+    );
+    expect(document.head.querySelector('link[rel="canonical"]'))
+      .toHaveAttribute('href', 'https://runmprc.com/suggestions');
+    expect(document.head.querySelector('meta[property="og:url"]'))
+      .toHaveAttribute('content', 'https://runmprc.com/suggestions');
+    expect(document.head.querySelector('meta[property="twitter:url"]'))
+      .toHaveAttribute('content', 'https://runmprc.com/suggestions');
+  });
+
+  test('adds no page-level intake, external form, analytics, or service request', () => {
+    render(<App />);
+
+    const main = screen.getByRole('main');
+    expect(main.querySelector(
+      'form, input, textarea, select, button, iframe, object, embed, '
+        + '[contenteditable], input[type="file"]',
+    )).toBeNull();
+    expect(main.querySelector(
+      '[src], [srcset], [data], [action], [formaction]',
+    )).toBeNull();
+    expect(within(main).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(main).queryByRole('button')).not.toBeInTheDocument();
+    expect(main.querySelector(
+      'a[href^="http"], a[href^="//"], a[href^="mailto:"], '
+        + 'a[href^="javascript:"], a[target="_blank"]',
+    )).toBeNull();
+    expect(main).toHaveTextContent(
+      'This page does not submit or store your suggestion.',
+    );
+    expect(main).toHaveTextContent(
+      'The Contact email is not anonymous or confidential.',
+    );
+    expect(main).toHaveTextContent(
+      "If you send an email, your email service and the club's existing email service may retain your address and message.",
+    );
+    expect(main).toHaveTextContent(
+      'Do not include passwords or verification codes, payment details, private member information, health information, emergency-contact details, or vulnerability evidence.',
+    );
+    expect(main).toHaveTextContent(
+      'security report',
+    );
+    expect(main).toHaveTextContent(
+      'Ask for a secure reply. Keep secrets, private records, payment references, and exploit details out of an ordinary suggestion.',
+    );
+    expect(main).toHaveTextContent(
+      'We may not reply, and sending an idea does not promise that it will be implemented.',
+    );
+    expect(SUGGESTIONS_SOURCE.match(/^import .+;$/gmu)).toEqual([
+      "import React from 'react';",
+      "import { Link } from 'react-router-dom';",
+      "import SEO from '../../components/SEO';",
+      "import './suggestions.css';",
+    ]);
+    expect(SUGGESTIONS_SOURCE).not.toMatch(
+      /(?:from\s+['"][^'"]*services|require\s*\(|import\s*\()/u,
+    );
+    expect(SUGGESTIONS_SOURCE).not.toMatch(
+      /(?:navigator\s*\.\s*sendBeacon|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|new\s+Image\b|\bfetch\s*\()/u,
+    );
+    expect(SUGGESTIONS_CSS).not.toMatch(/(?:@import|url\s*\()/iu);
+    expect(useServiceLocator).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(navigator.sendBeacon).not.toHaveBeenCalled();
+    expect([
+      adminOrderAction,
+      createCheckoutSession,
+      createEvent,
+      createMerchCheckout,
+      createProduct,
+      getEventBySlug,
+      getProductBySlug,
+      listActiveProducts,
+      listAllEvents,
+      listAllMembers,
+      listAllOrders,
+      listAllProducts,
+      listEventRegistrations,
+      listMemberEvents,
+      listPublicEvents,
+      listRegistrationsForEvent,
+      lookupOrder,
+      lookupRegistration,
+      setMemberRole,
+      updateEvent,
+      updateProduct,
+    ].filter((mock) => mock.mock.calls.length > 0)).toEqual([]);
+  });
 });
 
 test('keeps the real Join route structured data free of an unapproved membership Offer', async () => {

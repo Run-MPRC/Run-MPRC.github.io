@@ -16,6 +16,7 @@
 | Shop | Firestore product records plus `src/pages/shop/` | Live commerce is not approved. |
 | Committee | `src/text/Committee.js`, `src/pages/officers/Committee.jsx`, `src/images/committee/` | Names/titles and duplicate search metadata live in the component. |
 | Contact | `src/text/ContactUs.js`, `src/pages/contact/Contact.jsx`, `src/images/contact/` | Some text and email parts are hardcoded. |
+| Suggestions — **SOURCE ONLY, NOT LIVE** | `src/pages/suggestions/Suggestions.jsx`, `src/pages/suggestions/suggestions.css` | Information page only: no suggestion form, record, or suggestion-specific service or provider. It opens Contact; any email is a separate existing channel. Exact copy requires communications and privacy/security approval. |
 | Footer | `src/text/Footer.js`, footer components | Legal/privacy-style wording requires an approved source. |
 | Forms, map, and social links | `src/text/externalLinks.js` | Use public view/submission links, never private edit links. |
 | Terms and Privacy | `src/pages/legal/` | Do not ask AI to invent policy. Require approved owner text. |

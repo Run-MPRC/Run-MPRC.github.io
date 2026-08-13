@@ -17,6 +17,8 @@ flowchart TD
     Site --> Shop["Shop pickup catalog — LIVE; no online ordering"]
     Site --> Committee["Committee"]
     Site --> Contact["Contact Us"]
+    Site --> Suggestions["Suggestions — source only, not live"]
+    Suggestions --> Contact
     Site --> Account["Login and Account"]
     Account --> AuthAction["Verification link page — source only, not live"]
     Site --> Legal["Terms and Privacy"]
@@ -24,8 +26,11 @@ flowchart TD
 ```
 
 In words: public information, account/admin pages, and unfinished commerce
-screens share one website; the live Shop pickup catalog creates no order or
-payment, and seeing any screen does not mean it is approved for live commerce.
+screens share one website; in source only, Suggestions is a public information
+page with no form or suggestion record, opens the existing Contact page, and
+treats any later email as a separate existing channel, while the live Shop
+pickup catalog creates no order or payment and seeing any screen does not mean
+it is approved for live commerce.
 
 ## Where information lives
 
