@@ -1623,6 +1623,187 @@ describe('My Account member directory profile', () => {
     expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
   });
 
+  describe('MEMBERS-DIRECTORY-001I uncertain-change reload truth', () => {
+    const unknownChangeMessage = 'We could not confirm that change. Do not make another change yet. Reload settings to check what is currently saved.';
+
+    test('keeps an ordinary unknown upload warning through failed and repeated reloads without restoring draft bytes or retrying', async () => {
+      (setMyMemberDirectoryPhoto as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockRejectedValueOnce(new Error('synthetic private first reload detail'))
+        .mockRejectedValueOnce(new Error('synthetic private second reload detail'));
+      renderProfile();
+      const input = await screen.findByLabelText('Add profile photo');
+      fireEvent.change(input, {
+        target: {
+          files: [new File(['uncertain local bytes'], 'fixture-001i-001.png', {
+            type: 'image/png',
+          })],
+        },
+      });
+      const preview = await screen.findByRole('img', {
+        name: 'Selected profile photo preview',
+      });
+      fireEvent.load(preview);
+      fireEvent.click(screen.getByRole('button', { name: 'Save profile photo' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(unknownChangeMessage);
+      expect(document.body.innerHTML).not.toContain(btoa('uncertain local bytes'));
+      expect(screen.queryByLabelText('Add profile photo')).not.toBeInTheDocument();
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      expect(await screen.findByRole('alert')).toHaveTextContent(unknownChangeMessage);
+      expect(document.body).not.toHaveTextContent('No setting was changed');
+      expect(document.body.innerHTML).not.toContain(btoa('uncertain local bytes'));
+      expect(screen.queryByLabelText('Add profile photo')).not.toBeInTheDocument();
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3));
+      expect(await screen.findByRole('alert')).toHaveTextContent(unknownChangeMessage);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('keeps successful-mutation readback uncertainty through failed reloads until one authoritative read succeeds', async () => {
+      const authoritative = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 8,
+        searchableByOfficers: true,
+      };
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockRejectedValueOnce(new Error('synthetic private readback detail'))
+        .mockRejectedValueOnce(new Error('synthetic private first reload detail'))
+        .mockRejectedValueOnce(new Error('synthetic private second reload detail'))
+        .mockResolvedValueOnce(authoritative);
+      renderProfile();
+      fireEvent.click(await screen.findByRole('checkbox'));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(unknownChangeMessage);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3));
+      expect(await screen.findByRole('alert')).toHaveTextContent(unknownChangeMessage);
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(4));
+      expect(await screen.findByRole('alert')).toHaveTextContent(unknownChangeMessage);
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(5));
+      expect(await screen.findByRole('checkbox')).toBeChecked();
+      expect(screen.getByRole('img', { name: 'Your current profile thumbnail' }))
+        .toBeInTheDocument();
+      expect(screen.queryByText(unknownChangeMessage)).not.toBeInTheDocument();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(5);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('keeps initial and definitive-rejection read failures generic without a global no-change promise', async () => {
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private initial detail'))
+        .mockRejectedValueOnce(new Error('synthetic private initial reload detail'));
+      const initial = renderProfile();
+
+      const initialAlert = await screen.findByRole('alert');
+      expect(initialAlert).toHaveTextContent(
+        'We could not load your profile photo and officer finder settings. Reload settings to try again.',
+      );
+      expect(initialAlert).not.toHaveTextContent('No setting was changed');
+      expect(initialAlert).not.toHaveTextContent('could not confirm that change');
+      expect(createMemberDirectoryRequestId).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      const initialReloadAlert = await screen.findByRole('alert');
+      expect(initialReloadAlert).toHaveTextContent(
+        'We could not load your profile photo and officer finder settings. Reload settings to try again.',
+      );
+      expect(initialReloadAlert).not.toHaveTextContent('No setting was changed');
+      expect(initialReloadAlert).not.toHaveTextContent(unknownChangeMessage);
+      initial.unmount();
+
+      jest.clearAllMocks();
+      (createMemberDirectoryRequestId as jest.Mock).mockReturnValue(REQUEST_ID);
+      const rejected = { code: 'functions/failed-precondition' };
+      (setMyMemberDirectoryVisibility as jest.Mock).mockRejectedValueOnce(rejected);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => error === rejected,
+      );
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockRejectedValueOnce(new Error('synthetic private confirming detail'))
+        .mockRejectedValueOnce(new Error('synthetic private reload detail'));
+      renderProfile();
+      fireEvent.click(await screen.findByRole('checkbox'));
+
+      const rejectionAlert = await screen.findByRole('alert');
+      expect(rejectionAlert).toHaveTextContent(
+        'We could not load your profile photo and officer finder settings. Reload settings to try again.',
+      );
+      expect(rejectionAlert).not.toHaveTextContent(unknownChangeMessage);
+      fireEvent.click(screen.getByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3));
+      expect(await screen.findByRole('alert')).not.toHaveTextContent(unknownChangeMessage);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test.each([
+      ['application', otherApp, 'synthetic-user'],
+      ['account', app, 'other-synthetic-user'],
+    ])('does not carry uncertainty or a late reload into a new %s context', async (_label, nextApp, nextUid) => {
+      const oldReload = deferred<typeof DEFAULT_PROFILE>();
+      (setMyMemberDirectoryVisibility as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(oldReload.promise)
+        .mockRejectedValueOnce(new Error('synthetic private current load detail'));
+      const view = renderProfile();
+      fireEvent.click(await screen.findByRole('checkbox'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={nextApp}
+          uid={nextUid}
+          displayName="Current Synthetic Member"
+          backendAvailable
+        />,
+      );
+
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3));
+      const currentAlert = await screen.findByRole('alert');
+      expect(currentAlert).toHaveTextContent(
+        'We could not load your profile photo and officer finder settings. Reload settings to try again.',
+      );
+      expect(currentAlert).not.toHaveTextContent(unknownChangeMessage);
+      await act(async () => oldReload.reject(new Error('synthetic private late reload detail')));
+      expect(screen.getByRole('alert')).not.toHaveTextContent(unknownChangeMessage);
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+  });
+
   test('reloads settings before allowing a retry after an unknown outcome', async () => {
     const current = { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
     (getMyMemberDirectoryProfile as jest.Mock)
