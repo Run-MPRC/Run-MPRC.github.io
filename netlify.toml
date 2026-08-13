@@ -16,7 +16,7 @@
   command = "node ./scripts/netlify-release-build.js"
 
 [context.deploy-preview]
-  # The #623 control-branch preview verifies its exact pinned source. Other
+  # The temporary #623 production authority is inactive again. Ordinary
   # previews use their checked-out tree; production still needs the exact gate.
   command = "node ./scripts/netlify-release-build.js --preview"
 
