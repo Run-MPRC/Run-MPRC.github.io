@@ -38,22 +38,33 @@ type SearchState =
   | { phase: 'resolved'; results: readonly MemberDirectorySearchResult[] }
   | { phase: 'unavailable' };
 
-function PhotoFallback({ displayName }: { displayName: string }) {
+function PhotoFallback({
+  displayName,
+  unavailable = false,
+}: {
+  displayName: string;
+  unavailable?: boolean;
+}) {
   return (
     <div
       className="member-directory-admin__photo-fallback grid h-32 w-32 flex-none place-items-center rounded-lg border-2 border-gray-400 bg-gray-100 px-2 text-center text-sm font-semibold text-gray-700"
       role="img"
-      aria-label={`No profile photo for ${displayName}`}
+      aria-label={unavailable
+        ? `Profile photo unavailable for ${displayName}`
+        : `No profile photo for ${displayName}`}
     >
-      No photo
+      {unavailable ? 'Photo unavailable' : 'No photo'}
     </div>
   );
 }
 
 function DirectoryPhoto({ result }: { result: MemberDirectorySearchResult }) {
   const [failed, setFailed] = useState(false);
-  if (result.photo === null || failed) {
+  if (result.photo === null) {
     return <PhotoFallback displayName={result.displayName} />;
+  }
+  if (failed) {
+    return <PhotoFallback displayName={result.displayName} unavailable />;
   }
   return (
     <img
@@ -71,6 +82,8 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
   const [queryInput, setQueryInput] = useState('');
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [state, setState] = useState<SearchState>({ phase: 'idle' });
+  const [clearAnnouncement, setClearAnnouncement] = useState<string | null>(null);
+  const queryInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(false);
   const pendingRef = useRef(false);
   const operationRef = useRef<symbol | null>(null);
@@ -90,6 +103,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     setQueryInput(event.currentTarget.value);
     setValidationMessage(null);
     setState({ phase: 'idle' });
+    setClearAnnouncement(null);
   }
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -101,6 +115,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
       operationRef.current = null;
       setValidationMessage(QUERY_REQUIREMENT);
       setState({ phase: 'idle' });
+      setClearAnnouncement(null);
       return;
     }
 
@@ -110,6 +125,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     } catch {
       setValidationMessage(null);
       setState({ phase: 'unavailable' });
+      setClearAnnouncement(null);
       return;
     }
 
@@ -119,6 +135,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     setQueryInput(query);
     setValidationMessage(null);
     setState({ phase: 'pending' });
+    setClearAnnouncement(null);
 
     try {
       const response = await searchMemberDirectory(app, { requestId, query });
@@ -134,7 +151,19 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     }
   }
 
+  function handleClear() {
+    operationRef.current = null;
+    setQueryInput('');
+    setValidationMessage(null);
+    setState({ phase: 'idle' });
+    setClearAnnouncement('Search field and displayed result cards cleared.');
+    queryInputRef.current?.focus();
+  }
+
   const pending = state.phase === 'pending';
+  const clearAvailable = validationMessage !== null
+    || state.phase === 'resolved'
+    || state.phase === 'unavailable';
   const queryDescriptionIds = [
     'member-directory-query-help',
     validationMessage ? 'member-directory-query-validation' : null,
@@ -167,6 +196,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
               choose Search.
             </span>
             <input
+              ref={queryInputRef}
               id="member-directory-name-query"
               name="member-directory-name-query"
               type="text"
@@ -182,15 +212,35 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
               className="member-directory-admin__input mt-3 block min-h-11 min-w-0 w-full max-w-full rounded border border-gray-500 bg-white px-3 py-2 text-gray-900"
             />
           </label>
-          <button
-            type="submit"
-            disabled={pending}
-            className="member-directory-admin__button min-h-11 w-full rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-          >
-            {pending ? 'Searching...' : 'Search'}
-          </button>
+          <div className="member-directory-admin__actions flex min-w-0 max-w-full flex-col gap-3 sm:w-auto sm:flex-row">
+            <button
+              type="submit"
+              disabled={pending}
+              className="member-directory-admin__button min-h-11 w-full rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {pending ? 'Searching...' : 'Search'}
+            </button>
+            {clearAvailable && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="member-directory-admin__button--secondary min-h-11 max-w-full rounded border-2 px-5 py-2 font-semibold"
+              >
+                Clear search and result cards
+              </button>
+            )}
+          </div>
         </div>
       </form>
+
+      <p
+        className={clearAnnouncement ? 'mt-4 text-sm text-gray-700' : 'sr-only'}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {clearAnnouncement}
+      </p>
 
       {validationMessage && (
         <p

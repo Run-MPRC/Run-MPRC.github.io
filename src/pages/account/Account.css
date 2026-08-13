@@ -245,6 +245,35 @@
   border-color: #1e3a8a;
 }
 
+.member-directory-admin__actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.member-directory-admin__button--secondary {
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  max-width: 100%;
+  color: #1e3a8a;
+  background: #fff;
+  border-color: #1e40af;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.member-directory-admin__button--secondary:hover {
+  color: #111827;
+  background: #facc15;
+  border-color: #111827;
+}
+
+.member-directory-admin__button--secondary:focus-visible {
+  outline: 3px solid #1e40af;
+  outline-offset: 3px;
+}
+
 .member-directory-admin__message {
   border: 1px solid;
 }
@@ -461,6 +490,19 @@
   background: #fef2f2;
   border: 2px solid #fca5a5;
   border-radius: 0.375rem;
+}
+
+@media (max-width: 320px) {
+  .member-directory-admin__actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .member-directory-admin__button--secondary {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 359px) {
