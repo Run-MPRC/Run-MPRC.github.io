@@ -2416,30 +2416,34 @@ Officer review steps after every prerequisite has proof:
 
 ## Optional profile photo and officer people finder — INERT FRONTEND PREVIEW; BACKEND NOT LIVE
 
-**Purpose:** let officers review the future profile-photo, independent finder-choice, and People finder layouts without connecting the private backend. The current #621 frontend default is an inert preview: every related control is disabled; it reads no saved photo or setting, accepts or uploads no photo, searches no name, and saves nothing. After a later approved connection, a signed-in person could choose one private profile thumbnail and, separately, choose whether the People finder may show their display name and thumbnail. A properly authorized officer could search by name and compare voluntary thumbnails visually. The system will not search a photo or recognize a face.
+**Purpose:** let officers review the future profile-photo, independent finder-choice, and People finder layouts without connecting the private backend. The #621 frontend source default is an inert preview: every related control is disabled; it reads no saved photo or setting, accepts or uploads no photo, searches no name, and saves nothing. #623 freezes only that inert interface over the current live source for one bounded Netlify release. That release is under review and not published. Production still serves #473 deploy `6a6dc9ea588b0c0008036312` from source `39ab8649df411262c8109a3c81a57bc38f1e168b`. After a later approved connection, a signed-in person could choose one private profile thumbnail and, separately, choose whether the People finder may show their display name and thumbnail. A properly authorized officer could search by name and compare voluntary thumbnails visually. The system will not search a photo or recognize a face.
 
 **Approver:** membership lead, privacy owner, and platform/security owner. The privacy owner must approve the final notice and backup/removal wording before connected publication.
 
-**Prerequisites:** parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504), account source child [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505), search source child [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506), and frontend-preview child [#621](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/621) are reviewed. Review the protected disabled layouts only through synthetic local artifacts. After the exact #621 frontend revision is published and read back, inspect only its signed-out public guards. Use only made-up accounts, made-up names, and generated non-face images for the preserved connected-source tests. Protected release [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507), the approved #110 privacy entry, scoped authorization, #133 protected release authority, and isolated staging are still required before any backend connection or live use.
+**Prerequisites:** parent [#504](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/504), account source child [#505](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/505), search source child [#506](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/506), and frontend-preview child [#621](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/621) are reviewed. #623 must have its separately reviewed exact release record before publication. Review the protected disabled layouts only through synthetic local artifacts. If the exact #623 frontend artifact later publishes and is read back, inspect only its signed-out public revision and guards. Use only made-up accounts, made-up names, and generated non-face images for the preserved connected-source tests. Protected release [#507](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/507), the approved #110 privacy entry, scoped authorization, #133 protected release authority, and isolated staging are still required before any backend connection or live use.
 
 ```mermaid
 flowchart TD
-    Person["Signed-in person's My Account preview"] --> Account["Photo and separate finder-choice controls disabled"]
-    Guard["Existing administrator guard"] --> Officer["People finder preview"]
+    Synthetic["Synthetic local protected-layout proof"] --> Person["Signed-in person's My Account preview"]
+    Synthetic --> Guard["Existing administrator guard"]
+    Person --> Account["Photo and separate finder-choice controls disabled"]
+    Guard --> Officer["People finder preview"]
     Officer --> Search["Name field and Search button disabled"]
     Account --> None["No directory name or photo read, upload, remove, search, or save"]
     Search --> None
+    Release["#623 exact inert artifact under review"] --> Public["Future signed-out revision and guard readback only"]
+    Public -. "does not prove protected layout" .-> Synthetic
     Later["Later #507 reviewed source flip"] --> Gates["Privacy, scoped authorization, staging, and backend-first readback"]
     Gates --> Connected["Future optional name search with voluntary thumbnails"]
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the current signed-in Account preview and administrator-guarded People finder show their future layouts with every directory control disabled. Their directory branches read, accept, search, and save nothing; the administrator guard still uses the normal account and role context. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
+Text alternative: synthetic local artifacts prove the signed-in Account preview and administrator-guarded People finder with every directory control disabled. The #623 artifact is under review; if published, signed-out public checks prove only its exact revision, normal guards, and absence of a directory request, not the protected layouts. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
 
 Officer review steps for the #621 frontend preview:
 
 1. Keep the profile photo and People finder backend marked **NOT AVAILABLE YET**.
-2. Ask the platform owner for the exact #621 pull request, commit, and frontend test record.
+2. Ask the platform owner for the exact #621 source pull request, commit, and frontend test record.
 3. Confirm the source-controlled availability boundary defaults unavailable.
 4. Confirm the default My Account path mounts no connected profile component.
 5. Ask the platform owner for dated synthetic local screenshots of both protected layouts at desktop and 320-pixel widths.
@@ -2460,13 +2464,17 @@ Officer review steps for the #621 frontend preview:
 20. Confirm the copy says a future result will not prove membership.
 21. Confirm the copy says there is no photo query or facial recognition.
 22. Confirm synthetic tests still cover the preserved connected branches through an explicit test seam.
-23. After publication, ask the platform owner for the exact frontend hosting record.
-24. Ask the platform owner for the matching public revision readback.
-25. While signed out, open `/account` and confirm the normal sign-in boundary remains.
-26. While signed out, open `/admin/member-directory` and confirm the administrator boundary remains.
-27. Ask the platform owner for the anonymous public network record.
-28. Confirm that record contains no member-directory callable request.
-29. Stop. Do not sign in to production, choose a file, enter a name, call Firebase directly, or use production member data.
+23. Ask whether #623 is still under review or has exact publication proof.
+24. If it remains under review, record **not published** and stop the public checks.
+25. If it published, ask the platform owner for release ID `WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`, 62 files, digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`, and the exact public marker.
+26. Confirm the release record says no Firebase, provider, account, sign-in, or production-data action occurred.
+27. Ask the platform owner for the matching signed-out public revision readback.
+28. While signed out, open `/account` and confirm the normal sign-in boundary remains.
+29. While signed out, open `/admin/member-directory` and confirm the administrator boundary remains.
+30. Ask the platform owner for the anonymous public network record.
+31. Confirm that record contains no member-directory callable request.
+32. Confirm the manifest was re-paused and its attempt did not replace the verified deploy.
+33. Stop. Do not sign in to production, choose a file, enter a name, call Firebase directly, or use production member data.
 
 Officer review steps for the preserved #505 connected source only:
 
@@ -2525,11 +2533,11 @@ Officer review steps for the preserved #506 connected source only:
 39. Confirm loading, no-result, fixed-error, and missing-photo states remain readable.
 40. Stop. Do not enable connected production Account or Admin controls, search a real name, inspect a real profile, or edit Firebase.
 
-**Expected result:** the frontend defaults to a visibly disabled preview that makes zero directory calls, accepts no file or name, and shows no person. Separate synthetic tests still prove the preserved default-off account controls and bounded officer name search whose future results would be rechecked against current private state. The backend and connected behavior remain unavailable. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
+**Expected result:** the frontend artifact defaults to a visibly disabled preview that makes zero directory calls, accepts no file or name, and shows no person. Before exact publication proof, production remains the #473 deploy. Separate synthetic tests prove the protected disabled layouts and preserved connected source. Any later signed-out public readback proves only the exact revision, normal guards, and absence of a member-directory request. The backend and connected behavior remain unavailable. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
 
 **Stop conditions:** an enabled preview control; a preview that reads saved directory state, accepts a file or finder name, creates a directory request number, calls a directory service, or shows a sample or result card; a real person, name, photo, member record, production sign-in, direct production Firebase access, production data change, or member-directory callable request; a public/permanent photo URL; an upload that silently opts in; a result from a search transaction ordered after completed opt-out; a notice that fails to explain that an earlier-committed response may still arrive; raw image, name, query, result identity, or provider detail in a log, issue, screenshot, message, email, or AI tool; a request for photo search, face recognition, similarity matching, or biometric processing; missing privacy approval for connected publication; an unreviewed availability flip; or a claim that source, tests, merge, frontend publication, or preview means the backend feature is live.
 
-**Success proof:** record the exact #505, #506, and #621 pull requests and merge commits; green focused and full checks; dependency review; independent privacy/security and backup-officer reviews; and explicit statements that Firebase, providers, and production data were unchanged. Record the exact frontend publication and `runmprc.com` readback if they occurred, or the exact external blocker if they did not. Synthetic artifacts and tests prove only the disabled protected layouts and default zero-directory-call branches. Publication and anonymous readback prove only the exact revision, signed-out guards, and absence of a public member-directory request. Record separately that the privacy notice, backend deployment, connected behavior, and live directory were not performed. Final connected live proof belongs to #507.
+**Success proof:** record the exact #505, #506, and #621 pull requests and merge commits; green focused and full checks; dependency review; independent privacy/security and backup-officer reviews; and explicit statements that Firebase, providers, accounts/sign-in, and production data were unchanged. While #623 is under review, record the exact source, tree, count, digest, expected parent, and current #473 production/rollback deploy, then state **not published**. If #623 later publishes, record the exact release merge, deploy, public marker, signed-out guards, anonymous no-directory-request result, repause attempt, and retained-deploy readback. Synthetic artifacts and tests prove only the disabled protected layouts and default zero-directory-call branches. Publication and anonymous readback prove only the exact revision, signed-out guards, and absence of a public member-directory request. Record separately that the privacy notice, backend deployment, connected behavior, and live directory were not performed. Final connected live proof belongs to #507.
 
 **Undo:** before or after frontend-preview publication, use one reviewed frontend revert or safe roll-forward and read back the exact disabled state. The #621 preview changes no Firebase record to undo. After a future approved backend release, use the documented backend-first release path and verify opt-out/removal with a made-up account. Never undo by deleting or editing a real account or Firebase record manually.
 
