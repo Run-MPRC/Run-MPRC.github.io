@@ -2440,6 +2440,20 @@ flowchart TD
     Send --> Readback["Refetch authoritative processed thumbnail or no-photo fallback"]
     Discard --> Preserved
     Readback --> Preserved
+    RemovalReview["#633 reviewed-replacement removal — SOURCE ONLY"] --> RemoveCurrent["Remove current saved photo"]
+    RemoveCurrent --> RemovalReadback{"Remove outcome and authoritative readback?"}
+    RemovalReadback -- "confirmed" --> KeepDraft["Update saved-photo state and revision; preserve same reading or ready local draft identity; no upload"]
+    RemovalReadback -- "definitive rejection and successful readback" --> KeepRetry["Keep draft; fixed error describes Remove"]
+    RemovalReadback -- "unknown or readback fails" --> DropDraft["Discard draft bytes and data URL; hide photo and finder mutation controls"]
+    KeepDraft --> FocusChoice{"Useful focus target?"}
+    FocusChoice -- "saved photo remains" --> FocusRemove["Remove current saved photo"]
+    FocusChoice -- "current draft ready" --> FocusSave["Save profile photo"]
+    FocusChoice -- "reading or no ready draft" --> FocusInput["Persistent Add or Replace input"]
+    FocusSave -. "later explicit Save sends same bytes once with readback revision" .-> Send
+    FocusRemove --> Preserved
+    FocusInput --> Preserved
+    KeepRetry --> Preserved
+    DropDraft --> Recovery["Existing unknown or unavailable reload state; no Save retry"]
     FinderDisposal["#631 connected People-finder disposal — SOURCE ONLY"] --> Completed["Completed validation, empty, fixed failure, or result-card state"]
     Completed --> Clear["Clear query, prior messages/headings/cards/names/images; announce local clear; focus input; zero new request or call"]
     FinderDisposal --> PhotoValue{"Returned photo value?"}
@@ -2458,7 +2472,7 @@ flowchart TD
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -2771,6 +2785,91 @@ Officer source-review procedure for MEMBERS-DIRECTORY-001G [#631] local People-f
 **Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #631 changes source only. Undo cannot recall a result already seen or captured and must not alter the query-free audit.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, a supplied image remained exposed after failure or Clear, Clear made a request, connected behavior became available, or the local result could not be removed from the rendered page.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001H [#633] reviewed-replacement removal — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify that removing the current saved photo does not silently discard a separate local replacement and that keyboard focus returns to a useful photo action. This review does not connect the feature, upload a real photo, or change production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #631 is reviewed and merged. Ask the platform owner or testing specialist for the exact #633 source candidate, the named generated-only test output, and a redacted written synthetic-behavior report. That specialist runs the tests and records the evidence. The backup officer reviews the written evidence without a terminal or test harness. Keep the source-controlled availability value `false`. Use only a made-up account and generated non-face images. Do not sign in to production, choose a real photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #633 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the testing specialist for the named MEMBERS-DIRECTORY-001H test output.
+6. Ask the testing specialist for the redacted written synthetic-behavior report.
+7. Confirm the report names the specialist who ran the tests.
+8. Confirm the evidence uses only a made-up account.
+9. Confirm the evidence uses only generated non-face images.
+10. Confirm the source-controlled availability value remains byte-for-byte `false`.
+11. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+12. Confirm the destructive action is named **Remove current saved photo**.
+13. Confirm that label distinguishes the saved thumbnail from the local replacement.
+14. Confirm selecting a replacement creates no upload request number.
+15. Confirm reading a replacement calls no upload service.
+16. Confirm reviewing a ready replacement calls no upload service.
+17. Confirm a successful remove refetches the authoritative profile.
+18. Confirm that readback updates the current saved-photo state.
+19. Confirm that readback updates the revision used by a later Save.
+20. Confirm a current ready replacement keeps the same local identity after confirmed removal.
+21. Confirm a current ready replacement keeps the same generated bytes after confirmed removal.
+22. Confirm confirmed removal does not upload the preserved replacement.
+23. Confirm a later explicit Save creates one new request number.
+24. Confirm that Save sends the preserved content type once.
+25. Confirm that Save sends the preserved bytes once.
+26. Confirm that Save uses the revision returned by the remove readback.
+27. Confirm a current reading replacement keeps its identity after confirmed removal.
+28. Confirm the current reader may finish locally after confirmed removal.
+29. Confirm the finished reader still requires explicit Save before upload.
+30. Confirm a successful remove does not change the officer-finder choice.
+31. Confirm readback with a current saved photo focuses **Remove current saved photo**.
+32. Confirm readback with no saved photo and a ready current draft focuses **Save profile photo**.
+33. Confirm readback with a reading draft focuses the persistent Add/Replace file input.
+34. Confirm readback with no draft focuses the persistent Add/Replace file input.
+35. Confirm definitive remove rejection plus successful readback keeps the local draft.
+36. Confirm that rejection exposes one fixed error for **Remove current saved photo**.
+37. Confirm an unknown remove outcome discards the local draft.
+38. Confirm a failed post-remove readback discards the local draft.
+39. Confirm each discarded draft leaves no generated data URL in the rendered page.
+40. Confirm each unknown or failed-readback state exposes no Save retry.
+41. Confirm each unknown or failed-readback state hides the photo and finder mutation controls.
+42. Confirm each unknown or failed-readback state retains only the existing **Reload settings** recovery.
+43. Confirm an older reader cannot replace a current reselection.
+44. Confirm an old remove completion cannot restore a draft after the application changes.
+45. Confirm an old remove completion cannot restore a draft after the made-up account changes.
+46. Confirm an old remove completion cannot restore state after unmount.
+47. Confirm no stale completion moves focus in a later context.
+48. Confirm no stale completion sends a photo in a later context.
+49. Confirm the default Account branch obtains no directory context.
+50. Confirm the default Account branch creates no request number.
+51. Confirm the default Account branch calls no directory service.
+52. Confirm the source diff changes no Account wiring or People-finder page.
+53. Confirm the source diff changes no client service contract.
+54. Confirm the source diff adds no photo query, face recognition, or biometric processing.
+55. Confirm the source diff changes no Function, Rule, index, schema, package, workflow, or release control.
+56. Record the source change as its own state.
+57. Record the named test results as their own state.
+58. Record whether the change merged as its own state.
+59. Record whether any website artifact was published as its own state.
+60. Record the exact `runmprc.com` revision as its own state.
+61. Record whether Firebase was deployed as its own state.
+62. Record whether an outside provider was configured as its own state.
+63. Record whether an account or sign-in state changed as its own state.
+64. Record whether production data changed as its own state.
+65. Record whether connected behavior became available as its own state.
+66. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source clearly separates **Remove current saved photo** from the local replacement. Confirmed removal and authoritative readback preserve the same current reading or ready draft while updating the saved-photo state and revision. A later explicit Save sends the preserved content type and bytes once against that refreshed revision. Definitive rejection plus successful readback keeps the draft and associates the fixed error with Remove. Unknown outcome or failed readback discards the draft and data URL, hides the photo and finder mutation controls, retains only the existing **Reload settings** recovery, and offers no Save or duplicate-mutation retry. Focus moves to a still-current Remove action first, an eligible Save action second, or the persistent Add/Replace input otherwise. Finder visibility stays unchanged. Stale completions remain inert. Availability remains `false`; the default branch and live #623 preview remain inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real account or photo; production sign-in; a replacement upload before explicit Save; a local draft lost after confirmed removal; a draft retained after an unknown outcome or failed readback; a discarded data URL left in the page; Save using the pre-remove revision; duplicate upload; focus sent to a missing or stale control; an older reader, mutation, or readback restoring bytes, state, focus, or a service call in another context; a photo change that alters finder visibility; a Firebase, Rule, index, Function, service-contract, provider, account, sign-in, production-data, or website change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, or merge means the feature is live.
+
+**Success proof:** record the exact #633 issue, reviewed pull request and commit; trustworthy old-source failure; green separately named MEMBERS-DIRECTORY-001H focused tests; green full frontend tests; type-checking; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend/accessibility, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #633 changes source only. Undo must not retain or restore a stale local draft.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real photo appeared, a replacement was uploaded without explicit Save, draft bytes survived an unknown state, finder visibility changed, or connected behavior became available.
 
 **Expected result:** production deploy `6a7e072f8f346b0008510d29` defaults to a visibly disabled preview that makes zero directory calls, accepts no file or name, and shows no person. Separate synthetic tests prove the protected disabled layouts and preserved connected source. Completed signed-out public readback proves only the exact revision, normal guards, and absence of a member-directory request. The backend and connected behavior remain unavailable. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
 
