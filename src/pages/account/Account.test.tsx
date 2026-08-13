@@ -250,7 +250,18 @@ describe('Account profile recovery', () => {
     expect(getMyProfile).toHaveBeenCalledWith(firestore, USER.uid);
   });
 
-  test('binds the directory controls to the current app, account, and display-name state', async () => {
+  test('passes the exact current saved display name to the directory controls', async () => {
+    renderAccount();
+
+    expect(await screen.findByTestId('member-directory-profile')).toBeInTheDocument();
+    expect(mockMemberDirectoryProfile).toHaveBeenLastCalledWith({
+      app,
+      uid: USER.uid,
+      displayName: PROFILE.fullName,
+    });
+  });
+
+  test('passes a missing current saved display name without deriving eligibility', async () => {
     (getMyProfile as jest.Mock).mockResolvedValue({ ...PROFILE, fullName: null });
 
     renderAccount();
@@ -259,8 +270,43 @@ describe('Account profile recovery', () => {
     expect(mockMemberDirectoryProfile).toHaveBeenLastCalledWith({
       app,
       uid: USER.uid,
-      hasDisplayName: false,
+      displayName: null,
     });
+  });
+
+  test('updates the directory display-name prop only after the saved profile is reread', async () => {
+    const updatedProfile = {
+      ...PROFILE,
+      fullName: 'Updated Synthetic Member',
+    };
+    (getMyProfile as jest.Mock)
+      .mockResolvedValueOnce(PROFILE)
+      .mockResolvedValueOnce(updatedProfile);
+    renderAccount();
+
+    expect(await screen.findByText(PROFILE.fullName)).toBeInTheDocument();
+    expect(mockMemberDirectoryProfile).toHaveBeenLastCalledWith({
+      app,
+      uid: USER.uid,
+      displayName: PROFILE.fullName,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Full name'), {
+      target: { value: updatedProfile.fullName },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockMemberDirectoryProfile).toHaveBeenLastCalledWith({
+      app,
+      uid: USER.uid,
+      displayName: updatedProfile.fullName,
+    }));
+    expect(updateMyProfile).toHaveBeenCalledWith(
+      firestore,
+      USER.uid,
+      { fullName: updatedProfile.fullName },
+    );
   });
 
   test('shows the shared page hero while authentication is loading', () => {

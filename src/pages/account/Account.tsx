@@ -796,7 +796,7 @@ export function AccountContent({
           <MemberDirectoryProfile
             app={firebaseApp}
             uid={user.uid}
-            hasDisplayName={Boolean(profile.fullName?.trim())}
+            displayName={profile.fullName}
           />
         )}
 

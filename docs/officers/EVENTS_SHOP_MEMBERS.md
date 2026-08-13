@@ -2433,12 +2433,14 @@ flowchart TD
     Search --> None
     Release["#623 exact inert artifact published"] --> Public["Completed signed-out revision and guard readback only"]
     Public -. "does not prove protected layout" .-> Synthetic
+    Hardening["#627 connected-interface hardening — SOURCE ONLY"] --> Preserved["Accessible Account and People finder branches preserved behind false availability"]
+    Preserved -. "NOT LIVE; cannot be mounted until reviewed connection" .-> Later
     Later["Later #507 reviewed source flip"] --> Gates["Privacy, scoped authorization, staging, and backend-first readback"]
     Gates --> Connected["Future optional name search with voluntary thumbnails"]
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: synthetic local artifacts prove the signed-in Account preview and administrator-guarded People finder with every directory control disabled. #623 published the exact inert artifact. Completed signed-out public checks prove only its exact revision, normal guards, and absence of a directory request, not the protected layouts. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
+Text alternative: synthetic local artifacts prove the signed-in Account preview and administrator-guarded People finder with every directory control disabled. #623 published the exact inert artifact. Completed signed-out public checks prove only its exact revision, normal guards, and absence of a directory request, not the protected layouts. #627 preserves accessible connected Account and People finder branches only in source behind the unchanged false availability value, so that hardened structure is not live or mounted. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
 
 Officer review steps for the #621 frontend preview:
 
@@ -2532,6 +2534,46 @@ Officer review steps for the preserved #506 connected source only:
 38. Set the source page to a 320-pixel width with only synthetic data.
 39. Confirm loading, no-result, fixed-error, and missing-photo states remain readable.
 40. Stop. Do not enable connected production Account or Admin controls, search a real name, inspect a real profile, or edit Firebase.
+
+Officer review steps for MEMBERS-DIRECTORY-001E [#627] connected source only:
+
+The section purpose, approvers, stop conditions, undo path, and escalation roles remain unchanged. This review checks source and generated test evidence only.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #627 reviewed pull request, merge commit, and generated-only frontend test record.
+3. Confirm the source-controlled availability value remains byte-for-byte `false`.
+4. Confirm production deploy `6a7e072f8f346b0008510d29` remains the unchanged inert #623 preview.
+5. Confirm the tests use only made-up names and generated non-face images.
+6. Confirm My Account supplies the current full display name to the preserved connected profile controls.
+7. Confirm new opt-in uses the same bounded Unicode display-name eligibility as the private projection.
+8. Confirm an ineligible current name cannot turn on a new finder choice.
+9. Confirm an existing finder choice can still be turned off after the current name becomes ineligible.
+10. Confirm a current-name update immediately changes the connected controls' eligibility message and state.
+11. Confirm every no-photo placeholder is announced as an image with a clear no-photo label.
+12. Confirm a photo-selection or photo-change error describes the file control.
+13. Confirm a photo-removal error describes the remove button.
+14. Confirm a finder-setting error describes the finder checkbox.
+15. Confirm those fixed errors expose no provider, account, endpoint, or raw failure detail.
+16. Confirm an invalid finder query marks the name field invalid.
+17. Confirm the invalid-query instruction describes the name field.
+18. Confirm a fixed search failure describes the name field without marking the name invalid.
+19. Confirm a successful non-empty search announces `Search complete. Matching result cards are available below.`
+20. Confirm the completion announcement exposes no result count.
+21. Confirm the connected result view exposes no total, cursor, or pagination.
+22. Confirm the native checkbox, name field, and buttons remain keyboard-operable.
+23. Confirm the interactive controls retain at least a 44-pixel height.
+24. Confirm the form, input, action, messages, fallback, and result cards use explicit readable foreground and background colors.
+25. Confirm the search action stacks within the 320-pixel synthetic view.
+26. Confirm a deferred file read cannot submit after the application or made-up account changes.
+27. Confirm a deferred file read cannot render an older error or result after that context changes.
+28. Confirm the default Account and administrator-guarded branches still accept no file or name.
+29. Confirm the default branches still create no request number or directory service context.
+30. Confirm #627 changes no Function, Rule, index, service contract, package, workflow, release control, provider setting, account, sign-in state, or production data.
+31. Record source change, tests, merge, preview, website publication, exact `runmprc.com` revision, Firebase, provider configuration, account/sign-in change, production data, and connected behavior as separate results.
+
+**#627 expected result:** the reviewed source applies the projection's exact name-eligibility boundary to new opt-in, preserves turn-off after a name becomes ineligible, improves control and placeholder semantics, announces a non-empty search without a count, uses scoped readable colors, contains native controls at 320 pixels, and makes an older file read inert after its Account context changes. The availability value remains `false`. The default branch remains inert, and the live #623 preview remains unchanged. Neither makes a directory request. The backend and connected behavior remain **NOT AVAILABLE YET**. A merge is not website publication.
+
+**#627 success proof:** record the exact issue, reviewed pull request and merge commit, green focused and full frontend checks, type-checking, diagnostic production build, unchanged lint baseline, independent privacy/security, frontend/accessibility, and backup-officer GO reviews, and exact-main CI. Record the unchanged `false` availability value and the unchanged #623 deploy separately. Record website publication, `runmprc.com` revision change, Firebase deployment, Rules or index change, provider configuration, account/sign-in change, production-data action, and connected behavior as **not performed**. Final connection and live proof remain #507 work.
 
 **Expected result:** production deploy `6a7e072f8f346b0008510d29` defaults to a visibly disabled preview that makes zero directory calls, accepts no file or name, and shows no person. Separate synthetic tests prove the protected disabled layouts and preserved connected source. Completed signed-out public readback proves only the exact revision, normal guards, and absence of a member-directory request. The backend and connected behavior remain unavailable. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
 
