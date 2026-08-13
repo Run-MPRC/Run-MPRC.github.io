@@ -2472,7 +2472,7 @@ flowchart TD
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -2953,6 +2953,93 @@ Officer source-review procedure for MEMBERS-DIRECTORY-001I [#635] uncertain-chan
 **Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #635 changes source only. Undo must not introduce a false no-change assurance or restore discarded draft bytes.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, a failed Reload hid uncertain-change truth, Reload sent a mutation, stale state crossed accounts, or connected behavior became available.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001J [#637] profile-recovery keyboard focus — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify from specialist-prepared evidence that the preserved connected Account interface moves keyboard focus to the available recovery action after a user-initiated profile-setting failure, without connecting the feature, repeating a mutation, using a real account or photo, or changing production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #635 is reviewed and merged. Ask the platform owner or testing specialist for the exact #637 source candidate, the named generated-only test output, the trustworthy old-source failure, and a redacted written synthetic-behavior report. The specialist runs the tests and records the evidence. The backup officer reviews that written evidence without a terminal or test harness. Keep the source-controlled availability value `false`. Do not sign in to production, use a real name or photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #637 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the testing specialist for the named MEMBERS-DIRECTORY-001J test output.
+6. Ask the testing specialist for the trustworthy old-source failure.
+7. Ask the testing specialist for the redacted written synthetic-behavior report.
+8. Confirm the report names the specialist who ran the tests.
+9. Confirm the evidence uses only a made-up account.
+10. Confirm the evidence uses only generated non-face image bytes.
+11. Confirm the source-controlled availability value remains byte-for-byte `false`.
+12. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+13. Confirm an ordinary unknown visibility outcome focuses **Reload settings**.
+14. Confirm an ordinary unknown upload outcome focuses **Reload settings**.
+15. Confirm an ordinary unknown removal outcome focuses **Reload settings**.
+16. Confirm a completed mutation followed by failed authoritative readback focuses **Reload settings**.
+17. Confirm a definitive rejection followed by failed confirming read focuses generic **Reload settings**.
+18. Confirm the uncertain paths retain **We could not confirm that change**.
+19. Confirm the definitive-rejection read failure retains the generic unavailable message.
+20. Confirm the first failed uncertain-state Reload focuses its replacement **Reload settings** action.
+21. Confirm a repeated failed uncertain-state Reload focuses its replacement **Reload settings** action.
+22. Confirm a failed generic Reload focuses its replacement **Reload settings** action.
+23. Confirm an initial profile-load failure does not move focus from an outside control.
+24. Confirm an initial profile-load failure does not focus **Reload settings** automatically.
+25. Confirm a successful authoritative Reload removes **Reload settings**.
+26. Confirm a successful authoritative Reload does not focus an unrelated ready control.
+27. Confirm each mutation-created focus intent belongs to the current mounted application-and-account lifetime.
+28. Confirm each Reload-created focus intent is bound to its exact new load identity.
+29. Confirm an older load completion cannot use a newer load's focus intent.
+30. Confirm an application change makes the earlier recovery focus intent inert.
+31. Confirm an account change makes the earlier recovery focus intent inert.
+32. Confirm unmount makes the earlier recovery focus intent inert.
+33. Confirm Reload creates no directory request number.
+34. Confirm Reload calls no visibility mutation.
+35. Confirm Reload calls no photo upload mutation.
+36. Confirm Reload calls no photo removal mutation.
+37. Confirm Reload starts no automatic mutation retry.
+38. Confirm recovery focus restores no selected-photo draft.
+39. Confirm recovery focus restores no discarded data URL.
+40. Confirm the default Account branch obtains no directory context.
+41. Confirm the default Account branch creates no directory request number.
+42. Confirm the default Account branch calls no directory service.
+43. Confirm the source diff changes no Account wiring.
+44. Confirm the source diff changes no People-finder page.
+45. Confirm the source diff changes no data movement.
+46. Confirm the source diff changes no page structure.
+47. Confirm the source diff changes no client service contract.
+48. Confirm the source diff changes no Function.
+49. Confirm the source diff changes no Rule.
+50. Confirm the source diff changes no index.
+51. Confirm the source diff changes no schema.
+52. Confirm the source diff changes no package.
+53. Confirm the source diff changes no workflow.
+54. Confirm the source diff changes no release control.
+55. Confirm the source diff adds no photo query.
+56. Confirm the source diff adds no face recognition.
+57. Confirm the source diff adds no biometric processing.
+58. Record the source change as its own state.
+59. Record the named test results as their own state.
+60. Record whether the change merged as its own state.
+61. Record whether any website artifact was published as its own state.
+62. Record the exact `runmprc.com` revision as its own state.
+63. Record whether Firebase was deployed as its own state.
+64. Record whether an outside provider was configured as its own state.
+65. Record whether an account or sign-in state changed as its own state.
+66. Record whether production data changed as its own state.
+67. Record whether connected behavior became available as its own state.
+68. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source focuses **Reload settings** after an ordinary unknown visibility, upload, or removal outcome; failed authoritative post-mutation readback; or failed confirming read after definitive rejection. A Reload-created focus intent belongs to the same mounted application-and-account lifetime and is bound to that exact load. Each guarded failed Reload focuses its replacement recovery action. Initial load failure does not steal focus. Successful authoritative reload clears the intent without redirecting focus to an unrelated ready control. Application change, account change, unmount, and stale completion remain focus-inert. The focus handoff creates no request ID, extra service call, mutation, automatic retry, restored draft, or data URL. Existing uncertainty and generic failure truth remain unchanged. Availability remains `false`; the default branch obtains no directory context, creates no request ID, and calls no directory service; and live #623 remains inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real account, name, or photo; production sign-in; direct production Firebase access; a user-initiated mutation or readback failure whose rendered **Reload settings** action is not focused; a failed Reload whose replacement **Reload settings** action is not focused; an initial load failure that steals unrelated focus; a successful Reload that redirects focus to an unrelated ready control; an older load, application, account, or unmounted completion that moves focus; a request number or visibility, upload, or removal mutation caused by Reload; an automatic mutation retry; a restored draft or data URL; changed uncertainty or generic failure wording; a data-flow or page-structure change; a Function, Rule, index, schema, service-contract, provider, account, sign-in, production-data, or website change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, or merge means the feature is live.
+
+**Success proof:** record the exact #637 issue, reviewed pull request and commit; trustworthy old-source failure; green separately named MEMBERS-DIRECTORY-001J focused tests; green full frontend tests; type-checking; scoped lint; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend/accessibility, focus/race, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #637 changes source only. Undo must not strand focus after a user-initiated recovery transition or permit a stale completion to move focus.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, recovery focus moved across applications or accounts, Reload sent a mutation, an initial failure stole unrelated focus, or connected behavior became available.
 
 ## Admin screens — NOT AVAILABLE YET
 

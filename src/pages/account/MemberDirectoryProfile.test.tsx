@@ -1804,6 +1804,271 @@ describe('My Account member directory profile', () => {
     });
   });
 
+  describe('MEMBERS-DIRECTORY-001J profile recovery focus', () => {
+    async function selectReadyUpload(bytes: string) {
+      const input = await screen.findByLabelText('Add profile photo');
+      fireEvent.change(input, {
+        target: {
+          files: [new File([bytes], 'fixture-001j.png', { type: 'image/png' })],
+        },
+      });
+      const preview = await screen.findByRole('img', {
+        name: 'Selected profile photo preview',
+      });
+      fireEvent.load(preview);
+      return screen.getByRole('button', { name: 'Save profile photo' });
+    }
+
+    test.each([
+      ['visibility', 'visibility'],
+      ['upload', 'upload'],
+      ['removal', 'remove'],
+    ])('focuses Reload settings after an ordinary unknown %s outcome', async (
+      _label,
+      action,
+    ) => {
+      if (action === 'visibility') {
+        (setMyMemberDirectoryVisibility as jest.Mock)
+          .mockRejectedValueOnce(new Error('synthetic private visibility detail'));
+      } else if (action === 'upload') {
+        (setMyMemberDirectoryPhoto as jest.Mock)
+          .mockRejectedValueOnce(new Error('synthetic private upload detail'));
+      } else {
+        (getMyMemberDirectoryProfile as jest.Mock).mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+        (removeMyMemberDirectoryPhoto as jest.Mock)
+          .mockRejectedValueOnce(new Error('synthetic private removal detail'));
+      }
+      renderProfile();
+
+      let control: HTMLElement;
+      if (action === 'visibility') {
+        control = await screen.findByRole('checkbox');
+      } else if (action === 'upload') {
+        control = await selectReadyUpload('unknown upload bytes');
+      } else {
+        control = await screen.findByRole('button', {
+          name: 'Remove current saved photo',
+        });
+      }
+      control.focus();
+      expect(control).toHaveFocus();
+      fireEvent.click(control);
+
+      const reload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(reload).toHaveFocus();
+      expect(document.activeElement).not.toBe(document.body);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(
+        action === 'visibility' ? 1 : 0,
+      );
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(action === 'upload' ? 1 : 0);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(action === 'remove' ? 1 : 0);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+      if (action === 'upload') {
+        expect(document.body.innerHTML).not.toContain(btoa('unknown upload bytes'));
+      }
+    });
+
+    test.each([
+      ['resolved mutation readback failure', false],
+      ['definitive rejection confirming-read failure', true],
+    ])('focuses Reload settings after a %s', async (_label, definitive) => {
+      const rejected = { code: 'functions/failed-precondition' };
+      if (definitive) {
+        (setMyMemberDirectoryVisibility as jest.Mock).mockRejectedValueOnce(rejected);
+        (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+          (error) => error === rejected,
+        );
+      }
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockRejectedValueOnce(new Error('synthetic private readback detail'));
+      renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+
+      fireEvent.click(checkbox);
+
+      const reload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(reload).toHaveFocus();
+      expect(screen.getByRole('alert')).toHaveTextContent(definitive
+        ? /could not load your profile photo/i
+        : /could not confirm that change/i);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('refocuses every replacement Reload after repeated unknown-state failures without retrying the mutation', async () => {
+      (setMyMemberDirectoryVisibility as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockRejectedValueOnce(new Error('synthetic private first reload detail'))
+        .mockRejectedValueOnce(new Error('synthetic private second reload detail'));
+      renderProfile();
+      fireEvent.click(await screen.findByRole('checkbox'));
+      const firstReload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(firstReload).toHaveFocus();
+
+      fireEvent.click(firstReload);
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      const secondReload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(secondReload).not.toBe(firstReload);
+      expect(secondReload).toHaveFocus();
+
+      fireEvent.click(secondReload);
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3));
+      const thirdReload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(thirdReload).not.toBe(secondReload);
+      expect(thirdReload).toHaveFocus();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('refocuses Reload after a generic reload failure but does not focus an initial background failure', async () => {
+      const initialLoad = deferred<typeof DEFAULT_PROFILE>();
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockReturnValueOnce(initialLoad.promise)
+        .mockRejectedValueOnce(new Error('synthetic private generic reload detail'));
+      const view = render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      outside.focus();
+      expect(outside).toHaveFocus();
+
+      await act(async () => initialLoad.reject(new Error('synthetic private initial detail')));
+
+      const initialReload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(outside).toHaveFocus();
+      expect(initialReload).not.toHaveFocus();
+      initialReload.focus();
+      fireEvent.click(initialReload);
+
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      const replacementReload = await screen.findByRole('button', {
+        name: 'Reload settings',
+      });
+      expect(replacementReload).not.toBe(initialReload);
+      expect(replacementReload).toHaveFocus();
+      expect(createMemberDirectoryRequestId).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('synthetic private');
+      view.unmount();
+    });
+
+    test('clears recovery focus intent after a successful authoritative reload', async () => {
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private initial detail'))
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+      renderProfile();
+      const reload = await screen.findByRole('button', { name: 'Reload settings' });
+      reload.focus();
+
+      fireEvent.click(reload);
+
+      expect(await screen.findByRole('img', { name: 'Your current profile thumbnail' }))
+        .toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Reload settings' }))
+        .not.toBeInTheDocument();
+      expect(document.activeElement).toBe(document.body);
+      expect(screen.getByRole('checkbox')).not.toHaveFocus();
+      expect(screen.getByLabelText('Replace profile photo')).not.toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Remove current saved photo' }))
+        .not.toHaveFocus();
+      expect(createMemberDirectoryRequestId).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['application', otherApp, 'synthetic-user'],
+      ['account', app, 'other-synthetic-user'],
+    ])('makes a failed old Reload focus-inert after the %s changes', async (
+      _label,
+      nextApp,
+      nextUid,
+    ) => {
+      const oldReload = deferred<typeof DEFAULT_PROFILE>();
+      (setMyMemberDirectoryVisibility as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(oldReload.promise)
+        .mockResolvedValueOnce(DEFAULT_PROFILE);
+      const view = renderProfile();
+      fireEvent.click(await screen.findByRole('checkbox'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={nextApp}
+          uid={nextUid}
+          displayName="Current Synthetic Member"
+          backendAvailable
+        />,
+      );
+      const currentInput = await screen.findByLabelText('Add profile photo');
+      currentInput.focus();
+      await act(async () => oldReload.reject(new Error('synthetic private late detail')));
+
+      expect(currentInput).toHaveFocus();
+      expect(screen.queryByRole('button', { name: 'Reload settings' }))
+        .not.toBeInTheDocument();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('makes a failed old Reload focus-inert after unmount', async () => {
+      const oldReload = deferred<typeof DEFAULT_PROFILE>();
+      (setMyMemberDirectoryVisibility as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(oldReload.promise);
+      const view = renderProfile();
+      fireEvent.click(await screen.findByRole('checkbox'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Reload settings' }));
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      view.unmount();
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      try {
+        outside.focus();
+
+        await act(async () => oldReload.reject(new Error('synthetic private late detail')));
+
+        expect(outside).toHaveFocus();
+        expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+        expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+        expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      } finally {
+        outside.remove();
+      }
+    });
+  });
+
   test('reloads settings before allowing a retry after an unknown outcome', async () => {
     const current = { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
     (getMyMemberDirectoryProfile as jest.Mock)
