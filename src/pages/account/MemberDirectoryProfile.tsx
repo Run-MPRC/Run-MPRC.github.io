@@ -321,7 +321,9 @@ function MemberDirectoryProfileAttempt({
   const mutationRef = useRef<symbol | null>(null);
   const photoReadRef = useRef<symbol | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const focusPhotoInputAfterSaveRef = useRef(false);
+  const removePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const savePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const postMutationFocusRef = useRef<'photo-input' | 'remove-result' | null>(null);
 
   useEffect(() => {
     const lifetime = Symbol('member-directory-lifetime');
@@ -331,15 +333,32 @@ function MemberDirectoryProfileAttempt({
       loadRef.current = null;
       mutationRef.current = null;
       photoReadRef.current = null;
-      focusPhotoInputAfterSaveRef.current = false;
+      postMutationFocusRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    if (state.phase !== 'ready' || !focusPhotoInputAfterSaveRef.current) return;
-    focusPhotoInputAfterSaveRef.current = false;
+    if (state.phase !== 'ready' || postMutationFocusRef.current === null) return;
+    const focusIntent = postMutationFocusRef.current;
+    postMutationFocusRef.current = null;
+    if (focusIntent === 'photo-input') {
+      photoInputRef.current?.focus();
+      return;
+    }
+    if (state.profile.hasPhoto) {
+      removePhotoButtonRef.current?.focus();
+      return;
+    }
+    if (
+      photoDraft?.phase === 'preview'
+      && photoDraft.renderState === 'ready'
+      && photoReadRef.current === photoDraft.identity
+    ) {
+      savePhotoButtonRef.current?.focus();
+      return;
+    }
     photoInputRef.current?.focus();
-  }, [state.phase]);
+  }, [photoDraft, state]);
 
   useEffect(() => {
     const lifetime = lifetimeRef.current;
@@ -348,7 +367,7 @@ function MemberDirectoryProfileAttempt({
     loadRef.current = load;
     mutationRef.current = null;
     photoReadRef.current = null;
-    focusPhotoInputAfterSaveRef.current = false;
+    postMutationFocusRef.current = null;
     setActionError(null);
     setPhotoDraft(null);
     setState({ phase: 'loading' });
@@ -450,11 +469,13 @@ function MemberDirectoryProfileAttempt({
       const profile = await getMyMemberDirectoryProfile(app);
       if (!mutationIsCurrent(start)) return;
       mutationRef.current = null;
-      if (start.action !== 'visibility') {
+      if (start.action === 'upload') {
         photoReadRef.current = null;
         setPhotoDraft(null);
+        postMutationFocusRef.current = 'photo-input';
+      } else if (start.action === 'remove') {
+        postMutationFocusRef.current = 'remove-result';
       }
-      if (start.action === 'upload') focusPhotoInputAfterSaveRef.current = true;
       setState({ phase: 'ready', profile, confirmation: confirmation(profile) });
     } catch {
       if (!mutationIsCurrent(start)) return;
@@ -759,6 +780,7 @@ function MemberDirectoryProfileAttempt({
                 </span>
                 {profile.hasPhoto && (
                   <button
+                    ref={removePhotoButtonRef}
                     type="button"
                     onClick={handleRemovePhoto}
                     disabled={pending}
@@ -766,7 +788,7 @@ function MemberDirectoryProfileAttempt({
                       ? 'member-directory-action-error'
                       : undefined}
                   >
-                    Remove profile photo
+                    Remove current saved photo
                   </button>
                 )}
               </div>
@@ -822,6 +844,7 @@ function MemberDirectoryProfileAttempt({
                 <div className="member-directory-profile__draft-actions">
                   {photoDraft.phase !== 'reading' && (
                     <button
+                      ref={savePhotoButtonRef}
                       type="button"
                       onClick={saveSelectedPhoto}
                       disabled={pending || photoDraft.renderState !== 'ready'}

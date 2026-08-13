@@ -284,7 +284,7 @@ describe('My Account member directory profile', () => {
       'accept',
       'image/jpeg,image/png,image/webp',
     );
-    expect(screen.queryByRole('button', { name: 'Remove profile photo' }))
+    expect(screen.queryByRole('button', { name: 'Remove current saved photo' }))
       .not.toBeInTheDocument();
     expect(screen.getByText(/search result does not prove current club membership/i))
       .toBeInTheDocument();
@@ -958,55 +958,365 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Officer finder is off.');
   });
 
-  test('removes a photo without changing an enabled finder setting', async () => {
-    const refreshed = {
-      ...PROFILE_WITH_PHOTO,
-      revision: 5,
-      hasPhoto: false,
-      photo: null,
-    };
-    (getMyMemberDirectoryProfile as jest.Mock)
-      .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
-      .mockResolvedValueOnce(refreshed);
-    renderProfile();
-    const remove = await screen.findByRole('button', { name: 'Remove profile photo' });
+  describe('MEMBERS-DIRECTORY-001H saved-photo removal with a local draft', () => {
+    async function selectReadyReplacement(bytes: string, filename: string) {
+      const input = await screen.findByLabelText('Replace profile photo');
+      fireEvent.change(input, {
+        target: {
+          files: [new File([bytes], filename, { type: 'image/png' })],
+        },
+      });
+      const preview = await screen.findByRole('img', {
+        name: 'Selected profile photo preview',
+      });
+      fireEvent.load(preview);
+      return { input, preview };
+    }
 
-    fireEvent.click(remove);
+    test('preserves a ready replacement after confirmed removal and focuses its Save action', async () => {
+      const refreshed = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 5,
+        hasPhoto: false,
+        photo: null,
+      };
+      const saved = {
+        ...refreshed,
+        revision: 6,
+        hasPhoto: true,
+        photo: {
+          ...PHOTO,
+          version: '22222222-2222-4222-8222-222222222222',
+        },
+      };
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockResolvedValueOnce(refreshed)
+        .mockResolvedValueOnce(saved);
+      renderProfile();
+      await selectReadyReplacement('preserved replacement', 'fixture-001h-001.png');
 
-    await waitFor(() => expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
-      requestId: REQUEST_ID,
-      expectedRevision: 4,
-    }));
-    expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
-    expect(await screen.findByRole('img', { name: 'No profile photo' }))
-      .toBeInTheDocument();
-    expect(screen.getByRole('checkbox', {
-      name: 'Let verified website administrators find me by name',
-    })).toBeChecked();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Profile photo removed. Your officer finder setting did not change.',
-    );
-  });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove current saved photo' }));
 
-  test('announces a current photo restored elsewhere after removal', async () => {
-    const changedAgain = {
-      ...PROFILE_WITH_PHOTO,
-      revision: 6,
-      photo: { ...PHOTO, version: '22222222-2222-4222-8222-222222222222' },
-    };
-    (getMyMemberDirectoryProfile as jest.Mock)
-      .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
-      .mockResolvedValueOnce(changedAgain);
-    renderProfile();
+      expect(await screen.findByRole('img', { name: 'No profile photo' }))
+        .toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Selected profile photo preview' }))
+        .toHaveAttribute(
+          'src',
+          `data:image/png;base64,${btoa('preserved replacement')}`,
+        );
+      expect(screen.getByRole('button', { name: 'Save profile photo' }))
+        .toHaveFocus();
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove profile photo' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save profile photo' }));
 
-    expect(await screen.findByText(
-      'Profile photo changed again elsewhere. The preview shows the current photo.',
-    )).toHaveAttribute('role', 'status');
-    expect(screen.getByRole('img', { name: 'Your current profile thumbnail' }))
-      .toBeInTheDocument();
-    expect(screen.getByRole('status')).not.toHaveTextContent('Profile photo removed.');
+      await waitFor(() => expect(setMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
+        requestId: REQUEST_ID,
+        expectedRevision: 5,
+        contentType: 'image/png',
+        base64Data: btoa('preserved replacement'),
+      }));
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(2);
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(await screen.findByRole('img', { name: 'Your current profile thumbnail' }))
+        .toBeInTheDocument();
+    });
+
+    test('lets the current FileReader finish locally after confirmed removal and focuses the input while it is reading', async () => {
+      const deferredReader = installDeferredFileReader();
+      try {
+        const refreshed = {
+          ...PROFILE_WITH_PHOTO,
+          revision: 5,
+          hasPhoto: false,
+          photo: null,
+        };
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+          .mockResolvedValueOnce(refreshed);
+        renderProfile();
+        const input = await screen.findByLabelText('Replace profile photo');
+        fireEvent.change(input, {
+          target: {
+            files: [new File(['reading replacement'], 'fixture-001h-002.png', {
+              type: 'image/png',
+            })],
+          },
+        });
+        expect(screen.getByText('Preparing selected photo preview...'))
+          .toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', {
+          name: 'Remove current saved photo',
+        }));
+
+        expect(await screen.findByRole('img', { name: 'No profile photo' }))
+          .toBeInTheDocument();
+        expect(screen.getByLabelText('Add profile photo')).toHaveFocus();
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+        expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+
+        await act(async () => deferredReader.readers[0].complete('reading replacement'));
+        const preview = await screen.findByRole('img', {
+          name: 'Selected profile photo preview',
+        });
+        expect(preview).toHaveAttribute(
+          'src',
+          `data:image/png;base64,${btoa('reading replacement')}`,
+        );
+        fireEvent.load(preview);
+        expect(screen.getByRole('button', { name: 'Save profile photo' }))
+          .toBeEnabled();
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      } finally {
+        deferredReader.restore();
+      }
+    });
+
+    test('keeps only the current reselection when deferred reads finish after confirmed removal', async () => {
+      const deferredReader = installDeferredFileReader();
+      try {
+        const refreshed = {
+          ...PROFILE_WITH_PHOTO,
+          revision: 5,
+          hasPhoto: false,
+          photo: null,
+        };
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+          .mockResolvedValueOnce(refreshed);
+        renderProfile();
+        const input = await screen.findByLabelText('Replace profile photo');
+        fireEvent.change(input, {
+          target: {
+            files: [new File(['stale replacement'], 'fixture-001h-003.png', {
+              type: 'image/png',
+            })],
+          },
+        });
+        fireEvent.change(input, {
+          target: {
+            files: [new File(['current replacement'], 'fixture-001h-004.png', {
+              type: 'image/png',
+            })],
+          },
+        });
+
+        fireEvent.click(screen.getByRole('button', {
+          name: 'Remove current saved photo',
+        }));
+        expect(await screen.findByRole('img', { name: 'No profile photo' }))
+          .toBeInTheDocument();
+
+        await act(async () => deferredReader.readers[0].complete('stale replacement'));
+        expect(screen.queryByRole('img', { name: 'Selected profile photo preview' }))
+          .not.toBeInTheDocument();
+        await act(async () => deferredReader.readers[1].complete('current replacement'));
+
+        expect(await screen.findByRole('img', {
+          name: 'Selected profile photo preview',
+        })).toHaveAttribute(
+          'src',
+          `data:image/png;base64,${btoa('current replacement')}`,
+        );
+        expect(document.body.innerHTML).not.toContain(btoa('stale replacement'));
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      } finally {
+        deferredReader.restore();
+      }
+    });
+
+    test('preserves the ready draft and associates a fixed error after a definitive rejected remove readback', async () => {
+      const rejected = { code: 'functions/failed-precondition' };
+      const current = { ...PROFILE_WITH_PHOTO, revision: 7 };
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockRejectedValueOnce(rejected);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => error === rejected,
+      );
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockResolvedValueOnce(current);
+      renderProfile();
+      await selectReadyReplacement('rejected replacement', 'fixture-001h-005.png');
+
+      fireEvent.click(screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'That change was rejected before it was saved. Review the requirements and try again.',
+      );
+      expect(screen.getByRole('img', { name: 'Selected profile photo preview' }))
+        .toHaveAttribute(
+          'src',
+          `data:image/png;base64,${btoa('rejected replacement')}`,
+        );
+      expect(screen.getByRole('button', { name: 'Save profile photo' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Remove current saved photo' })
+        .getAttribute('aria-describedby')).toContain('member-directory-action-error');
+      expect(screen.getByRole('checkbox')).toBeChecked();
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['outcome is unknown', false],
+      ['successful mutation readback fails', true],
+    ])('discards draft bytes and hides connected controls when the remove %s', async (_label, resolves) => {
+      if (resolves) {
+        (removeMyMemberDirectoryPhoto as jest.Mock).mockResolvedValueOnce({});
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+          .mockRejectedValueOnce(new Error('synthetic private readback detail'));
+      } else {
+        (removeMyMemberDirectoryPhoto as jest.Mock)
+          .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+      }
+      renderProfile();
+      await selectReadyReplacement('discarded replacement', 'fixture-001h-006.png');
+
+      fireEvent.click(screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /could not confirm that change/i,
+      );
+      expect(screen.queryByRole('img', { name: 'Selected profile photo preview' }))
+        .not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save profile photo' }))
+        .not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Replace profile photo')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Add profile photo')).not.toBeInTheDocument();
+      expect(document.body.innerHTML).not.toContain(btoa('discarded replacement'));
+      expect(document.body).not.toHaveTextContent('synthetic private');
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('focuses the file input after confirmed removal with no local draft and leaves visibility on', async () => {
+      const refreshed = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 5,
+        hasPhoto: false,
+        photo: null,
+      };
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockResolvedValueOnce(refreshed);
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+
+      fireEvent.click(remove);
+
+      await waitFor(() => expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
+        requestId: REQUEST_ID,
+        expectedRevision: 4,
+      }));
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(await screen.findByRole('img', { name: 'No profile photo' }))
+        .toBeInTheDocument();
+      expect(screen.getByRole('checkbox', {
+        name: 'Let verified website administrators find me by name',
+      })).toBeChecked();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Profile photo removed. Your officer finder setting did not change.',
+      );
+      expect(screen.getByLabelText('Add profile photo')).toHaveFocus();
+    });
+
+    test('focuses the still-current saved-photo remove action after concurrent restoration', async () => {
+      const changedAgain = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 6,
+        photo: { ...PHOTO, version: '22222222-2222-4222-8222-222222222222' },
+      };
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockResolvedValueOnce(changedAgain);
+      renderProfile();
+      await selectReadyReplacement('concurrent replacement', 'fixture-001h-007.png');
+
+      fireEvent.click(await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      }));
+
+      expect(await screen.findByText(
+        'Profile photo changed again elsewhere. The preview shows the current photo.',
+      )).toHaveAttribute('role', 'status');
+      expect(screen.getByRole('img', { name: 'Your current profile thumbnail' }))
+        .toBeInTheDocument();
+      expect(screen.queryByText(
+        'Profile photo removed. Your officer finder setting did not change.',
+      )).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Selected profile photo preview' }))
+        .toHaveAttribute(
+          'src',
+          `data:image/png;base64,${btoa('concurrent replacement')}`,
+        );
+      expect(screen.getByRole('button', { name: 'Remove current saved photo' }))
+        .toHaveFocus();
+    });
+
+    test.each([
+      ['application', otherApp, 'synthetic-user'],
+      ['account', app, 'other-synthetic-user'],
+    ])('makes an old remove completion inert after the %s changes', async (_label, nextApp, nextUid) => {
+      const oldRemove = deferred<unknown>();
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(oldRemove.promise);
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockResolvedValueOnce(DEFAULT_PROFILE);
+      const view = renderProfile();
+      await selectReadyReplacement('old-context replacement', 'fixture-001h-008.png');
+      fireEvent.click(screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      }));
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={nextApp}
+          uid={nextUid}
+          displayName="Current Synthetic Member"
+          backendAvailable
+        />,
+      );
+      expect(await screen.findByRole('img', { name: 'No profile photo' }))
+        .toBeInTheDocument();
+      await act(async () => oldRemove.resolve({}));
+
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole('img', { name: 'Selected profile photo preview' }))
+        .not.toBeInTheDocument();
+      expect(document.body.innerHTML).not.toContain(btoa('old-context replacement'));
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('makes an old remove completion inert after unmount', async () => {
+      const oldRemove = deferred<unknown>();
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(oldRemove.promise);
+      (getMyMemberDirectoryProfile as jest.Mock).mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+      const view = renderProfile();
+      await selectReadyReplacement('unmounted replacement', 'fixture-001h-009.png');
+      fireEvent.click(screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      }));
+
+      view.unmount();
+      await act(async () => oldRemove.resolve({}));
+
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
   });
 
   test('MEMBERS-DIRECTORY-001F falls back when a saved thumbnail cannot decode and resets for a new version', async () => {
@@ -1034,7 +1344,7 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('img', {
       name: 'Saved profile photo could not be displayed',
     })).toHaveTextContent('Photo unavailable');
-    expect(screen.getByRole('button', { name: 'Remove profile photo' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove current saved photo' })).toBeEnabled();
 
     fireEvent.click(screen.getByRole('checkbox'));
 
@@ -1045,7 +1355,7 @@ describe('My Account member directory profile', () => {
       'src',
       `data:image/webp;base64,${newPhoto.base64Data}`,
     );
-    expect(screen.getByRole('button', { name: 'Remove profile photo' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove current saved photo' })).toBeEnabled();
   });
 
   test('blocks parallel mutations, then hides all controls after an unknown mutation outcome', async () => {
@@ -1540,7 +1850,7 @@ describe('My Account member directory profile', () => {
     expect(screen.getByRole('checkbox').getAttribute('aria-describedby')).toContain(
       'member-directory-privacy-description',
     );
-    expect(screen.getByRole('button', { name: 'Remove profile photo' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove current saved photo' })).toBeEnabled();
   });
 
   test('MEMBERS-DIRECTORY-001F keeps the photo review contained at 320px', () => {
