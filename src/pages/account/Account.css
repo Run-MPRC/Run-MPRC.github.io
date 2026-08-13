@@ -289,6 +289,17 @@
   min-width: 0;
 }
 
+.member-directory-profile__current-photo {
+  display: flex;
+  flex: 0 0 8rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  color: #111827;
+  text-align: center;
+}
+
 .member-directory-profile__photo img,
 .member-directory-profile__placeholder {
   width: 8rem;
@@ -339,6 +350,53 @@
   width: 100%;
   min-height: 2.75rem;
   font: inherit;
+}
+
+.member-directory-profile__draft {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: #111827;
+  background: #eff6ff;
+  border: 2px solid #1e40af;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.member-directory-profile__draft h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 1rem;
+}
+
+.member-directory-profile__draft-review {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  gap: 0.5rem;
+}
+
+.member-directory-profile__draft-image {
+  box-sizing: border-box;
+  width: 8rem;
+  height: 8rem;
+  max-width: 100%;
+  border: 2px solid #6b7280;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  object-position: center;
+}
+
+.member-directory-profile__draft-actions {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
 }
 
 .member-directory-profile__visibility {
@@ -417,6 +475,15 @@
   .member-directory-profile__photo img,
   .member-directory-profile__placeholder {
     max-width: 100%;
+  }
+
+  .member-directory-profile__draft {
+    padding: 0.75rem;
+  }
+
+  .member-directory-profile__draft-actions,
+  .member-directory-profile__draft-actions button {
+    width: 100%;
   }
 }
 

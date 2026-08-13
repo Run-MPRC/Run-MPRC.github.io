@@ -2434,13 +2434,19 @@ flowchart TD
     Release["#623 exact inert artifact published"] --> Public["Completed signed-out revision and guard readback only"]
     Public -. "does not prove protected layout" .-> Synthetic
     Hardening["#627 connected-interface hardening — SOURCE ONLY"] --> Preserved["Accessible Account and People finder branches preserved behind false availability"]
+    Review["#629 connected photo review — SOURCE ONLY"] --> Draft["Generated valid image is read locally; centered-square draft says Selected photo — not uploaded yet"]
+    Draft -- "Cancel" --> Discard["Discard draft; create no request number; send nothing"]
+    Draft -- "Save only" --> Send["Create request number and send existing upload request"]
+    Send --> Readback["Refetch authoritative processed thumbnail or no-photo fallback"]
+    Discard --> Preserved
+    Readback --> Preserved
     Preserved -. "NOT LIVE; cannot be mounted until reviewed connection" .-> Later
     Later["Later #507 reviewed source flip"] --> Gates["Privacy, scoped authorization, staging, and backend-first readback"]
     Gates --> Connected["Future optional name search with voluntary thumbnails"]
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: synthetic local artifacts prove the signed-in Account preview and administrator-guarded People finder with every directory control disabled. #623 published the exact inert artifact. Completed signed-out public checks prove only its exact revision, normal guards, and absence of a directory request, not the protected layouts. #627 preserves accessible connected Account and People finder branches only in source behind the unchanged false availability value, so that hardened structure is not live or mounted. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
+Text alternative: synthetic local artifacts prove the signed-in Account preview and administrator-guarded People finder with every directory control disabled. #623 published the exact inert artifact. Completed signed-out public checks prove only its exact revision, normal guards, and absence of a directory request, not the protected layouts. #627 preserves accessible connected Account and People finder branches only in source behind the unchanged false availability value. #629 preserves a further source-only photo-review branch: a generated valid image is read locally into a centered-square draft labeled Selected photo — not uploaded yet; Cancel discards it without a request, while Save alone creates a request and sends the existing upload command before authoritative profile readback. The current saved photo remains separate and authoritative. A failed saved-thumbnail render shows a version-scoped Photo unavailable fallback without removing the Remove action. Neither connected-source branch is live or mounted. Only a later #507 source flip after privacy, authorization, staging, and backend-first readback could connect the optional name search and voluntary thumbnails. It will not search a photo, and a result will not prove or change an official record.
 
 Officer review steps for the #621 frontend preview:
 
@@ -2574,6 +2580,100 @@ The section purpose, approvers, stop conditions, undo path, and escalation roles
 **#627 expected result:** the reviewed source applies the projection's exact name-eligibility boundary to new opt-in, preserves turn-off after a name becomes ineligible, improves control and placeholder semantics, announces a non-empty search without a count, uses scoped readable colors, contains native controls at 320 pixels, and makes an older file read inert after its Account context changes. The availability value remains `false`. The default branch remains inert, and the live #623 preview remains unchanged. Neither makes a directory request. The backend and connected behavior remain **NOT AVAILABLE YET**. A merge is not website publication.
 
 **#627 success proof:** record the exact issue, reviewed pull request and merge commit, green focused and full frontend checks, type-checking, diagnostic production build, unchanged lint baseline, independent privacy/security, frontend/accessibility, and backup-officer GO reviews, and exact-main CI. Record the unchanged `false` availability value and the unchanged #623 deploy separately. Record website publication, `runmprc.com` revision change, Firebase deployment, Rules or index change, provider configuration, account/sign-in change, production-data action, and connected behavior as **not performed**. Final connection and live proof remain #507 work.
+
+Officer review steps for MEMBERS-DIRECTORY-001F [#629] explicit photo review — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify that the preserved connected Account source holds a selected generated image locally for review and sends it only after explicit Save, without connecting the backend or changing production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #627 is reviewed and merged. Ask the platform owner for the exact #629 source candidate and its generated-only test evidence. Keep the source-controlled availability value `false`. Use only a made-up account and a generated non-face JPG, PNG, or WebP in an isolated local test. Do not sign in to production, select a real photo, call Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #629 issue, reviewed pull request, merge commit, and synthetic test record.
+3. Confirm the source-controlled availability value remains byte-for-byte `false`.
+4. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+5. Confirm the synthetic test uses a generated non-face image.
+6. Select one supported generated image in the isolated connected-source test.
+7. Confirm the browser validates and reads the selection locally.
+8. Confirm the pending draft is presented as a centered square.
+9. Confirm the draft heading says **Selected photo — not uploaded yet**.
+10. Confirm selection creates no request number.
+11. Confirm selection calls no photo service.
+12. Confirm the application never reads, retains, renders, logs, sends, or otherwise exposes the selected filename; opaque generated test-file names are allowed only as fixtures.
+13. Confirm the current processed thumbnail or no-photo fallback remains visibly separate from the pending draft.
+14. Select **Cancel selected photo**.
+15. Confirm Cancel discards the pending draft.
+16. Confirm Cancel creates no request number.
+17. Confirm Cancel calls no photo service.
+18. Select the generated image again.
+19. Select **Save profile photo**.
+20. Confirm Save creates the request number only after that action.
+21. Confirm Save sends the exact selected content type and bytes once with the current revision.
+22. Confirm successful Save refetches the current profile.
+23. Confirm the refetched processed thumbnail or no-photo fallback replaces the local draft as the authoritative display.
+24. Confirm Save leaves the independent finder choice unchanged.
+25. Simulate request-number creation failure at Save.
+26. Confirm the ready local draft remains available for a retry and nothing is sent.
+27. Simulate one definitive rejected upload followed by successful profile readback.
+28. Confirm the retryable local draft remains and the next Save uses the refetched revision.
+29. Simulate an unknown upload result.
+30. Confirm the local draft is discarded and the controls are hidden.
+31. Repeat that discard-and-hide check for a successful upload followed by failed profile readback.
+32. Repeat that discard-and-hide check for a definitive rejection followed by failed profile readback.
+33. Save the independent finder choice while a draft is ready.
+34. Confirm the local draft remains and its later Save uses the refreshed revision.
+35. Test one unsupported generated file.
+36. Confirm the unsupported file receives one fixed error associated with the file control.
+37. Repeat the fixed-error check for an empty generated file.
+38. Repeat the fixed-error check for an oversized generated file.
+39. Repeat the fixed-error check for a simulated unreadable file.
+40. Confirm each invalid or unreadable selection retains no draft and cannot be saved.
+41. Repeat the fixed-error check for a browser-unrenderable generated image.
+42. Confirm the unrenderable selection retains no image bytes and exposes no Save action.
+43. Simulate failure to display the current saved thumbnail.
+44. Confirm the saved-photo area says **Photo unavailable**.
+45. Confirm **Remove profile photo** remains available.
+46. Confirm a new saved-photo version gets a new display attempt.
+47. Confirm an older read cannot render after reselection.
+48. Confirm an older preview load or error cannot change a newer draft.
+49. Confirm an older read cannot render after Cancel.
+50. Confirm an older read cannot render after unmount.
+51. Confirm an older read cannot render after the application changes.
+52. Confirm an older read cannot render after the made-up account changes.
+53. Confirm an older read cannot upload after any of those changes.
+54. Confirm a named test announces that the ready local preview has not been uploaded.
+55. Confirm **Cancel selected photo** is a native button that can receive keyboard focus.
+56. Confirm that test returns focus to the persistent photo file control after Cancel.
+57. Confirm that test announces that the selection was discarded and nothing was uploaded.
+58. Confirm **Save profile photo** is a native button that can receive keyboard focus.
+59. Confirm that test returns focus to the persistent Add or Replace photo file control after confirmed Save.
+60. Confirm Save and Cancel are described for a screen reader.
+61. Confirm Save and Cancel retain at least a 44-pixel height.
+62. Confirm the saved state, pending draft, actions, and fixed errors fit at 320 pixels without horizontal overflow.
+63. Confirm the default Account branch still accepts no file.
+64. Confirm the default Account branch still creates no request number or directory service context.
+65. Record whether the source changed.
+66. Record the named test results.
+67. Record whether the change merged.
+68. Record whether the website was published.
+69. Record the exact `runmprc.com` revision separately.
+70. Record whether Firebase was deployed.
+71. Record whether a provider was configured.
+72. Record whether an account or sign-in state changed.
+73. Record whether production data changed.
+74. Record whether connected behavior became available.
+75. Stop. Do not turn availability on, deploy a backend, publish the connected source, or use a real photo.
+
+**Expected result:** selecting a valid generated image produces one centered-square local draft labeled **Selected photo — not uploaded yet** and sends nothing. A polite status announces when that local preview is ready. Cancel discards that draft, sends nothing, announces the result, and returns focus to the persistent file control. Save alone creates a request number, sends the existing revisioned upload request, and then refetches the authoritative processed thumbnail or no-photo fallback; confirmed Save also returns focus to the persistent Add or Replace photo control. Request-number failure or definitive rejection with successful readback retains the retryable draft; unknown or failed readback discards it and hides controls. A visibility save preserves it and refreshes the revision used by its later Save. The application does not use or expose the filename, stale reads and image events are inert, finder visibility is unchanged, and invalid or unreadable selections retain no draft. Unrenderable bytes are discarded and cannot be saved. A failed saved-thumbnail display uses a version-reset **Photo unavailable** fallback while Remove remains available. Availability remains `false`; the live #623 preview and backend remain unchanged. Connected behavior is **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real name or photo; a production sign-in; any photo request before explicit Save; a request number created by selection or Cancel; a filename read, retained, rendered, logged, sent, or exposed; an unknown-outcome or failed-readback draft retained; a retryable draft discarded after request-number failure or definitive rejection with successful readback; a stale draft rendered or sent after reselection, Cancel, unmount, application change, or account change; an invalid, unreadable, or unrenderable byte-bearing draft retained or savable; a saved-photo display failure that removes the Remove action or suppresses a new version; a photo change that alters finder visibility; a Firebase, Rule, index, Function, provider, account, sign-in, or production-data change; an availability flip; a connected website publication; or a claim that source, tests, or merge means the feature is live.
+
+**Success proof:** record the exact #629 issue, reviewed pull request and merge commit; green focused and full frontend checks; type-checking; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend/accessibility, and backup-officer GO reviews; and exact-main CI. Record the unchanged `false` availability value and unchanged #623 deploy separately. Record website publication, `runmprc.com` revision change, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected behavior as **not performed**. Final backend connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase or production-data undo is needed because #629 changes source only.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real photo or filename appeared, any bytes were sent before Save, finder visibility changed, or an unknown upload result could not be reconciled.
 
 **Expected result:** production deploy `6a7e072f8f346b0008510d29` defaults to a visibly disabled preview that makes zero directory calls, accepts no file or name, and shows no person. Separate synthetic tests prove the protected disabled layouts and preserved connected source. Completed signed-out public readback proves only the exact revision, normal guards, and absence of a member-directory request. The backend and connected behavior remain unavailable. There is no public directory, official roster, public photo URL, Firebase Storage object, photo-as-query path, face recognition, similarity score, embedding, biometric template, export, result total, or pagination.
 
