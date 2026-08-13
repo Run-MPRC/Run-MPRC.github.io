@@ -18,6 +18,11 @@ type ViewState =
   | 'checking'
   | EmailVerificationActionResult;
 
+interface VerificationAttempt {
+  contextGeneration: number;
+  token: symbol;
+}
+
 function readVerificationCode(search: string): string | null {
   try {
     const params = new URLSearchParams(search);
@@ -66,20 +71,59 @@ function VerifyEmailAction() {
   const location = useLocation();
   const navigate = useNavigate();
   const { services, isReady } = useServiceLocator();
+  const identityService = isReady ? services?.identityService ?? null : null;
+  const committedContextRef = useRef({
+    generation: 0,
+    identityService,
+  });
+  const [renderedContextGeneration, setRenderedContextGeneration] = useState(0);
+  const contextMatches = committedContextRef.current.identityService
+    === identityService
+    && committedContextRef.current.generation === renderedContextGeneration;
   const actionCodeRef = useRef<string | null | undefined>(undefined);
   if (actionCodeRef.current === undefined) {
     actionCodeRef.current = readVerificationCode(location.search);
   }
-  const [viewState, setViewState] = useState<ViewState>(
+  const [storedViewState, setViewState] = useState<ViewState>(
     actionCodeRef.current === null ? 'unusable' : 'ready',
   );
   const [historyScrubbed, setHistoryScrubbed] = useState(false);
-  const inFlightRef = useRef(false);
+  const activeAttemptRef = useRef<VerificationAttempt | null>(null);
+  const providerAttemptStartedRef = useRef(false);
   const initialScrubCompleteRef = useRef(false);
   const mountedRef = useRef(true);
   const requestVersionRef = useRef(0);
   const scrubFailedRef = useRef(false);
   const resultRef = useRef<HTMLDivElement>(null);
+  let viewState = storedViewState;
+  if (!contextMatches) {
+    viewState = providerAttemptStartedRef.current ? 'unusable' : 'ready';
+  }
+
+  useLayoutEffect(() => {
+    const committedContext = committedContextRef.current;
+    if (committedContext.identityService === identityService) return;
+
+    const nextContext = {
+      generation: committedContext.generation + 1,
+      identityService,
+    };
+    committedContextRef.current = nextContext;
+    requestVersionRef.current += 1;
+    activeAttemptRef.current = null;
+
+    if (providerAttemptStartedRef.current) {
+      // A code already sent through one identity service is never reused after
+      // readiness or service identity changes. The first provider may already
+      // have consumed it, and this page cannot prove another service shares the
+      // same authority.
+      actionCodeRef.current = null;
+      setViewState('unusable');
+    } else {
+      setViewState(actionCodeRef.current === null ? 'unusable' : 'ready');
+    }
+    setRenderedContextGeneration(nextContext.generation);
+  }, [identityService]);
 
   useLayoutEffect(() => {
     const hasNavigationState = location.search !== ''
@@ -162,11 +206,14 @@ function VerifyEmailAction() {
 
   const runVerification = async () => {
     const actionCode = actionCodeRef.current;
+    const committedContext = committedContextRef.current;
     if (
-      inFlightRef.current
+      !contextMatches
+      || activeAttemptRef.current?.contextGeneration
+        === committedContext.generation
       || !historyScrubbed
-      || !isReady
-      || !services
+      || !identityService
+      || committedContext.identityService !== identityService
       || actionCode === null
       || actionCode === undefined
     ) {
@@ -178,24 +225,38 @@ function VerifyEmailAction() {
       return;
     }
 
-    inFlightRef.current = true;
+    const attemptToken = Symbol('verification-attempt');
+    activeAttemptRef.current = {
+      contextGeneration: committedContext.generation,
+      token: attemptToken,
+    };
+    providerAttemptStartedRef.current = true;
     const requestVersion = requestVersionRef.current;
     setViewState('checking');
     let result: EmailVerificationActionResult;
     try {
-      result = await services.identityService.verifyEmailAction(actionCode);
+      result = await identityService.verifyEmailAction(actionCode);
     } catch {
       result = 'unavailable';
     } finally {
-      inFlightRef.current = false;
+      if (activeAttemptRef.current?.token === attemptToken) {
+        activeAttemptRef.current = null;
+      }
     }
-    if (mountedRef.current && requestVersion === requestVersionRef.current) {
+    if (
+      mountedRef.current
+      && requestVersion === requestVersionRef.current
+      && committedContextRef.current.generation
+        === committedContext.generation
+      && committedContextRef.current.identityService === identityService
+    ) {
       if (result !== 'unavailable') actionCodeRef.current = null;
       setViewState(result);
     }
   };
 
-  const providerReady = historyScrubbed && isReady && services !== null;
+  const providerReady = historyScrubbed && contextMatches
+    && identityService !== null;
   const preparing = viewState === 'ready' && !providerReady;
   const checking = viewState === 'checking';
   const showAction = viewState === 'ready' || viewState === 'unavailable';
