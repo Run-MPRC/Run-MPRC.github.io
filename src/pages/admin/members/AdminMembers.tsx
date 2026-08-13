@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import '../../../assets/styles/memberDirectoryPreview.css';
 import SEO from '../../../components/SEO';
 import AdminGuard from '../AdminGuard';
 import { useServiceLocator } from '../../../services/ServiceLocatorContext';
@@ -98,7 +99,19 @@ function Inner() {
         <Link to="/admin" className="text-sm text-blue-600 hover:underline">
           ← Admin home
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Members</h1>
+        <h1 className="text-2xl font-bold mt-2">Website accounts</h1>
+        <p className="mt-2 text-sm">
+          This name/email filter is for website-role work. It does not honor the
+          optional People finder choice and is not the official membership roster.
+          {' '}
+          <Link
+            to="/admin/member-directory"
+            className="member-directory-preview__inline-link"
+          >
+            Open the People finder interface preview
+          </Link>
+          ; search is not connected yet.
+        </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
           <div className="border rounded p-3 bg-purple-50">

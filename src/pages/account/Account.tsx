@@ -15,6 +15,7 @@ import {
 } from '../../services/account/accountService';
 import { formatEventDate, formatPrice } from '../../services/events/eventsService';
 import StravaSection from './StravaSection';
+import MemberDirectoryProfilePreview from './MemberDirectoryProfilePreview';
 import { getLocationReturnPath } from '../login/loginReturnPath';
 
 function roleLabel(role: string) {
@@ -312,6 +313,10 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
             </div>
           )}
         </section>
+
+        <MemberDirectoryProfilePreview
+          hasDisplayName={Boolean(profile?.fullName?.trim())}
+        />
 
         <section className="mt-6">
           <h2 className="text-lg font-semibold mb-3">Upcoming events</h2>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import '../../assets/styles/memberDirectoryPreview.css';
 import { Timestamp } from 'firebase/firestore';
 import SEO from '../../components/SEO';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
@@ -187,8 +188,17 @@ function Inner() {
               to="/admin/members"
               className="block border rounded-lg p-4 hover:bg-gray-50"
             >
-              <div className="font-semibold">Members</div>
-              <div className="text-sm text-gray-600">Promote, demote, search</div>
+              <div className="font-semibold">Website accounts</div>
+              <div className="text-sm text-gray-600">Manage website roles</div>
+            </Link>
+            <Link
+              to="/admin/member-directory"
+              className="member-directory-preview__nav-card block rounded-lg p-4"
+            >
+              <div className="font-semibold">People finder</div>
+              <div className="member-directory-preview__nav-card-copy text-sm">
+                Interface preview; search not connected
+              </div>
             </Link>
             <Link
               to="/admin/products"
