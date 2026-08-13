@@ -203,6 +203,20 @@ type ActionError = {
   message: string;
 };
 
+type PhotoDraft =
+  | {
+    phase: 'reading';
+    identity: symbol;
+  }
+  | {
+    phase: 'preview';
+    identity: symbol;
+    contentType: MemberDirectoryUploadType;
+    base64Data: string;
+    dataUrl: string;
+    renderState: 'loading' | 'ready';
+  };
+
 type MutationConfirmation = (
   profile: MemberDirectoryProfileData,
 ) => string;
@@ -241,6 +255,36 @@ function isAcceptedUploadType(value: string): value is MemberDirectoryUploadType
   return MEMBER_DIRECTORY_UPLOAD_TYPES.some((type) => type === value);
 }
 
+function SavedMemberDirectoryPhoto({
+  photo,
+}: {
+  photo: NonNullable<MemberDirectoryProfileData['photo']>;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        className="member-directory-profile__placeholder"
+        role="img"
+        aria-label="Saved profile photo could not be displayed"
+      >
+        Photo unavailable
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={`data:${photo.contentType};base64,${photo.base64Data}`}
+      width={128}
+      height={128}
+      alt="Your current profile thumbnail"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -271,9 +315,13 @@ function MemberDirectoryProfileAttempt({
   const [state, setState] = useState<ViewState>({ phase: 'loading' });
   const [reloadAttempt, setReloadAttempt] = useState(0);
   const [actionError, setActionError] = useState<ActionError | null>(null);
+  const [photoDraft, setPhotoDraft] = useState<PhotoDraft | null>(null);
   const lifetimeRef = useRef<symbol | null>(null);
   const loadRef = useRef<symbol | null>(null);
   const mutationRef = useRef<symbol | null>(null);
+  const photoReadRef = useRef<symbol | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const focusPhotoInputAfterSaveRef = useRef(false);
 
   useEffect(() => {
     const lifetime = Symbol('member-directory-lifetime');
@@ -282,8 +330,16 @@ function MemberDirectoryProfileAttempt({
       if (lifetimeRef.current === lifetime) lifetimeRef.current = null;
       loadRef.current = null;
       mutationRef.current = null;
+      photoReadRef.current = null;
+      focusPhotoInputAfterSaveRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (state.phase !== 'ready' || !focusPhotoInputAfterSaveRef.current) return;
+    focusPhotoInputAfterSaveRef.current = false;
+    photoInputRef.current?.focus();
+  }, [state.phase]);
 
   useEffect(() => {
     const lifetime = lifetimeRef.current;
@@ -291,7 +347,10 @@ function MemberDirectoryProfileAttempt({
     let active = true;
     loadRef.current = load;
     mutationRef.current = null;
+    photoReadRef.current = null;
+    focusPhotoInputAfterSaveRef.current = false;
     setActionError(null);
+    setPhotoDraft(null);
     setState({ phase: 'loading' });
 
     async function loadProfile() {
@@ -355,11 +414,6 @@ function MemberDirectoryProfileAttempt({
   ) {
     try {
       await mutate();
-      if (!mutationIsCurrent(start)) return;
-      const profile = await getMyMemberDirectoryProfile(app);
-      if (!mutationIsCurrent(start)) return;
-      mutationRef.current = null;
-      setState({ phase: 'ready', profile, confirmation: confirmation(profile) });
     } catch (error) {
       if (!mutationIsCurrent(start)) return;
       if (isDefinitiveMemberDirectoryRejection(error)) {
@@ -376,12 +430,37 @@ function MemberDirectoryProfileAttempt({
         } catch {
           if (!mutationIsCurrent(start)) return;
           mutationRef.current = null;
+          photoReadRef.current = null;
+          setPhotoDraft(null);
           setActionError(null);
           setState({ phase: 'unavailable' });
         }
         return;
       }
       mutationRef.current = null;
+      photoReadRef.current = null;
+      setPhotoDraft(null);
+      setActionError(null);
+      setState({ phase: 'unknown' });
+      return;
+    }
+
+    if (!mutationIsCurrent(start)) return;
+    try {
+      const profile = await getMyMemberDirectoryProfile(app);
+      if (!mutationIsCurrent(start)) return;
+      mutationRef.current = null;
+      if (start.action !== 'visibility') {
+        photoReadRef.current = null;
+        setPhotoDraft(null);
+      }
+      if (start.action === 'upload') focusPhotoInputAfterSaveRef.current = true;
+      setState({ phase: 'ready', profile, confirmation: confirmation(profile) });
+    } catch {
+      if (!mutationIsCurrent(start)) return;
+      mutationRef.current = null;
+      photoReadRef.current = null;
+      setPhotoDraft(null);
       setActionError(null);
       setState({ phase: 'unknown' });
     }
@@ -437,12 +516,30 @@ function MemberDirectoryProfileAttempt({
     );
   }
 
+  function cancelSelectedPhoto() {
+    photoReadRef.current = null;
+    setPhotoDraft(null);
+    setActionError((current) => (current?.control === 'file' ? null : current));
+    setState((current) => (current.phase === 'ready'
+      ? {
+        ...current,
+        confirmation: 'Selected photo discarded. Nothing was uploaded.',
+      }
+      : current));
+    photoInputRef.current?.focus();
+  }
+
   async function handlePhotoSelection(event: React.ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const file = input.files?.[0] || null;
     input.value = '';
-    setActionError(null);
     if (file === null) return;
+    photoReadRef.current = null;
+    setPhotoDraft(null);
+    setActionError(null);
+    setState((current) => (current.phase === 'ready'
+      ? { ...current, confirmation: null }
+      : current));
     const { type: contentType } = file;
     if (!isAcceptedUploadType(contentType)) {
       setActionError({
@@ -461,6 +558,77 @@ function MemberDirectoryProfileAttempt({
       return;
     }
 
+    const lifetime = lifetimeRef.current;
+    if (lifetime === null) return;
+    const identity = Symbol('member-directory-photo-read');
+    photoReadRef.current = identity;
+    setPhotoDraft({ phase: 'reading', identity });
+    let base64Data: string;
+    try {
+      base64Data = await readFileAsBase64(file);
+    } catch {
+      if (
+        lifetimeRef.current !== lifetime
+        || photoReadRef.current !== identity
+      ) return;
+      photoReadRef.current = null;
+      setPhotoDraft(null);
+      setActionError({
+        control: 'file',
+        invalid: true,
+        message: 'We could not read that image. Choose the file again.',
+      });
+      return;
+    }
+    if (
+      lifetimeRef.current !== lifetime
+      || photoReadRef.current !== identity
+    ) return;
+
+    setPhotoDraft({
+      phase: 'preview',
+      identity,
+      contentType,
+      base64Data,
+      dataUrl: `data:${contentType};base64,${base64Data}`,
+      renderState: 'loading',
+    });
+  }
+
+  function handleDraftRender(identity: symbol, rendered: boolean) {
+    if (photoReadRef.current !== identity) return;
+    if (!rendered) {
+      photoReadRef.current = null;
+      setPhotoDraft(null);
+      setActionError({
+        control: 'file',
+        invalid: true,
+        message: 'That image could not be displayed. Choose another image.',
+      });
+      return;
+    }
+    setPhotoDraft((current) => {
+      if (
+        current?.phase !== 'preview'
+        || current.identity !== identity
+      ) return current;
+      return {
+        ...current,
+        renderState: 'ready',
+      };
+    });
+    setActionError((current) => (current?.control === 'file' ? null : current));
+  }
+
+  function saveSelectedPhoto() {
+    if (
+      state.phase !== 'ready'
+      || photoDraft?.phase !== 'preview'
+      || photoDraft.renderState !== 'ready'
+      || photoReadRef.current !== photoDraft.identity
+      || mutationRef.current !== null
+    ) return;
+
     let requestId: string;
     try {
       requestId = createMemberDirectoryRequestId();
@@ -475,21 +643,7 @@ function MemberDirectoryProfileAttempt({
 
     const start = startMutation('upload');
     if (start === null) return;
-    let base64Data: string;
-    try {
-      base64Data = await readFileAsBase64(file);
-    } catch {
-      if (!mutationIsCurrent(start)) return;
-      mutationRef.current = null;
-      setState({ phase: 'ready', profile: start.profile, confirmation: null });
-      setActionError({
-        control: 'file',
-        invalid: true,
-        message: 'We could not read that image. Choose the file again.',
-      });
-      return;
-    }
-    if (!mutationIsCurrent(start)) return;
+    const { contentType, base64Data } = photoDraft;
 
     finishMutation(
       start,
@@ -559,27 +713,29 @@ function MemberDirectoryProfileAttempt({
         return (
           <div className="member-directory-profile__controls">
             <div className="member-directory-profile__photo">
-              {profile.photo ? (
-                <img
-                  src={`data:${profile.photo.contentType};base64,${profile.photo.base64Data}`}
-                  width={128}
-                  height={128}
-                  alt="Your current profile thumbnail"
-                />
-              ) : (
-                <div
-                  className="member-directory-profile__placeholder"
-                  role="img"
-                  aria-label="No profile photo"
-                >
-                  No photo
-                </div>
-              )}
+              <div className="member-directory-profile__current-photo">
+                <strong>Current saved photo</strong>
+                {profile.photo ? (
+                  <SavedMemberDirectoryPhoto
+                    key={profile.photo.version}
+                    photo={profile.photo}
+                  />
+                ) : (
+                  <div
+                    className="member-directory-profile__placeholder"
+                    role="img"
+                    aria-label="No profile photo"
+                  >
+                    No photo
+                  </div>
+                )}
+              </div>
               <div className="member-directory-profile__photo-actions">
                 <label htmlFor="member-directory-photo-file">
                   {profile.hasPhoto ? 'Replace profile photo' : 'Add profile photo'}
                 </label>
                 <input
+                  ref={photoInputRef}
                   id="member-directory-photo-file"
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -615,6 +771,81 @@ function MemberDirectoryProfileAttempt({
                 )}
               </div>
             </div>
+
+            {photoDraft && (
+              <section
+                className="member-directory-profile__draft"
+                aria-labelledby="member-directory-photo-draft-heading"
+              >
+                <div>
+                  <h3 id="member-directory-photo-draft-heading">
+                    Selected photo — not uploaded yet
+                  </h3>
+                  <p id="member-directory-photo-draft-description">
+                    Review this local preview. Choose Save profile photo to upload
+                    it, or Cancel selected photo to discard it without sending it.
+                  </p>
+                </div>
+
+                {photoDraft.phase === 'reading' && (
+                  <p role="status" aria-live="polite" aria-atomic="true">
+                    Preparing selected photo preview...
+                  </p>
+                )}
+
+                {photoDraft.phase === 'preview' && (
+                  <div className="member-directory-profile__draft-review">
+                    {/* The wording distinguishes this unsaved photo from the saved thumbnail. */}
+                    {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+                    <img
+                      className="member-directory-profile__draft-image"
+                      src={photoDraft.dataUrl}
+                      width={128}
+                      height={128}
+                      alt="Selected profile photo preview"
+                      onLoad={() => handleDraftRender(photoDraft.identity, true)}
+                      onError={() => handleDraftRender(photoDraft.identity, false)}
+                    />
+                    {photoDraft.renderState === 'loading' && (
+                      <p role="status" aria-live="polite" aria-atomic="true">
+                        Checking selected photo preview...
+                      </p>
+                    )}
+                    {photoDraft.renderState === 'ready' && (
+                      <p role="status" aria-live="polite" aria-atomic="true">
+                        Selected photo preview is ready. It has not been uploaded.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="member-directory-profile__draft-actions">
+                  {photoDraft.phase !== 'reading' && (
+                    <button
+                      type="button"
+                      onClick={saveSelectedPhoto}
+                      disabled={pending || photoDraft.renderState !== 'ready'}
+                      aria-describedby={[
+                        'member-directory-photo-draft-description',
+                        actionError?.control === 'file'
+                          ? 'member-directory-action-error'
+                          : null,
+                      ].filter(Boolean).join(' ')}
+                    >
+                      Save profile photo
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={cancelSelectedPhoto}
+                    disabled={pending}
+                    aria-describedby="member-directory-photo-draft-description"
+                  >
+                    Cancel selected photo
+                  </button>
+                </div>
+              </section>
+            )}
 
             <div className="member-directory-profile__visibility">
               <label htmlFor="member-directory-searchable">
