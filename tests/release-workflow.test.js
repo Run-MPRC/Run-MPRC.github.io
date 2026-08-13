@@ -270,7 +270,7 @@ test('Netlify manifest pins the inactive bounded #623 interface release', () => 
   );
 });
 
-test('completed #473 records remain the current live predecessor truth', () => {
+test('completed #623 records are live while #473 remains rollback history', () => {
   assert.match(
     netlifyConfig,
     /temporary #623 production authority is inactive again/i,
@@ -280,63 +280,10 @@ test('completed #473 records remain the current live predecessor truth', () => {
     /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
-  const expectedTruth = new Map([
-    [
-      'IMPLEMENTATION_PLAN.md',
-      /bounded replacement \[#473\][^\n]*deploy `6a6dc9ea588b0c0008036312`[^\n]*temporary manifest became inactive again/i,
-    ],
-    [
-      'OFFICER_START_HERE.md',
-      /bounded replacement is still live as Netlify deploy `6a6dc9ea588b0c0008036312`[^\n]*#623 is a separate one-shot release under review/i,
-    ],
-    [
-      'OPERATIONS_RUNBOOK.md',
-      /WEB-002A \[#473\][^\n]*completed[^\n]*9ad6837756cdd409d296009fde5082eeeae5c059[^\n]*6a6dc9ea588b0c0008036312[^\n]*cb6a8f0a418fc14b448bce5ded71d68520415c92[^\n]*6a6dcdd47bc81e000859a249/i,
-    ],
-    [
-      'README.md',
-      /bounded replacement deploy `6a6dc9ea588b0c0008036312`[^\n]*temporary manifest is inactive again/i,
-    ],
-    [
-      'SECURITY.md',
-      /Bounded replacement \[#473\][^\n]*6a6dc9ea588b0c0008036312[^\n]*Final control `cb6a8f0`[^\n]*6a6dcdd47bc81e000859a249/i,
-    ],
-    [
-      'SYSTEM_DESIGN.md',
-      /used one bounded replacement exception[^\n]*6a6dc9ea588b0c0008036312[^\n]*manifest became inactive again/i,
-    ],
-    [
-      'docs/officers/ACCESS_CONTINUITY.md',
-      /temporary #473 release is complete[^\n]*manifest is inactive[^\n]*release source is absent/i,
-    ],
-    [
-      'docs/officers/EVENTS_SHOP_MEMBERS.md',
-      /In-person Shop catalog — LIVE[\s\S]*Public Events-list load failure privacy — LIVE FRONTEND CONTAINMENT[\s\S]*Public Events-calendar load failure privacy — LIVE FRONTEND CONTAINMENT/i,
-    ],
-    [
-      'docs/officers/PUBLISH_AND_CHECK.md',
-      /Temporary #473 permissions-containment release — COMPLETED 2026-08-01[\s\S]*cb6a8f0a418fc14b448bce5ded71d68520415c92[\s\S]*6a6dcdd47bc81e000859a249/i,
-    ],
-    [
-      'docs/officers/README.md',
-      /bounded replacement remains live as deploy `6a6dc9ea588b0c0008036312`[^\n]*#623 is one separate[^\n]*release under review/i,
-    ],
-    [
-      'docs/officers/REQUEST_A_CHANGE.md',
-      /bounded replacement is live[^\n]*temporary manifest is inactive again/i,
-    ],
-    [
-      'docs/officers/SYSTEM_MAPS.md',
-      /Completed #473 exact release; manifest inactive/i,
-    ],
-  ]);
-
   finalReleaseTruth.forEach((contents, relativePath) => {
-    assert.match(
-      contents,
-      expectedTruth.get(relativePath),
-      `${relativePath} must describe final #473 authority and availability`,
-    );
+    assert.match(contents, /#623/);
+    assert.match(contents, /6a7e072f8f346b0008510d29/);
+    assert.match(contents, /#473/);
     [
       /PENDING #473 RELEASE/i,
       /Temporary #473 permissions-containment release — PENDING REVIEW AND RELEASE/i,
@@ -346,42 +293,116 @@ test('completed #473 records remain the current live predecessor truth', () => {
       assert.doesNotMatch(
         contents,
         staleClaim,
-        `${relativePath} must not retain rollback-era #473 status`,
+        `${relativePath} must not retain stale #473 release status`,
       );
     });
   });
 
-  const pendingTruth = [
-    'IMPLEMENTATION_PLAN.md',
-    'OFFICER_START_HERE.md',
-    'OPERATIONS_RUNBOOK.md',
-    'SECURITY.md',
-    'SYSTEM_DESIGN.md',
-    'docs/officers/EVENTS_SHOP_MEMBERS.md',
-    'docs/officers/PUBLISH_AND_CHECK.md',
-    'docs/officers/README.md',
-  ].map((relativePath) => finalReleaseTruth.get(relativePath));
-  pendingTruth.forEach((record) => {
-    assert.match(record, /#623/);
-    assert.match(record, /(?:under review|not published)/i);
-    assert.match(record, /6a6dc9ea588b0c0008036312/);
-  });
-  [
-    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
-    '411aa6ec9a9459f5d923030533ffc7c007fe6908',
-    'd837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1',
-    '019353361210021483f23003e09ee6924b78e67c',
-  ].forEach((identifier) => {
+  const completedTruth = new Map([
     [
-      finalReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
-      finalReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
-    ].forEach((record) => assert.match(record, new RegExp(identifier)));
+      'IMPLEMENTATION_PLAN.md',
+      /#623[^\n]*completed[^\n]*published[^\n]*6a7e072f8f346b0008510d29/i,
+    ],
+    [
+      'OFFICER_START_HERE.md',
+      /#623[^\n]*completed[^\n]*6a7e072f8f346b0008510d29[^\n]*live/i,
+    ],
+    [
+      'OPERATIONS_RUNBOOK.md',
+      /#623[^\n]*completed[^\n]*6a7e072f8f346b0008510d29[^\n]*published/i,
+    ],
+    [
+      'README.md',
+      /completed bounded #623 release[^\n]*published deploy `6a7e072f8f346b0008510d29`/i,
+    ],
+    [
+      'SECURITY.md',
+      /#623[^\n]*published[^\n]*inert[^\n]*6a7e072f8f346b0008510d29/i,
+    ],
+    [
+      'SYSTEM_DESIGN.md',
+      /#623[^\n]*completed[^\n]*published[^\n]*inert[^\n]*6a7e072f8f346b0008510d29/i,
+    ],
+    [
+      'docs/officers/ACCESS_CONTINUITY.md',
+      /live #623 marker[^\n]*deploy `6a7e072f8f346b0008510d29`/i,
+    ],
+    [
+      'docs/officers/EVENTS_SHOP_MEMBERS.md',
+      /#623 published only that inert interface[^\n]*deploy `6a7e072f8f346b0008510d29`/i,
+    ],
+    [
+      'docs/officers/PUBLISH_AND_CHECK.md',
+      /#623 completed[^\n]*Deploy `6a7e072f8f346b0008510d29`[^\n]*production now/i,
+    ],
+    [
+      'docs/officers/README.md',
+      /#623 completed[^\n]*inert[^\n]*Deploy `6a7e072f8f346b0008510d29`[^\n]*live/i,
+    ],
+    [
+      'docs/officers/REQUEST_A_CHANGE.md',
+      /completed #623 exception published inert-interface deploy `6a7e072f8f346b0008510d29`/i,
+    ],
+    [
+      'docs/officers/SYSTEM_MAPS.md',
+      /completed #623 exception[^\n]*deploy `6a7e072f8f346b0008510d29` remains live/i,
+    ],
+  ]);
+  completedTruth.forEach((expectedTruth, relativePath) => {
+    const record = finalReleaseTruth.get(relativePath);
+    assert.match(
+      record,
+      expectedTruth,
+      `${relativePath} must bind #623's completed state to the live deploy`,
+    );
+    [
+      /#623[^\n]{0,80}(?:release|artifact)[^\n]{0,40}(?:is|remains|was) (?:still )?(?:under review|not published)/i,
+      /#623[^\n]{0,120}has not published or been verified/i,
+      /#623[^\n]{0,120}remains under review and is not production/i,
+      /That release is under review and not published/i,
+      /production (?:still )?serves[^\n]*#473/i,
+      /Temporary #623[^\n]*— (?:UNDER REVIEW|PENDING)/i,
+    ].forEach((staleClaim) => {
+      assert.doesNotMatch(
+        record,
+        staleClaim,
+        `${relativePath} must not retain stale #623 release status`,
+      );
+    });
   });
 
   const canonicalRecords = [
     finalReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
     finalReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
   ];
+  [
+    '9d5cc8612b4321172370bd949d307e7e4ac0ec7d',
+    '6a7e072f8f346b0008510d29',
+    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
+    '411aa6ec9a9459f5d923030533ffc7c007fe6908',
+    'd837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1',
+    '019353361210021483f23003e09ee6924b78e67c',
+    'c8678c623afdd9becf77d596b71f36f26f04b746',
+    '6a7e081e73fdd60009f7ba57',
+    '31729248865',
+  ].forEach((identifier) => {
+    canonicalRecords.forEach((record) => {
+      assert.match(record, new RegExp(identifier));
+    });
+  });
+  canonicalRecords.forEach((record) => {
+    assert.match(record, /(?:62 files|62-file)/i);
+    assert.match(
+      record,
+      /(?:6a7e081e73fdd60009f7ba57[\s\S]{0,240}(?:unpublished|published nothing|publish nothing)|(?:unpublished|published nothing|publish nothing)[\s\S]{0,240}6a7e081e73fdd60009f7ba57)/i,
+    );
+    assert.match(
+      record,
+      /(?:6a7e072f8f346b0008510d29[\s\S]{0,300}(?:retained|remained|left|stayed)|(?:retained|remained|left|stayed)[\s\S]{0,300}6a7e072f8f346b0008510d29)/i,
+    );
+  });
+
+  // Preserve the complete historical #473 release and rollback chain.
   [
     '40728ff6141e34a279b70cc41d983c22ac5f0daa',
     '6a6dc0167fbe68000816b448',

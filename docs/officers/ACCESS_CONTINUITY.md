@@ -84,9 +84,15 @@ For each system, record only:
 10. Confirm a normal merge does not start the GitHub release.
 11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
-13. Confirm ordinary Netlify Git-triggered production builds remain paused. The temporary #473 release is complete: confirm its manifest is inactive, its release source is absent, and its live marker matches the current runbook. For any future exception, re-read the issue and pull request for a newer blocker and compare the executable delta with the current live artifact immediately before merge.
-14. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
-15. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
+13. Confirm ordinary Netlify Git-triggered production builds remain paused.
+14. Confirm the live #623 marker names control `9d5cc8612b4321172370bd949d307e7e4ac0ec7d`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`, 62 files, digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`, and deploy `6a7e072f8f346b0008510d29`.
+15. Confirm repause merge `c8678c623afdd9becf77d596b71f36f26f04b746` passed CI run `31729248865`.
+16. Confirm repause attempt `6a7e081e73fdd60009f7ba57` published nothing and deploy `6a7e072f8f346b0008510d29` stayed live.
+17. Record the earlier completed #473 deploy `6a6dc9ea588b0c0008036312` as rollback history.
+18. For any future exception, re-read the issue and pull request for a newer blocker.
+19. Compare its executable delta with the current live artifact immediately before merge.
+20. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
+21. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
 
 ### Synthetic role-boundary drill — NOT AVAILABLE YET
 

@@ -10,7 +10,7 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01. Bounded replacement deploy `6a6dc9ea588b0c0008036312`, exact source `39ab8649df411262c8109a3c81a57bc38f1e168b`, is production now. Shop is the static catalog; Events and Calendar show a fixed retry-later notice instead of a raw provider error. Event records remain unavailable because this did not deploy Firebase. #623 is a separate one-shot release under review for one frozen inert member-directory interface artifact. It is not published or verified, and the #473 deploy is its rollback target. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
+**Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01; bounded #473 deploy `6a6dc9ea588b0c0008036312`, source `39ab8649df411262c8109a3c81a57bc38f1e168b`, remains the recorded rollback. #623 completed one separate exact-artifact release. Deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, is production now. Its signed-out marker, guard, route, and no-directory-request checks passed. The manifest is inactive, the release source is absent, and the rollback ref remains. Shop is the static catalog; Events and Calendar show a fixed retry-later notice instead of a raw provider error. Event records remain unavailable because this did not deploy Firebase. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
 ## The release gate
 
@@ -57,7 +57,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
-- Ordinary Git-triggered Netlify production builds are paused. The completed #473 exception used one exact two-parent merge and pinned source/tree/artifact; its release source is retired. #623 temporarily arms a new exact-parent one-shot under review. It must publish only its frozen artifact, pass signed-out readback, and be re-paused immediately.
+- Ordinary Git-triggered Netlify production builds are paused. The completed #473 exception used one exact two-parent merge and pinned source/tree/artifact; its release source is retired. #623 completed a second exact-parent one-shot, published only its frozen inert artifact, passed signed-out readback, and was immediately re-paused. Its release source is retired; its rollback ref remains.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 - CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
@@ -163,28 +163,27 @@ If a member or officer sees **Server configuration is unavailable**:
 6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from a merge unless a separate exact temporary release is explicitly armed and reviewed.
 7. For any other merge, if Netlify unexpectedly publishes, stop and treat it as a hosting incident.
 
-## Temporary #623 inert member-directory interface release — UNDER REVIEW; NOT PUBLISHED
+## Temporary #623 inert member-directory interface release — COMPLETED 2026-08-13
 
-**Purpose:** publish only the visibly disabled My Account profile-photo/finder-choice interface and the administrator-guarded People finder layout. This is an interface preview. It does not connect the private backend, read or save a setting, accept or upload a photo, search a name, or show a person.
+**Purpose:** record the completed publication of only the visibly disabled My Account profile-photo/finder-choice interface and the administrator-guarded People finder layout. This is an interface preview. It does not connect the private backend, read or save a setting, accept or upload a photo, search a name, or show a person.
 
 **Approver:** Dave Liu as platform owner, plus the privacy/security reviewer. This is not an officer-operated control.
 
-**Prerequisites:** approved issue [#623](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/623) with no newer blocker; exact release ID `WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13`; green exact-head checks; successful pinned Deploy Preview; source commit `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`; source tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`; 62-file digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`; exact first parent `019353361210021483f23003e09ee6924b78e67c`; current production and rollback deploy `6a6dc9ea588b0c0008036312`; current live source `39ab8649df411262c8109a3c81a57bc38f1e168b`; release source `codex/netlify-source-623-member-directory-preview`; rollback source `codex/netlify-source-623-rollback`; an executable diff proving only the inert interface was added to the live source; synthetic protected-layout proof; a prepared manifest-disable change; a named signed-out public observer; and no other `main` merge until verification and repause finish.
+**Completed evidence:** approved issue [#623](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/623); release ID `WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13`; pinned preview deploy `6a7e05febf8fde00084cf9e0`; preview head `1fdb31f71fcaf01c33b5e57a4cd28fc473a4a737`; green PR CI run `31728469418`; source commit `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`; source tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`; 62-file digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`; previous source `39ab8649df411262c8109a3c81a57bc38f1e168b`; rollback deploy `6a6dc9ea588b0c0008036312`; exact release merge `9d5cc8612b4321172370bd949d307e7e4ac0ec7d`, parents `019353361210021483f23003e09ee6924b78e67c` and `1fdb31f71fcaf01c33b5e57a4cd28fc473a4a737`, tree `41b6d024d369d93f28ea49940b4f4e5710d3ab52`; green exact-main CI run `31728908486`; ready production deploy `6a7e072f8f346b0008510d29`, published `2026-08-13T18:05:35.983Z`; signed-out guard, route, marker, and no-connected-symbol/request proof; repause head `d401daa409176dce0906c245adf3f20310cb513b`; green repause PR CI run `31728977578`; exact repause merge `c8678c623afdd9becf77d596b71f36f26f04b746`, parents `9d5cc8612b4321172370bd949d307e7e4ac0ec7d` and `d401daa409176dce0906c245adf3f20310cb513b`; green repause exact-main CI run `31729248865`; unpublished Netlify attempt `6a7e081e73fdd60009f7ba57`; retained production deploy and marker; inactive manifest; absent release source; and retained `codex/netlify-source-623-rollback` ref. Protected-layout proof remains synthetic.
 
 ```mermaid
 flowchart TD
-    Synthetic["Synthetic local protected-layout proof"] --> Preview["Pinned #623 Deploy Preview"]
-    Preview --> Match{"Marker, source, tree, count, and digest match?"}
-    Match -- "No" --> Keep["Stop — keep #473 deploy live"]
-    Match -- "Yes" --> Merge["Exact-parent merge commit"]
-    Merge --> Public["Signed-out public revision and guard checks"]
-    Public --> Good{"Exact artifact and no directory request?"}
-    Good -- "No" --> Rollback["Restore #473 deploy"]
-    Good -- "Yes" --> Repause["Disable manifest and verify no replacement"]
-    Repause --> Retire["Retire release source and record proof"]
+    Synthetic["Synthetic local protected-layout proof"] --> Preview["Pinned #623 Deploy Preview matched"]
+    Preview --> Merge["Exact-parent release merged"]
+    Merge --> Public["Signed-out revision and guards verified"]
+    Public --> NoRequest["No connected directory symbol or request"]
+    NoRequest --> Repause["Temporary authority disabled"]
+    Repause --> Verify["Unpublished attempt; #623 deploy retained"]
 ```
 
-In words: synthetic local artifacts prove the protected disabled layouts. The release preview must match the exact frozen artifact. Only the exact-parent merge may publish it. Signed-out public checks then prove only the revision, normal guards, and absence of a directory request. A mismatch leaves or restores the current #473 deploy; a success is immediately re-paused.
+In words: synthetic local artifacts prove the protected disabled layouts. The exact preview matched the frozen artifact, the exact-parent merge published it, and signed-out public checks proved only the revision, normal guards, and absence of a directory request. The temporary authority was then disabled; its unpublished attempt left the verified #623 deploy and marker live. The #473 deploy remains the recorded rollback.
+
+Completed checklist, retained as the audit record:
 
 1. Confirm the release pull request targets `main`.
 2. Confirm its exact head and every required check are current and green.
@@ -221,13 +220,13 @@ In words: synthetic local artifacts prove the protected disabled layouts. The re
 33. Read the public marker again and confirm the verified deploy remains live.
 34. Retire the #623 release source and verify it is absent.
 
-**Expected result:** if every gate passes, Netlify serves exactly the frozen inert interface. My Account remains behind sign-in, the People finder remains behind the administrator guard, and no member-directory request is available to a signed-out observer. Protected layouts remain synthetic proof only. The release does not deploy Firebase, Rules, Functions, or indexes; configure a provider; change sign-in, accounts, or production data; or make the backend available. Connected behavior remains **NOT AVAILABLE YET** under #507.
+**Expected result:** every gate passed, and Netlify serves exactly the frozen inert interface as deploy `6a7e072f8f346b0008510d29`. My Account remains behind sign-in, the People finder remains behind the administrator guard, and no member-directory request was available to the signed-out observer. Protected layouts remain synthetic proof only. The release deployed no Firebase, Rules, Functions, or indexes; configured no provider; changed no sign-in, account, or production data; and did not make the backend available. Connected behavior remains **NOT AVAILABLE YET** under #507.
 
 **Stop conditions:** stop if `main` advances; a branch, context, source, tree, count, digest, parent, marker, page, guard, network record, or repause result differs; the preview is missing; rollback is unavailable; a protected control is enabled; a public check asks for sign-in or private data; a real name or photo appears; a member-directory request is made; another production attempt starts; or any blocker remains open.
 
-**Success proof:** keep the public deploy and marker links, exact hashes, check time, phone/computer widths, signed-out guard results, anonymous no-directory-request record, repause attempt, retained-deploy readback, and one redacted public screenshot if it contains no private content. Record Firebase, provider configuration, account/sign-in changes, and production-data changes as not performed. Do not call synthetic protected-layout proof public production proof.
+**Success proof:** preview deploy `6a7e05febf8fde00084cf9e0` matched head `1fdb31f71fcaf01c33b5e57a4cd28fc473a4a737`, and PR CI run `31728469418` passed. Release merge `9d5cc8612b4321172370bd949d307e7e4ac0ec7d` and exact-main CI run `31728908486` passed. Production deploy `6a7e072f8f346b0008510d29` published at `2026-08-13T18:05:35.983Z`; its marker matched source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`, previous source `39ab8649df411262c8109a3c81a57bc38f1e168b`, rollback deploy `6a6dc9ea588b0c0008036312`, 62 files, and digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`. Signed-out phone/computer guard checks and the anonymous no-connected-symbol/request check passed. Repause head `d401daa409176dce0906c245adf3f20310cb513b` passed PR CI run `31728977578`; merge `c8678c623afdd9becf77d596b71f36f26f04b746` passed all five exact-main jobs in run `31729248865`. Attempt `6a7e081e73fdd60009f7ba57` stopped unpublished, and provider plus marker readback retained deploy `6a7e072f8f346b0008510d29`. The manifest is inactive; release source ref is absent; rollback ref remains. Firebase, provider configuration, account/sign-in, and production data were unchanged. Synthetic protected-layout proof is not public production proof.
 
-**Undo:** before publication, leave deploy `6a6dc9ea588b0c0008036312` live. If the wrong result publishes, ask the Netlify team owner to restore that same deploy. If provider restore is unavailable, use only the reviewed exact-parent rollback pinned to source `39ab8649df411262c8109a3c81a57bc38f1e168b`, then rerun its exact preview and checks. Disabling the manifest alone does not roll back an already published deploy.
+**Undo:** if the verified #623 interface later proves wrong, ask the Netlify team owner to restore recorded rollback deploy `6a6dc9ea588b0c0008036312`. If provider restore is unavailable, use only a newly reviewed exact-parent rollback pinned to source `39ab8649df411262c8109a3c81a57bc38f1e168b`, then rerun its exact preview and checks. The retained rollback ref is evidence, not standing publication authority. Disabling the manifest alone does not roll back an already published deploy.
 
 **Escalation:** platform owner first; privacy/security owner second; membership lead if the layout or promise is wrong. Use the private incident path if a real name, photo, account, or directory request appears.
 
