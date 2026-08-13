@@ -1,6 +1,11 @@
 /* eslint-env jest */
 
+import React from 'react';
+import {
+  fireEvent, render, screen, waitFor,
+} from '@testing-library/react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import MemberDirectoryProfile from '../../pages/account/MemberDirectoryProfile';
 import {
   createMemberDirectoryRequestId,
   getMyMemberDirectoryProfile,
@@ -18,7 +23,12 @@ jest.mock('firebase/functions', () => ({
 const app = { name: 'synthetic-app' } as any;
 const REQUEST_ID = '123e4567-e89b-42d3-a456-426614174000';
 const SECOND_REQUEST_ID = '123e4567-e89b-42d3-b456-426614174001';
-const PHOTO_BYTES = btoa('synthetic processed webp bytes');
+
+function webPEnvelope(byteLength: number): string {
+  return btoa(`RIFF${'\0'.repeat(4)}WEBP${'\0'.repeat(byteLength - 12)}`);
+}
+
+const PHOTO_BYTES = webPEnvelope(32);
 const PHOTO = {
   contentType: 'image/webp',
   base64Data: PHOTO_BYTES,
@@ -39,6 +49,13 @@ const MUTATION_STATE = {
   searchableByOfficers: true,
   hasPhoto: true,
 };
+
+function profileWithPhoto(base64Data: string) {
+  return {
+    ...PROFILE,
+    photo: { ...PHOTO, base64Data },
+  };
+}
 
 describe('member directory callable service', () => {
   beforeEach(() => {
@@ -267,5 +284,190 @@ describe('member directory callable service', () => {
       .toBe(false);
     expect(isDefinitiveMemberDirectoryRejection(accessor)).toBe(false);
     expect(isDefinitiveMemberDirectoryRejection(hostile)).toBe(false);
+  });
+});
+
+describe('MEMBERS-DIRECTORY-001K saved WebP response boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getFunctions as jest.Mock).mockReturnValue({ name: 'synthetic-functions' });
+  });
+
+  test.each([
+    ['the exact 12-byte structural envelope', webPEnvelope(12)],
+    ['the exact 65,536-byte response limit', webPEnvelope(64 * 1024)],
+  ])('accepts %s', async (_label, base64Data) => {
+    const response = profileWithPhoto(base64Data);
+    const callable = jest.fn().mockResolvedValue({ data: response });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(getMyMemberDirectoryProfile(app)).resolves.toEqual(response);
+    expect(callable).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['empty bytes', ''],
+    ['a truncated 11-byte envelope', btoa(`RIFF${'\0'.repeat(4)}WEB`)],
+    ['the wrong RIFF marker', btoa(`NOPE${'\0'.repeat(4)}WEBP`)],
+    ['the wrong WEBP marker', btoa(`RIFF${'\0'.repeat(4)}NOPE`)],
+    ['non-canonical base64', 'Zh=='],
+    ['a 65,537-byte response', webPEnvelope((64 * 1024) + 1)],
+  ])('rejects %s with the fixed response error', async (_label, base64Data) => {
+    const callable = jest.fn().mockResolvedValue({
+      data: profileWithPhoto(base64Data),
+    });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(getMyMemberDirectoryProfile(app))
+      .rejects.toThrow('Invalid member directory response.');
+  });
+
+  test.each([
+    ['the wrong returned MIME type', { ...PHOTO, contentType: 'image/png' }],
+    ['the wrong width', { ...PHOTO, width: 255 }],
+    ['the wrong height', { ...PHOTO, height: 255 }],
+    ['an uppercase version', { ...PHOTO, version: REQUEST_ID.toUpperCase() }],
+    ['an extra field', { ...PHOTO, providerDetail: 'not allowed' }],
+  ])('preserves exact photo validation for %s', async (_label, photo) => {
+    const callable = jest.fn().mockResolvedValue({
+      data: { ...PROFILE, photo },
+    });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(getMyMemberDirectoryProfile(app))
+      .rejects.toThrow('Invalid member directory response.');
+  });
+
+  test('rejects returned photo prototypes, accessors, and hostile objects generically', async () => {
+    const prototypePhoto = Object.assign(Object.create(null), PHOTO);
+    const accessorPhoto = { ...PHOTO } as Record<string, unknown>;
+    Object.defineProperty(accessorPhoto, 'base64Data', {
+      enumerable: true,
+      get: () => PHOTO_BYTES,
+    });
+    const hostilePhoto = new Proxy({}, {
+      ownKeys() {
+        throw new Error('synthetic-provider-canary');
+      },
+    });
+    const callable = jest.fn()
+      .mockResolvedValueOnce({ data: { ...PROFILE, photo: prototypePhoto } })
+      .mockResolvedValueOnce({ data: { ...PROFILE, photo: accessorPhoto } })
+      .mockResolvedValueOnce({ data: { ...PROFILE, photo: hostilePhoto } });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(getMyMemberDirectoryProfile(app))
+      .rejects.toThrow('Invalid member directory response.');
+    await expect(getMyMemberDirectoryProfile(app))
+      .rejects.toThrow('Invalid member directory response.');
+    await expect(getMyMemberDirectoryProfile(app))
+      .rejects.toThrow('Invalid member directory response.');
+  });
+
+  test('preserves canonical non-RIFF outbound WebP upload bytes unchanged', async () => {
+    const base64Data = btoa('canonical outbound WebP bytes without a RIFF marker');
+    const request = {
+      requestId: REQUEST_ID,
+      expectedRevision: 2,
+      contentType: 'image/webp' as const,
+      base64Data,
+    };
+    const callable = jest.fn().mockResolvedValue({ data: MUTATION_STATE });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    await expect(setMyMemberDirectoryPhoto(app, request))
+      .resolves.toEqual(MUTATION_STATE);
+    expect(callable).toHaveBeenCalledWith(request);
+  });
+
+  test('keeps mislabeled saved bytes out of the actual Account photo DOM', async () => {
+    const callable = jest.fn().mockResolvedValue({
+      data: profileWithPhoto(btoa(`NOPE${'\0'.repeat(4)}WEBP`)),
+    });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    render(React.createElement(MemberDirectoryProfile, {
+      app,
+      uid: 'synthetic-member',
+      displayName: 'Synthetic Member',
+      backendAvailable: true,
+    }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not load your profile photo and officer finder settings.',
+    );
+    expect(screen.queryByRole('img', {
+      name: 'Your current profile thumbnail',
+    })).not.toBeInTheDocument();
+    expect(document.querySelector('img[src^="data:image/webp;base64,"]'))
+      .not.toBeInTheDocument();
+    expect(httpsCallable).toHaveBeenCalledTimes(1);
+    expect(callable).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the byte-free fallback and Remove after browser decode failure', async () => {
+    const base64Data = webPEnvelope(12);
+    const callable = jest.fn().mockResolvedValue({
+      data: profileWithPhoto(base64Data),
+    });
+    (httpsCallable as jest.Mock).mockReturnValue(callable);
+
+    render(React.createElement(MemberDirectoryProfile, {
+      app,
+      uid: 'synthetic-member',
+      displayName: 'Synthetic Member',
+      backendAvailable: true,
+    }));
+
+    const image = await screen.findByRole('img', {
+      name: 'Your current profile thumbnail',
+    });
+    expect(image).toHaveAttribute(
+      'src',
+      `data:image/webp;base64,${base64Data}`,
+    );
+
+    fireEvent.error(image);
+
+    await waitFor(() => expect(screen.getByRole('img', {
+      name: 'Saved profile photo could not be displayed',
+    })).toHaveTextContent('Photo unavailable'));
+    expect(document.querySelector('img[src^="data:image/webp;base64,"]'))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole('button', {
+      name: 'Remove current saved photo',
+    })).toBeEnabled();
+    expect(httpsCallable).toHaveBeenCalledTimes(1);
+    expect(callable).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the default unavailable preview free of context, IDs, and calls', () => {
+    const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+    const randomUUID = jest.fn(() => REQUEST_ID);
+    const getRandomValues = jest.fn((bytes: Uint8Array) => bytes);
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: { getRandomValues, randomUUID },
+    });
+    try {
+      render(React.createElement(MemberDirectoryProfile, {
+        app: null as any,
+        uid: '',
+        displayName: null,
+      }));
+
+      expect(screen.getByText('Interface preview — not connected yet.'))
+        .toBeInTheDocument();
+      expect(randomUUID).not.toHaveBeenCalled();
+      expect(getRandomValues).not.toHaveBeenCalled();
+      expect(getFunctions).not.toHaveBeenCalled();
+      expect(httpsCallable).not.toHaveBeenCalled();
+    } finally {
+      if (originalCrypto) {
+        Object.defineProperty(globalThis, 'crypto', originalCrypto);
+      } else {
+        delete (globalThis as { crypto?: Crypto }).crypto;
+      }
+    }
   });
 });
