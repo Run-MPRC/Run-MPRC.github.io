@@ -987,6 +987,486 @@ describe('Account profile recovery', () => {
     });
   });
 
+  describe('AUTH-006H profile-save unconfirmed-result focus', () => {
+    const UNCONFIRMED_MESSAGE = 'We could not confirm your profile change. Try the profile again before making another change.';
+    const privateUpdateCanary = 'synthetic-private-update-rejection';
+
+    const servicesA = {
+      firebaseResources: { app, firestore },
+      identityService: { signOut, resendVerificationEmail },
+    };
+    const userB = {
+      uid: 'synthetic-user-b',
+      email: 'member-b@example.test',
+      role: 'unverified' as const,
+    };
+    const appB = { name: 'synthetic-app-b' };
+    const firestoreB = { name: 'synthetic-firestore-b' };
+    const identityServiceB = {
+      signOut: jest.fn(),
+      resendVerificationEmail: jest.fn(),
+    };
+    const profileB = {
+      ...PROFILE,
+      uid: userB.uid,
+      email: userB.email,
+      fullName: 'Current Synthetic Member B',
+    };
+
+    function useAccountServices(services: typeof servicesA | null) {
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services,
+        isReady: Boolean(services),
+      });
+    }
+
+    function evictFocusToBody() {
+      const displaced = document.createElement('button');
+      document.body.append(displaced);
+      displaced.focus();
+      displaced.remove();
+      expect(document.body).toHaveFocus();
+    }
+
+    function getUnconfirmedAlert() {
+      const alert = screen.getByRole('alert');
+      const message = alert.querySelector('p');
+      const retry = screen.getByRole('button', { name: 'Try profile again' });
+      expect(message?.textContent).toBe(UNCONFIRMED_MESSAGE);
+      expect(alert).toContainElement(retry);
+      expect(message?.nextElementSibling).toBe(retry);
+      expect(retry).toBeEnabled();
+      expect(retry).not.toHaveAttribute('tabindex', '-1');
+      return alert;
+    }
+
+    async function startDeferredUpdate({
+      focusSave = true,
+      fullName = 'Unconfirmed Synthetic Member',
+    }: {
+      focusSave?: boolean;
+      fullName?: string;
+    } = {}) {
+      const update = accountDeferred<void>();
+      (updateMyProfile as jest.Mock).mockReturnValueOnce(update.promise);
+      (getMyProfile as jest.Mock).mockResolvedValueOnce(PROFILE);
+      const view = renderAccount();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByLabelText('Full name'), {
+        target: { value: fullName },
+      });
+      const save = screen.getByRole('button', { name: 'Save' });
+      if (focusSave) save.focus();
+      fireEvent.click(save);
+      await waitFor(() => expect(updateMyProfile).toHaveBeenCalledTimes(1));
+      return {
+        fullName, save, update, view,
+      };
+    }
+
+    async function startDeferredConfirmation() {
+      const confirmation = accountDeferred<typeof PROFILE | null>();
+      (updateMyProfile as jest.Mock).mockResolvedValueOnce(undefined);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockReturnValueOnce(confirmation.promise);
+      const view = renderAccount();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      const save = screen.getByRole('button', { name: 'Save' });
+      save.focus();
+      fireEvent.click(save);
+      await waitFor(() => expect(getMyProfile).toHaveBeenCalledTimes(2));
+      return {
+        confirmation, save, view,
+      };
+    }
+
+    test('focuses the exact current unconfirmed alert after a focused Save loses native focus', async () => {
+      const { fullName, save, update } = await startDeferredUpdate();
+      expect(save).toHaveFocus();
+      evictFocusToBody();
+
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+
+      const alert = getUnconfirmedAlert();
+      expect(alert).toHaveFocus();
+      expect(alert).toHaveAttribute('role', 'alert');
+      expect(alert).toHaveAttribute('aria-live', 'assertive');
+      expect(alert).toHaveAttribute('aria-atomic', 'true');
+      expect(alert).toHaveAttribute('tabindex', '-1');
+      expect(alert).toHaveClass('account-profile__unconfirmed-result');
+      expect(alert.isConnected).toBe(true);
+      expect(screen.queryByText('Profile name saved.')).not.toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(privateUpdateCanary);
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(updateMyProfile).toHaveBeenCalledWith(
+        firestore,
+        USER.uid,
+        { fullName },
+      );
+      expect(getMyProfile).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['missing', 'resolve' as const, null],
+      [
+        'rejected',
+        'reject' as const,
+        new Error('synthetic-private-confirmation-rejection'),
+      ],
+    ])('focuses the same alert when the current confirmation read is %s', async (
+      _label,
+      settlement,
+      outcome,
+    ) => {
+      const { confirmation } = await startDeferredConfirmation();
+      evictFocusToBody();
+
+      await act(async () => {
+        if (settlement === 'resolve') {
+          confirmation.resolve(outcome as null);
+        } else {
+          confirmation.reject(outcome);
+        }
+      });
+
+      const alert = getUnconfirmedAlert();
+      expect(alert).toHaveFocus();
+      expect(screen.queryByText('Profile name saved.')).not.toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(
+        'synthetic-private-confirmation-rejection',
+      );
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test.each([
+      ['no active element', null],
+      ['the document root', document.documentElement],
+      ['a disconnected element', document.createElement('button')],
+    ])('restores unconfirmed-result focus from %s', async (_label, lostFocus) => {
+      const { update } = await startDeferredUpdate();
+      const activeElement = jest.spyOn(document, 'activeElement', 'get')
+        .mockImplementation(() => lostFocus);
+      try {
+        await act(async () => update.reject(new Error(privateUpdateCanary)));
+      } finally {
+        activeElement.mockRestore();
+      }
+
+      expect(getUnconfirmedAlert()).toHaveFocus();
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(1);
+    });
+
+    test('consumes the armed intent after preserving deliberate update-pending focus', async () => {
+      const { update, view } = await startDeferredUpdate();
+      const deliberateTarget = document.createElement('button');
+      document.body.append(deliberateTarget);
+      deliberateTarget.focus();
+
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+
+      const alert = getUnconfirmedAlert();
+      expect(alert).not.toHaveFocus();
+      expect(deliberateTarget).toHaveFocus();
+      deliberateTarget.remove();
+      expect(document.body).toHaveFocus();
+      view.rerender(accountView());
+      expect(alert).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+    });
+
+    test('preserves connected deliberate focus while the confirmation read rejects', async () => {
+      const { confirmation } = await startDeferredConfirmation();
+      const deliberateTarget = screen.getByRole('button', { name: 'Sign out' });
+      deliberateTarget.focus();
+
+      await act(async () => confirmation.reject(
+        new Error('synthetic-private-confirmation-rejection'),
+      ));
+
+      expect(getUnconfirmedAlert()).not.toHaveFocus();
+      expect(deliberateTarget).toHaveFocus();
+    });
+
+    test('leaves an already-focused unconfirmed alert alone', async () => {
+      const { update } = await startDeferredUpdate();
+      const focusTargets: HTMLElement[] = [];
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function recordFocus(
+        this: HTMLElement,
+      ) {
+        focusTargets.push(this);
+      });
+      const activeElement = jest.spyOn(document, 'activeElement', 'get')
+        .mockImplementation(() => document.querySelector(
+          '.account-profile__unconfirmed-result',
+        ));
+      try {
+        await act(async () => update.reject(new Error(privateUpdateCanary)));
+      } finally {
+        activeElement.mockRestore();
+        focus.mockRestore();
+      }
+
+      const alert = getUnconfirmedAlert();
+      expect(focusTargets).not.toContain(alert);
+    });
+
+    test('shows an unfocused programmatic result without delayed focus after its origin disappears', async () => {
+      const outsideOrigin = document.createElement('button');
+      document.body.append(outsideOrigin);
+      outsideOrigin.focus();
+      const { update, view } = await startDeferredUpdate({ focusSave: false });
+      expect(outsideOrigin).toHaveFocus();
+      outsideOrigin.remove();
+      expect(document.body).toHaveFocus();
+
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+
+      expect(getUnconfirmedAlert()).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+      view.rerender(accountView());
+      expect(getUnconfirmedAlert()).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+    });
+
+    test.each([
+      ['setup', 'setup'],
+      ['read', 'read'],
+    ])('does not move focus from body for an initial profile %s failure', async (
+      _label,
+      stage,
+    ) => {
+      evictFocusToBody();
+      if (stage === 'setup') {
+        (ensureMyProfile as jest.Mock).mockRejectedValueOnce(
+          new Error('synthetic-private-setup-rejection'),
+        );
+      } else {
+        (getMyProfile as jest.Mock).mockRejectedValueOnce(
+          new Error('synthetic-private-read-rejection'),
+        );
+      }
+
+      renderAccount();
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(
+        'Your profile is temporarily unavailable.',
+      );
+      expect(alert).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+      expect(document.body).not.toHaveTextContent(/synthetic-private/i);
+    });
+
+    test('keeps validation failure local with Save focused and starts no write', async () => {
+      renderAccount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByLabelText('Full name'), {
+        target: { value: '🏃'.repeat(101) },
+      });
+      const save = screen.getByRole('button', { name: 'Save' });
+      save.focus();
+      fireEvent.click(save);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Full name must be 200 characters or fewer.',
+      );
+      expect(save).toHaveFocus();
+      expect(updateMyProfile).not.toHaveBeenCalled();
+      expect(getMyProfile).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+    });
+
+    test('clears the old save intent before Try profile again reloads', async () => {
+      const { update, view } = await startDeferredUpdate();
+      const deliberateTarget = screen.getByRole('button', { name: 'Sign out' });
+      deliberateTarget.focus();
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+      const oldAlert = getUnconfirmedAlert();
+      const retry = screen.getByRole('button', { name: 'Try profile again' });
+      retry.focus();
+
+      fireEvent.click(retry);
+
+      expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(oldAlert.isConnected).toBe(false);
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      view.rerender(accountView());
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test.each([
+      [
+        'UID',
+        servicesA,
+        userB,
+      ],
+      [
+        'Firebase app',
+        {
+          firebaseResources: { app: appB, firestore },
+          identityService: servicesA.identityService,
+        },
+        USER,
+      ],
+      [
+        'Firestore service',
+        {
+          firebaseResources: { app, firestore: firestoreB },
+          identityService: servicesA.identityService,
+        },
+        USER,
+      ],
+      [
+        'identity service',
+        {
+          firebaseResources: { app, firestore },
+          identityService: identityServiceB,
+        },
+        USER,
+      ],
+    ])('keeps a stale rejected update inert after a %s-only change', async (
+      _transition,
+      nextServices,
+      nextUser,
+    ) => {
+      useAccountServices(servicesA);
+      const { update, view } = await startDeferredUpdate();
+      const currentProfile = {
+        ...PROFILE,
+        uid: nextUser.uid,
+        email: nextUser.email,
+        fullName: `Current ${_transition} Context`,
+      };
+      (getMyProfile as jest.Mock).mockResolvedValueOnce(currentProfile);
+      useAccountServices(nextServices);
+      view.rerender(accountView(nextUser));
+      expect(await screen.findByText(currentProfile.fullName)).toBeInTheDocument();
+      const deliberateTarget = screen.getByRole('button', { name: 'Sign out' });
+      deliberateTarget.focus();
+
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      expect(deliberateTarget).toHaveFocus();
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('invalidates a failure focus intent across unavailable and same-context return', async () => {
+      useAccountServices(servicesA);
+      const { update, view } = await startDeferredUpdate();
+      const restoredProfile = {
+        ...PROFILE,
+        fullName: 'Restored Same Context Member',
+      };
+      useAccountServices(null);
+      view.rerender(accountView());
+      expect(screen.getByRole('status')).toHaveTextContent('Loading profile...');
+      (getMyProfile as jest.Mock).mockResolvedValueOnce(restoredProfile);
+      useAccountServices(servicesA);
+      view.rerender(accountView());
+      expect(await screen.findByText(restoredProfile.fullName)).toBeInTheDocument();
+      const deliberateTarget = screen.getByRole('button', { name: 'Sign out' });
+      deliberateTarget.focus();
+
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      expect(deliberateTarget).toHaveFocus();
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not let a stale rejected update disturb or unlock a newer attempt', async () => {
+      const oldUpdate = accountDeferred<void>();
+      const currentUpdate = accountDeferred<void>();
+      (updateMyProfile as jest.Mock)
+        .mockReturnValueOnce(oldUpdate.promise)
+        .mockReturnValueOnce(currentUpdate.promise);
+      useAccountServices(servicesA);
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(profileB);
+      const view = renderAccount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      const oldSave = screen.getByRole('button', { name: 'Save' });
+      oldSave.focus();
+      fireEvent.click(oldSave);
+      await waitFor(() => expect(updateMyProfile).toHaveBeenCalledTimes(1));
+
+      useAccountServices({
+        firebaseResources: { app: appB, firestore: firestoreB },
+        identityService: identityServiceB,
+      });
+      view.rerender(accountView(userB));
+      expect(await screen.findByText(profileB.fullName)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      const currentSave = screen.getByRole('button', { name: 'Save' });
+      currentSave.focus();
+      fireEvent.click(currentSave);
+      await waitFor(() => expect(updateMyProfile).toHaveBeenCalledTimes(2));
+      evictFocusToBody();
+
+      await act(async () => oldUpdate.reject(new Error(privateUpdateCanary)));
+
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+      expect(document.body).toHaveFocus();
+
+      await act(async () => currentUpdate.reject(new Error('current-private-rejection')));
+
+      expect(getUnconfirmedAlert()).toHaveFocus();
+      expect(document.body).not.toHaveTextContent('current-private-rejection');
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('keeps a stale rejected authoritative read inert after a UID change', async () => {
+      useAccountServices(servicesA);
+      const { confirmation, view } = await startDeferredConfirmation();
+      (getMyProfile as jest.Mock).mockResolvedValueOnce(profileB);
+      view.rerender(accountView(userB));
+      expect(await screen.findByText(profileB.fullName)).toBeInTheDocument();
+      const deliberateTarget = screen.getByRole('button', { name: 'Sign out' });
+      deliberateTarget.focus();
+
+      await act(async () => confirmation.reject(
+        new Error('synthetic-private-stale-confirmation-rejection'),
+      ));
+
+      expect(screen.queryByText(UNCONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      expect(deliberateTarget).toHaveFocus();
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(3);
+    });
+
+    test('makes an unmounted focused rejection inert', async () => {
+      const { update, view } = await startDeferredUpdate();
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+      view.unmount();
+
+      await act(async () => update.reject(new Error(privateUpdateCanary)));
+
+      expect(document.body).not.toHaveTextContent(UNCONFIRMED_MESSAGE);
+      expect(focus).not.toHaveBeenCalled();
+      expect(getMyProfile).toHaveBeenCalledTimes(1);
+      focus.mockRestore();
+    });
+
+    test('uses bounded wrapping and scoped visible-focus CSS for the unconfirmed alert', () => {
+      const css = readFileSync(join(__dirname, 'Account.css'), 'utf8');
+
+      expect(css).toMatch(/\.account-profile__unconfirmed-result\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*overflow-wrap:\s*anywhere;[^}]*\}/);
+      expect(css).toMatch(/\.account-profile__unconfirmed-result:focus\s*\{[^}]*outline:\s*3px\s+solid\s+#005bd8;[^}]*outline-offset:\s*3px;[^}]*\}/);
+      expect(css).not.toMatch(/\[role=(?:['"])?alert(?:['"])?\]\s*:focus/);
+    });
+  });
+
   describe('AUTH-006F profile-save context isolation', () => {
     const userB = {
       uid: 'synthetic-user-b',
