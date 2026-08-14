@@ -19,6 +19,7 @@ const MIN_CANONICAL_DISPLAY_NAME_CODE_UNITS = 2;
 const CONTROL_OR_FORMAT_PATTERN = /[\p{Cc}\p{Cf}]/u;
 const DIRECTORY_TOKEN_PATTERN = /[\p{L}\p{N}][\p{L}\p{M}\p{N}]*/gu;
 const LOAD_FAILURE_MESSAGE = 'We could not load your profile photo and officer finder settings. Reload settings to try again.';
+const RELOAD_SUCCESS_MESSAGE = 'Profile photo and officer finder settings reloaded.';
 const UNKNOWN_CHANGE_MESSAGE = 'We could not confirm that change. Do not make another change yet. Reload settings to check what is currently saved.';
 const REJECTED_CHANGE_MESSAGE = 'That change was rejected before it was saved. Review the requirements and try again.';
 const REQUEST_UNAVAILABLE_MESSAGE = 'This browser could not safely start that change. No setting was changed. Reload the page and try again.';
@@ -227,6 +228,11 @@ type RecoveryFocusIntent = {
   load: symbol | null;
 };
 
+type ReloadFocusIntent = {
+  lifetime: symbol;
+  load: symbol | null;
+};
+
 type RemoveFocusIntent = {
   lifetime: symbol;
   operation: symbol;
@@ -343,6 +349,8 @@ function MemberDirectoryProfileAttempt({
   const mutationRef = useRef<symbol | null>(null);
   const uncertainChangeRef = useRef(false);
   const recoveryFocusIntentRef = useRef<RecoveryFocusIntent | null>(null);
+  const pendingReloadFocusIntentRef = useRef<ReloadFocusIntent | null>(null);
+  const reloadResultFocusIntentRef = useRef<ReloadFocusIntent | null>(null);
   const pendingRemoveFocusIntentRef = useRef<RemoveFocusIntent | null>(null);
   const rejectedRemoveResultFocusIntentRef = useRef<RemoveFocusIntent | null>(null);
   const pendingConfirmedPhotoFocusIntentRef = useRef<ConfirmedPhotoFocusIntent | null>(null);
@@ -353,6 +361,7 @@ function MemberDirectoryProfileAttempt({
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const removePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
   const reloadButtonRef = useRef<HTMLButtonElement | null>(null);
+  const reloadSuccessStatusRef = useRef<HTMLParagraphElement | null>(null);
   const savePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
   const visibilityCheckboxRef = useRef<HTMLInputElement | null>(null);
 
@@ -365,6 +374,8 @@ function MemberDirectoryProfileAttempt({
       mutationRef.current = null;
       uncertainChangeRef.current = false;
       recoveryFocusIntentRef.current = null;
+      pendingReloadFocusIntentRef.current = null;
+      reloadResultFocusIntentRef.current = null;
       pendingRemoveFocusIntentRef.current = null;
       rejectedRemoveResultFocusIntentRef.current = null;
       pendingConfirmedPhotoFocusIntentRef.current = null;
@@ -374,6 +385,28 @@ function MemberDirectoryProfileAttempt({
       photoReadRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (state.phase !== 'ready' || state.confirmation !== RELOAD_SUCCESS_MESSAGE) return;
+    const intent = reloadResultFocusIntentRef.current;
+    if (intent === null) return;
+    reloadResultFocusIntentRef.current = null;
+    if (
+      intent.lifetime !== lifetimeRef.current
+      || intent.load === null
+      || intent.load !== loadRef.current
+    ) return;
+    const target = reloadSuccessStatusRef.current;
+    if (target === null || !target.isConnected) return;
+    const active = document.activeElement;
+    if (active === target) return;
+    if (
+      active === null
+      || active === document.body
+      || active === document.documentElement
+      || !active.isConnected
+    ) target.focus();
+  }, [state]);
 
   useEffect(() => {
     if (state.phase !== 'unknown' && state.phase !== 'unavailable') return;
@@ -485,6 +518,20 @@ function MemberDirectoryProfileAttempt({
     ) {
       recoveryFocusIntentRef.current = { ...focusIntent, load };
     }
+    const pendingReloadFocusIntent = pendingReloadFocusIntentRef.current;
+    reloadResultFocusIntentRef.current = null;
+    if (
+      pendingReloadFocusIntent !== null
+      && pendingReloadFocusIntent.lifetime === lifetime
+      && pendingReloadFocusIntent.load === null
+    ) {
+      pendingReloadFocusIntentRef.current = {
+        ...pendingReloadFocusIntent,
+        load,
+      };
+    } else {
+      pendingReloadFocusIntentRef.current = null;
+    }
     mutationRef.current = null;
     pendingRemoveFocusIntentRef.current = null;
     rejectedRemoveResultFocusIntentRef.current = null;
@@ -506,9 +553,26 @@ function MemberDirectoryProfileAttempt({
           || lifetimeRef.current !== lifetime
           || loadRef.current !== load
         ) return;
+        const reloadIntent = recoveryFocusIntentRef.current;
+        const reloaded = reloadIntent !== null
+          && reloadIntent.lifetime === lifetime
+          && reloadIntent.source === 'reload'
+          && reloadIntent.load === load;
+        const boundReloadFocusIntent = pendingReloadFocusIntentRef.current;
+        reloadResultFocusIntentRef.current = reloaded
+          && boundReloadFocusIntent !== null
+          && boundReloadFocusIntent.lifetime === lifetime
+          && boundReloadFocusIntent.load === load
+          ? boundReloadFocusIntent
+          : null;
+        pendingReloadFocusIntentRef.current = null;
         uncertainChangeRef.current = false;
         recoveryFocusIntentRef.current = null;
-        setState({ phase: 'ready', profile, confirmation: null });
+        setState({
+          phase: 'ready',
+          profile,
+          confirmation: reloaded ? RELOAD_SUCCESS_MESSAGE : null,
+        });
       } catch {
         if (
           !active
@@ -516,6 +580,8 @@ function MemberDirectoryProfileAttempt({
           || lifetimeRef.current !== lifetime
           || loadRef.current !== load
         ) return;
+        pendingReloadFocusIntentRef.current = null;
+        reloadResultFocusIntentRef.current = null;
         setState({
           phase: preserveUncertainChange ? 'unknown' : 'unavailable',
         });
@@ -914,6 +980,11 @@ function MemberDirectoryProfileAttempt({
       (state.phase !== 'unknown' && state.phase !== 'unavailable')
       || lifetime === null
     ) return;
+    reloadResultFocusIntentRef.current = null;
+    pendingReloadFocusIntentRef.current = reloadButtonRef.current !== null
+      && document.activeElement === reloadButtonRef.current
+      ? { lifetime, load: null }
+      : null;
     recoveryFocusIntentRef.current = {
       lifetime,
       source: 'reload',
@@ -972,6 +1043,19 @@ function MemberDirectoryProfileAttempt({
         }
         return (
           <div className="member-directory-profile__controls">
+            {state.phase === 'ready'
+              && state.confirmation === RELOAD_SUCCESS_MESSAGE && (
+              <p
+                ref={reloadSuccessStatusRef}
+                className="member-directory-profile__reload-result"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                tabIndex={-1}
+              >
+                {RELOAD_SUCCESS_MESSAGE}
+              </p>
+            )}
             <div className="member-directory-profile__photo">
               <div className="member-directory-profile__current-photo">
                 <strong>Current saved photo</strong>
@@ -1165,7 +1249,9 @@ function MemberDirectoryProfileAttempt({
                 {pendingMessage}
               </p>
             )}
-            {state.phase === 'ready' && state.confirmation && (
+            {state.phase === 'ready'
+              && state.confirmation
+              && state.confirmation !== RELOAD_SUCCESS_MESSAGE && (
               <p role="status" aria-live="polite" aria-atomic="true">
                 {state.confirmation}
               </p>
