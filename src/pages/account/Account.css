@@ -206,6 +206,11 @@
   align-items: stretch;
 }
 
+.member-directory-profile__reload-result:focus {
+  outline: 3px solid #005bd8;
+  outline-offset: 3px;
+}
+
 .member-directory-profile__controls,
 .member-directory-profile__warning {
   margin-top: 1rem;
