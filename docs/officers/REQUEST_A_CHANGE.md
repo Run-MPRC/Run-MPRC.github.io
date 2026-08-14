@@ -34,7 +34,7 @@ Have one of these ready:
 
 If you open GitHub yourself, use the [canonical repository on `main`](https://github.com/Run-MPRC/Run-MPRC.github.io/tree/main), then select **Issues**. `main` is now the repository default. Do not use the legacy `dev` branch as the source for a new request.
 
-The GitHub release is manual. A `main` merge runs checks but does not publish the GitHub Pages copy or deploy Firebase. Ordinary Git-triggered Netlify production builds are paused by repository configuration. The completed #623 exception published inert-interface deploy `6a7e072f8f346b0008510d29`, then repause attempt `6a7e081e73fdd60009f7ba57` published nothing and retained that deploy. Its temporary manifest is inactive, so it is not a reusable officer control. The earlier completed #473 deploy `6a6dc9ea588b0c0008036312` is rollback history. Netlify provider settings remain separately unverified. Stop and escalate any unexpected publication.
+The GitHub release is manual. A `main` merge runs checks but does not publish the GitHub Pages copy or deploy Firebase. Ordinary Git-triggered Netlify production builds are paused by repository configuration. The completed #659 exception published accessibility deploy `6a7ece87c5ca4d0007c1a3fc`, then repause attempt `6a7ed0ddb00a46000818878d` published nothing and retained that deploy. Its temporary manifest is inactive, so it is not a reusable officer control. Completed #623 inert-interface deploy `6a7e072f8f346b0008510d29` is the immediate rollback, and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history. Netlify provider settings remain separately unverified. Stop and escalate any unexpected publication.
 
 ## If you cannot open an AI assistant
 

@@ -112,13 +112,13 @@ Do not publish photos of minors, private events, name badges, addresses, license
 4. Check spelling, title, photo, order, and old-officer removal.
 5. Ask AI to confirm no account permissions changed. Website display and GitHub/Firebase access are separate.
 
-## Phone navigation preview check — SOURCE AVAILABLE; #659 LIVE CHECK UNDER REVIEW
+## Phone navigation check — #659 LIVE AND VERIFIED 2026-08-14
 
 **Purpose:** confirm that the small-screen menu is predictable before a website release.
 
 **Approver:** communications lead or platform owner.
 
-**Before you start:** have the reviewed preview link. Stay signed out and use no private information. WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) freezes the reviewed #490 phone-menu behavior with the related visible-focus and route-focus source for one exact-artifact release, but it is under review and is not published. Production remains #623 deploy `6a7e072f8f346b0008510d29`, which is also #659's rollback target.
+**Before you start:** stay signed out and use no private information. WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) completed one exact-artifact release of the reviewed #490 phone-menu behavior with the related visible-focus and route-focus source. Production deploy `6a7ece87c5ca4d0007c1a3fc` passed the signed-out phone menu and route-focus check. #623 deploy `6a7e072f8f346b0008510d29` is the rollback target.
 
 1. Open the preview at a phone-sized width.
 2. Select the MPRC logo while the menu is closed.
@@ -141,7 +141,7 @@ Do not publish photos of minors, private events, name badges, addresses, license
 
 **Escalation:** platform owner first; accessibility reviewer second.
 
-This check describes #490 source and preview behavior. The #659 signed-out live observer may repeat the phone-menu check only after the public marker identifies the exact approved release. On production, use safe public destinations only; do not choose Sign in, enter data, open a private page, or submit a form. Until the exact #659 publication and repause records pass, this behavior is **NOT LIVE YET** and #623 remains the verified host record. Follow the full no-terminal procedure in [Review, merge, release, and check a change](./PUBLISH_AND_CHECK.md).
+The completed #659 signed-out live check used safe public destinations only. At phone width, the menu exposed truthful open disclosure state; choosing `/events` closed it, moved focus to main content at the top, and caused no horizontal overflow. Exact served source, CSS, and mutation-sensitive tests preserve the bounded visible-focus cue; this audit does not claim a saved screenshot or a separate live keyboard `:focus-visible` observation. On production, do not choose Sign in, enter data, open a private page, or submit a form. Repause attempt `6a7ed0ddb00a46000818878d` published nothing and retained deploy `6a7ece87c5ca4d0007c1a3fc`. Follow the full no-terminal record in [Review, merge, release, and check a change](./PUBLISH_AND_CHECK.md).
 
 ## Success check
 

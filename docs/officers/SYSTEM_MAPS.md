@@ -86,7 +86,7 @@ flowchart TD
     Rules --> Functions["Deploy and verify named Functions"]
     Functions --> Pages["Pages branch without Netlify's domain claim"]
     Main -. "Ordinary Git production build paused" .-> Netlify
-    Main -. "Completed #623 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
+    Main -. "Completed #659 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> Netlify
     Netlify["Netlify — current live host; reusable protected publication unavailable"] --> Live["runmprc.com"]
@@ -94,7 +94,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify and the completed #623 exception is inactive; its deploy `6a7e072f8f346b0008510d29` remains live while completed #473 deploy `6a6dc9ea588b0c0008036312` is rollback history; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
+In words: merge, release request, and protected approval are separate; a missing or failed Firebase gate publishes nothing; ordinary merges cannot publish Netlify and the completed #659 exception is inactive; its deploy `6a7ece87c5ca4d0007c1a3fc` remains live while completed #623 deploy `6a7e072f8f346b0008510d29` is the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history; the future Pages branch must stop claiming the Netlify domain, and both hosts still need separate proof.
 
 ## Account and permission ownership
 

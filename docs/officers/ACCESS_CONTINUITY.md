@@ -85,14 +85,16 @@ For each system, record only:
 11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
 13. Confirm ordinary Netlify Git-triggered production builds remain paused.
-14. Confirm the live #623 marker names control `9d5cc8612b4321172370bd949d307e7e4ac0ec7d`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`, 62 files, digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`, and deploy `6a7e072f8f346b0008510d29`.
-15. Confirm repause merge `c8678c623afdd9becf77d596b71f36f26f04b746` passed CI run `31729248865`.
-16. Confirm repause attempt `6a7e081e73fdd60009f7ba57` published nothing and deploy `6a7e072f8f346b0008510d29` stayed live.
-17. Record the earlier completed #473 deploy `6a6dc9ea588b0c0008036312` as rollback history.
-18. For any future exception, re-read the issue and pull request for a newer blocker.
-19. Compare its executable delta with the current live artifact immediately before merge.
-20. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
-21. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
+14. Confirm the live #659 marker names control `46e23647d8e0bf9fa3a574ea5c5f993be10a419d`, source `7496fe0881fb52908c4ff2f40f488df09c94c908`, tree `ccac4c189c195db8ab594e0eefe256ea9fa04996`, 62 files, digest `e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7`, and deploy `6a7ece87c5ca4d0007c1a3fc`.
+15. Confirm release merge `46e23647d8e0bf9fa3a574ea5c5f993be10a419d` passed exact-main CI run `31783141914`.
+16. Confirm repause merge `3138a00c1c48e1d5d1dcda0b44722b09a2194ff7` passed exact-main CI run `31783808994`.
+17. Confirm repause attempt `6a7ed0ddb00a46000818878d` published nothing and deploy `6a7ece87c5ca4d0007c1a3fc` stayed live.
+18. Confirm the manifest is inactive, temporary refs are absent, and rollback ref `codex/netlify-source-659-rollback` remains.
+19. Record completed #623 deploy `6a7e072f8f346b0008510d29` as the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` as older history.
+20. For any future exception, re-read the issue and pull request for a newer blocker.
+21. Compare its executable delta with the current live artifact immediately before merge.
+22. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
+23. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
 
 ### Synthetic role-boundary drill — NOT AVAILABLE YET
 
