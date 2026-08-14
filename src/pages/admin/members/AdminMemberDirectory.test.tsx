@@ -677,4 +677,247 @@ describe('Admin People finder', () => {
       );
     });
   });
+
+  describe('MEMBERS-DIRECTORY-001L exact-search focus recovery contract', () => {
+    type FocusOrigin = 'input' | 'search';
+    type SearchOutcome = 'results' | 'empty' | 'failure';
+
+    function focusOrigin(origin: FocusOrigin) {
+      const element = origin === 'input'
+        ? queryInput()
+        : screen.getByRole('button', { name: 'Search' });
+      element.focus();
+      expect(element).toHaveFocus();
+      return element;
+    }
+
+    function startFocusedSearch(origin: FocusOrigin, value = 'synthetic') {
+      const input = queryInput();
+      fireEvent.change(input, { target: { value } });
+      const element = focusOrigin(origin);
+      fireEvent.submit(input.closest('form') as HTMLFormElement);
+      expect(input).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Searching...' })).toBeDisabled();
+      return element;
+    }
+
+    function evictFocusToBody(originElement: HTMLElement) {
+      originElement.blur();
+      if (document.activeElement !== document.body) {
+        const browserEvictionModel = document.createElement('button');
+        browserEvictionModel.type = 'button';
+        document.body.appendChild(browserEvictionModel);
+        browserEvictionModel.focus();
+        browserEvictionModel.remove();
+      }
+      expect(document.activeElement).toBe(document.body);
+    }
+
+    async function settleSearch(
+      pending: ReturnType<typeof deferred<any>>,
+      outcome: SearchOutcome,
+    ) {
+      const observedPromise = pending.promise.catch(() => undefined);
+      await act(async () => {
+        if (outcome === 'failure') {
+          pending.reject(new Error('synthetic-private-search-failure'));
+        } else if (outcome === 'results') {
+          pending.resolve({
+            schemaVersion: 1,
+            results: [{
+              entryRef: ENTRY_REF,
+              displayName: 'Synthetic Focus Runner',
+              photo: null,
+            }],
+          });
+        } else {
+          pending.resolve({ schemaVersion: 1, results: [] });
+        }
+        await observedPromise;
+      });
+    }
+
+    test.each([
+      ['input', 'results'],
+      ['input', 'empty'],
+      ['input', 'failure'],
+      ['search', 'results'],
+      ['search', 'empty'],
+      ['search', 'failure'],
+    ] as const)(
+      'restores the exact %s origin after browser focus eviction and a current %s settlement',
+      async (origin, outcome) => {
+        const pending = deferred<any>();
+        (searchMemberDirectory as jest.Mock).mockReturnValueOnce(pending.promise);
+        renderDirectory();
+
+        const originElement = startFocusedSearch(origin);
+        evictFocusToBody(originElement);
+
+        await settleSearch(pending, outcome);
+
+        await waitFor(() => expect(originElement).toHaveFocus());
+        expect(originElement).not.toBeDisabled();
+        expect(screen.getByRole('button', {
+          name: 'Clear search and result cards',
+        })).not.toHaveFocus();
+        expect(createMemberDirectorySearchRequestId).toHaveBeenCalledTimes(1);
+        expect(searchMemberDirectory).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test.each([
+      ['input', 'results'],
+      ['input', 'empty'],
+      ['input', 'failure'],
+      ['search', 'results'],
+      ['search', 'empty'],
+      ['search', 'failure'],
+    ] as const)(
+      'preserves another connected focus after a %s-origin search reaches %s',
+      async (origin, outcome) => {
+        const pending = deferred<any>();
+        (searchMemberDirectory as jest.Mock).mockReturnValueOnce(pending.promise);
+        renderDirectory();
+
+        const originElement = startFocusedSearch(origin);
+        const outside = screen.getByRole('link', { name: /admin home/i });
+        outside.focus();
+        expect(outside).toHaveFocus();
+
+        await settleSearch(pending, outcome);
+
+        expect(outside).toHaveFocus();
+        expect(originElement).not.toHaveFocus();
+        expect(createMemberDirectorySearchRequestId).toHaveBeenCalledTimes(1);
+        expect(searchMemberDirectory).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test('creates no focus intent for a programmatic submit while focus is outside', async () => {
+      const pending = deferred<any>();
+      (searchMemberDirectory as jest.Mock).mockReturnValueOnce(pending.promise);
+      renderDirectory();
+
+      const input = queryInput();
+      fireEvent.change(input, { target: { value: 'synthetic' } });
+      const outside = screen.getByRole('link', { name: /admin home/i });
+      outside.focus();
+      fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+      await settleSearch(pending, 'results');
+
+      expect(outside).toHaveFocus();
+      expect(input).not.toHaveFocus();
+      expect(createMemberDirectorySearchRequestId).toHaveBeenCalledTimes(1);
+      expect(searchMemberDirectory).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['input'],
+      ['search'],
+    ] as const)('does not refocus the %s origin when it already retained focus', async (origin) => {
+      const pending = deferred<any>();
+      (searchMemberDirectory as jest.Mock).mockReturnValueOnce(pending.promise);
+      renderDirectory();
+
+      const originElement = startFocusedSearch(origin);
+      expect(originElement).toHaveFocus();
+      const focusSpy = jest.spyOn(originElement, 'focus');
+
+      await settleSearch(pending, 'empty');
+
+      expect(originElement).toHaveFocus();
+      expect(focusSpy).not.toHaveBeenCalled();
+      expect(createMemberDirectorySearchRequestId).toHaveBeenCalledTimes(1);
+      expect(searchMemberDirectory).toHaveBeenCalledTimes(1);
+    });
+
+    test('keeps local validation and request-ID failure focus-inert', () => {
+      renderDirectory();
+
+      const input = queryInput();
+      fireEvent.change(input, { target: { value: 'x' } });
+      input.focus();
+      fireEvent.submit(input.closest('form') as HTMLFormElement);
+      expect(input).toHaveFocus();
+      expect(input).not.toBeDisabled();
+      expect(createMemberDirectorySearchRequestId).not.toHaveBeenCalled();
+      expect(searchMemberDirectory).not.toHaveBeenCalled();
+
+      fireEvent.change(input, { target: { value: 'synthetic' } });
+      const search = screen.getByRole('button', { name: 'Search' });
+      search.focus();
+      (createMemberDirectorySearchRequestId as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('synthetic-request-id-failure');
+      });
+      fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+      expect(search).toHaveFocus();
+      expect(input).not.toBeDisabled();
+      expect(search).not.toBeDisabled();
+      expect(searchMemberDirectory).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['Firebase-app change', 'results', otherApp, 'admin-one'],
+      ['Firebase-app change', 'failure', otherApp, 'admin-one'],
+      ['admin-account change', 'results', app, 'admin-two'],
+      ['admin-account change', 'failure', app, 'admin-two'],
+    ] as const)('makes old %s %s focus-inert', async (
+      _context,
+      outcome,
+      nextApp,
+      nextUid,
+    ) => {
+      const pending = deferred<any>();
+      (searchMemberDirectory as jest.Mock).mockReturnValueOnce(pending.promise);
+      const view = renderDirectory();
+      const oldOrigin = startFocusedSearch('input');
+      evictFocusToBody(oldOrigin);
+
+      setContext(nextApp, nextUid);
+      view.rerender(
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+          initialEntries={['/admin/member-directory']}
+        >
+          <AdminMemberDirectory backendAvailable />
+        </MemoryRouter>,
+      );
+      const newInput = queryInput();
+      const outside = screen.getByRole('link', { name: /admin home/i });
+      outside.focus();
+
+      await settleSearch(pending, outcome);
+
+      expect(outside).toHaveFocus();
+      expect(newInput).not.toHaveFocus();
+      expect(screen.queryByText('Synthetic Focus Runner')).not.toBeInTheDocument();
+    });
+
+    test.each([
+      ['results'],
+      ['failure'],
+    ] as const)('makes %s completion focus-inert after unmount', async (outcome) => {
+      const pending = deferred<any>();
+      (searchMemberDirectory as jest.Mock).mockReturnValueOnce(pending.promise);
+      const view = renderDirectory();
+      const oldOrigin = startFocusedSearch('search');
+      evictFocusToBody(oldOrigin);
+      view.unmount();
+
+      const outside = document.createElement('button');
+      outside.type = 'button';
+      outside.textContent = 'Persistent outside control';
+      document.body.appendChild(outside);
+      outside.focus();
+
+      await settleSearch(pending, outcome);
+
+      expect(outside).toHaveFocus();
+      expect(document.body).not.toHaveTextContent('Synthetic Focus Runner');
+      outside.remove();
+    });
+  });
 });
