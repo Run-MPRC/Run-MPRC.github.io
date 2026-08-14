@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-002D-KEYBOARD-FOCUS-2026-08-14",
   "issueNumber": 659,
   "previewBranch": "codex/issue-659-netlify-release",

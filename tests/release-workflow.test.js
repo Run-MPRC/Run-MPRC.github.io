@@ -242,10 +242,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the active bounded #659 keyboard-focus release', () => {
+test('Netlify manifest pins the inactive bounded #659 keyboard-focus release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(
     loaded.manifest.releaseId,
     'WEB-002D-KEYBOARD-FOCUS-2026-08-14',
@@ -289,11 +289,11 @@ test('Netlify manifest pins the active bounded #659 keyboard-focus release', () 
 test('completed #623 records stay live while #659 is pending', () => {
   assert.match(
     netlifyConfig,
-    /#659 control-branch preview verifies its exact pinned source/i,
+    /temporary #659 production authority is inactive again/i,
   );
   assert.match(
     netlifyConfig,
-    /Other[\s\S]{0,20}previews use their checked-out tree/i,
+    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
   finalReleaseTruth.forEach((contents, relativePath) => {
