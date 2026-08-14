@@ -38,6 +38,11 @@ type SearchState =
   | { phase: 'resolved'; results: readonly MemberDirectorySearchResult[] }
   | { phase: 'unavailable' };
 
+type SearchFocusIntent = {
+  operation: symbol;
+  origin: 'input' | 'search';
+};
+
 function PhotoFallback({
   displayName,
   unavailable = false,
@@ -84,9 +89,11 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
   const [state, setState] = useState<SearchState>({ phase: 'idle' });
   const [clearAnnouncement, setClearAnnouncement] = useState<string | null>(null);
   const queryInputRef = useRef<HTMLInputElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(false);
   const pendingRef = useRef(false);
   const operationRef = useRef<symbol | null>(null);
+  const focusIntentRef = useRef<SearchFocusIntent | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -94,12 +101,34 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
       mountedRef.current = false;
       pendingRef.current = false;
       operationRef.current = null;
+      focusIntentRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (state.phase === 'idle' || state.phase === 'pending') return;
+    const intent = focusIntentRef.current;
+    if (intent === null || operationRef.current !== intent.operation) return;
+
+    focusIntentRef.current = null;
+    const origin = intent.origin === 'input'
+      ? queryInputRef.current
+      : searchButtonRef.current;
+    if (origin === null || !origin.isConnected) return;
+
+    const { activeElement } = document;
+    if (activeElement === origin) return;
+    const meaningfulFocus = activeElement !== null
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+      && activeElement.isConnected;
+    if (!meaningfulFocus) origin.focus();
+  }, [state]);
 
   function handleQueryChange(event: React.ChangeEvent<HTMLInputElement>) {
     if (pendingRef.current) return;
     operationRef.current = null;
+    focusIntentRef.current = null;
     setQueryInput(event.currentTarget.value);
     setValidationMessage(null);
     setState({ phase: 'idle' });
@@ -113,6 +142,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     const query = normalizeMemberDirectorySearchQuery(queryInput);
     if (query === null) {
       operationRef.current = null;
+      focusIntentRef.current = null;
       setValidationMessage(QUERY_REQUIREMENT);
       setState({ phase: 'idle' });
       setClearAnnouncement(null);
@@ -123,6 +153,8 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     try {
       requestId = createMemberDirectorySearchRequestId();
     } catch {
+      operationRef.current = null;
+      focusIntentRef.current = null;
       setValidationMessage(null);
       setState({ phase: 'unavailable' });
       setClearAnnouncement(null);
@@ -132,6 +164,14 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
     const operation = Symbol('member-directory-search');
     operationRef.current = operation;
     pendingRef.current = true;
+    const { activeElement } = document;
+    if (activeElement === queryInputRef.current) {
+      focusIntentRef.current = { operation, origin: 'input' };
+    } else if (activeElement === searchButtonRef.current) {
+      focusIntentRef.current = { operation, origin: 'search' };
+    } else {
+      focusIntentRef.current = null;
+    }
     setQueryInput(query);
     setValidationMessage(null);
     setState({ phase: 'pending' });
@@ -153,6 +193,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
 
   function handleClear() {
     operationRef.current = null;
+    focusIntentRef.current = null;
     setQueryInput('');
     setValidationMessage(null);
     setState({ phase: 'idle' });
@@ -214,6 +255,7 @@ function SearchAttempt({ app }: { app: FirebaseApp }) {
           </label>
           <div className="member-directory-admin__actions flex min-w-0 max-w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <button
+              ref={searchButtonRef}
               type="submit"
               disabled={pending}
               className="member-directory-admin__button min-h-11 w-full rounded border-2 border-blue-800 bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"

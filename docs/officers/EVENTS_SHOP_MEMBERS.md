@@ -2472,7 +2472,7 @@ flowchart TD
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; source-only #639 admits a returned saved photo only when its canonical decoded bytes total 12 through 65,536 with `RIFF` at bytes 0–3 and `WEBP` at bytes 8–11, maps every other returned byte shape to one fixed byte-free failure before the Account image path, preserves the version-scoped **Photo unavailable** fallback and Remove action for structurally admitted bytes the browser cannot display, and leaves outbound uploads unchanged; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; source-only #639 admits a returned saved photo only when its canonical decoded bytes total 12 through 65,536 with `RIFF` at bytes 0–3 and `WEBP` at bytes 8–11, maps every other returned byte shape to one fixed byte-free failure before the Account image path, preserves the version-scoped **Photo unavailable** fallback and Remove action for structurally admitted bytes the browser cannot display, and leaves outbound uploads unchanged; source-only #641 records only the exact current input-or-Search focus origin after a valid search enters pending, restores that same now-enabled origin after cards, empty, or fixed failure only when native disablement left no meaningful focus, and preserves any other connected focus the user chose during the request; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -3140,6 +3140,112 @@ Officer source-review procedure for MEMBERS-DIRECTORY-001K [#639] saved-photo re
 **Undo:** use one reviewed service-and-documentation revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #639 changes source only. Undo must not turn clearly mislabeled returned bytes into a saved-thumbnail image or change outbound upload bytes.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, raw returned bytes or provider detail reached the page or a log, malformed bytes entered the saved-thumbnail image path, outbound uploads changed, or connected behavior became available.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001L [#641] People-finder search focus — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify from specialist-prepared evidence that the preserved connected People finder returns keyboard focus to the exact name input or Search button displaced by one current search, without stealing focus deliberately moved elsewhere, connecting the feature, using a real person, or changing production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #639 is reviewed and merged. Ask the platform owner or testing specialist for the exact #641 source candidate, the named synthetic-only test output, the trustworthy old-source failure, and a redacted written behavior report. The specialist runs the tests and records the evidence. The backup officer reviews that written evidence without a terminal or test harness. Keep the source-controlled availability value `false`. Do not sign in to production, enter a real name, inspect a real photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #641 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the testing specialist for the named MEMBERS-DIRECTORY-001L test output.
+6. Ask the testing specialist for the trustworthy old-source failure.
+7. Ask the testing specialist for the redacted written synthetic-behavior report.
+8. Confirm the report names the specialist who ran the tests.
+9. Confirm the evidence uses only a made-up administrator account.
+10. Confirm the evidence uses only made-up names.
+11. Confirm any image evidence uses generated non-face data.
+12. Confirm the source-controlled availability value remains byte-for-byte `false`.
+13. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+14. Confirm a valid query must pass before a focus intent can exist.
+15. Confirm request-number creation must succeed before a focus intent can exist.
+16. Confirm the current search must enter its pending state before a focus intent can exist.
+17. Confirm the focus intent records the exact search operation.
+18. Confirm the focus intent records whether the name input or Search was the origin.
+19. Confirm the focus intent records no query.
+20. Confirm the focus intent records no name.
+21. Confirm the focus intent records no result or photo.
+22. Confirm the focus intent records no account ID.
+23. Confirm the focus intent records no request number or service value.
+24. Confirm pending still disables the persistent name input.
+25. Confirm pending still disables Search.
+26. Confirm browser focus eviction from the name input is modeled explicitly.
+27. Confirm result cards restore that same now-enabled name input after eviction.
+28. Confirm an empty result restores that same now-enabled name input after eviction.
+29. Confirm the fixed failure restores that same now-enabled name input after eviction.
+30. Confirm browser focus eviction from Search is modeled explicitly.
+31. Confirm result cards restore that same now-enabled Search button after eviction.
+32. Confirm an empty result restores that same now-enabled Search button after eviction.
+33. Confirm the fixed failure restores that same now-enabled Search button after eviction.
+34. Confirm the handoff does nothing when the recorded origin already owns focus.
+35. Confirm an outside connected control keeps focus when chosen during a pending search.
+36. Confirm that outside focus survives a result-card settlement.
+37. Confirm that outside focus survives an empty-result settlement.
+38. Confirm that outside focus survives a fixed-failure settlement.
+39. Confirm a programmatic submit while focus is outside creates no focus intent.
+40. Confirm local validation failure keeps the controls enabled.
+41. Confirm local validation failure creates no request number.
+42. Confirm local validation failure creates no search.
+43. Confirm request-number failure keeps the controls enabled.
+44. Confirm request-number failure creates no search.
+45. Confirm editing the name field clears an obsolete focus intent.
+46. Confirm Clear clears an obsolete focus intent.
+47. Confirm Clear still removes the query and displayed result state.
+48. Confirm Clear still focuses the empty name input.
+49. Confirm Clear creates no request number.
+50. Confirm Clear creates no directory-service call.
+51. Confirm an application change makes a late resolution focus-inert.
+52. Confirm an application change makes a late rejection focus-inert.
+53. Confirm an administrator change makes a late resolution focus-inert.
+54. Confirm an administrator change makes a late rejection focus-inert.
+55. Confirm unmount makes a late resolution focus-inert.
+56. Confirm unmount makes a late rejection focus-inert.
+57. Confirm an obsolete operation cannot move focus.
+58. Confirm the focus handoff creates no second request number.
+59. Confirm the focus handoff creates no extra search or retry.
+60. Confirm the focus handoff creates no Clear action.
+61. Confirm the focus handoff creates no result or audit.
+62. Confirm the focus handoff creates no service call or data URL.
+63. Confirm existing name normalization remains unchanged.
+64. Confirm existing response bounds remain unchanged.
+65. Confirm existing result and thumbnail behavior remains unchanged.
+66. Confirm existing fixed-error and disposal behavior remains unchanged.
+67. Confirm the administrator guard remains unchanged.
+68. Confirm the source diff changes no Account path.
+69. Confirm the source diff changes no client service contract.
+70. Confirm the source diff changes no Function, Rule, index, or schema.
+71. Confirm the source diff changes no package or workflow.
+72. Confirm the source diff adds no photo query or facial recognition.
+73. Confirm the source diff adds no image matching or embedding.
+74. Confirm the source diff adds no similarity score or biometric processing.
+75. Confirm the source diff adds no result total or export.
+76. Confirm the source diff adds no roster authority or membership proof.
+77. Record the source change as its own state.
+78. Record the named test results as their own state.
+79. Record whether the change merged as its own state.
+80. Record whether any website artifact was published as its own state.
+81. Record the exact `runmprc.com` revision as its own state.
+82. Record whether Firebase was deployed as its own state.
+83. Record whether an outside provider was configured as its own state.
+84. Record whether an account or sign-in state changed as its own state.
+85. Record whether production data changed as its own state.
+86. Record whether connected or live People-finder behavior became available as its own state.
+87. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source records only an exact-operation name-input or Search-button focus intent after a valid query and request number admit one pending search. Current result cards, empty results, and fixed failure consume that intent after render. The already-focused origin remains focused. Focus evicted to the document body, root, no active element, or a disconnected element returns to the same now-enabled origin. Another connected control deliberately focused during pending keeps focus. Programmatic or outside-focused submit, local validation failure, and request-number failure create no intent. Editing, Clear, application or administrator change, unmount, and obsolete resolution or rejection prevent stale focus movement. Clear keeps its existing local disposal, input focus, and zero-call behavior. Focus creates no request number, extra search, retry, Clear action, result, audit, service call, or data URL. Availability remains `false`; the default branch obtains no directory context, creates no request number, and calls no directory service; and live #623 remains inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real account, name, or photo; production sign-in; direct production Firebase access; a current input- or Search-origin search that leaves focus on the document body after cards, empty, or fixed failure; settlement that moves focus away from another connected control; programmatic submission that steals outside focus; validation or request-number failure that disables controls or starts a search; an application, administrator, unmounted, or obsolete completion that moves focus; a second request number, search, retry, Clear action, result, audit, service call, or data URL caused by focus; changed normalization, response, result, thumbnail, fixed-error, disposal, or guard behavior; a photo query; face recognition, matching, embedding, similarity scoring, biometric processing, total, export, roster authority, or membership proof; a Function, Rule, index, schema, package, workflow, provider, account, sign-in, production-data, or website change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, or merge means the feature is live.
+
+**Success proof:** record the exact #641 issue, reviewed pull request and commit; trustworthy old-source failure; green separately named MEMBERS-DIRECTORY-001L focused tests; green full frontend tests; type-checking; scoped lint; diagnostic production build; unchanged lint baseline; workflow checks; diff-check; independent privacy/security, frontend/accessibility, focus/race, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend-and-documentation revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #641 changes source only. Undo must not strand focus after native pending-control eviction or permit a stale completion to move focus.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, focus moved across applications or administrator accounts, settlement stole deliberately moved focus, a focus handoff created a request or service call, or connected behavior became available.
 
 ## Admin screens — NOT AVAILABLE YET
 
