@@ -259,6 +259,10 @@ export function AccountContent({
     attemptId: number;
     generation: number;
   } | null>(null);
+  const [profileSaveUnconfirmed, setProfileSaveUnconfirmed] = useState<{
+    attemptId: number;
+    generation: number;
+  } | null>(null);
 
   const [regsData, setRegsData] = useState<MyRegistrationsResponse | null>(null);
   const [regsLoading, setRegsLoading] = useState(true);
@@ -294,7 +298,9 @@ export function AccountContent({
   const profileSaveBlockedRef = useRef(false);
   const pendingProfileSaveFocusIntentRef = useRef<ProfileSaveToken | null>(null);
   const profileSaveResultFocusIntentRef = useRef<ProfileSaveToken | null>(null);
+  const profileSaveUnconfirmedFocusIntentRef = useRef<ProfileSaveToken | null>(null);
   const profileSaveResultRef = useRef<HTMLParagraphElement | null>(null);
+  const profileSaveUnconfirmedResultRef = useRef<HTMLDivElement | null>(null);
   const profileSaveButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileContextGenerationRef = useRef(0);
   const profileContextMountedRef = useRef(false);
@@ -329,8 +335,10 @@ export function AccountContent({
     setEditing(false);
     setSaveError(null);
     setProfileSaveConfirmation(null);
+    setProfileSaveUnconfirmed(null);
     pendingProfileSaveFocusIntentRef.current = null;
     profileSaveResultFocusIntentRef.current = null;
+    profileSaveUnconfirmedFocusIntentRef.current = null;
 
     return () => {
       profileContextMountedRef.current = false;
@@ -338,6 +346,7 @@ export function AccountContent({
       profileSaveBlockedRef.current = true;
       pendingProfileSaveFocusIntentRef.current = null;
       profileSaveResultFocusIntentRef.current = null;
+      profileSaveUnconfirmedFocusIntentRef.current = null;
     };
   }, [firebaseApp, firebaseFirestore, identityService, user.uid]);
 
@@ -380,8 +389,10 @@ export function AccountContent({
       setEditing(false);
       setSaveError(null);
       setProfileSaveConfirmation(null);
+      setProfileSaveUnconfirmed(null);
       pendingProfileSaveFocusIntentRef.current = null;
       profileSaveResultFocusIntentRef.current = null;
+      profileSaveUnconfirmedFocusIntentRef.current = null;
 
       try {
         await ensureMyProfile(activeServices.firebaseResources.app);
@@ -462,7 +473,9 @@ export function AccountContent({
     if (!validation.valid) {
       pendingProfileSaveFocusIntentRef.current = null;
       profileSaveResultFocusIntentRef.current = null;
+      profileSaveUnconfirmedFocusIntentRef.current = null;
       setProfileSaveConfirmation(null);
+      setProfileSaveUnconfirmed(null);
       setSaveError(validation.message);
       return;
     }
@@ -497,7 +510,9 @@ export function AccountContent({
       ? focusToken
       : null;
     profileSaveResultFocusIntentRef.current = null;
+    profileSaveUnconfirmedFocusIntentRef.current = null;
     setProfileSaveConfirmation(null);
+    setProfileSaveUnconfirmed(null);
     setSaving(true);
     setSaveError(null);
     try {
@@ -517,6 +532,8 @@ export function AccountContent({
       const confirmation = { attemptId, generation: attempt.generation };
       const pendingFocusIntent = pendingProfileSaveFocusIntentRef.current;
       pendingProfileSaveFocusIntentRef.current = null;
+      profileSaveUnconfirmedFocusIntentRef.current = null;
+      setProfileSaveUnconfirmed(null);
       profileSaveResultFocusIntentRef.current = matchesProfileSaveToken(
         pendingFocusIntent,
         confirmation,
@@ -527,9 +544,18 @@ export function AccountContent({
       setEditing(false);
     } catch {
       if (!isCurrentProfileSave(attempt)) return;
+      const unconfirmed = { attemptId, generation: attempt.generation };
+      const pendingFocusIntent = pendingProfileSaveFocusIntentRef.current;
       pendingProfileSaveFocusIntentRef.current = null;
       profileSaveResultFocusIntentRef.current = null;
+      profileSaveUnconfirmedFocusIntentRef.current = matchesProfileSaveToken(
+        pendingFocusIntent,
+        unconfirmed,
+      )
+        ? unconfirmed
+        : null;
       setProfileSaveConfirmation(null);
+      setProfileSaveUnconfirmed(unconfirmed);
       setProfile(null);
       setEditing(false);
       setSaveError(null);
@@ -624,6 +650,41 @@ export function AccountContent({
     target.focus();
   }, [editing, profile, profileSaveConfirmation, profileState]);
 
+  useLayoutEffect(() => {
+    const focusIntent = profileSaveUnconfirmedFocusIntentRef.current;
+    profileSaveUnconfirmedFocusIntentRef.current = null;
+    if (!focusIntent) return;
+    if (!matchesProfileSaveToken(profileSaveUnconfirmed, focusIntent)) return;
+    if (
+      profileContextGenerationRef.current !== focusIntent.generation
+      || profileSaveAttemptIdRef.current !== focusIntent.attemptId
+      || profileState !== 'unavailable'
+      || profile
+      || editing
+      || profileSaveConfirmation
+      || profileError !== PROFILE_CHANGE_UNCONFIRMED_MESSAGE
+    ) return;
+
+    const target = profileSaveUnconfirmedResultRef.current;
+    if (!target?.isConnected) return;
+    const { activeElement } = document;
+    if (activeElement === target) return;
+    if (
+      activeElement
+      && activeElement.isConnected
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+    ) return;
+    target.focus();
+  }, [
+    editing,
+    profile,
+    profileError,
+    profileSaveConfirmation,
+    profileSaveUnconfirmed,
+    profileState,
+  ]);
+
   const currentSignOutOutcome = signOutOutcome
     && signOutOutcome.uid === user.uid
     && signOutOutcome.identityService === identityService
@@ -642,6 +703,19 @@ export function AccountContent({
     && profileSaveConfirmation.attemptId === profileSaveAttemptIdRef.current
     ? profileSaveConfirmation
     : null;
+  const currentProfileSaveUnconfirmed = profileSaveUnconfirmed
+    && profileSaveUnconfirmed.generation === profileContextGenerationRef.current
+    && profileSaveUnconfirmed.attemptId === profileSaveAttemptIdRef.current
+    ? profileSaveUnconfirmed
+    : null;
+  const isCurrentProfileSaveUnconfirmed = Boolean(
+    currentProfileSaveUnconfirmed
+      && profileState === 'unavailable'
+      && !profile
+      && !editing
+      && !currentProfileSaveConfirmation
+      && profileError === PROFILE_CHANGE_UNCONFIRMED_MESSAGE,
+  );
   const registrationsBelongToCurrentContext = registrationsContext
     && registrationsContext.uid === user.uid
     && registrationsContext.identityService === identityService
@@ -771,7 +845,9 @@ export function AccountContent({
                 onClick={() => {
                   pendingProfileSaveFocusIntentRef.current = null;
                   profileSaveResultFocusIntentRef.current = null;
+                  profileSaveUnconfirmedFocusIntentRef.current = null;
                   setProfileSaveConfirmation(null);
+                  setProfileSaveUnconfirmed(null);
                   setEditing(true);
                 }}
                 className="account-profile__edit text-sm text-blue-600 hover:underline"
@@ -782,13 +858,30 @@ export function AccountContent({
           </div>
           {profileError && (
             <div
+              ref={isCurrentProfileSaveUnconfirmed
+                ? profileSaveUnconfirmedResultRef
+                : undefined}
               role="alert"
-              className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+              aria-live={isCurrentProfileSaveUnconfirmed ? 'assertive' : undefined}
+              aria-atomic={isCurrentProfileSaveUnconfirmed ? 'true' : undefined}
+              tabIndex={isCurrentProfileSaveUnconfirmed ? -1 : undefined}
+              className={`p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700${
+                isCurrentProfileSaveUnconfirmed
+                  ? ' account-profile__unconfirmed-result'
+                  : ''
+              }`}
             >
               <p>{profileError}</p>
               <button
                 type="button"
-                onClick={() => setProfileLoadAttempt((attempt) => attempt + 1)}
+                onClick={() => {
+                  pendingProfileSaveFocusIntentRef.current = null;
+                  profileSaveResultFocusIntentRef.current = null;
+                  profileSaveUnconfirmedFocusIntentRef.current = null;
+                  setProfileSaveConfirmation(null);
+                  setProfileSaveUnconfirmed(null);
+                  setProfileLoadAttempt((attempt) => attempt + 1);
+                }}
                 className="mt-2 text-blue-700 underline"
               >
                 Try profile again
