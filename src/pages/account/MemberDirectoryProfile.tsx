@@ -232,6 +232,12 @@ type RemoveFocusIntent = {
   operation: symbol;
 };
 
+type ConfirmedPhotoFocusIntent = {
+  lifetime: symbol;
+  operation: symbol;
+  action: 'upload' | 'remove';
+};
+
 function visibilityConfirmation(
   requested: boolean,
 ): MutationConfirmation {
@@ -334,12 +340,13 @@ function MemberDirectoryProfileAttempt({
   const recoveryFocusIntentRef = useRef<RecoveryFocusIntent | null>(null);
   const pendingRemoveFocusIntentRef = useRef<RemoveFocusIntent | null>(null);
   const rejectedRemoveResultFocusIntentRef = useRef<RemoveFocusIntent | null>(null);
+  const pendingConfirmedPhotoFocusIntentRef = useRef<ConfirmedPhotoFocusIntent | null>(null);
+  const confirmedPhotoResultFocusIntentRef = useRef<ConfirmedPhotoFocusIntent | null>(null);
   const photoReadRef = useRef<symbol | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const removePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
   const reloadButtonRef = useRef<HTMLButtonElement | null>(null);
   const savePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
-  const postMutationFocusRef = useRef<'photo-input' | 'remove-result' | null>(null);
 
   useEffect(() => {
     const lifetime = Symbol('member-directory-lifetime');
@@ -352,8 +359,9 @@ function MemberDirectoryProfileAttempt({
       recoveryFocusIntentRef.current = null;
       pendingRemoveFocusIntentRef.current = null;
       rejectedRemoveResultFocusIntentRef.current = null;
+      pendingConfirmedPhotoFocusIntentRef.current = null;
+      confirmedPhotoResultFocusIntentRef.current = null;
       photoReadRef.current = null;
-      postMutationFocusRef.current = null;
     };
   }, []);
 
@@ -403,26 +411,35 @@ function MemberDirectoryProfileAttempt({
   }, [photoDraft, state]);
 
   useEffect(() => {
-    if (state.phase !== 'ready' || postMutationFocusRef.current === null) return;
-    const focusIntent = postMutationFocusRef.current;
-    postMutationFocusRef.current = null;
-    if (focusIntent === 'photo-input') {
-      photoInputRef.current?.focus();
-      return;
-    }
-    if (state.profile.hasPhoto) {
-      removePhotoButtonRef.current?.focus();
-      return;
-    }
-    if (
+    const intent = confirmedPhotoResultFocusIntentRef.current;
+    if (state.phase !== 'ready' || intent === null) return;
+    confirmedPhotoResultFocusIntentRef.current = null;
+    if (intent.lifetime !== lifetimeRef.current) return;
+
+    let target: HTMLElement | null = null;
+    if (intent.action === 'upload') {
+      target = photoInputRef.current;
+    } else if (state.profile.hasPhoto) {
+      target = removePhotoButtonRef.current;
+    } else if (
       photoDraft?.phase === 'preview'
       && photoDraft.renderState === 'ready'
       && photoReadRef.current === photoDraft.identity
     ) {
-      savePhotoButtonRef.current?.focus();
-      return;
+      target = savePhotoButtonRef.current;
+    } else {
+      target = photoInputRef.current;
     }
-    photoInputRef.current?.focus();
+    if (target === null) return;
+
+    const active = document.activeElement;
+    if (active === target) return;
+    if (
+      active === null
+      || active === document.body
+      || active === document.documentElement
+      || !active.isConnected
+    ) target.focus();
   }, [photoDraft, state]);
 
   useEffect(() => {
@@ -443,8 +460,9 @@ function MemberDirectoryProfileAttempt({
     mutationRef.current = null;
     pendingRemoveFocusIntentRef.current = null;
     rejectedRemoveResultFocusIntentRef.current = null;
+    pendingConfirmedPhotoFocusIntentRef.current = null;
+    confirmedPhotoResultFocusIntentRef.current = null;
     photoReadRef.current = null;
-    postMutationFocusRef.current = null;
     setActionError(null);
     setPhotoDraft(null);
     setState({ phase: 'loading' });
@@ -517,6 +535,8 @@ function MemberDirectoryProfileAttempt({
     } catch (error) {
       if (!mutationIsCurrent(start)) return;
       if (isDefinitiveMemberDirectoryRejection(error)) {
+        pendingConfirmedPhotoFocusIntentRef.current = null;
+        confirmedPhotoResultFocusIntentRef.current = null;
         try {
           const profile = await getMyMemberDirectoryProfile(app);
           if (!mutationIsCurrent(start)) return;
@@ -541,6 +561,8 @@ function MemberDirectoryProfileAttempt({
           mutationRef.current = null;
           pendingRemoveFocusIntentRef.current = null;
           rejectedRemoveResultFocusIntentRef.current = null;
+          pendingConfirmedPhotoFocusIntentRef.current = null;
+          confirmedPhotoResultFocusIntentRef.current = null;
           photoReadRef.current = null;
           setPhotoDraft(null);
           setActionError(null);
@@ -556,6 +578,8 @@ function MemberDirectoryProfileAttempt({
       mutationRef.current = null;
       pendingRemoveFocusIntentRef.current = null;
       rejectedRemoveResultFocusIntentRef.current = null;
+      pendingConfirmedPhotoFocusIntentRef.current = null;
+      confirmedPhotoResultFocusIntentRef.current = null;
       photoReadRef.current = null;
       setPhotoDraft(null);
       setActionError(null);
@@ -572,16 +596,23 @@ function MemberDirectoryProfileAttempt({
     if (!mutationIsCurrent(start)) return;
     pendingRemoveFocusIntentRef.current = null;
     rejectedRemoveResultFocusIntentRef.current = null;
+    confirmedPhotoResultFocusIntentRef.current = null;
     try {
       const profile = await getMyMemberDirectoryProfile(app);
       if (!mutationIsCurrent(start)) return;
+      const focusIntent = pendingConfirmedPhotoFocusIntentRef.current;
+      pendingConfirmedPhotoFocusIntentRef.current = null;
+      confirmedPhotoResultFocusIntentRef.current = focusIntent !== null
+        && focusIntent.lifetime === start.lifetime
+        && focusIntent.operation === start.operation
+        && focusIntent.action === start.action
+        && (start.action === 'upload' || start.action === 'remove')
+        ? focusIntent
+        : null;
       mutationRef.current = null;
       if (start.action === 'upload') {
         photoReadRef.current = null;
         setPhotoDraft(null);
-        postMutationFocusRef.current = 'photo-input';
-      } else if (start.action === 'remove') {
-        postMutationFocusRef.current = 'remove-result';
       }
       uncertainChangeRef.current = false;
       recoveryFocusIntentRef.current = null;
@@ -589,6 +620,8 @@ function MemberDirectoryProfileAttempt({
     } catch {
       if (!mutationIsCurrent(start)) return;
       mutationRef.current = null;
+      pendingConfirmedPhotoFocusIntentRef.current = null;
+      confirmedPhotoResultFocusIntentRef.current = null;
       photoReadRef.current = null;
       setPhotoDraft(null);
       setActionError(null);
@@ -646,6 +679,13 @@ function MemberDirectoryProfileAttempt({
       pendingRemoveFocusIntentRef.current = {
         lifetime: start.lifetime,
         operation: start.operation,
+      };
+    }
+    if (document.activeElement === removePhotoButtonRef.current) {
+      pendingConfirmedPhotoFocusIntentRef.current = {
+        lifetime: start.lifetime,
+        operation: start.operation,
+        action: 'remove',
       };
     }
     finishMutation(
@@ -785,6 +825,13 @@ function MemberDirectoryProfileAttempt({
 
     const start = startMutation('upload');
     if (start === null) return;
+    if (document.activeElement === savePhotoButtonRef.current) {
+      pendingConfirmedPhotoFocusIntentRef.current = {
+        lifetime: start.lifetime,
+        operation: start.operation,
+        action: 'upload',
+      };
+    }
     const { contentType, base64Data } = photoDraft;
 
     finishMutation(

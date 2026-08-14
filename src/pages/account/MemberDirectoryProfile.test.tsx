@@ -335,7 +335,9 @@ describe('My Account member directory profile', () => {
     expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
     expect(document.body).not.toHaveTextContent('fixture-002.png');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile photo' }));
+    const save = screen.getByRole('button', { name: 'Save profile photo' });
+    save.focus();
+    fireEvent.click(save);
 
     await waitFor(() => expect(setMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
       requestId: REQUEST_ID,
@@ -997,7 +999,9 @@ describe('My Account member directory profile', () => {
       renderProfile();
       await selectReadyReplacement('preserved replacement', 'fixture-001h-001.png');
 
-      fireEvent.click(screen.getByRole('button', { name: 'Remove current saved photo' }));
+      const remove = screen.getByRole('button', { name: 'Remove current saved photo' });
+      remove.focus();
+      fireEvent.click(remove);
 
       expect(await screen.findByRole('img', { name: 'No profile photo' }))
         .toBeInTheDocument();
@@ -1052,9 +1056,11 @@ describe('My Account member directory profile', () => {
         expect(screen.getByText('Preparing selected photo preview...'))
           .toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', {
+        const remove = screen.getByRole('button', {
           name: 'Remove current saved photo',
-        }));
+        });
+        remove.focus();
+        fireEvent.click(remove);
 
         expect(await screen.findByRole('img', { name: 'No profile photo' }))
           .toBeInTheDocument();
@@ -1216,6 +1222,7 @@ describe('My Account member directory profile', () => {
         name: 'Remove current saved photo',
       });
 
+      remove.focus();
       fireEvent.click(remove);
 
       await waitFor(() => expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
@@ -1246,9 +1253,11 @@ describe('My Account member directory profile', () => {
       renderProfile();
       await selectReadyReplacement('concurrent replacement', 'fixture-001h-007.png');
 
-      fireEvent.click(await screen.findByRole('button', {
+      const remove = await screen.findByRole('button', {
         name: 'Remove current saved photo',
-      }));
+      });
+      remove.focus();
+      fireEvent.click(remove);
 
       expect(await screen.findByText(
         'Profile photo changed again elsewhere. The preview shows the current photo.',
@@ -1742,6 +1751,584 @@ describe('My Account member directory profile', () => {
       } finally {
         outside.remove();
       }
+    });
+  });
+
+  describe('MEMBERS-DIRECTORY-001N confirmed-photo focus containment', () => {
+    const WITHOUT_PHOTO: MemberDirectoryProfileData = {
+      ...PROFILE_WITH_PHOTO,
+      revision: 5,
+      hasPhoto: false,
+      photo: null,
+    };
+    const UPDATED_WITH_PHOTO: MemberDirectoryProfileData = {
+      ...DEFAULT_PROFILE,
+      revision: 1,
+      hasPhoto: true,
+      photo: PHOTO,
+    };
+
+    async function selectReadyUpload(
+      bytes = '001n upload bytes',
+      inputLabel = 'Add profile photo',
+    ) {
+      const input = await screen.findByLabelText(inputLabel);
+      fireEvent.change(input, {
+        target: {
+          files: [new File([bytes], 'fixture-001n.png', { type: 'image/png' })],
+        },
+      });
+      const preview = await screen.findByRole('img', {
+        name: 'Selected profile photo preview',
+      });
+      fireEvent.load(preview);
+      return screen.getByRole('button', { name: 'Save profile photo' });
+    }
+
+    function arrangeConfirmedUpload(
+      current: MemberDirectoryProfileData = UPDATED_WITH_PHOTO,
+    ) {
+      const mutation = deferred<unknown>();
+      const readback = deferred<MemberDirectoryProfileData>();
+      (setMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(mutation.promise);
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(readback.promise);
+      return {
+        settle: async () => {
+          await act(async () => mutation.resolve({}));
+          await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+          await act(async () => readback.resolve(current));
+        },
+      };
+    }
+
+    function arrangeConfirmedRemoval(
+      current: MemberDirectoryProfileData = WITHOUT_PHOTO,
+    ) {
+      const mutation = deferred<unknown>();
+      const readback = deferred<MemberDirectoryProfileData>();
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(mutation.promise);
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockReturnValueOnce(readback.promise);
+      return {
+        settle: async () => {
+          await act(async () => mutation.resolve({}));
+          await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+          await act(async () => readback.resolve(current));
+        },
+      };
+    }
+
+    function modelDisabledControlFocusEviction(control: HTMLElement) {
+      control.blur();
+      const disposable = document.createElement('button');
+      document.body.appendChild(disposable);
+      disposable.focus();
+      expect(disposable).toHaveFocus();
+      disposable.remove();
+      expect(document.body).toHaveFocus();
+    }
+
+    test('preserves deliberately selected connected outside focus after confirmed upload', async () => {
+      const attempt = arrangeConfirmedUpload();
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const save = await selectReadyUpload();
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      save.focus();
+      fireEvent.click(save);
+      outside.focus();
+
+      await attempt.settle();
+
+      expect(outside).toHaveFocus();
+      expect(screen.getByLabelText('Replace profile photo')).not.toHaveFocus();
+    });
+
+    test('preserves deliberately selected connected in-profile focus after confirmed upload', async () => {
+      const attempt = arrangeConfirmedUpload();
+      renderProfile();
+      const save = await selectReadyUpload();
+      save.focus();
+      fireEvent.click(save);
+      const heading = screen.getByRole('heading', {
+        name: 'Profile photo and officer finder',
+      });
+      heading.tabIndex = -1;
+      heading.focus();
+
+      await attempt.settle();
+
+      expect(heading).toHaveFocus();
+      expect(screen.getByLabelText('Replace profile photo')).not.toHaveFocus();
+    });
+
+    test('preserves deliberately selected connected outside focus after confirmed removal', async () => {
+      const attempt = arrangeConfirmedRemoval();
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      remove.focus();
+      fireEvent.click(remove);
+      outside.focus();
+
+      await attempt.settle();
+
+      expect(outside).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+    });
+
+    test('preserves deliberately selected connected in-profile focus after confirmed removal', async () => {
+      const attempt = arrangeConfirmedRemoval();
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      const heading = screen.getByRole('heading', {
+        name: 'Profile photo and officer finder',
+      });
+      heading.tabIndex = -1;
+      heading.focus();
+
+      await attempt.settle();
+
+      expect(heading).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+    });
+
+    test('restores the persistent file input after focused Save is natively evicted', async () => {
+      const attempt = arrangeConfirmedUpload();
+      renderProfile();
+      const save = await selectReadyUpload('focused upload bytes');
+      save.focus();
+
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+      await attempt.settle();
+
+      expect(screen.getByLabelText('Replace profile photo')).toHaveFocus();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Profile photo saved. Your officer finder setting did not change.',
+      );
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
+        requestId: REQUEST_ID,
+        expectedRevision: 0,
+        contentType: 'image/png',
+        base64Data: btoa('focused upload bytes'),
+      });
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent('fixture-001n.png');
+    });
+
+    test('restores the file input after focused Remove is evicted and no draft remains', async () => {
+      const attempt = arrangeConfirmedRemoval();
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+      await attempt.settle();
+
+      expect(screen.getByLabelText('Add profile photo')).toHaveFocus();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Profile photo removed. Your officer finder setting did not change.',
+      );
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledWith(app, {
+        requestId: REQUEST_ID,
+        expectedRevision: 4,
+      });
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+    });
+
+    test('restores the exact current ready Save after focused Remove is evicted', async () => {
+      const attempt = arrangeConfirmedRemoval();
+      renderProfile();
+      await selectReadyUpload('retained 001n draft', 'Replace profile photo');
+      const remove = screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+      await attempt.settle();
+
+      const save = screen.getByRole('button', { name: 'Save profile photo' });
+      expect(save).toHaveFocus();
+      expect(save).toBeEnabled();
+      expect(screen.getByRole('img', { name: 'Selected profile photo preview' }))
+        .toHaveAttribute(
+          'src',
+          `data:image/png;base64,${btoa('retained 001n draft')}`,
+        );
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+    });
+
+    test('restores a surviving Remove after focused Remove is evicted', async () => {
+      const changedAgain: MemberDirectoryProfileData = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 6,
+        photo: {
+          ...PHOTO,
+          version: '22222222-2222-4222-8222-222222222222',
+        },
+      };
+      const attempt = arrangeConfirmedRemoval(changedAgain);
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+      await attempt.settle();
+
+      expect(screen.getByRole('button', { name: 'Remove current saved photo' }))
+        .toHaveFocus();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Profile photo changed again elsewhere. The preview shows the current photo.',
+      );
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not redundantly focus an already-focused surviving Remove', async () => {
+      const current: MemberDirectoryProfileData = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 6,
+      };
+      const attempt = arrangeConfirmedRemoval(current);
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      const focus = jest.spyOn(remove, 'focus');
+
+      fireEvent.click(remove);
+      expect(remove).toHaveFocus();
+      await attempt.settle();
+
+      expect(remove).toHaveFocus();
+      expect(focus).not.toHaveBeenCalled();
+      focus.mockRestore();
+    });
+
+    test('creates no confirmed handoff for an outside-focused programmatic Save invocation', async () => {
+      const attempt = arrangeConfirmedUpload();
+      renderProfile();
+      const save = await selectReadyUpload('programmatic upload bytes');
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      outside.focus();
+
+      fireEvent.click(save);
+      outside.remove();
+      expect(document.body).toHaveFocus();
+      await attempt.settle();
+
+      expect(document.body).toHaveFocus();
+      expect(screen.getByLabelText('Replace profile photo')).not.toHaveFocus();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+    });
+
+    test('creates no confirmed handoff for an outside-focused programmatic Remove invocation', async () => {
+      const attempt = arrangeConfirmedRemoval();
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      outside.focus();
+
+      fireEvent.click(remove);
+      outside.remove();
+      expect(document.body).toHaveFocus();
+      await attempt.settle();
+
+      expect(document.body).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+    });
+
+    test('a request-ID failure creates no upload focus intent or service call', async () => {
+      (createMemberDirectoryRequestId as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('synthetic private request-id detail');
+      });
+      renderProfile();
+      const save = await selectReadyUpload('request failure bytes');
+      save.focus();
+
+      fireEvent.click(save);
+
+      expect(save).toHaveFocus();
+      expect(save).toBeEnabled();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'This browser could not safely start that change. No setting was changed.',
+      );
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('a request-ID failure creates no removal focus intent or service call', async () => {
+      (createMemberDirectoryRequestId as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('synthetic private request-id detail');
+      });
+      (getMyMemberDirectoryProfile as jest.Mock).mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+
+      expect(remove).toHaveFocus();
+      expect(remove).toBeEnabled();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('a definitive upload rejection does not use confirmed-success focus', async () => {
+      const rejected = { code: 'functions/failed-precondition' };
+      (setMyMemberDirectoryPhoto as jest.Mock).mockRejectedValueOnce(rejected);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => error === rejected,
+      );
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockResolvedValueOnce(DEFAULT_PROFILE);
+      renderProfile();
+      const save = await selectReadyUpload('rejected upload bytes');
+      save.focus();
+
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'That change was rejected before it was saved.',
+      );
+      expect(document.body).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Save profile photo' }))
+        .not.toHaveFocus();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('an unknown removal outcome uses Reload recovery, not confirmed-success focus', async () => {
+      (getMyMemberDirectoryProfile as jest.Mock).mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+      (removeMyMemberDirectoryPhoto as jest.Mock)
+        .mockRejectedValueOnce(new Error('synthetic private outcome detail'));
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+
+      expect(await screen.findByRole('button', { name: 'Reload settings' }))
+        .toHaveFocus();
+      expect(screen.queryByLabelText('Add profile photo')).not.toBeInTheDocument();
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('a failed upload readback uses Reload recovery, not confirmed-success focus', async () => {
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockRejectedValueOnce(new Error('synthetic private readback detail'));
+      renderProfile();
+      const save = await selectReadyUpload('failed readback bytes');
+      save.focus();
+
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+
+      expect(await screen.findByRole('button', { name: 'Reload settings' }))
+        .toHaveFocus();
+      expect(screen.queryByLabelText('Add profile photo')).not.toBeInTheDocument();
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(document.body.innerHTML).not.toContain(btoa('failed readback bytes'));
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test('makes an old confirmed upload mutation focus-inert after the application changes', async () => {
+      const mutation = deferred<unknown>();
+      (setMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(mutation.promise);
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockResolvedValueOnce(DEFAULT_PROFILE);
+      const view = renderProfile();
+      const save = await selectReadyUpload('old application bytes');
+      save.focus();
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={otherApp}
+          uid="synthetic-user"
+          displayName="Current Synthetic Member"
+          backendAvailable
+        />,
+      );
+      const currentInput = await screen.findByLabelText('Add profile photo');
+      currentInput.focus();
+      await act(async () => mutation.resolve({}));
+
+      expect(currentInput).toHaveFocus();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(document.body.innerHTML).not.toContain(btoa('old application bytes'));
+    });
+
+    test('makes an old confirmed upload readback focus-inert after the account changes', async () => {
+      const oldReadback = deferred<MemberDirectoryProfileData>();
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(oldReadback.promise)
+        .mockResolvedValueOnce(DEFAULT_PROFILE);
+      const view = renderProfile();
+      const save = await selectReadyUpload('old account bytes');
+      save.focus();
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={app}
+          uid="other-synthetic-user"
+          displayName="Current Synthetic Member"
+          backendAvailable
+        />,
+      );
+      const currentInput = await screen.findByLabelText('Add profile photo');
+      currentInput.focus();
+      await act(async () => oldReadback.resolve(UPDATED_WITH_PHOTO));
+
+      expect(currentInput).toHaveFocus();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(document.body.innerHTML).not.toContain(btoa('old account bytes'));
+    });
+
+    test('makes an old confirmed upload readback focus-inert after unmount', async () => {
+      const oldReadback = deferred<MemberDirectoryProfileData>();
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(oldReadback.promise);
+      const view = renderProfile();
+      const save = await selectReadyUpload('unmounted upload bytes');
+      save.focus();
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      view.unmount();
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      try {
+        outside.focus();
+        await act(async () => oldReadback.resolve(UPDATED_WITH_PHOTO));
+
+        expect(outside).toHaveFocus();
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+        expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      } finally {
+        outside.remove();
+      }
+    });
+
+    test('consumes a confirmed upload focus handoff exactly once', async () => {
+      const attempt = arrangeConfirmedUpload();
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const save = await selectReadyUpload('one-shot upload bytes');
+      save.focus();
+      fireEvent.click(save);
+      modelDisabledControlFocusEviction(save);
+      await attempt.settle();
+      const input = screen.getByLabelText('Replace profile photo');
+      expect(input).toHaveFocus();
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      outside.focus();
+
+      fireEvent.change(input, {
+        target: {
+          files: [new File(['next local bytes'], 'next-local.png', {
+            type: 'image/png',
+          })],
+        },
+      });
+      await screen.findByRole('img', { name: 'Selected profile photo preview' });
+
+      expect(outside).toHaveFocus();
+      expect(input).not.toHaveFocus();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(document.body).not.toHaveTextContent('next-local.png');
     });
   });
 
