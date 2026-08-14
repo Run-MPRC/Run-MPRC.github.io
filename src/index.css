@@ -76,6 +76,20 @@ body {
   padding-top: var(--site-nav-height);
 }
 
+#main-content:focus-visible::after {
+  content: "";
+  position: fixed;
+  z-index: 98;
+  top: calc(var(--site-nav-height) + 6px);
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  box-sizing: border-box;
+  border: 3px solid var(--color-secondary);
+  box-shadow: 0 0 0 3px var(--color-gray-600);
+  pointer-events: none;
+}
+
 .container {
   width: var(--container-width-lg);
   max-width: 1920px;

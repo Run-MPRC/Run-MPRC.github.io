@@ -413,6 +413,91 @@ Do not use this section until #133 records that both GitHub environments are pro
 
 **Escalation:** platform owner first, then the accessibility reviewer or backup release officer. Treat an unexpected live publication as a hosting incident.
 
+### Verify focus after a client-side page change — WEB-UX-004 SOURCE CHECK AVAILABLE; LIVE CHECK NOT AVAILABLE YET
+
+**Purpose:** prove that a keyboard user who opens another page without a full browser reload moves from the old navigation control into the new main content. The source must not move focus on the first page load or take focus that the new page or user already chose. A client-side page change replaces the page content while the website stays open.
+
+**Approver:** the pull-request accessibility reviewer approves the source evidence. The named release observer approves a later public check, with the platform owner available if the revision or publication record is unclear.
+
+**Prerequisites:** issue #657; one exact reviewed pull request and commit; the recorded old-source failure; the named green WEB-UX-004 and full App results; and a reviewed undo. The source check uses GitHub and test summaries only. It needs no terminal, account, sign-in, private page, or real data. The later public check also requires a separately approved exact commit, host readback for that commit, a private browser window, a keyboard, and safe signed-out public pages. Protected publication is still **NOT AVAILABLE YET** under #133/#136. At the time this procedure was added, #623 Netlify deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, remained live. Do not call WEB-UX-004 live while that remains the host record.
+
+**Specialist dependency:** the platform maintainer must supply the exact issue, pull request, commit, test record, and later host readback. The officer can perform every browser step without a terminal. No Firebase or provider specialist action belongs to this check because those surfaces do not change.
+
+**Source check:**
+
+1. Ask the platform maintainer for issue #657, the pull request, and the exact commit.
+2. Open the pull request's **Files changed** view.
+3. Confirm it changes only the two focus source files, the existing App test file, the global stylesheet, the header-clearance test, and this guide.
+4. Read the recorded old-source failure.
+5. Confirm that failure says the persistent navigation link kept focus instead of the main content.
+6. Read the named WEB-UX-004 green result.
+7. Confirm the green result covers first loads without focus movement.
+8. Confirm the green result covers a new path moving stale or lost focus to the existing main content once.
+9. Confirm the green result covers search-only, page-section-only, and same-path state-only changes without a handoff.
+10. Confirm the green result preserves focus chosen by the destination page or user.
+11. Confirm the green result makes canceled, replaced, missing, and unmounted destinations inert.
+12. Confirm the green result preserves the skip link and the released phone-menu close behavior.
+13. Confirm the green result reports no added website service call.
+14. Read the full App result and the hosted required checks for the same exact commit.
+15. Record source changed, tests passed, and merge state separately.
+
+**Later signed-out public check — NOT AVAILABLE YET:**
+
+16. Open the approved public page in a private browser window at 1280 CSS pixels wide.
+17. Confirm the host identifies the exact approved commit.
+18. Stay signed out.
+19. Keep every form empty.
+20. Press `Tab` once after the direct page load.
+21. Confirm the skip link appears instead of focus jumping into main content.
+22. Use `Tab` to reach a public desktop navigation link.
+23. Press `Enter` once to open a different public page.
+24. Confirm the old navigation link no longer owns focus.
+25. Confirm the new main content owns focus with the visible yellow-and-dark scoped cue.
+26. Confirm the cue is visible, unclipped, and does not move the layout.
+27. Press `Tab` once.
+28. Confirm focus continues to the first normal destination control, or the next normal page control when the destination has none.
+29. Use the browser's keyboard Back command once.
+30. Confirm focus returns to the current page's main content.
+31. Use the browser's keyboard Forward command once.
+32. Confirm focus returns to the current page's main content.
+33. Change the browser view to 390 CSS pixels wide.
+34. Reload one safe public page.
+35. Press `Tab` once.
+36. Confirm the skip link appears and the first load did not focus main.
+37. Use the keyboard to open the phone navigation menu.
+38. Use the keyboard to activate one safe public destination.
+39. Confirm the phone menu closes.
+40. Confirm focus moves to the new main content with the same visible, unclipped scoped cue.
+41. Press `Tab` once.
+42. Confirm focus enters the destination order and does not return to a hidden menu link.
+43. Record the exact commit, pages, browser, date, and both checked widths.
+44. Save one redacted public screenshot at each width.
+45. Record website publication, exact `runmprc.com` revision, Firebase, outside providers, accounts and sign-in, production data, and live behavior as separate states.
+
+**Expected result:** source evidence proves one focus handoff after a real path change, no handoff on first load or same-path cleanup, preservation of newer destination or user focus, and inert stale work. A later approved public check shows main focus at 1280 and 390 CSS pixels, a visible unclipped scoped cue alongside unchanged #291 behavior, normal next-`Tab` order, and the released phone menu closing. This interface change does not deploy Firebase, configure a provider, use an account, sign in, read or change production data, or prove live behavior.
+
+**Stop conditions:** stop if the issue, commit, review, old-source failure, or green results are missing or mismatched. Stop if the host still identifies #623 or another revision. Stop if anyone asks for sign-in, a private page, a form submission, a real name, member data, payment data, or a provider action. Stop if initial load moves focus, old or hidden navigation keeps focus, destination-chosen focus is replaced, the scoped cue is missing or clipped, focus becomes trapped, the next `Tab` order is wrong, or the layout moves. Stop if a merge, workflow, preview, or screenshot is called proof of publication or live behavior.
+
+**Success proof:** keep the issue, pull request, exact commit, named review, old-source failure, green WEB-UX-004 and full App results, hosted checks, checked public pages, browser, date, widths, and two redacted screenshots. Complete every line below without combining states:
+
+```text
+Source changed:
+Tests passed:
+Code merged:
+Deploy Preview checked:
+Website published:
+runmprc.com exact revision verified:
+Firebase deployed:
+Outside providers configured or verified:
+Account or sign-in action:
+Production data action:
+Live route-focus behavior verified:
+```
+
+**Undo:** if the change is not published, open one tracked issue and reviewed pull request to revert or safely correct the exact focus source. If a later approved publication is wrong, use the reviewed release rollback or safe roll-forward for that exact revision and repeat this check. Do not edit live CSS, browser files, Firebase, or provider settings by hand. Do not publish only to test an undo.
+
+**Escalation:** accessibility reviewer first, then the platform owner or backup release officer. Treat an unexpected publication, unknown revision, account prompt, private-data exposure, Firebase action, or provider action as an incident and follow the private escalation path.
+
 ## Expected result
 
 Merge, release approval, Firebase deployment, backend verification, Pages publication, Netlify publication, `runmprc.com`, and provider verification are recorded as separate states. A backend failure or missing authority leaves the website unpublished.
