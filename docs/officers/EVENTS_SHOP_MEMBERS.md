@@ -1072,12 +1072,18 @@ flowchart LR
     New --> Read
     Read --> Name["Display and edit name"]
     Read --> Pause["Do not display or accept phone"]
-    Name --> Rules["Firebase Rules allow name-only update"]
+    Name --> Save["Save one name-only update"]
+    Save --> Rules["Firebase Rules check the name-only update"]
+    Rules --> Updated{"Current update completes?"}
+    Updated -- "No" --> Retry["Hide Edit and show Try profile again"]
+    Updated -- "Yes" --> Confirm{"Current profile reread returns a profile?"}
+    Confirm -- "Yes" --> Result["Show Profile name saved.\nRestore otherwise-lost focus only if Save owned it"]
+    Confirm -- "No" --> Retry
     PhoneAttempt["Browser tries a phone change"] --> Deny["Firebase Rules deny"]
     Pause --> Existing["Existing stored value stays unchanged"]
 ```
 
-In words: signup or profile recovery creates a missing pending profile without copying a phone from Firebase Auth; My Account shows and edits the member's name, does not display or accept a phone number, and leaves every existing profile unchanged; the reviewed Rules deny a browser phone change.
+In words: signup or profile recovery creates a missing pending profile without copying a phone from Firebase Auth; My Account shows and edits the member's name, does not display or accept a phone number, and leaves every existing stored phone value unchanged; after one current name-only update completes and its current profile reread returns a profile, My Account shows **Profile name saved.** and restores otherwise-lost focus to that result only when Save owned focus, while an unconfirmed change keeps the existing Try profile again recovery; the reviewed Rules deny a browser phone change.
 
 Officer steps after every prerequisite has proof:
 
@@ -1099,6 +1105,152 @@ Officer steps after every prerequisite has proof:
 **Undo:** use one reviewed revert or safe roll-forward through the same backend-first gate. Do not restore browser collection or Auth-phone copying until #110 approves its purpose, notice, access, and retention, and #113/#133/#136 prove the intended live boundary.
 
 **Escalation:** membership lead plus privacy/platform owner; use the private incident path under #112 if exposure is suspected.
+
+Officer source-review procedure for AUTH-006G [#651] confirmed profile-name Save result focus — source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify from specialist-prepared evidence that one exact current confirmed full-name Save shows the fixed result **Profile name saved.**, and that only a Save which owned focus may return otherwise-lost focus to that result, without using a real account, changing Firebase, or publishing the website.
+
+**Approvers:** membership lead, identity/privacy owner, and platform/security owner.
+
+**Prerequisites:** released #531/PR #534 supplies the existing one-attempt and account-context fences. Ask the platform owner or testing specialist for the exact #651 source candidate, the trustworthy unchanged-runtime named failure, the complete passing AUTH-006G named result, the full Account result, type-check and scoped-lint results, the bounded focus-style evidence, the exact diff check, and a redacted written synthetic-behavior report. The specialist runs every command and records the evidence. The backup officer reviews only those written records and prepared artifacts; the backup officer does not use a terminal or test harness. In this procedure, a profile generation and attempt ID are two internal numbers that identify one page lifetime and one Save; they contain no member detail. Keep the optional-directory availability value `false`. Do not sign in to production, use a real name, inspect a real profile, call production Firebase, configure a provider, or change production data.
+
+1. Keep the confirmed profile-name result marked **SOURCE ONLY, NOT LIVE**.
+2. Ask the platform owner for the exact #651 issue.
+3. Ask the platform owner for the reviewed pull request when one exists.
+4. Ask the platform owner for the exact candidate or merge commit.
+5. Ask the platform owner for the three-path runtime diff.
+6. Ask the platform owner for runtime diff digest `c00a6c7e0486dcdfbb0e9d0a4b4c48215f03e3e8c72634fc1f2b17142c08c1d5`.
+7. Ask the testing specialist for the trustworthy unchanged-runtime result with one expected failure and 243 skipped tests.
+8. Ask the testing specialist for test-only digest `df02329a39ee24b127f801d4a8726f5748bdff0b992b8706a16456bbeb2fd66f` for that unchanged-runtime result.
+9. Ask the testing specialist for the green 22-of-22 AUTH-006G result.
+10. Ask the testing specialist for the green 265-of-265 full Account result.
+11. Ask the testing specialist for the passing type-check result.
+12. Ask the testing specialist for the passing scoped ESLint result.
+13. Ask the testing specialist for the passing diff-check result.
+14. Ask the testing specialist for the bounded grid, containment, and focus-style evidence.
+15. Ask the testing specialist for the redacted written synthetic-behavior report.
+16. Confirm the report names the specialist who ran the checks.
+17. Confirm the backup officer used no terminal.
+18. Confirm every profile and account in the evidence is made up.
+19. Confirm no real name appears in the evidence.
+20. Confirm no production Firebase call appears in the evidence.
+21. Confirm the success result says exactly **Profile name saved.**.
+22. Confirm the result appears only after the exact current update completes.
+23. Confirm the result appears only after the exact current authoritative profile reread returns a profile.
+24. Confirm a returned current profile supplies the displayed saved name.
+25. Confirm the same returned current profile supplies the existing directory display-name input.
+26. Confirm the result contains no entered member name.
+27. Confirm the result contains no email.
+28. Confirm the result contains no UID.
+29. Confirm the result contains no revision.
+30. Confirm the result contains no provider or caught-error detail.
+31. Confirm the result has status semantics.
+32. Confirm the result has polite live semantics.
+33. Confirm the result has atomic semantics.
+34. Confirm the result has a programmatic-only tab position of `-1`.
+35. Confirm the result uses the scoped `account-profile__save-result` class.
+36. Confirm focused result evidence shows a 3-pixel outline.
+37. Confirm focused result evidence shows outline color `#005bd8`.
+38. Confirm focused result evidence shows a 3-pixel outline offset.
+39. Confirm the result has bounded width and minimum-width rules.
+40. Confirm the result has a bounded maximum-width rule.
+41. Confirm the result wraps long content instead of overflowing.
+42. Confirm the Profile header remains contained at 320 pixels.
+43. Confirm Profile-header DOM order is heading, result, then **Edit**.
+44. Confirm the grid keeps the heading on the first visual row.
+45. Confirm the grid keeps Edit on the first visual row.
+46. Confirm the result spans the second visual row.
+47. Confirm the next Tab after the focused result reaches Edit.
+48. Confirm validation finishes before a focus intent can be created.
+49. Confirm synchronous one-attempt admission finishes before a focus intent can be created.
+50. Confirm the exact connected Save button must own focus to create the intent.
+51. Confirm the pending intent records only the current profile generation.
+52. Confirm the pending intent records only the exact attempt ID.
+53. Confirm the intent records no member or profile detail.
+54. Confirm only exact current confirmed success transfers the matching intent.
+55. Confirm the layout effect consumes the transferred intent before target checks.
+56. Confirm the current profile generation must match before focus.
+57. Confirm the current attempt ID must match before focus.
+58. Confirm the result node must still be connected before focus.
+59. Confirm a result that already retained focus is not focused again.
+60. Confirm absent focus returns to the result.
+61. Confirm document-body focus returns to the result.
+62. Confirm document-root focus returns to the result.
+63. Confirm disconnected focus returns to the result.
+64. Confirm connected focus outside Profile remains focused.
+65. Confirm connected focus inside Profile remains focused.
+66. Confirm a valid unfocused Save still shows the success result.
+67. Confirm a valid unfocused Save moves no focus.
+68. Confirm removing an unfocused Save's outside focus origin causes no delayed focus.
+69. Confirm one result intent can move focus only once.
+70. Confirm a later same-context rerender cannot repeat consumed focus.
+71. Confirm choosing Edit clears the prior success result.
+72. Confirm a new admitted Save clears the prior success result.
+73. Confirm a profile load clears the prior success result.
+74. Confirm a profile-context change clears the prior success result.
+75. Confirm the initial profile load shows no save-success result.
+76. Confirm validation failure shows no save-success result.
+77. Confirm validation failure starts no profile write.
+78. Confirm update rejection keeps the existing unconfirmed-change result.
+79. Confirm a missing confirmation reread keeps the existing unconfirmed-change result.
+80. Confirm a rejected confirmation reread keeps the existing unconfirmed-change result.
+81. Confirm an application-only change makes old save success inert.
+82. Confirm a Firestore-service-only change makes old save success inert.
+83. Confirm an identity-service-only change makes old save success inert.
+84. Confirm a UID-only change makes old save success inert.
+85. Confirm unavailable-to-same-context return invalidates the older generation.
+86. Confirm a stale update completion cannot show or focus old success.
+87. Confirm a stale authoritative reread cannot show or focus old success.
+88. Confirm a newer attempt cannot reuse an older intent.
+89. Confirm unmount makes a pending save result- and focus-inert.
+90. Confirm one admitted confirmed Save makes exactly one update call.
+91. Confirm one admitted confirmed Save makes exactly one confirmation reread.
+92. Confirm result focus creates no additional read.
+93. Confirm result focus creates no additional write.
+94. Confirm result focus creates no request or retry.
+95. Confirm result focus creates no provider call.
+96. Confirm result focus creates no log or stored value.
+97. Confirm existing unconfirmed-save retry focus remains separate.
+98. Confirm validation error association remains separate.
+99. Confirm Edit-to-input focus remains separate.
+100. Confirm Cancel-to-Edit focus remains separate.
+101. Confirm the source diff changes no Account service or profile payload.
+102. Confirm the source diff changes no Function or Firestore Rule.
+103. Confirm the source diff changes no schema or index.
+104. Confirm the source diff changes no package or workflow.
+105. Confirm the source diff changes no provider configuration.
+106. Confirm the source diff changes no account or sign-in state.
+107. Confirm the source diff changes no production data.
+108. Confirm the source diff adds no membership, dues, role, payment, entitlement, or roster claim.
+109. Confirm the source diff adds no photo query or facial recognition.
+110. Confirm the source diff adds no matching, embedding, similarity, or biometric processing.
+111. Confirm active #616 Strava runtime files remain unchanged.
+112. Confirm active #616 OAUTH-001A2L/RISK-024 documentation remains unchanged.
+113. Confirm the optional-directory availability value remains byte-for-byte `false`.
+114. Confirm the last verified production directory deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+115. Confirm #507 still owns every optional-directory connection and live-proof gate.
+116. Record the source change as its own state.
+117. Record the named test results as their own state.
+118. Record whether the change merged as its own state.
+119. Record whether any website artifact was published as its own state.
+120. Record the exact `runmprc.com` revision as its own state.
+121. Record whether Firebase was deployed as its own state.
+122. Record whether an outside provider was configured as its own state.
+123. Record whether an account or sign-in state changed as its own state.
+124. Record whether production data changed as its own state.
+125. Record whether the confirmed profile-name result is live as its own state.
+126. Record whether connected profile-photo or officer-finder behavior is live as its own state.
+127. Stop before changing Firebase, a provider, an account, production data, directory availability, or the live website.
+
+**Expected result:** one exact current full-name update plus its successful non-null authoritative profile reread renders exactly **Profile name saved.** between the Profile heading and Edit, with status, polite live, atomic, programmatic-focus, bounded-layout, and visible-outline semantics. Only an admitted Save that owned focus records the current generation and attempt ID. Exact current confirmed success alone transfers that intent. The layout effect consumes it before target checks. Absent, body, document-root, or disconnected focus returns to the connected result; retained result focus is left alone; and every other connected focus is preserved. An unfocused Save still shows the truthful result without moving focus. Initial load, validation, update rejection, missing or rejected reread, profile reload, context or generation change, newer attempt, stale work, unmount, and later rerender cannot show or focus stale success. Edit, a new Save, profile load, and context change clear the old result. The handoff creates no extra read, write, request, retry, provider call, log, or stored value. Existing unconfirmed-change recovery remains unchanged. The behavior is source only and **NOT LIVE** until separately published and verified. Directory availability remains `false`, and live #623 remains inert.
+
+**Stop conditions:** a real account, profile, name, email, UID, screenshot, or production sign-in; direct production Firebase access; a provider configuration or production-data action; success copy other than **Profile name saved.**; a result shown before a current non-null authoritative reread; a result containing a member, provider, or error detail; missing status, live, atomic, programmatic-focus, bounded-layout, or visible-outline semantics; DOM order other than heading, result, Edit; a focused exact current Save whose confirmed result receives no otherwise-lost focus; an unfocused Save that moves focus; a connected control that loses deliberately selected focus; an intent containing anything beyond generation and attempt ID; transfer before current confirmed success; delayed focus on a later render; stale application, Firestore, identity, UID, generation, attempt, reread, or unmounted work that shows or focuses success; an extra read, write, request, retry, provider call, log, or stored value; changed validation, payload, confirmation-reread, AUTH-006F, unconfirmed-change, failure/retry, Edit-to-input focus, Cancel-to-Edit focus, directory, or Strava behavior; a Function, Rule, schema, index, package, workflow, provider, account, sign-in, production-data, deployment, publication, membership, dues, role, payment, entitlement, roster, photo-query, facial-recognition, matching, embedding, similarity, or biometric change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, merge, preview, or green CI proves the behavior live.
+
+**Success proof:** record the exact #651 issue, reviewed pull request and commit; trustworthy unchanged-runtime result with one expected failure and 243 skipped tests plus test-only digest `df02329a39ee24b127f801d4a8726f5748bdff0b992b8706a16456bbeb2fd66f`; green 22-of-22 AUTH-006G block; green 265-of-265 Account suite; passing type-check, scoped ESLint, and diff-check; bounded grid, containment, and focus-style evidence; runtime diff digest `c00a6c7e0486dcdfbb0e9d0a4b4c48215f03e3e8c72634fc1f2b17142c08c1d5`; relevant full frontend, repository Node, diagnostic build, unchanged lint-baseline, workflow, and security checks when complete; independent frontend/accessibility, security/privacy/race, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and live behavior separately. Record the unchanged `false` directory availability and unchanged #623 deploy separately. Source and tests do not prove merge. Merge does not prove publication. Publication does not prove `runmprc.com`, Firebase, provider, account, data, or live behavior.
+
+**Undo:** use one reviewed frontend-and-documentation revert or safe roll-forward. No Firebase, provider, account, sign-in, or production-data undo is needed because #651 changes source only. An undo must preserve AUTH-006F context fencing, generic unconfirmed-change recovery, the inert directory default, and active #616 work. Do not undo by editing or deleting a profile or account.
+
+**Escalation:** membership lead plus identity/privacy and platform/security owners. Use the private incident path if a real profile detail appeared, focus crossed application or account contexts, a stale result appeared, deliberately selected connected focus was stolen, an intent retained private or service data, a focus handoff created a read or write, or any source-only behavior became connected or live without separate approval.
 
 ## Provider-neutral membership authority — SOURCE ONLY, UNUSED
 

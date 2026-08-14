@@ -234,6 +234,7 @@ function RegistrationRow({
 
 const PROFILE_UNAVAILABLE_MESSAGE = 'Your profile is temporarily unavailable. Sign out and try again later. No membership or payment status was changed.';
 const PROFILE_CHANGE_UNCONFIRMED_MESSAGE = 'We could not confirm your profile change. Try the profile again before making another change.';
+const PROFILE_SAVE_CONFIRMED_MESSAGE = 'Profile name saved.';
 const SIGN_OUT_PENDING_MESSAGE = 'Signing out. Keep this page open.';
 const SIGN_OUT_RETRY_MESSAGE = 'We could not confirm sign-out. You may still be signed in. Try sign out once more.';
 const SIGN_OUT_TERMINAL_MESSAGE = 'We still could not confirm sign-out. You may still be signed in. Close the browser and do not let anyone else use this device until the membership lead or platform owner helps.';
@@ -254,6 +255,10 @@ export function AccountContent({
   const [fullName, setFullName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [profileSaveConfirmation, setProfileSaveConfirmation] = useState<{
+    attemptId: number;
+    generation: number;
+  } | null>(null);
 
   const [regsData, setRegsData] = useState<MyRegistrationsResponse | null>(null);
   const [regsLoading, setRegsLoading] = useState(true);
@@ -272,7 +277,8 @@ export function AccountContent({
   type ProfileDataContext = ProfileServiceContext & {
     generation: number;
   };
-  type ProfileSaveAttempt = ProfileDataContext & { attemptId: number };
+  type ProfileSaveToken = { attemptId: number; generation: number };
+  type ProfileSaveAttempt = ProfileDataContext & ProfileSaveToken;
   type SignOutOutcome = AccountContext & {
     attemptId: number;
     attemptNumber: 1 | 2;
@@ -286,6 +292,10 @@ export function AccountContent({
   const [signOutOutcome, setSignOutOutcome] = useState<SignOutOutcome | null>(null);
   const profileSaveAttemptIdRef = useRef(0);
   const profileSaveBlockedRef = useRef(false);
+  const pendingProfileSaveFocusIntentRef = useRef<ProfileSaveToken | null>(null);
+  const profileSaveResultFocusIntentRef = useRef<ProfileSaveToken | null>(null);
+  const profileSaveResultRef = useRef<HTMLParagraphElement | null>(null);
+  const profileSaveButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileContextGenerationRef = useRef(0);
   const profileContextMountedRef = useRef(false);
   const currentProfileContextRef = useRef<ProfileServiceContext>({
@@ -318,11 +328,16 @@ export function AccountContent({
     setSaving(false);
     setEditing(false);
     setSaveError(null);
+    setProfileSaveConfirmation(null);
+    pendingProfileSaveFocusIntentRef.current = null;
+    profileSaveResultFocusIntentRef.current = null;
 
     return () => {
       profileContextMountedRef.current = false;
       profileContextGenerationRef.current += 1;
       profileSaveBlockedRef.current = true;
+      pendingProfileSaveFocusIntentRef.current = null;
+      profileSaveResultFocusIntentRef.current = null;
     };
   }, [firebaseApp, firebaseFirestore, identityService, user.uid]);
 
@@ -364,6 +379,9 @@ export function AccountContent({
       setProfileError(null);
       setEditing(false);
       setSaveError(null);
+      setProfileSaveConfirmation(null);
+      pendingProfileSaveFocusIntentRef.current = null;
+      profileSaveResultFocusIntentRef.current = null;
 
       try {
         await ensureMyProfile(activeServices.firebaseResources.app);
@@ -430,10 +448,21 @@ export function AccountContent({
       && currentContext.uid === attempt.uid;
   }
 
+  function matchesProfileSaveToken(
+    token: ProfileSaveToken | null,
+    expected: ProfileSaveToken,
+  ) {
+    return token?.generation === expected.generation
+      && token.attemptId === expected.attemptId;
+  }
+
   async function handleSave() {
     if (!services) return;
     const validation = validateMemberProfileFields({ fullName });
     if (!validation.valid) {
+      pendingProfileSaveFocusIntentRef.current = null;
+      profileSaveResultFocusIntentRef.current = null;
+      setProfileSaveConfirmation(null);
       setSaveError(validation.message);
       return;
     }
@@ -461,6 +490,14 @@ export function AccountContent({
       attemptId,
       generation: profileContextGenerationRef.current,
     };
+    const focusToken = { attemptId, generation: attempt.generation };
+    const saveButton = profileSaveButtonRef.current;
+    pendingProfileSaveFocusIntentRef.current = saveButton?.isConnected
+      && document.activeElement === saveButton
+      ? focusToken
+      : null;
+    profileSaveResultFocusIntentRef.current = null;
+    setProfileSaveConfirmation(null);
     setSaving(true);
     setSaveError(null);
     try {
@@ -477,9 +514,22 @@ export function AccountContent({
       setFullName(fresh.fullName || '');
       setProfileError(null);
       setProfileState('ready');
+      const confirmation = { attemptId, generation: attempt.generation };
+      const pendingFocusIntent = pendingProfileSaveFocusIntentRef.current;
+      pendingProfileSaveFocusIntentRef.current = null;
+      profileSaveResultFocusIntentRef.current = matchesProfileSaveToken(
+        pendingFocusIntent,
+        confirmation,
+      )
+        ? confirmation
+        : null;
+      setProfileSaveConfirmation(confirmation);
       setEditing(false);
     } catch {
       if (!isCurrentProfileSave(attempt)) return;
+      pendingProfileSaveFocusIntentRef.current = null;
+      profileSaveResultFocusIntentRef.current = null;
+      setProfileSaveConfirmation(null);
       setProfile(null);
       setEditing(false);
       setSaveError(null);
@@ -548,6 +598,32 @@ export function AccountContent({
     }
   }
 
+  useLayoutEffect(() => {
+    const focusIntent = profileSaveResultFocusIntentRef.current;
+    profileSaveResultFocusIntentRef.current = null;
+    if (!focusIntent) return;
+    if (!matchesProfileSaveToken(profileSaveConfirmation, focusIntent)) return;
+    if (
+      profileContextGenerationRef.current !== focusIntent.generation
+      || profileSaveAttemptIdRef.current !== focusIntent.attemptId
+      || profileState !== 'ready'
+      || editing
+      || !profile
+    ) return;
+
+    const target = profileSaveResultRef.current;
+    if (!target?.isConnected) return;
+    const { activeElement } = document;
+    if (activeElement === target) return;
+    if (
+      activeElement
+      && activeElement.isConnected
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+    ) return;
+    target.focus();
+  }, [editing, profile, profileSaveConfirmation, profileState]);
+
   const currentSignOutOutcome = signOutOutcome
     && signOutOutcome.uid === user.uid
     && signOutOutcome.identityService === identityService
@@ -561,6 +637,11 @@ export function AccountContent({
     && profileContext.firebaseApp === firebaseApp
     && profileContext.firebaseFirestore === firebaseFirestore
     && profileContext.generation === profileContextGenerationRef.current;
+  const currentProfileSaveConfirmation = profileSaveConfirmation
+    && profileSaveConfirmation.generation === profileContextGenerationRef.current
+    && profileSaveConfirmation.attemptId === profileSaveAttemptIdRef.current
+    ? profileSaveConfirmation
+    : null;
   const registrationsBelongToCurrentContext = registrationsContext
     && registrationsContext.uid === user.uid
     && registrationsContext.identityService === identityService
@@ -667,13 +748,33 @@ export function AccountContent({
         </div>
 
         <section className="border rounded-lg p-4 mt-4 bg-gray-50">
-          <div className="flex justify-between items-center mb-3">
+          <div className="account-profile__header">
             <h2 className="text-lg font-semibold">Profile</h2>
+            {currentProfileSaveConfirmation
+              && !editing
+              && profileState === 'ready'
+              && profile && (
+              <p
+                ref={profileSaveResultRef}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                tabIndex={-1}
+                className="account-profile__save-result"
+              >
+                {PROFILE_SAVE_CONFIRMED_MESSAGE}
+              </p>
+            )}
             {!editing && profileState === 'ready' && profile && (
               <button
                 type="button"
-                onClick={() => setEditing(true)}
-                className="text-sm text-blue-600 hover:underline"
+                onClick={() => {
+                  pendingProfileSaveFocusIntentRef.current = null;
+                  profileSaveResultFocusIntentRef.current = null;
+                  setProfileSaveConfirmation(null);
+                  setEditing(true);
+                }}
+                className="account-profile__edit text-sm text-blue-600 hover:underline"
               >
                 Edit
               </button>
@@ -754,6 +855,7 @@ export function AccountContent({
               )}
               <div className="flex gap-2">
                 <button
+                  ref={profileSaveButtonRef}
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
