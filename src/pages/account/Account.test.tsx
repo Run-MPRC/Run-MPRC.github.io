@@ -559,6 +559,330 @@ describe('Account profile recovery', () => {
     expect(screen.queryByTestId('strava-section')).not.toBeInTheDocument();
   });
 
+  describe('AUTH-006I profile Edit-to-input focus', () => {
+    const servicesA = {
+      firebaseResources: { app, firestore },
+      identityService: { signOut, resendVerificationEmail },
+    };
+    const userB = {
+      uid: 'synthetic-user-b',
+      email: 'member-b@example.test',
+      role: 'unverified' as const,
+    };
+
+    async function readyEdit() {
+      const edit = await screen.findByRole('button', { name: 'Edit' });
+      await waitFor(() => expect(listMyRegistrations).toHaveBeenCalledTimes(1));
+      return edit;
+    }
+
+    function focusInstances(focus: jest.SpyInstance) {
+      return focus.mock.instances as HTMLElement[];
+    }
+
+    test('hands otherwise-lost keyboard Edit focus to the existing full-name input', async () => {
+      renderAccount();
+      const edit = await readyEdit();
+      edit.focus();
+      fireEvent.click(edit, { detail: 0 });
+
+      const input = screen.getByLabelText('Full name');
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(input).toHaveValue(PROFILE.fullName);
+      expect(input).toHaveFocus();
+      expect(input).toBeEnabled();
+      expect(ensureMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(1);
+      expect(listMyRegistrations).toHaveBeenCalledTimes(1);
+      expect(updateMyProfile).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['no active element', null],
+      ['the document root', document.documentElement],
+      ['a disconnected element', document.createElement('button')],
+    ])('restores Edit-to-input focus from %s', async (_label, lostFocus) => {
+      renderAccount();
+      const edit = await readyEdit();
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+      const activeElement = jest.spyOn(document, 'activeElement', 'get')
+        .mockImplementation(() => (edit.isConnected ? edit : lostFocus));
+      try {
+        fireEvent.click(edit, { detail: 0 });
+      } finally {
+        activeElement.mockRestore();
+      }
+
+      const input = screen.getByLabelText('Full name');
+      expect(focusInstances(focus)).toContain(input);
+      expect(updateMyProfile).not.toHaveBeenCalled();
+    });
+
+    test('does not refocus an input that already owns focus', async () => {
+      renderAccount();
+      const edit = await readyEdit();
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+      const activeElement = jest.spyOn(document, 'activeElement', 'get')
+        .mockImplementation(() => (edit.isConnected
+          ? edit
+          : document.querySelector('#profile-full-name')));
+      try {
+        fireEvent.click(edit, { detail: 0 });
+      } finally {
+        activeElement.mockRestore();
+      }
+
+      const input = screen.getByLabelText('Full name');
+      expect(focusInstances(focus)).not.toContain(input);
+    });
+
+    test('opens for an unfocused programmatic activation without moving focus now or later', async () => {
+      const view = renderAccount();
+      const edit = await readyEdit();
+      const outside = document.createElement('button');
+      document.body.append(outside);
+      outside.focus();
+      outside.remove();
+      expect(document.body).toHaveFocus();
+
+      fireEvent.click(edit);
+
+      const input = screen.getByLabelText('Full name');
+      expect(input).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+      view.rerender(accountView());
+      expect(input).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+      expect(updateMyProfile).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['outside Profile', () => {
+        const target = document.createElement('button');
+        document.body.append(target);
+        return target;
+      }],
+      ['inside Profile', () => screen.getByRole('button', {
+        name: 'Request another verification email',
+      })],
+    ])('preserves connected deliberate focus %s and consumes the intent', async (
+      _label,
+      getTarget,
+    ) => {
+      const view = renderAccount();
+      const edit = await readyEdit();
+      const deliberateTarget = getTarget();
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+      const activeElement = jest.spyOn(document, 'activeElement', 'get')
+        .mockImplementation(() => (edit.isConnected ? edit : deliberateTarget));
+      try {
+        fireEvent.click(edit, { detail: 0 });
+      } finally {
+        activeElement.mockRestore();
+      }
+
+      const input = screen.getByLabelText('Full name');
+      expect(focusInstances(focus)).not.toContain(input);
+      if (!deliberateTarget.closest('.account-content')) deliberateTarget.remove();
+      view.rerender(accountView());
+      expect(focusInstances(focus)).not.toContain(input);
+    });
+
+    test('consumes a successful focus handoff once across later same-context renders', async () => {
+      const view = renderAccount();
+      const edit = await readyEdit();
+      edit.focus();
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+
+      fireEvent.click(edit, { detail: 0 });
+
+      const input = screen.getByLabelText('Full name');
+      expect(focusInstances(focus).filter((target) => target === input)).toHaveLength(1);
+      view.rerender(accountView());
+      expect(focusInstances(focus).filter((target) => target === input)).toHaveLength(1);
+    });
+
+    test.each([
+      [
+        'Firebase app',
+        {
+          services: {
+            firebaseResources: { app: { name: 'synthetic-app-b' }, firestore },
+            identityService: servicesA.identityService,
+          },
+          user: USER,
+        },
+      ],
+      [
+        'Firestore service',
+        {
+          services: {
+            firebaseResources: { app, firestore: { name: 'synthetic-firestore-b' } },
+            identityService: servicesA.identityService,
+          },
+          user: USER,
+        },
+      ],
+      [
+        'identity service',
+        {
+          services: {
+            firebaseResources: { app, firestore },
+            identityService: {
+              signOut: jest.fn(),
+              resendVerificationEmail: jest.fn(),
+            },
+          },
+          user: USER,
+        },
+      ],
+      [
+        'UID',
+        {
+          services: servicesA,
+          user: userB,
+        },
+      ],
+    ])('cannot reuse a consumed Edit focus intent after a %s-only change', async (
+      _label,
+      nextContext,
+    ) => {
+      const nextProfile = {
+        ...PROFILE,
+        uid: nextContext.user.uid,
+        email: nextContext.user.email,
+        fullName: 'Next Context Synthetic Member',
+      };
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(nextProfile);
+      const view = renderAccount();
+      const edit = await readyEdit();
+      const deliberateTarget = document.createElement('button');
+      document.body.append(deliberateTarget);
+      const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+      const activeElement = jest.spyOn(document, 'activeElement', 'get')
+        .mockImplementation(() => (edit.isConnected ? edit : deliberateTarget));
+      try {
+        fireEvent.click(edit, { detail: 0 });
+      } finally {
+        activeElement.mockRestore();
+      }
+      const oldInput = screen.getByLabelText('Full name');
+      expect(focusInstances(focus)).not.toContain(oldInput);
+      deliberateTarget.remove();
+
+      (useServiceLocator as jest.Mock).mockReturnValue({
+        services: nextContext.services,
+        isReady: true,
+      });
+      view.rerender(accountView(nextContext.user));
+      expect(await screen.findByText(nextProfile.fullName)).toBeInTheDocument();
+      expect(screen.queryByLabelText('Full name')).not.toBeInTheDocument();
+      expect(focusInstances(focus)).not.toContain(oldInput);
+    });
+
+    test('uses the authoritative reread name after AUTH-006G success', async () => {
+      const confirmed = {
+        ...PROFILE,
+        fullName: 'Confirmed Synthetic Member',
+      };
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(confirmed);
+      renderAccount();
+      fireEvent.click(await readyEdit());
+      fireEvent.change(screen.getByLabelText('Full name'), {
+        target: { value: confirmed.fullName },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText('Profile name saved.')).toBeInTheDocument();
+
+      const edit = screen.getByRole('button', { name: 'Edit' });
+      edit.focus();
+      fireEvent.click(edit, { detail: 0 });
+
+      expect(screen.queryByText('Profile name saved.')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Full name')).toHaveValue(confirmed.fullName);
+      expect(screen.getByLabelText('Full name')).toHaveFocus();
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('clears an AUTH-006G result without focusing for an unfocused Edit', async () => {
+      const confirmed = {
+        ...PROFILE,
+        fullName: 'Confirmed Programmatic Synthetic Member',
+      };
+      (getMyProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE)
+        .mockResolvedValueOnce(confirmed);
+      const view = renderAccount();
+      fireEvent.click(await readyEdit());
+      fireEvent.change(screen.getByLabelText('Full name'), {
+        target: { value: confirmed.fullName },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText('Profile name saved.')).toBeInTheDocument();
+
+      const edit = screen.getByRole('button', { name: 'Edit' });
+      const outside = document.createElement('button');
+      document.body.append(outside);
+      outside.focus();
+      outside.remove();
+      expect(document.body).toHaveFocus();
+      fireEvent.click(edit);
+
+      const input = screen.getByLabelText('Full name');
+      expect(screen.queryByText('Profile name saved.')).not.toBeInTheDocument();
+      expect(input).toHaveValue(confirmed.fullName);
+      expect(input).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+
+      view.rerender(accountView());
+      expect(input).not.toHaveFocus();
+      expect(updateMyProfile).toHaveBeenCalledTimes(1);
+      expect(getMyProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('keeps the existing input semantics, keyboard order, and global focus rule', async () => {
+      renderAccount();
+      const edit = await readyEdit();
+      edit.focus();
+      fireEvent.click(edit, { detail: 0 });
+
+      const input = screen.getByLabelText('Full name');
+      const save = screen.getByRole('button', { name: 'Save' });
+      const cancel = screen.getByRole('button', { name: 'Cancel' });
+      expect(input.tagName).toBe('INPUT');
+      expect(input).toHaveAccessibleDescription('Up to 200 characters.');
+      expect(input).toHaveAttribute('autocomplete', 'name');
+      expect(input).toHaveAttribute('maxlength', '200');
+      expect(input.compareDocumentPosition(save))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(save.compareDocumentPosition(cancel))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+      const globalCss = readFileSync(join(__dirname, '../../index.css'), 'utf8');
+      expect(globalCss).toMatch(/:focus-visible,[^{]*\{[^}]*outline:\s*3px\s+solid\s+var\(--color-secondary\);[^}]*outline-offset:\s*3px;[^}]*box-shadow:\s*0\s+0\s+0\s+6px\s+var\(--color-gray-600\);[^}]*\}/);
+      expect(updateMyProfile).not.toHaveBeenCalled();
+    });
+
+    test('leaves an already-consumed focus handoff inert after unmount', async () => {
+      const view = renderAccount();
+      const edit = await readyEdit();
+      edit.focus();
+      fireEvent.click(edit, { detail: 0 });
+      const input = screen.getByLabelText('Full name');
+      expect(input).toHaveFocus();
+
+      view.unmount();
+
+      expect(input.isConnected).toBe(false);
+      expect(updateMyProfile).not.toHaveBeenCalled();
+    });
+  });
+
   describe('AUTH-006G profile-save success feedback and focus', () => {
     const CONFIRMED_PROFILE = {
       ...PROFILE,

@@ -302,6 +302,8 @@ export function AccountContent({
   const profileSaveResultRef = useRef<HTMLParagraphElement | null>(null);
   const profileSaveUnconfirmedResultRef = useRef<HTMLDivElement | null>(null);
   const profileSaveButtonRef = useRef<HTMLButtonElement | null>(null);
+  const profileEditFocusIntentRef = useRef<number | null>(null);
+  const profileFullNameInputRef = useRef<HTMLInputElement | null>(null);
   const profileContextGenerationRef = useRef(0);
   const profileContextMountedRef = useRef(false);
   const currentProfileContextRef = useRef<ProfileServiceContext>({
@@ -339,6 +341,7 @@ export function AccountContent({
     pendingProfileSaveFocusIntentRef.current = null;
     profileSaveResultFocusIntentRef.current = null;
     profileSaveUnconfirmedFocusIntentRef.current = null;
+    profileEditFocusIntentRef.current = null;
 
     return () => {
       profileContextMountedRef.current = false;
@@ -347,6 +350,7 @@ export function AccountContent({
       pendingProfileSaveFocusIntentRef.current = null;
       profileSaveResultFocusIntentRef.current = null;
       profileSaveUnconfirmedFocusIntentRef.current = null;
+      profileEditFocusIntentRef.current = null;
     };
   }, [firebaseApp, firebaseFirestore, identityService, user.uid]);
 
@@ -393,6 +397,7 @@ export function AccountContent({
       pendingProfileSaveFocusIntentRef.current = null;
       profileSaveResultFocusIntentRef.current = null;
       profileSaveUnconfirmedFocusIntentRef.current = null;
+      profileEditFocusIntentRef.current = null;
 
       try {
         await ensureMyProfile(activeServices.firebaseResources.app);
@@ -468,6 +473,7 @@ export function AccountContent({
   }
 
   async function handleSave() {
+    profileEditFocusIntentRef.current = null;
     if (!services) return;
     const validation = validateMemberProfileFields({ fullName });
     if (!validation.valid) {
@@ -723,6 +729,33 @@ export function AccountContent({
     && registrationsContext.firebaseFirestore === firebaseFirestore
     && registrationsContext.generation === profileContextGenerationRef.current;
 
+  useLayoutEffect(() => {
+    const focusIntent = profileEditFocusIntentRef.current;
+    profileEditFocusIntentRef.current = null;
+    if (focusIntent === null) return;
+    if (
+      !profileContextMountedRef.current
+      || profileContextGenerationRef.current !== focusIntent
+      || !profileBelongsToCurrentContext
+      || profileState !== 'ready'
+      || !profile
+      || !editing
+      || saving
+    ) return;
+
+    const target = profileFullNameInputRef.current;
+    if (!target?.isConnected || target.disabled) return;
+    const { activeElement } = document;
+    if (activeElement === target) return;
+    if (
+      activeElement
+      && activeElement.isConnected
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+    ) return;
+    target.focus();
+  }, [editing, profile, profileBelongsToCurrentContext, profileState, saving]);
+
   if (currentSignOutOutcome) {
     const isRetry = currentSignOutOutcome.status === 'retry';
     const isTerminal = currentSignOutOutcome.status === 'terminal';
@@ -842,7 +875,12 @@ export function AccountContent({
             {!editing && profileState === 'ready' && profile && (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(event) => {
+                  const editButton = event.currentTarget;
+                  profileEditFocusIntentRef.current = editButton.isConnected
+                    && document.activeElement === editButton
+                    ? profileContextGenerationRef.current
+                    : null;
                   pendingProfileSaveFocusIntentRef.current = null;
                   profileSaveResultFocusIntentRef.current = null;
                   profileSaveUnconfirmedFocusIntentRef.current = null;
@@ -875,6 +913,7 @@ export function AccountContent({
               <button
                 type="button"
                 onClick={() => {
+                  profileEditFocusIntentRef.current = null;
                   pendingProfileSaveFocusIntentRef.current = null;
                   profileSaveResultFocusIntentRef.current = null;
                   profileSaveUnconfirmedFocusIntentRef.current = null;
@@ -924,6 +963,7 @@ export function AccountContent({
                 <label htmlFor="profile-full-name" className="block">
                   <span className="text-sm font-medium">Full name</span>
                   <input
+                    ref={profileFullNameInputRef}
                     id="profile-full-name"
                     type="text"
                     className="border rounded px-3 py-2 w-full"
@@ -959,6 +999,7 @@ export function AccountContent({
                 <button
                   type="button"
                   onClick={() => {
+                    profileEditFocusIntentRef.current = null;
                     setEditing(false);
                     setFullName(profile?.fullName || '');
                     setSaveError(null);
