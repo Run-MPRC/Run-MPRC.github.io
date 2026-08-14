@@ -59,7 +59,7 @@ function App() {
           <Navbar />
           <AnnouncementBanner />
           <ScrollToTop />
-          <main id="main-content">
+          <main id="main-content" tabIndex={-1}>
             <ErrorBoundary>
               <Routes>
                 <Route index element={<Home />} />

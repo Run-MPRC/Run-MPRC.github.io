@@ -214,9 +214,9 @@ describe('global keyboard focus visibility', () => {
   });
 
   test('provides a bounded two-tone focus-visible indicator', () => {
-    const globalFocusRules = stylesheetRules.filter(({ selector }) => (
-      selector.includes(':focus-visible')
-    ));
+    const globalFocusRules = stylesheetRules.filter(
+      ({ selector }) => selector === approvedFocusSelector,
+    );
     expect(globalFocusRules).toHaveLength(1);
     expect(globalFocusRules[0].selector).toBe(approvedFocusSelector);
 
@@ -247,6 +247,59 @@ describe('global keyboard focus visibility', () => {
     expect(shadow).not.toBeNull();
     expect(Number(shadow?.[1])).toBeGreaterThan(0);
     expect(Number(shadow?.[1])).toBeLessThanOrEqual(8);
+  });
+
+  test('keeps the focused main cue inside the viewport below fixed navigation', () => {
+    const mainFocusRules = stylesheetRules.filter(
+      ({ selector }) => selector === '#main-content:focus-visible::after',
+    );
+    expect(mainFocusRules).toHaveLength(1);
+
+    const [{ declarations }] = mainFocusRules;
+    expect(getDeclarationValues(declarations, 'content')).toEqual(['""']);
+    expect(getDeclarationValues(declarations, 'position')).toEqual(['fixed']);
+    const [cueZIndex] = getDeclarationValues(declarations, 'z-index');
+    expect(cueZIndex).toBe('98');
+    const [navigationZIndex] = getDeclarationValues(
+      getRule(readStylesheet('components', 'navbar.css'), 'nav'),
+      'z-index',
+    );
+    expect(navigationZIndex).toBe('99');
+    expect(Number(cueZIndex)).toBeLessThan(Number(navigationZIndex));
+    expect(getDeclarationValues(declarations, 'pointer-events')).toEqual(['none']);
+    expect(getDeclarationValues(declarations, 'box-sizing')).toEqual(['border-box']);
+    expect(getDeclarationValues(declarations, 'border')).toEqual([
+      '3px solid var(--color-secondary)',
+    ]);
+    expect(getDeclarationValues(declarations, 'box-shadow')).toEqual([
+      '0 0 0 3px var(--color-gray-600)',
+    ]);
+
+    const focusRule = stylesheetRules.find(
+      ({ selector }) => selector === approvedFocusSelector,
+    );
+    const outlineWidth = getDeclarationValues(focusRule.declarations, 'outline')[0]
+      .match(/^(\d+(?:\.\d+)?)px\s/)?.[1];
+    const outlineOffset = getDeclarationValues(
+      focusRule.declarations,
+      'outline-offset',
+    )[0].match(/^(\d+(?:\.\d+)?)px$/)?.[1];
+    const shadowSpread = getDeclarationValues(focusRule.declarations, 'box-shadow')[0]
+      .match(/^0\s+0\s+0\s+(\d+(?:\.\d+)?)px\s/)?.[1];
+    const decorationExtent = Math.max(
+      Number(outlineWidth) + Number(outlineOffset),
+      Number(shadowSpread),
+    );
+
+    ['right', 'bottom', 'left'].forEach((property) => {
+      const inset = getDeclarationValues(declarations, property)[0]
+        .match(/^(\d+(?:\.\d+)?)px$/)?.[1];
+      expect(Number(inset)).toBeGreaterThanOrEqual(decorationExtent);
+    });
+    const top = getDeclarationValues(declarations, 'top');
+    expect(top).toEqual([
+      `calc(var(--site-nav-height) + ${decorationExtent}px)`,
+    ]);
   });
 
   test('has no competing outline suppression in the global stylesheet', () => {
