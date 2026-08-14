@@ -14,7 +14,8 @@
 }
 
 .skip-to-content:focus {
-  left: 0;
+  left: 8px;
+  top: 8px;
 }
 
 *,
@@ -23,7 +24,6 @@
   margin: 0;
   padding: 0;
   border: 0;
-  outline: 0;
   list-style: none;
   text-decoration: none;
   box-sizing: border-box;
@@ -56,6 +56,13 @@
   --transition: all 500ms ease; /* make sure all transition have a constant effect*/
 }
 
+:focus-visible,
+.hover\:shadow-md:hover:focus-visible {
+  outline: 3px solid var(--color-secondary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--color-gray-600);
+}
+
 /******************** GENERAL STYLES ********************/
 body {
   font-family: "Montserrat", sans-serif;
@@ -67,6 +74,20 @@ body {
 
 #main-content {
   padding-top: var(--site-nav-height);
+}
+
+#main-content:focus-visible::after {
+  content: "";
+  position: fixed;
+  z-index: 98;
+  top: calc(var(--site-nav-height) + 6px);
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  box-sizing: border-box;
+  border: 3px solid var(--color-secondary);
+  box-shadow: 0 0 0 3px var(--color-gray-600);
+  pointer-events: none;
 }
 
 .container {
