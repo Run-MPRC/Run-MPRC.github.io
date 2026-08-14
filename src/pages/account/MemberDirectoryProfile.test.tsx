@@ -10,6 +10,7 @@ import {
   createMemberDirectoryRequestId,
   getMyMemberDirectoryProfile,
   isDefinitiveMemberDirectoryRejection,
+  MemberDirectoryProfile as MemberDirectoryProfileData,
   removeMyMemberDirectoryPhoto,
   setMyMemberDirectoryPhoto,
   setMyMemberDirectoryVisibility,
@@ -1316,6 +1317,431 @@ describe('My Account member directory profile', () => {
 
       expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
       expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('MEMBERS-DIRECTORY-001M rejected-removal focus recovery', () => {
+    const rejected = { code: 'functions/failed-precondition' };
+    const WITHOUT_PHOTO: MemberDirectoryProfileData = {
+      ...PROFILE_WITH_PHOTO,
+      revision: 7,
+      hasPhoto: false,
+      photo: null,
+    };
+
+    function arrangeRejectedRemoval(
+      current: MemberDirectoryProfileData = WITHOUT_PHOTO,
+    ) {
+      const removal = deferred<unknown>();
+      const readback = deferred<MemberDirectoryProfileData>();
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(removal.promise);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => error === rejected,
+      );
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockReturnValueOnce(readback.promise);
+      return {
+        removal,
+        readback,
+        settle: async () => {
+          await act(async () => {
+            removal.reject(rejected);
+            await Promise.resolve();
+          });
+          await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+          await act(async () => readback.resolve(current));
+        },
+      };
+    }
+
+    function modelDisabledControlFocusEviction(control: HTMLElement) {
+      control.blur();
+      const disposable = document.createElement('button');
+      document.body.appendChild(disposable);
+      disposable.focus();
+      expect(disposable).toHaveFocus();
+      disposable.remove();
+      expect(document.body).toHaveFocus();
+    }
+
+    async function selectReplacement({
+      previewState = 'ready',
+    }: {
+      previewState?: 'ready' | 'loading';
+    } = {}) {
+      const input = await screen.findByLabelText('Replace profile photo');
+      fireEvent.change(input, {
+        target: {
+          files: [new File(['001m replacement'], 'fixture-001m.png', {
+            type: 'image/png',
+          })],
+        },
+      });
+      const preview = await screen.findByRole('img', {
+        name: 'Selected profile photo preview',
+      });
+      if (previewState === 'ready') fireEvent.load(preview);
+      return { input, preview };
+    }
+
+    test('restores the persistent file input after focused Remove disappears on a definitive rejection readback', async () => {
+      const attempt = arrangeRejectedRemoval();
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+
+      expect(remove).toBeDisabled();
+      modelDisabledControlFocusEviction(remove);
+      await attempt.settle();
+
+      const input = screen.getByLabelText('Add profile photo');
+      expect(input).toHaveFocus();
+      expect(screen.queryByRole('button', { name: 'Remove current saved photo' }))
+        .not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'That change was rejected before it was saved. Review the requirements and try again.',
+      );
+      expect(input.getAttribute('aria-describedby'))
+        .not.toContain('member-directory-action-error');
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+    });
+
+    test('restores the ready replacement Save action without attaching the Remove rejection to it', async () => {
+      const attempt = arrangeRejectedRemoval();
+      renderProfile();
+      await selectReplacement();
+      const remove = screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+
+      expect(remove).toBeDisabled();
+      modelDisabledControlFocusEviction(remove);
+      await attempt.settle();
+
+      const save = screen.getByRole('button', { name: 'Save profile photo' });
+      const input = screen.getByLabelText('Add profile photo');
+      expect(save).toHaveFocus();
+      expect(save.getAttribute('aria-describedby'))
+        .not.toContain('member-directory-action-error');
+      expect(input.getAttribute('aria-describedby'))
+        .not.toContain('member-directory-action-error');
+      expect(screen.getByRole('alert')).toHaveTextContent(/rejected before it was saved/i);
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('falls back to the file input while the replacement preview is not ready', async () => {
+      const attempt = arrangeRejectedRemoval();
+      renderProfile();
+      await selectReplacement({ previewState: 'loading' });
+      const remove = screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+
+      await attempt.settle();
+
+      expect(screen.getByLabelText('Add profile photo')).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Save profile photo' })).toBeDisabled();
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('falls back to the file input while a replacement is still being read', async () => {
+      const reader = installDeferredFileReader();
+      try {
+        const attempt = arrangeRejectedRemoval();
+        renderProfile();
+        const input = await screen.findByLabelText('Replace profile photo');
+        fireEvent.change(input, {
+          target: {
+            files: [new File(['001m reading'], 'fixture-001m-reading.png', {
+              type: 'image/png',
+            })],
+          },
+        });
+        expect(screen.getByText('Preparing selected photo preview...')).toBeInTheDocument();
+        const remove = screen.getByRole('button', {
+          name: 'Remove current saved photo',
+        });
+        remove.focus();
+        fireEvent.click(remove);
+        modelDisabledControlFocusEviction(remove);
+
+        await attempt.settle();
+
+        expect(screen.getByLabelText('Add profile photo')).toHaveFocus();
+        expect(screen.queryByRole('button', { name: 'Save profile photo' }))
+          .not.toBeInTheDocument();
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      } finally {
+        reader.restore();
+      }
+    });
+
+    test('restores a surviving Remove action and keeps its fixed error association', async () => {
+      const current = {
+        ...PROFILE_WITH_PHOTO,
+        revision: 7,
+        photo: { ...PHOTO, version: '22222222-2222-4222-8222-222222222222' },
+      };
+      const attempt = arrangeRejectedRemoval(current);
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+
+      await attempt.settle();
+
+      const survivingRemove = screen.getByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      expect(survivingRemove).toHaveFocus();
+      expect(survivingRemove.getAttribute('aria-describedby'))
+        .toContain('member-directory-action-error');
+    });
+
+    test('does not redundantly focus a surviving Remove action that retained focus', async () => {
+      const current = { ...PROFILE_WITH_PHOTO, revision: 7 };
+      const attempt = arrangeRejectedRemoval(current);
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      const focus = jest.spyOn(remove, 'focus');
+
+      fireEvent.click(remove);
+      expect(remove).toHaveFocus();
+      await attempt.settle();
+
+      expect(remove).toHaveFocus();
+      expect(focus).not.toHaveBeenCalled();
+      focus.mockRestore();
+    });
+
+    test('creates no focus intent for an outside-focused programmatic Remove invocation', async () => {
+      const attempt = arrangeRejectedRemoval();
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      outside.focus();
+
+      fireEvent.click(await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      }));
+      await attempt.settle();
+
+      expect(outside).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+    });
+
+    test('preserves a deliberately selected connected control during the pending removal', async () => {
+      const attempt = arrangeRejectedRemoval();
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      remove.focus();
+      fireEvent.click(remove);
+      outside.focus();
+
+      await attempt.settle();
+
+      expect(outside).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+    });
+
+    test('preserves a deliberately selected connected in-profile control during the pending removal', async () => {
+      const attempt = arrangeRejectedRemoval();
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      const inProfile = screen.getByRole('heading', {
+        name: 'Profile photo and officer finder',
+      });
+      inProfile.tabIndex = -1;
+      inProfile.focus();
+      expect(inProfile).toHaveFocus();
+
+      await attempt.settle();
+
+      expect(inProfile).toHaveFocus();
+      expect(screen.getByLabelText('Add profile photo')).not.toHaveFocus();
+    });
+
+    test('keeps a request-ID failure on the enabled focused Remove with zero removal call', async () => {
+      (getMyMemberDirectoryProfile as jest.Mock).mockResolvedValueOnce(PROFILE_WITH_PHOTO);
+      (createMemberDirectoryRequestId as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('synthetic private request-id detail');
+      });
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+
+      fireEvent.click(remove);
+
+      expect(remove).toBeEnabled();
+      expect(remove).toHaveFocus();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'This browser could not safely start that change. No setting was changed.',
+      );
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['definitive confirming-read failure', true],
+      ['ordinary unknown outcome', false],
+    ])('leaves rejected-removal focus recovery to Reload after a %s', async (
+      _label,
+      definitive,
+    ) => {
+      const failure = definitive ? rejected : new Error('synthetic private outcome detail');
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockRejectedValueOnce(new Error('synthetic private confirming-read detail'));
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockRejectedValueOnce(failure);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => definitive && error === rejected,
+      );
+      renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+
+      const reload = await screen.findByRole('button', { name: 'Reload settings' });
+      expect(reload).toHaveFocus();
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(definitive ? 2 : 1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test.each([
+      ['application', otherApp, 'synthetic-user'],
+      ['account', app, 'other-synthetic-user'],
+    ])('makes an old rejected-removal focus intent inert after the %s changes', async (
+      _label,
+      nextApp,
+      nextUid,
+    ) => {
+      const removal = deferred<unknown>();
+      const oldReadback = deferred<MemberDirectoryProfileData>();
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(removal.promise);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => error === rejected,
+      );
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockReturnValueOnce(oldReadback.promise)
+        .mockResolvedValueOnce(DEFAULT_PROFILE);
+      const view = renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+      await act(async () => {
+        removal.reject(rejected);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={nextApp}
+          uid={nextUid}
+          displayName="Current Synthetic Member"
+          backendAvailable
+        />,
+      );
+      const currentInput = await screen.findByLabelText('Add profile photo');
+      currentInput.focus();
+      await act(async () => oldReadback.resolve(WITHOUT_PHOTO));
+
+      expect(currentInput).toHaveFocus();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3);
+      expect(removeMyMemberDirectoryPhoto).toHaveBeenCalledTimes(1);
+    });
+
+    test('makes an old rejected-removal focus intent inert after unmount', async () => {
+      const removal = deferred<unknown>();
+      const oldReadback = deferred<MemberDirectoryProfileData>();
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(PROFILE_WITH_PHOTO)
+        .mockReturnValueOnce(oldReadback.promise);
+      (removeMyMemberDirectoryPhoto as jest.Mock).mockReturnValueOnce(removal.promise);
+      (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+        (error) => error === rejected,
+      );
+      const view = renderProfile();
+      const remove = await screen.findByRole('button', {
+        name: 'Remove current saved photo',
+      });
+      remove.focus();
+      fireEvent.click(remove);
+      modelDisabledControlFocusEviction(remove);
+      await act(async () => {
+        removal.reject(rejected);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      view.unmount();
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      try {
+        outside.focus();
+        await act(async () => oldReadback.resolve(WITHOUT_PHOTO));
+        expect(outside).toHaveFocus();
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      } finally {
+        outside.remove();
+      }
     });
   });
 
