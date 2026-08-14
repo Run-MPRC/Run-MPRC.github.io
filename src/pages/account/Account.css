@@ -1,3 +1,47 @@
+.account-profile__header {
+  display: grid;
+  min-width: 0;
+  margin-bottom: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 1rem;
+  row-gap: 0.75rem;
+}
+
+.account-profile__header h2 {
+  min-width: 0;
+  margin: 0;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.account-profile__edit {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.account-profile__save-result {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.75rem;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  color: #14532d;
+  background: #f0fdf4;
+  border: 2px solid #86efac;
+  border-radius: 0.375rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.account-profile__save-result:focus {
+  outline: 3px solid #005bd8;
+  outline-offset: 3px;
+}
+
 .account-verification-notice {
   display: flex;
   margin-top: 0.75rem;
