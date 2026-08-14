@@ -2472,7 +2472,7 @@ flowchart TD
     Connected -. "never photo search or proof" .-> Official["Membership, role, payment, or official records"]
 ```
 
-Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; source-only #639 admits a returned saved photo only when its canonical decoded bytes total 12 through 65,536 with `RIFF` at bytes 0–3 and `WEBP` at bytes 8–11, maps every other returned byte shape to one fixed byte-free failure before the Account image path, preserves the version-scoped **Photo unavailable** fallback and Remove action for structurally admitted bytes the browser cannot display, and leaves outbound uploads unchanged; source-only #641 records only the exact current input-or-Search focus origin after a valid search enters pending, restores that same now-enabled origin after cards, empty, or fixed failure only when native disablement left no meaningful focus, and preserves any other connected focus the user chose during the request; source-only #643 records only the exact current lifetime and removal operation when focused Remove enters pending, and after definitive rejection plus successful authoritative readback restores otherwise-lost focus to surviving Remove, a current ready Save, or the persistent file input without stealing deliberately moved connected focus or attaching the standalone rejection alert to a replacement target; source-only #645 records only the exact current lifetime, operation, and upload-or-remove action when focused Save or Remove enters pending, transfers it only after confirmed success plus current authoritative readback, restores otherwise-lost upload focus to the persistent file input or removal focus by the existing Remove, ready Save, then file-input priority, and preserves any other connected focus deliberately chosen during the mutation or readback; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
+Text alternative: the published #623 artifact keeps the Account and administrator-guarded People-finder controls disabled; source-only #627 preserves the accessible connected layouts behind the unchanged false availability value; source-only #629 adds local photo review where Cancel sends nothing, Save alone sends the existing upload command, and the current saved photo remains authoritative with a version-reset unavailable fallback; source-only #631 distinguishes a `null` **No photo** result from an unrenderable supplied **Photo unavailable** result, retries a different later photo version, and lets completed local states clear the query, messages, cards, names, and images with an announcement, input focus, and no new request or service call; that Clear action does not cancel work, erase memory or cache, roll back an audit, or recall a seen result; source-only #633 makes **Remove current saved photo** preserve the same local reading or ready replacement through a confirmed authoritative remove, use the refreshed revision only when the person later chooses Save, focus a remaining Remove action before a ready Save action before the persistent file input, keep the draft after a definitive rejection with successful readback, and after an unknown outcome or failed readback discard its bytes, hide photo and finder mutation controls, and retain only the existing Reload settings recovery with no Save retry; source-only #635 keeps that uncertain-change warning through failed Reload settings attempts until one authoritative profile read succeeds, while generic load failures make no global no-change promise and reload sends no mutation; source-only #637 focuses the recovery action after user-initiated mutation or readback failure, binds a Reload focus intent to the exact current load before focusing a replacement after failure, never steals focus on an initial load failure, and keeps stale application, account, and unmounted completions focus-inert; source-only #639 admits a returned saved photo only when its canonical decoded bytes total 12 through 65,536 with `RIFF` at bytes 0–3 and `WEBP` at bytes 8–11, maps every other returned byte shape to one fixed byte-free failure before the Account image path, preserves the version-scoped **Photo unavailable** fallback and Remove action for structurally admitted bytes the browser cannot display, and leaves outbound uploads unchanged; source-only #641 records only the exact current input-or-Search focus origin after a valid search enters pending, restores that same now-enabled origin after cards, empty, or fixed failure only when native disablement left no meaningful focus, and preserves any other connected focus the user chose during the request; source-only #643 records only the exact current lifetime and removal operation when focused Remove enters pending, and after definitive rejection plus successful authoritative readback restores otherwise-lost focus to surviving Remove, a current ready Save, or the persistent file input without stealing deliberately moved connected focus or attaching the standalone rejection alert to a replacement target; source-only #645 records only the exact current lifetime, operation, and upload-or-remove action when focused Save or Remove enters pending, transfers it only after confirmed success plus current authoritative readback, restores otherwise-lost upload focus to the persistent file input or removal focus by the existing Remove, ready Save, then file-input priority, and preserves any other connected focus deliberately chosen during the mutation or readback; source-only #647 records only the exact current lifetime and visibility operation when the focused officer-finder checkbox enters pending, transfers that intent after confirmed success or definitive rejection only after current authoritative readback, restores otherwise-lost focus to the same connected and enabled checkbox without stealing another deliberately focused control, and consumes without focus when current name eligibility leaves the returned off checkbox disabled; and only #507 may later connect name search plus voluntary thumbnails after privacy, authorization, staging, and backend-first readback, without photo search, face recognition, or official-record authority.
 
 Officer review steps for the #621 frontend preview:
 
@@ -3450,6 +3450,121 @@ Officer source-review procedure for MEMBERS-DIRECTORY-001N [#645] confirmed-phot
 **Undo:** use one reviewed frontend-and-documentation revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #645 changes source only. Undo must not restore unconditional confirmed-photo focus or weaken #643 rejected-removal focus and #637 Reload recovery.
 
 **Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, focus moved across applications or accounts, settlement stole deliberately moved focus, a focus intent retained private or service data, a focus handoff created a request or service call, or connected behavior became available.
+
+Officer source-review procedure for MEMBERS-DIRECTORY-001O [#647] visibility focus containment — connected source only, **NOT LIVE**:
+
+**Purpose:** let a backup officer verify from specialist-prepared evidence that the preserved connected Account interface restores keyboard focus displaced from the exact focused officer-finder checkbox after confirmed success or definitive rejection and authoritative readback, while preserving any other connected focus deliberately chosen during that work, without connecting the feature, using a real person, or changing production.
+
+**Approvers:** membership lead, privacy owner, and platform/security owner.
+
+**Prerequisites:** #645 is reviewed and merged. Ask the platform owner or testing specialist for the exact #647 source candidate, the named synthetic-only test output, the trustworthy unchanged-runtime failure, and a redacted written behavior report. The specialist runs the tests and records the evidence. The backup officer reviews that written evidence without a terminal or test harness. An operation identity in this procedure means only the component's one-time internal marker for the admitted visibility change. Keep the source-controlled availability value `false`. Do not sign in to production, use a real name or photo, call production Firebase, or change production data.
+
+1. Keep the complete profile-photo and People-finder feature marked **NOT AVAILABLE YET**.
+2. Ask the platform owner for the exact #647 issue.
+3. Ask the platform owner for the reviewed pull request.
+4. Ask the platform owner for the candidate or merge commit.
+5. Ask the testing specialist for the named MEMBERS-DIRECTORY-001O test output.
+6. Ask the testing specialist for the trustworthy unchanged-runtime failure.
+7. Ask the testing specialist for the redacted written synthetic-behavior report.
+8. Confirm the report names the specialist who ran the tests.
+9. Confirm every account and name in the evidence is made up.
+10. Confirm no real photo appears in the evidence.
+11. Confirm the source-controlled availability value remains byte-for-byte `false`.
+12. Confirm the last verified production deployment remains inert #623 deploy `6a7e072f8f346b0008510d29`.
+13. Confirm request-number creation must succeed before a visibility focus intent can exist.
+14. Confirm the visibility operation must enter `pending` before the intent can exist.
+15. Confirm the exact officer-finder checkbox must own focus when the operation enters `pending`.
+16. Confirm an outside-focused invocation creates no visibility focus intent.
+17. Confirm a programmatic invocation creates no visibility focus intent.
+18. Confirm the intent records only the current mounted application-and-account lifetime.
+19. Confirm the intent records only the exact visibility-operation identity.
+20. Confirm the intent records no query or name.
+21. Confirm the intent records no profile or revision.
+22. Confirm the intent records no request number or result.
+23. Confirm the intent records no error or provider value.
+24. Confirm the intent records no photo byte or data URL.
+25. Confirm the checkbox keeps its native disabled state while the visibility operation is pending.
+26. Confirm the existing duplicate-mutation gate remains unchanged.
+27. Confirm a visibility mutation must report success before the confirmed-success intent can advance.
+28. Confirm a current successful authoritative profile read is required after confirmed success.
+29. Confirm only a definitive rejection may use the rejection settlement branch.
+30. Confirm a current successful confirming profile read is required after definitive rejection.
+31. Confirm the current mounted lifetime must match before transfer.
+32. Confirm the exact operation identity must match before transfer.
+33. Confirm only the matching pending intent transfers to result ownership.
+34. Confirm one matching ready render consumes the result exactly once.
+35. Confirm the persistent officer-finder checkbox is the only focus destination.
+36. Confirm the destination checkbox must still be connected.
+37. Confirm the destination checkbox must be enabled.
+38. Confirm a checkbox that retained focus is not focused again.
+39. Confirm document-body focus returns to the checkbox.
+40. Confirm document-root focus returns to the checkbox.
+41. Confirm absent focus returns to the checkbox.
+42. Confirm disconnected focus returns to the checkbox.
+43. Confirm connected outside focus selected during confirmed work remains focused.
+44. Confirm connected in-profile focus selected during confirmed work remains focused.
+45. Confirm connected outside focus selected during definitive-rejection work remains focused.
+46. Confirm connected in-profile focus selected during definitive-rejection work remains focused.
+47. Confirm requested-on success restores the enabled checked checkbox after modeled native focus loss.
+48. Confirm requested-off success restores the enabled unchecked checkbox after modeled native focus loss.
+49. Confirm a changed-again authoritative result restores the enabled checkbox in its returned state.
+50. Confirm all existing visibility confirmation wording remains unchanged.
+51. Confirm definitive rejection retains the fixed alert association with the checkbox.
+52. Confirm a returned off checkbox disabled by current name eligibility is not focused.
+53. Confirm the disabled-checkbox result is still consumed permanently.
+54. Confirm the request-number-failure evidence shows the existing enabled, generic, zero-call, focus-inert state.
+55. Confirm request-number failure sends no visibility mutation.
+56. Confirm rejected mutation admission creates no visibility focus intent.
+57. Confirm an ordinary unknown outcome uses only the existing **Reload settings** focus recovery.
+58. Confirm failed readback after mutation success uses only the existing **Reload settings** focus recovery.
+59. Confirm failed confirming read after definitive rejection uses only the existing **Reload settings** focus recovery.
+60. Confirm none of those failure paths restores focus to the checkbox.
+61. Confirm an application change makes an older visibility mutation focus-inert.
+62. Confirm an account change makes an older visibility mutation focus-inert.
+63. Confirm an application change makes an older authoritative readback focus-inert.
+64. Confirm an account change makes an older authoritative readback focus-inert.
+65. Confirm unmount makes an older authoritative readback focus-inert.
+66. Confirm a later ready-state rerender cannot repeat a consumed focus handoff.
+67. Confirm request-number counts remain unchanged.
+68. Confirm visibility-mutation call counts remain unchanged.
+69. Confirm authoritative profile-read counts remain unchanged.
+70. Confirm the focus handoff creates no photo-upload call.
+71. Confirm the focus handoff creates no photo-removal call.
+72. Confirm the focus handoff starts no retry.
+73. Confirm the focus handoff creates no draft or data URL.
+74. Confirm #643 rejected-removal focus remains unchanged.
+75. Confirm #645 confirmed-photo focus remains unchanged.
+76. Confirm #637 **Reload settings** recovery remains unchanged.
+77. Confirm the source diff changes no People-finder behavior or administrator guard.
+78. Confirm the source diff changes no service contract, Function, Rule, index, or schema.
+79. Confirm the source diff changes no package, workflow, or release control.
+80. Confirm the source diff adds no photo query or facial recognition.
+81. Confirm the source diff adds no matching, embedding, or similarity score.
+82. Confirm the source diff adds no biometric processing, total, export, roster authority, or membership proof.
+83. Confirm the default Account branch obtains no directory-service context.
+84. Confirm the default Account branch creates no directory request number.
+85. Confirm the default Account branch calls no directory service.
+86. Record the source change as its own state.
+87. Record the named test results as their own state.
+88. Record whether the change merged as its own state.
+89. Record whether any website artifact was published as its own state.
+90. Record the exact `runmprc.com` revision as its own state.
+91. Record whether Firebase was deployed as its own state.
+92. Record whether an outside provider was configured as its own state.
+93. Record whether an account or sign-in state changed as its own state.
+94. Record whether production data changed as its own state.
+95. Record whether connected or live profile-photo or officer-finder behavior became available as its own state.
+96. Stop before changing availability, Firebase, a provider, an account, production data, or the live website.
+
+**Expected result:** the reviewed connected source creates one pending visibility focus intent only after request-number creation and admitted pending visibility while the exact officer-finder checkbox owns focus. The intent contains only the current mounted application-and-account lifetime and exact operation identity. Confirmed success plus a current successful authoritative read, or definitive rejection plus a current successful confirming read, transfers only the matching intent to one ready render. That render consumes the result once. Body, document-root, absent, or disconnected focus returns only to the same connected and enabled checkbox. A checkbox that retained focus is left alone. Any other connected focus deliberately chosen during mutation or readback is preserved. A returned off checkbox disabled by current name eligibility consumes the result without focus. Programmatic or outside-focused invocation, request-number failure, failed mutation admission, unknown outcome, failed readback, application or account change, unmount, and obsolete mutation or readback completion create no result or clear or fail its guards. #637 Reload recovery, #643 rejected-removal focus, and #645 confirmed-photo focus remain separate. Focus creates no request number, read, mutation, retry, audit, result, draft, photo byte, data URL, provider action, or data action beyond the already admitted operation. Availability remains `false`; the default branch obtains no directory context, creates no request number, and calls no directory service; and live #623 remains inert. The backend and connected behavior remain **NOT AVAILABLE YET**.
+
+**Stop conditions:** a real account, name, or photo; production sign-in; direct production Firebase access; a focused current checkbox that loses focus during confirmed success or definitive rejection plus current successful readback and never regains it while enabled; focus placed on a returned disabled checkbox; settlement that moves focus away from another connected control; an outside-focused or programmatic invocation that creates an intent; an intent that records a query, name, profile, revision, request number, result, error, provider value, photo byte, or data URL; a transfer before successful current authoritative readback; delayed focus during a later unrelated render; an unknown outcome or failed readback that bypasses Reload recovery; an application, account, unmounted, or obsolete completion that moves focus; an extra request number, read, mutation, retry, audit, result, draft, photo byte, data URL, provider action, or data action caused by focus; changed errors, confirmations, revisions, native pending disablement, #637, #643, or #645 behavior; a photo query; facial recognition, matching, embedding, similarity scoring, biometric processing, total, export, roster authority, or membership proof; a People-finder, service-contract, Function, Rule, index, schema, package, workflow, provider, account, sign-in, production-data, or website change; an availability flip; use of a terminal or test harness by the backup officer; or a claim that source, tests, merge, or a preview means the feature is live.
+
+**Success proof:** record the exact #647 issue, reviewed pull request and commit; trustworthy unchanged-runtime named failure; green 21-test MEMBERS-DIRECTORY-001O block; green full component and frontend tests; type-checking; scoped lint; diagnostic production build; unchanged lint baseline; repository Node tests; workflow checks; diff-check; independent privacy/security, frontend/accessibility, focus/race, and backup-officer reviews; and exact-main CI if merged. Record source, tests, merge, website publication, exact `runmprc.com` revision, Firebase deployment, provider configuration, account/sign-in change, production-data action, and connected/live behavior separately. Record the unchanged `false` availability value and unchanged #623 deploy separately. Source and tests do not prove merge; merge does not prove publication; publication does not prove `runmprc.com`, Firebase, provider, account, data, or connected-live behavior. Final connection and live proof remain #507 work.
+
+**Undo:** use one reviewed frontend-and-documentation revert or safe roll-forward. Confirm the default disabled branch still makes zero directory calls. No Firebase, provider, account, or production-data undo is needed because #647 changes source only. Undo must not restore lost visibility-checkbox focus after authoritative settlement or weaken #637, #643, or #645 focus containment.
+
+**Escalation:** membership lead plus privacy and platform/security owners. Use the private incident path if a real name or photo appeared, focus moved across applications or accounts, settlement stole deliberately moved focus, a disabled checkbox received focus, a focus intent retained private or service data, a focus handoff created a request or service call, or connected behavior became available.
 
 ## Admin screens — NOT AVAILABLE YET
 

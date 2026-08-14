@@ -238,6 +238,11 @@ type ConfirmedPhotoFocusIntent = {
   action: 'upload' | 'remove';
 };
 
+type VisibilityFocusIntent = {
+  lifetime: symbol;
+  operation: symbol;
+};
+
 function visibilityConfirmation(
   requested: boolean,
 ): MutationConfirmation {
@@ -342,11 +347,14 @@ function MemberDirectoryProfileAttempt({
   const rejectedRemoveResultFocusIntentRef = useRef<RemoveFocusIntent | null>(null);
   const pendingConfirmedPhotoFocusIntentRef = useRef<ConfirmedPhotoFocusIntent | null>(null);
   const confirmedPhotoResultFocusIntentRef = useRef<ConfirmedPhotoFocusIntent | null>(null);
+  const pendingVisibilityFocusIntentRef = useRef<VisibilityFocusIntent | null>(null);
+  const visibilityResultFocusIntentRef = useRef<VisibilityFocusIntent | null>(null);
   const photoReadRef = useRef<symbol | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const removePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
   const reloadButtonRef = useRef<HTMLButtonElement | null>(null);
   const savePhotoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const visibilityCheckboxRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const lifetime = Symbol('member-directory-lifetime');
@@ -361,6 +369,8 @@ function MemberDirectoryProfileAttempt({
       rejectedRemoveResultFocusIntentRef.current = null;
       pendingConfirmedPhotoFocusIntentRef.current = null;
       confirmedPhotoResultFocusIntentRef.current = null;
+      pendingVisibilityFocusIntentRef.current = null;
+      visibilityResultFocusIntentRef.current = null;
       photoReadRef.current = null;
     };
   }, []);
@@ -443,6 +453,24 @@ function MemberDirectoryProfileAttempt({
   }, [photoDraft, state]);
 
   useEffect(() => {
+    const intent = visibilityResultFocusIntentRef.current;
+    if (state.phase !== 'ready' || intent === null) return;
+    visibilityResultFocusIntentRef.current = null;
+    if (intent.lifetime !== lifetimeRef.current) return;
+
+    const target = visibilityCheckboxRef.current;
+    if (target === null || !target.isConnected || target.disabled) return;
+    const active = document.activeElement;
+    if (active === target) return;
+    if (
+      active === null
+      || active === document.body
+      || active === document.documentElement
+      || !active.isConnected
+    ) target.focus();
+  }, [displayNameEligible, state]);
+
+  useEffect(() => {
     const lifetime = lifetimeRef.current;
     const load = Symbol('member-directory-load');
     const preserveUncertainChange = uncertainChangeRef.current;
@@ -462,6 +490,8 @@ function MemberDirectoryProfileAttempt({
     rejectedRemoveResultFocusIntentRef.current = null;
     pendingConfirmedPhotoFocusIntentRef.current = null;
     confirmedPhotoResultFocusIntentRef.current = null;
+    pendingVisibilityFocusIntentRef.current = null;
+    visibilityResultFocusIntentRef.current = null;
     photoReadRef.current = null;
     setActionError(null);
     setPhotoDraft(null);
@@ -537,6 +567,7 @@ function MemberDirectoryProfileAttempt({
       if (isDefinitiveMemberDirectoryRejection(error)) {
         pendingConfirmedPhotoFocusIntentRef.current = null;
         confirmedPhotoResultFocusIntentRef.current = null;
+        visibilityResultFocusIntentRef.current = null;
         try {
           const profile = await getMyMemberDirectoryProfile(app);
           if (!mutationIsCurrent(start)) return;
@@ -546,6 +577,14 @@ function MemberDirectoryProfileAttempt({
             && focusIntent.lifetime === start.lifetime
             && focusIntent.operation === start.operation
             ? focusIntent
+            : null;
+          const visibilityFocusIntent = pendingVisibilityFocusIntentRef.current;
+          pendingVisibilityFocusIntentRef.current = null;
+          visibilityResultFocusIntentRef.current = visibilityFocusIntent !== null
+            && visibilityFocusIntent.lifetime === start.lifetime
+            && visibilityFocusIntent.operation === start.operation
+            && start.action === 'visibility'
+            ? visibilityFocusIntent
             : null;
           mutationRef.current = null;
           uncertainChangeRef.current = false;
@@ -563,6 +602,8 @@ function MemberDirectoryProfileAttempt({
           rejectedRemoveResultFocusIntentRef.current = null;
           pendingConfirmedPhotoFocusIntentRef.current = null;
           confirmedPhotoResultFocusIntentRef.current = null;
+          pendingVisibilityFocusIntentRef.current = null;
+          visibilityResultFocusIntentRef.current = null;
           photoReadRef.current = null;
           setPhotoDraft(null);
           setActionError(null);
@@ -580,6 +621,8 @@ function MemberDirectoryProfileAttempt({
       rejectedRemoveResultFocusIntentRef.current = null;
       pendingConfirmedPhotoFocusIntentRef.current = null;
       confirmedPhotoResultFocusIntentRef.current = null;
+      pendingVisibilityFocusIntentRef.current = null;
+      visibilityResultFocusIntentRef.current = null;
       photoReadRef.current = null;
       setPhotoDraft(null);
       setActionError(null);
@@ -597,6 +640,7 @@ function MemberDirectoryProfileAttempt({
     pendingRemoveFocusIntentRef.current = null;
     rejectedRemoveResultFocusIntentRef.current = null;
     confirmedPhotoResultFocusIntentRef.current = null;
+    visibilityResultFocusIntentRef.current = null;
     try {
       const profile = await getMyMemberDirectoryProfile(app);
       if (!mutationIsCurrent(start)) return;
@@ -608,6 +652,14 @@ function MemberDirectoryProfileAttempt({
         && focusIntent.action === start.action
         && (start.action === 'upload' || start.action === 'remove')
         ? focusIntent
+        : null;
+      const visibilityFocusIntent = pendingVisibilityFocusIntentRef.current;
+      pendingVisibilityFocusIntentRef.current = null;
+      visibilityResultFocusIntentRef.current = visibilityFocusIntent !== null
+        && visibilityFocusIntent.lifetime === start.lifetime
+        && visibilityFocusIntent.operation === start.operation
+        && start.action === 'visibility'
+        ? visibilityFocusIntent
         : null;
       mutationRef.current = null;
       if (start.action === 'upload') {
@@ -622,6 +674,8 @@ function MemberDirectoryProfileAttempt({
       mutationRef.current = null;
       pendingConfirmedPhotoFocusIntentRef.current = null;
       confirmedPhotoResultFocusIntentRef.current = null;
+      pendingVisibilityFocusIntentRef.current = null;
+      visibilityResultFocusIntentRef.current = null;
       photoReadRef.current = null;
       setPhotoDraft(null);
       setActionError(null);
@@ -650,6 +704,14 @@ function MemberDirectoryProfileAttempt({
     }
     const start = startMutation('visibility');
     if (start === null) return;
+    visibilityResultFocusIntentRef.current = null;
+    pendingVisibilityFocusIntentRef.current = document.activeElement
+      === visibilityCheckboxRef.current
+      ? {
+        lifetime: start.lifetime,
+        operation: start.operation,
+      }
+      : null;
     finishMutation(
       start,
       () => setMyMemberDirectoryVisibility(app, {
@@ -1050,6 +1112,7 @@ function MemberDirectoryProfileAttempt({
             <div className="member-directory-profile__visibility">
               <label htmlFor="member-directory-searchable">
                 <input
+                  ref={visibilityCheckboxRef}
                   id="member-directory-searchable"
                   type="checkbox"
                   checked={profile.searchableByOfficers}

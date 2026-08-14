@@ -2332,6 +2332,497 @@ describe('My Account member directory profile', () => {
     });
   });
 
+  describe('MEMBERS-DIRECTORY-001O visibility focus containment', () => {
+    type VisibilityAttemptOptions = {
+      current: MemberDirectoryProfileData;
+      definitiveRejection?: boolean;
+      initial?: MemberDirectoryProfileData;
+    };
+
+    function modelDisabledVisibilityFocusEviction(control: HTMLElement) {
+      control.blur();
+      const disposable = document.createElement('button');
+      document.body.appendChild(disposable);
+      disposable.focus();
+      expect(disposable).toHaveFocus();
+      disposable.remove();
+      expect(document.body).toHaveFocus();
+    }
+
+    function arrangeVisibilityAttempt({
+      current,
+      definitiveRejection = false,
+      initial = DEFAULT_PROFILE,
+    }: VisibilityAttemptOptions) {
+      const mutation = deferred<unknown>();
+      const readback = deferred<MemberDirectoryProfileData>();
+      (setMyMemberDirectoryVisibility as jest.Mock).mockReturnValueOnce(mutation.promise);
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(initial)
+        .mockReturnValueOnce(readback.promise);
+      const rejected = { code: 'functions/failed-precondition' };
+      if (definitiveRejection) {
+        (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+          (error) => error === rejected,
+        );
+      }
+      return {
+        settle: async () => {
+          const observedMutation = mutation.promise.catch(() => undefined);
+          await act(async () => {
+            if (definitiveRejection) mutation.reject(rejected);
+            else mutation.resolve({});
+            await observedMutation;
+          });
+          await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+          await act(async () => readback.resolve(current));
+        },
+      };
+    }
+
+    test.each([
+      [
+        'requested on',
+        DEFAULT_PROFILE,
+        { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true },
+        true,
+        'Officer finder is on.',
+      ],
+      [
+        'requested off',
+        PROFILE_WITH_PHOTO,
+        { ...PROFILE_WITH_PHOTO, revision: 5, searchableByOfficers: false },
+        false,
+        'Officer finder is off.',
+      ],
+      [
+        'changed-again result',
+        DEFAULT_PROFILE,
+        { ...DEFAULT_PROFILE, revision: 2, searchableByOfficers: false },
+        false,
+        'Officer finder changed again elsewhere. It is currently off.',
+      ],
+    ] as const)(
+      'restores the checkbox after browser focus eviction for a confirmed %s',
+      async (_label, initial, current, expectedChecked, confirmation) => {
+        const attempt = arrangeVisibilityAttempt({ initial, current });
+        renderProfile();
+        const checkbox = await screen.findByRole('checkbox');
+        checkbox.focus();
+
+        fireEvent.click(checkbox);
+        expect(checkbox).toBeDisabled();
+        modelDisabledVisibilityFocusEviction(checkbox);
+        await attempt.settle();
+
+        const currentCheckbox = screen.getByRole('checkbox');
+        expect(currentCheckbox).toBeEnabled();
+        expect(currentCheckbox).toHaveFocus();
+        expect(currentCheckbox).toHaveProperty('checked', expectedChecked);
+        expect(screen.getByRole('status')).toHaveTextContent(confirmation);
+        expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+        expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+        expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+        expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      },
+    );
+
+    test('restores the checkbox after definitive rejection readback and keeps its error association', async () => {
+      const attempt = arrangeVisibilityAttempt({
+        current: DEFAULT_PROFILE,
+        definitiveRejection: true,
+      });
+      renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+
+      fireEvent.click(checkbox);
+      expect(checkbox).toBeDisabled();
+      modelDisabledVisibilityFocusEviction(checkbox);
+      await attempt.settle();
+
+      const currentCheckbox = screen.getByRole('checkbox');
+      expect(currentCheckbox).toHaveFocus();
+      expect(currentCheckbox).toBeEnabled();
+      expect(currentCheckbox).not.toBeChecked();
+      expect(currentCheckbox.getAttribute('aria-describedby'))
+        .toContain('member-directory-action-error');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'That change was rejected before it was saved.',
+      );
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(setMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+      expect(removeMyMemberDirectoryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('does not redundantly focus a checkbox that retained focus', async () => {
+      const current = { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
+      const attempt = arrangeVisibilityAttempt({ current });
+      renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+      const focus = jest.spyOn(checkbox, 'focus');
+
+      fireEvent.click(checkbox);
+      expect(checkbox).toHaveFocus();
+      await attempt.settle();
+
+      expect(checkbox).toHaveFocus();
+      expect(focus).not.toHaveBeenCalled();
+      focus.mockRestore();
+    });
+
+    test.each([
+      ['confirmed success', false],
+      ['definitive rejection', true],
+    ] as const)(
+      'preserves deliberate connected outside focus after %s',
+      async (_label, definitiveRejection) => {
+        const current = definitiveRejection
+          ? DEFAULT_PROFILE
+          : { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
+        const attempt = arrangeVisibilityAttempt({ current, definitiveRejection });
+        render(
+          <>
+            <button type="button">Outside control</button>
+            <MemberDirectoryProfile
+              app={app}
+              uid="synthetic-user"
+              displayName="Synthetic Member"
+              backendAvailable
+            />
+          </>,
+        );
+        const checkbox = await screen.findByRole('checkbox');
+        const outside = screen.getByRole('button', { name: 'Outside control' });
+        checkbox.focus();
+        fireEvent.click(checkbox);
+        outside.focus();
+
+        await attempt.settle();
+
+        expect(outside).toHaveFocus();
+        expect(screen.getByRole('checkbox')).not.toHaveFocus();
+      },
+    );
+
+    test.each([
+      ['confirmed success', false],
+      ['definitive rejection', true],
+    ] as const)(
+      'preserves deliberate connected in-profile focus after %s',
+      async (_label, definitiveRejection) => {
+        const current = definitiveRejection
+          ? DEFAULT_PROFILE
+          : { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
+        const attempt = arrangeVisibilityAttempt({ current, definitiveRejection });
+        renderProfile();
+        const checkbox = await screen.findByRole('checkbox');
+        checkbox.focus();
+        fireEvent.click(checkbox);
+        const heading = screen.getByRole('heading', {
+          name: 'Profile photo and officer finder',
+        });
+        heading.tabIndex = -1;
+        heading.focus();
+
+        await attempt.settle();
+
+        expect(heading).toHaveFocus();
+        expect(screen.getByRole('checkbox')).not.toHaveFocus();
+      },
+    );
+
+    test('creates no handoff for an outside-focused programmatic invocation', async () => {
+      const current = { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
+      const attempt = arrangeVisibilityAttempt({ current });
+      renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      outside.focus();
+
+      fireEvent.click(checkbox);
+      outside.remove();
+      expect(document.body).toHaveFocus();
+      await attempt.settle();
+
+      expect(document.body).toHaveFocus();
+      expect(screen.getByRole('checkbox')).not.toHaveFocus();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('keeps request-ID failure enabled, generic, zero-call, and focus-inert', async () => {
+      (createMemberDirectoryRequestId as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('synthetic private request-id detail');
+      });
+      renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+
+      fireEvent.click(checkbox);
+
+      expect(checkbox).toHaveFocus();
+      expect(checkbox).toBeEnabled();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'This browser could not safely start that change. No setting was changed.',
+      );
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).not.toHaveBeenCalled();
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(1);
+      expect(document.body).not.toHaveTextContent('synthetic private');
+    });
+
+    test.each([
+      ['ordinary unknown outcome', 'unknown'],
+      ['post-mutation readback failure', 'readback'],
+      ['definitive confirming-read failure', 'definitive'],
+    ] as const)(
+      'leaves %s focus recovery exclusively to Reload',
+      async (_label, outcome) => {
+        const mutation = deferred<unknown>();
+        const readback = deferred<MemberDirectoryProfileData>();
+        const rejected = { code: 'functions/failed-precondition' };
+        (setMyMemberDirectoryVisibility as jest.Mock).mockReturnValueOnce(mutation.promise);
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(DEFAULT_PROFILE)
+          .mockReturnValueOnce(readback.promise);
+        if (outcome === 'definitive') {
+          (isDefinitiveMemberDirectoryRejection as jest.Mock).mockImplementation(
+            (error) => error === rejected,
+          );
+        }
+        renderProfile();
+        const checkbox = await screen.findByRole('checkbox');
+        checkbox.focus();
+        fireEvent.click(checkbox);
+        modelDisabledVisibilityFocusEviction(checkbox);
+
+        const observedMutation = mutation.promise.catch(() => undefined);
+        await act(async () => {
+          if (outcome === 'unknown') mutation.reject(new Error('synthetic private detail'));
+          else if (outcome === 'definitive') mutation.reject(rejected);
+          else mutation.resolve({});
+          await observedMutation;
+        });
+        if (outcome !== 'unknown') {
+          await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+          await act(async () => readback.reject(new Error('synthetic private readback detail')));
+        }
+
+        const reload = await screen.findByRole('button', { name: 'Reload settings' });
+        expect(reload).toHaveFocus();
+        expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+        expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+        expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(
+          outcome === 'unknown' ? 1 : 2,
+        );
+        expect(document.body).not.toHaveTextContent('synthetic private');
+      },
+    );
+
+    test('consumes the intent without focusing a returned checkbox disabled by name eligibility', async () => {
+      const current = { ...PROFILE_WITH_PHOTO, revision: 5, searchableByOfficers: false };
+      const attempt = arrangeVisibilityAttempt({
+        initial: PROFILE_WITH_PHOTO,
+        current,
+      });
+      const view = renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+      fireEvent.click(checkbox);
+      modelDisabledVisibilityFocusEviction(checkbox);
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={app}
+          uid="synthetic-user"
+          displayName="A"
+          backendAvailable
+        />,
+      );
+      await attempt.settle();
+
+      const returned = screen.getByRole('checkbox');
+      expect(returned).toBeDisabled();
+      expect(returned).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+      expect(screen.getByText(/current Profile name is not eligible/i))
+        .toBeInTheDocument();
+
+      view.rerender(
+        <MemberDirectoryProfile
+          app={app}
+          uid="synthetic-user"
+          displayName="Restored Synthetic Member"
+          backendAvailable
+        />,
+      );
+      expect(screen.getByRole('checkbox')).toBeEnabled();
+      expect(screen.getByRole('checkbox')).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+    });
+
+    test.each([
+      ['application', otherApp, 'synthetic-user'],
+      ['account', app, 'other-synthetic-user'],
+    ] as const)(
+      'makes old mutation focus inert after the %s changes',
+      async (_label, nextApp, nextUid) => {
+        const mutation = deferred<unknown>();
+        (setMyMemberDirectoryVisibility as jest.Mock).mockReturnValueOnce(mutation.promise);
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(DEFAULT_PROFILE)
+          .mockResolvedValueOnce(DEFAULT_PROFILE);
+        const view = renderProfile();
+        const checkbox = await screen.findByRole('checkbox');
+        checkbox.focus();
+        fireEvent.click(checkbox);
+        modelDisabledVisibilityFocusEviction(checkbox);
+
+        view.rerender(
+          <MemberDirectoryProfile
+            app={nextApp}
+            uid={nextUid}
+            displayName="Current Synthetic Member"
+            backendAvailable
+          />,
+        );
+        const currentCheckbox = await screen.findByRole('checkbox');
+        currentCheckbox.focus();
+        await act(async () => mutation.resolve({}));
+
+        expect(currentCheckbox).toHaveFocus();
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+        expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test.each([
+      ['application', otherApp, 'synthetic-user'],
+      ['account', app, 'other-synthetic-user'],
+    ] as const)(
+      'makes old authoritative readback focus inert after the %s changes',
+      async (_label, nextApp, nextUid) => {
+        const oldReadback = deferred<MemberDirectoryProfileData>();
+        (getMyMemberDirectoryProfile as jest.Mock)
+          .mockResolvedValueOnce(DEFAULT_PROFILE)
+          .mockReturnValueOnce(oldReadback.promise)
+          .mockResolvedValueOnce(DEFAULT_PROFILE);
+        const view = renderProfile();
+        const checkbox = await screen.findByRole('checkbox');
+        checkbox.focus();
+        fireEvent.click(checkbox);
+        modelDisabledVisibilityFocusEviction(checkbox);
+        await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+
+        view.rerender(
+          <MemberDirectoryProfile
+            app={nextApp}
+            uid={nextUid}
+            displayName="Current Synthetic Member"
+            backendAvailable
+          />,
+        );
+        const currentCheckbox = await screen.findByRole('checkbox');
+        const outside = document.createElement('button');
+        document.body.appendChild(outside);
+        try {
+          outside.focus();
+          await act(async () => oldReadback.resolve({
+            ...DEFAULT_PROFILE,
+            revision: 1,
+            searchableByOfficers: true,
+          }));
+
+          expect(outside).toHaveFocus();
+          expect(currentCheckbox).not.toHaveFocus();
+          expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(3);
+          expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+        } finally {
+          outside.remove();
+        }
+      },
+    );
+
+    test('makes an old authoritative readback focus inert after unmount', async () => {
+      const oldReadback = deferred<MemberDirectoryProfileData>();
+      (getMyMemberDirectoryProfile as jest.Mock)
+        .mockResolvedValueOnce(DEFAULT_PROFILE)
+        .mockReturnValueOnce(oldReadback.promise);
+      const view = renderProfile();
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+      fireEvent.click(checkbox);
+      modelDisabledVisibilityFocusEviction(checkbox);
+      await waitFor(() => expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2));
+      view.unmount();
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      try {
+        outside.focus();
+        await act(async () => oldReadback.resolve({
+          ...DEFAULT_PROFILE,
+          revision: 1,
+          searchableByOfficers: true,
+        }));
+
+        expect(outside).toHaveFocus();
+        expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+        expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      } finally {
+        outside.remove();
+      }
+    });
+
+    test('consumes a visibility focus handoff exactly once', async () => {
+      const current = { ...DEFAULT_PROFILE, revision: 1, searchableByOfficers: true };
+      const attempt = arrangeVisibilityAttempt({ current });
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <MemberDirectoryProfile
+            app={app}
+            uid="synthetic-user"
+            displayName="Synthetic Member"
+            backendAvailable
+          />
+        </>,
+      );
+      const checkbox = await screen.findByRole('checkbox');
+      checkbox.focus();
+      fireEvent.click(checkbox);
+      modelDisabledVisibilityFocusEviction(checkbox);
+      await attempt.settle();
+      expect(checkbox).toHaveFocus();
+      const outside = screen.getByRole('button', { name: 'Outside control' });
+      outside.focus();
+
+      const input = screen.getByLabelText('Add profile photo');
+      fireEvent.change(input, {
+        target: {
+          files: [new File(['next local bytes'], 'next-local.png', {
+            type: 'image/png',
+          })],
+        },
+      });
+      await screen.findByRole('img', { name: 'Selected profile photo preview' });
+
+      expect(outside).toHaveFocus();
+      expect(checkbox).not.toHaveFocus();
+      expect(createMemberDirectoryRequestId).toHaveBeenCalledTimes(1);
+      expect(setMyMemberDirectoryVisibility).toHaveBeenCalledTimes(1);
+      expect(getMyMemberDirectoryProfile).toHaveBeenCalledTimes(2);
+      expect(document.body).not.toHaveTextContent('next-local.png');
+    });
+  });
+
   test('MEMBERS-DIRECTORY-001F falls back when a saved thumbnail cannot decode and resets for a new version', async () => {
     const newPhoto = {
       ...PHOTO,
