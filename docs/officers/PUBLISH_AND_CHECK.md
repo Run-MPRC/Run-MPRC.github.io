@@ -12,6 +12,8 @@
 
 **Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01; bounded #473 deploy `6a6dc9ea588b0c0008036312`, source `39ab8649df411262c8109a3c81a57bc38f1e168b`, remains the recorded rollback. #623 completed one separate exact-artifact release. Deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, is production now. Its signed-out marker, guard, route, and no-directory-request checks passed. The manifest is inactive, the release source is absent, and the rollback ref remains. Shop is the static catalog; Events and Calendar show a fixed retry-later notice instead of a raw provider error. Event records remain unavailable because this did not deploy Firebase. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
+**Pending #659 exception:** WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) is one active exact-artifact accessibility release under review and is not published. The frozen source contains only reviewed #291 visible focus, #490 phone-menu disclosure/close behavior, and #657 client-side route focus. Production remains #623 deploy `6a7e072f8f346b0008510d29`, which is also #659's rollback target. This is not an officer-operated or reusable control. The no-terminal procedure below permits only signed-out public checks after exact source, preview, merge, and marker proof.
+
 ## The release gate
 
 ```mermaid
@@ -57,7 +59,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
-- Ordinary Git-triggered Netlify production builds are paused. The completed #473 exception used one exact two-parent merge and pinned source/tree/artifact; its release source is retired. #623 completed a second exact-parent one-shot, published only its frozen inert artifact, passed signed-out readback, and was immediately re-paused. Its release source is retired; its rollback ref remains.
+- Ordinary Git-triggered Netlify production builds are paused. The completed #473 exception used one exact two-parent merge and pinned source/tree/artifact; its release source is retired. #623 completed a second exact-parent one-shot, published only its frozen inert artifact, passed signed-out readback, and was immediately re-paused. Its release source is retired; its rollback ref remains. #659 is a separate exact accessibility artifact under review and is not published; #623 deploy `6a7e072f8f346b0008510d29` remains live and is #659's rollback target.
 - Live race signup, merchandise payments, and refunds remain unavailable.
 - CONFIG-001B1 [#151](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/151) adds source enforcement for a server-only commerce pause. It is not in the fixed profile-recovery release plan, is not deployed, and has no approved officer control. A future reviewed plan must deploy the complete guarded Function set with the deploy ceiling and every runtime/resource flag off, then prove signed webhooks still work. Do not widen the current plan by hand.
 
@@ -162,6 +164,87 @@ If a member or officer sees **Server configuration is unavailable**:
 5. Mark the result **merged — not released**.
 6. Do not expect GitHub Pages, Firebase, Netlify, or `runmprc.com` to change from a merge unless a separate exact temporary release is explicitly armed and reviewed.
 7. For any other merge, if Netlify unexpectedly publishes, stop and treat it as a hosting incident.
+
+## Temporary #659 keyboard-navigation and route-focus release — UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** publish one frozen accessibility-only website artifact. Keyboard users receive the reviewed visible-focus treatment, truthful phone-menu disclosure and closing, and a one-time focus move into new main content after client-side path navigation. This does not change public content, routes, sign-in, Firebase, providers, accounts, production data, payments, or connected directory behavior.
+
+**Approver:** Dave Liu as platform owner, plus the accessibility reviewer. This is not an officer-operated or reusable release control.
+
+**Prerequisites:** approved issue [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) with no newer blocker; release ID `WEB-002D-KEYBOARD-FOCUS-2026-08-14`; green exact-head checks; successful pinned Deploy Preview; source commit `7496fe0881fb52908c4ff2f40f488df09c94c908`; source tree `ccac4c189c195db8ab594e0eefe256ea9fa04996`; 62-file digest `e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7`; exact six-path live-to-source diff digest `462eeb01e7a9858678802464f7dd4b76cd2fcb3c13be827efb4f98fa53ca809c`; exact first parent `95880748e15c03b0ee58da6e1ed11ac6c9526529`; current production and rollback deploy `6a7e072f8f346b0008510d29`; current live source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`; current live tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`; current live 62-file digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`; release source `codex/netlify-source-659-keyboard-focus`; rollback source `codex/netlify-source-659-rollback`; an executable six-path diff; reviewed #291, #490, and #657 equivalence evidence; synthetic desktop and phone proof; a prepared manifest-disable change; a named signed-out public observer; and no other `main` merge until verification and repause finish.
+
+**Specialist dependency:** the platform maintainer supplies the exact GitHub, Netlify, marker, artifact, and rollback records. The officer uses reviewed links and a private browser only. The officer does not run a command, sign in, change a provider, inspect private data, or handle a secret.
+
+```mermaid
+flowchart TD
+    Source["Frozen six-path source"] --> Preview["Pinned #659 Deploy Preview"]
+    Preview --> Match{"Source, tree, count, digest, and marker match?"}
+    Match -- "No" --> Keep["Stop — keep #623 deploy live"]
+    Match -- "Yes" --> Merge["Exact-parent two-parent merge"]
+    Merge --> Public["Signed-out desktop and phone checks"]
+    Public --> Good{"Focus, menu, marker, and network checks pass?"}
+    Good -- "No" --> Rollback["Restore #623 deploy"]
+    Good -- "Yes" --> Repause["Disable temporary authority"]
+    Repause --> Verify["Confirm no replacement; retire temporary refs"]
+```
+
+In words: the preview must match the exact six-path frozen artifact. Only the exact-parent merge may publish it. Signed-out desktop and phone checks then verify the marker, visible focus, phone-menu behavior, and absence of a directory request. A mismatch leaves or restores the current #623 deploy. A success is immediately re-paused, and the temporary refs are retired.
+
+1. Open the #659 release pull request.
+2. Confirm its destination is `main`.
+3. Confirm its head is the exact reviewed control commit.
+4. Confirm every required check for that head is green.
+5. Ask the platform maintainer for the frozen source identity.
+6. Confirm the source commit and tree match the prerequisites.
+7. Confirm the artifact count and digest match the prerequisites.
+8. Confirm the six-path diff digest matches the prerequisites.
+9. Confirm the six changed paths are `src/App.jsx`, `src/App.test.jsx`, `src/components/Navbar.jsx`, `src/components/ScrollToTop.jsx`, `src/headerClearance.test.jsx`, and `src/index.css`.
+10. Confirm the review found only #291 visible-focus behavior, #490 phone-menu behavior, and #657 route-focus behavior.
+11. Confirm the review found no new route, content, service, Firebase, provider, account, data, payment, or connected-directory behavior.
+12. Confirm the directory availability value remains literal `false`.
+13. Read the synthetic desktop result at 1280 by 900 CSS pixels.
+14. Confirm the first load kept body focus and showed no main-content cue.
+15. Confirm a client-side path change focused main content at scroll position zero.
+16. Confirm the scoped cue was visible, unclipped, layout-neutral, and below the navigation layer.
+17. Read the synthetic phone result at 390 by 844 CSS pixels.
+18. Confirm a public phone-menu choice closed the menu and reported its collapsed state.
+19. Confirm phone navigation focused the new main content with the same bounded cue.
+20. Confirm the next Tab movement followed the normal destination order.
+21. Open the pinned Deploy Preview marker.
+22. Confirm its control, source, tree, previous source, rollback deploy, count, and digest match the prerequisites.
+23. Confirm the preview marker uses HTTPS, JSON, no-store, nosniff, and HSTS.
+24. Confirm preview pages carry `X-Robots-Tag: noindex`.
+25. Stay signed out and open safe public preview pages at both checked widths.
+26. Confirm direct load keeps body focus and the skip link appears on the first Tab.
+27. Confirm public path navigation moves focus into the new main content once.
+28. Confirm the phone menu closes and reports its collapsed state.
+29. Confirm the preview network record contains no member-directory request.
+30. Confirm the rollback ref and prepared repause are ready.
+31. Re-read the issue and pull-request comments.
+32. Stop for any unresolved blocker posted after the last review.
+33. Confirm `main` is still exact commit `95880748e15c03b0ee58da6e1ed11ac6c9526529`.
+34. Have the platform owner merge with a merge commit.
+35. Confirm the production attempt identifies that exact two-parent merge on `main`.
+36. Read the live public marker before checking behavior.
+37. Confirm the live marker matches the preview's stable source, tree, previous source, rollback deploy, count, and digest.
+38. Stay signed out and repeat the safe focus and phone-menu checks at both widths.
+39. Confirm the production network record contains no member-directory request.
+40. Record Firebase, providers, accounts, sign-in, and production data as unchanged.
+41. Have the platform owner merge the prepared manifest-disable change immediately.
+42. Confirm its Netlify attempt does not replace the verified deploy.
+43. Read the public marker again and confirm the verified deploy remains live.
+44. Confirm the release, control, and repause refs are retired.
+45. Confirm the rollback ref remains pinned to the prior live source.
+
+**Expected result:** if every gate passes, Netlify serves exactly the frozen accessibility artifact. A direct load keeps body focus and the skip link remains first. A client-side path change moves otherwise-stale focus into main content once with a visible bounded cue. A phone-menu destination closes the menu with truthful disclosure state and leaves normal next-Tab order. The release deploys no Firebase, Rules, Functions, or indexes; configures no provider; uses no account; changes no production data; and does not connect the directory. Until the production and repause proof exists, #659 remains under review and not published, while #623 deploy `6a7e072f8f346b0008510d29` remains live.
+
+**Stop conditions:** stop if `main` advances; a branch, context, source, tree, six-path scope, count, digest, parent, marker, asset, page, focus, cue, menu, network record, rollback, or repause result differs; a seventh source path appears; accumulated `main` behavior appears; the cue is absent or clipped; focus is stolen, trapped, stale, or out of order; the phone menu remains open or reports the wrong state; a protected control is enabled; a public check asks for sign-in or private data; a directory request appears; Firebase or a provider changes; another production attempt starts; or any blocker remains open.
+
+**Success proof:** keep the issue and pull-request links; exact control, source, tree, parent, and six-path diff identities; artifact count and digest; preview deploy and marker; required checks; signed-out desktop and phone page/focus/menu/network results; release merge; production deploy and marker; repause merge and unpublished attempt; retained-deploy readback; retired temporary refs; retained rollback ref; check date; browser; widths; and two redacted public screenshots. Record source, tests, merge, preview, website publication, `runmprc.com` revision, Firebase, outside providers, accounts/sign-in, production data, and live focus behavior as separate states.
+
+**Undo:** before publication, leave deploy `6a7e072f8f346b0008510d29` live. If the wrong result publishes, ask the Netlify team owner to atomically restore that same deploy. If provider restore is unavailable, use only a newly reviewed exact-parent rollback pinned to source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, then repeat its exact preview and marker checks. Disabling the manifest alone does not roll back an already published deploy.
+
+**Escalation:** platform owner first; accessibility reviewer second; security/privacy owner if an unexpected request, private value, account boundary, or provider action appears. Use the private incident path for any private data or secret. Do not copy that value into GitHub, a screenshot, email, or an AI tool.
 
 ## Temporary #623 inert member-directory interface release — COMPLETED 2026-08-13
 
@@ -385,13 +468,13 @@ Do not use this section until #133 records that both GitHub environments are pro
 9. Use made-up data only. Do not inspect or change a real member record.
 10. Complete the delivery record.
 
-### Check keyboard focus after an approved website publication — NOT AVAILABLE YET
+### Check keyboard focus after an approved website publication — #659 EXACT-ARTIFACT CHECK UNDER REVIEW
 
 **Purpose:** prove that a person using a keyboard can see which public link, button, or navigation control is active.
 
 **Approver:** the named release observer, with the platform owner or accessibility reviewer available if the check fails.
 
-**Prerequisites:** protected website publication must be available; the exact approved commit must be live and identified by the host; the public site must be safe to open without signing in; and the observer must use a normal computer with a keyboard. Publication is still **NOT AVAILABLE YET** under #133/#136, so do not record live proof from this procedure until those prerequisites are met.
+**Prerequisites:** the exact approved commit must be live and identified by the host; the public site must be safe to open without signing in; and the observer must use a normal computer with a keyboard. The reusable protected website release is still **NOT AVAILABLE YET** under #133/#136. #659 is one exact-artifact exception under review and is not published. Use this check for #659 only after its public marker matches the approved release; until then, #623 deploy `6a7e072f8f346b0008510d29` remains the verified host record.
 
 1. Open the public website in a private browser window.
 2. Confirm the host identifies the exact approved commit.
@@ -413,13 +496,13 @@ Do not use this section until #133 records that both GitHub environments are pro
 
 **Escalation:** platform owner first, then the accessibility reviewer or backup release officer. Treat an unexpected live publication as a hosting incident.
 
-### Verify focus after a client-side page change — WEB-UX-004 SOURCE CHECK AVAILABLE; LIVE CHECK NOT AVAILABLE YET
+### Verify focus after a client-side page change — WEB-UX-004 MERGED; #659 LIVE CHECK UNDER REVIEW
 
 **Purpose:** prove that a keyboard user who opens another page without a full browser reload moves from the old navigation control into the new main content. The source must not move focus on the first page load or take focus that the new page or user already chose. A client-side page change replaces the page content while the website stays open.
 
 **Approver:** the pull-request accessibility reviewer approves the source evidence. The named release observer approves a later public check, with the platform owner available if the revision or publication record is unclear.
 
-**Prerequisites:** issue #657; one exact reviewed pull request and commit; the recorded old-source failure; the named green WEB-UX-004 and full App results; and a reviewed undo. The source check uses GitHub and test summaries only. It needs no terminal, account, sign-in, private page, or real data. The later public check also requires a separately approved exact commit, host readback for that commit, a private browser window, a keyboard, and safe signed-out public pages. Protected publication is still **NOT AVAILABLE YET** under #133/#136. At the time this procedure was added, #623 Netlify deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, remained live. Do not call WEB-UX-004 live while that remains the host record.
+**Prerequisites:** issue #657; reviewed PR #658 and exact head `a411cb4ebcfb4f1f05b3883721aa55f3d72bc701`; the recorded old-source failure; the named green WEB-UX-004 and full App results; and a reviewed undo. The source check uses GitHub and test summaries only. It needs no terminal, account, sign-in, private page, or real data. #659 now pins the equivalent route-focus behavior with its #291/#490 prerequisites in source `7496fe0881fb52908c4ff2f40f488df09c94c908`, but that one-shot release is under review and is not published. The later public check requires the exact #659 marker, a private browser window, a keyboard, and safe signed-out public pages. Reusable protected publication remains **NOT AVAILABLE YET** under #133/#136. #623 Netlify deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, remains live. Do not call WEB-UX-004 live while that remains the host record.
 
 **Specialist dependency:** the platform maintainer must supply the exact issue, pull request, commit, test record, and later host readback. The officer can perform every browser step without a terminal. No Firebase or provider specialist action belongs to this check because those surfaces do not change.
 
@@ -441,7 +524,7 @@ Do not use this section until #133 records that both GitHub environments are pro
 14. Read the full App result and the hosted required checks for the same exact commit.
 15. Record source changed, tests passed, and merge state separately.
 
-**Later signed-out public check — NOT AVAILABLE YET:**
+**Later signed-out public check — ONLY AFTER THE EXACT #659 MARKER IS LIVE:**
 
 16. Open the approved public page in a private browser window at 1280 CSS pixels wide.
 17. Confirm the host identifies the exact approved commit.

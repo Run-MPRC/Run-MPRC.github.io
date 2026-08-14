@@ -33,6 +33,16 @@ const FINAL_RELEASE_TRUTH_PATHS = [
   'docs/officers/REQUEST_A_CHANGE.md',
   'docs/officers/SYSTEM_MAPS.md',
 ];
+const PENDING_RELEASE_TRUTH_PATHS = [
+  'IMPLEMENTATION_PLAN.md',
+  'OFFICER_START_HERE.md',
+  'OPERATIONS_RUNBOOK.md',
+  'SECURITY.md',
+  'SYSTEM_DESIGN.md',
+  'docs/officers/PUBLISH_AND_CHECK.md',
+  'docs/officers/README.md',
+  'docs/officers/UPDATE_PUBLIC_CONTENT.md',
+];
 const {
   authorizeProductionRelease,
   evaluateProductionRelease,
@@ -50,6 +60,12 @@ const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
 const finalReleaseTruth = new Map(
   FINAL_RELEASE_TRUTH_PATHS.map((relativePath) => [
+    relativePath,
+    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
+  ]),
+);
+const pendingReleaseTruth = new Map(
+  PENDING_RELEASE_TRUTH_PATHS.map((relativePath) => [
     relativePath,
     fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
   ]),
@@ -226,58 +242,58 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the inactive bounded #623 interface release', () => {
+test('Netlify manifest pins the active bounded #659 keyboard-focus release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, false);
+  assert.equal(loaded.manifest.active, true);
   assert.equal(
     loaded.manifest.releaseId,
-    'WEB-002C-MEMBER-DIRECTORY-PREVIEW-2026-08-13',
+    'WEB-002D-KEYBOARD-FOCUS-2026-08-14',
   );
-  assert.equal(loaded.manifest.issueNumber, 623);
+  assert.equal(loaded.manifest.issueNumber, 659);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    '019353361210021483f23003e09ee6924b78e67c',
+    '95880748e15c03b0ee58da6e1ed11ac6c9526529',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
+    '7496fe0881fb52908c4ff2f40f488df09c94c908',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    '411aa6ec9a9459f5d923030533ffc7c007fe6908',
+    'ccac4c189c195db8ab594e0eefe256ea9fa04996',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    '39ab8649df411262c8109a3c81a57bc38f1e168b',
+    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
-    '6a6dc9ea588b0c0008036312',
+    '6a7e072f8f346b0008510d29',
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-623-member-directory-preview',
+    'refs/heads/codex/netlify-source-659-keyboard-focus',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-623-netlify-release',
+    'codex/issue-659-netlify-release',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 62);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    'd837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1',
+    'e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7',
   );
 });
 
-test('completed #623 records are live while #473 remains rollback history', () => {
+test('completed #623 records stay live while #659 is pending', () => {
   assert.match(
     netlifyConfig,
-    /temporary #623 production authority is inactive again/i,
+    /#659 control-branch preview verifies its exact pinned source/i,
   );
   assert.match(
     netlifyConfig,
-    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
+    /Other[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
   finalReleaseTruth.forEach((contents, relativePath) => {
@@ -369,6 +385,68 @@ test('completed #623 records are live while #473 remains rollback history', () =
         `${relativePath} must not retain stale #623 release status`,
       );
     });
+  });
+
+  const expectedPendingTruth = new Map([
+    [
+      'IMPLEMENTATION_PLAN.md',
+      /\*\*WEB-002D pending release boundary:\*\* \[#659\][^\n]*under review and is not published/i,
+    ],
+    [
+      'OFFICER_START_HERE.md',
+      /As of \*\*2026-08-14\*\*, \[#659\][^\n]*under review and is not published/i,
+    ],
+    [
+      'OPERATIONS_RUNBOOK.md',
+      /WEB-002D \[#659\][^\n]*active one-shot Netlify accessibility release under review and is not published/i,
+    ],
+    [
+      'SECURITY.md',
+      /WEB-002D pending exact-artifact containment for RISK-036 \| \[#659\][^\n]*under review and is not published/i,
+    ],
+    [
+      'SYSTEM_DESIGN.md',
+      /WEB-002D \[#659\][^\n]*active exact-artifact exception under review, not a completed publication/i,
+    ],
+    [
+      'docs/officers/PUBLISH_AND_CHECK.md',
+      /^## Temporary #659 keyboard-navigation and route-focus release — UNDER REVIEW, NOT PUBLISHED$/m,
+    ],
+    [
+      'docs/officers/README.md',
+      /WEB-002D \[#659\][^\n]*under review and is not published/i,
+    ],
+    [
+      'docs/officers/UPDATE_PUBLIC_CONTENT.md',
+      /WEB-002D \[#659\][^\n]*under review and is not published/i,
+    ],
+  ]);
+  expectedPendingTruth.forEach((expectedTruth, relativePath) => {
+    const contents = pendingReleaseTruth.get(relativePath);
+    assert.match(
+      contents,
+      expectedTruth,
+      `${relativePath} must bind #659 to its exact pending status`,
+    );
+    assert.match(contents, /#659/);
+    assert.match(contents, /6a7e072f8f346b0008510d29/);
+    assert.doesNotMatch(
+      contents,
+      /#659 (?:has )?completed (?:one|its)|#659 published deploy|#659 is production/i,
+      `${relativePath} must not claim that #659 is live`,
+    );
+  });
+  [
+    '7496fe0881fb52908c4ff2f40f488df09c94c908',
+    'ccac4c189c195db8ab594e0eefe256ea9fa04996',
+    'e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7',
+    '95880748e15c03b0ee58da6e1ed11ac6c9526529',
+    '462eeb01e7a9858678802464f7dd4b76cd2fcb3c13be827efb4f98fa53ca809c',
+  ].forEach((identifier) => {
+    [
+      pendingReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
+      pendingReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
+    ].forEach((record) => assert.match(record, new RegExp(identifier)));
   });
 
   const canonicalRecords = [
