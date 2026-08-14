@@ -34,6 +34,8 @@ MPRC can open a race or merchandise item for sale only when the platform can:
 9. Do not trade payment integrity for UI responsiveness. Confirmation may say “processing”; it must not guess “paid.”
 10. Legal/tax/insurance questions are escalated to qualified owners, not decided by an implementation agent.
 
+**WEB-002D pending release boundary:** [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) is one active exact-artifact Netlify exception under review and is not published. It projects only the released #291 visible-focus behavior, #490 deterministic phone-menu disclosure/close behavior, and merged #657 route-focus handoff onto live source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`. Pinned source `7496fe0881fb52908c4ff2f40f488df09c94c908`, tree `ccac4c189c195db8ab594e0eefe256ea9fa04996`, 62 files, and digest `e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7` must match an exact two-parent merge whose first parent is `95880748e15c03b0ee58da6e1ed11ac6c9526529`. Until the exact preview, signed-out public checks, and immediate repause all pass, #623 deploy `6a7e072f8f346b0008510d29` remains production and the rollback target. #659 does not publish accumulated `main`, deploy Firebase, configure a provider, use an account, change production data, or connect the directory. Directory availability stays literal `false`; reusable hosting remains open under #460/#133/#136.
+
 ## 3. Dependency map
 
 ```mermaid

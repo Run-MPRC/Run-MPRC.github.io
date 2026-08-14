@@ -95,6 +95,8 @@ The former workflow automatically published Pages before attempting Firebase and
 
 #623 completed the same fail-closed pattern for one inert member-directory interface artifact. Deploy Preview `6a7e05febf8fde00084cf9e0` matched control head `1fdb31f71fcaf01c33b5e57a4cd28fc473a4a737`. Exact merge `9d5cc8612b4321172370bd949d307e7e4ac0ec7d`, with first parent `019353361210021483f23003e09ee6924b78e67c`, published deploy `6a7e072f8f346b0008510d29` from source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`, tree `411aa6ec9a9459f5d923030533ffc7c007fe6908`, 62 files, and digest `d837272a1e5efc1575809e87f532276b38d1a63f1dd79ec1aef0533f6da8afb1`. Its marker also records previous source `39ab8649df411262c8109a3c81a57bc38f1e168b` and rollback deploy `6a6dc9ea588b0c0008036312`. Signed-out route, guard, and bundle checks found no connected member-directory request or symbol. Repause merge `c8678c623afdd9becf77d596b71f36f26f04b746` made the manifest inactive; attempt `6a7e081e73fdd60009f7ba57` stopped unpublished and retained the verified deploy and marker. The release source ref is absent and the rollback ref remains. The release changed no Firebase, outside-provider configuration, sign-in state, or production data. Build hooks and a reusable protected Netlify publication path remain unverified. No source test clears the current Pages custom-domain claim, configures #133, or deploys #136; those remain separate provider states. The App Engine synchronization script is another surface that must be documented as active or retired.
 
+WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) is one active exact-artifact exception under review, not a completed publication. It freezes only the reviewed #291 visible-focus treatment, #490 deterministic phone-menu disclosure/close behavior, and #657 client-side route-focus handoff over current live source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`. Its pinned source is `7496fe0881fb52908c4ff2f40f488df09c94c908`, tree `ccac4c189c195db8ab594e0eefe256ea9fa04996`, 62 files, and artifact digest `e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7`; the exact six-path live-source diff digest is `462eeb01e7a9858678802464f7dd4b76cd2fcb3c13be827efb4f98fa53ca809c`, and the expected production first parent is `95880748e15c03b0ee58da6e1ed11ac6c9526529`. Until its pinned preview, exact two-parent merge, signed-out public focus checks, and immediate repause all pass, #623 deploy `6a7e072f8f346b0008510d29` remains production and the rollback target. #659 changes no route, content, Firebase surface, outside-provider configuration, account, sign-in state, production data, or directory behavior; directory availability remains literal `false`. Stop on any source, tree, file-count, artifact, parent, focus, menu, marker, or repause mismatch.
+
 ```mermaid
 flowchart TD
     Merge["Merge to main"] --> CI["Exact main-push CI"]
@@ -113,9 +115,10 @@ flowchart TD
     WebOnly --> Netlify
     Netlify --> WebReadback["Exact marker and signed-out guards verified"]
     WebReadback --> WebRepause["Temporary authority inactive; verified deploy retained"]
+    Pending["#659 exact focus artifact under review"] -. "Not published" .-> Netlify
 ```
 
-Text alternative: ordinary merges run CI and do not publish Netlify. #623 completed one exact-parent exception and production now serves its pinned inert artifact. Signed-out marker and guard checks passed, then the temporary authority was disabled without replacing the verified deploy. The separate protected workflow still requires approval and verified Firebase before publishing its Pages copy.
+Text alternative: ordinary merges run CI and do not publish Netlify. #623 completed one exact-parent exception and production now serves its pinned inert artifact. #659 is a separate exact focus-artifact release under review and has not published. Signed-out marker and guard checks passed for #623, then its temporary authority was disabled without replacing the verified deploy. The separate protected workflow still requires approval and verified Firebase before publishing its Pages copy.
 
 ### GitHub Pages callback handoff
 
