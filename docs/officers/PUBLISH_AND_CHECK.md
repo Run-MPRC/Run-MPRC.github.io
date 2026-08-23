@@ -10,6 +10,8 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
+**Firebase Hosting status:** **SOURCE ONLY, NOT AVAILABLE YET.** WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) requires controlled optimized builds to name staging or production, scans CI's synthetic staging JavaScript for the staging project and absence of production Firebase identities, and adds a missing-path SPA rewrite to source. It creates no Firebase Hosting site/channel, staging project, cloud authority, protected web-production branch, automatic publication, release marker, rollback, custom domain, or DNS/TLS change. Officers do not use its source configuration as a publish button.
+
 **Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01; bounded #473 deploy `6a6dc9ea588b0c0008036312` is older history. #623 completed the inert-directory predecessor and remains the immediate rollback as deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`. #659 completed one separate exact-artifact accessibility release. Deploy `6a7ece87c5ca4d0007c1a3fc`, source `7496fe0881fb52908c4ff2f40f488df09c94c908`, is production now. Its exact marker/artifact and signed-out route-focus/menu checks passed. The manifest is inactive, temporary refs are absent, and the rollback ref remains. Shop is the static catalog; Events and Calendar show a fixed retry-later notice; the directory remains inert. Event records remain unavailable because this did not deploy Firebase. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
 **Completed #659 exception:** WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) completed one exact-artifact accessibility release on 2026-08-14. The frozen source contains only reviewed #291 visible focus, #490 phone-menu disclosure/close behavior, and #657 client-side route focus. Production is deploy `6a7ece87c5ca4d0007c1a3fc`; #623 deploy `6a7e072f8f346b0008510d29` is its rollback target. This is not an officer-operated or reusable control. The no-terminal section below is retained as the audit record.
@@ -25,7 +27,9 @@ flowchart TD
     Request --> Preflight{"Commit and required checks valid?"}
     Preflight -- "No" --> Stop["Red failure — publish nothing"]
     Preflight -- "Yes" --> Prepare["Prepare credential-free website artifact"]
-    Prepare --> Release{"Approve protected environment?"}
+    Prepare --> WebConfig{"Explicit web environment and artifact identity valid?"}
+    WebConfig -- "No" --> Stop
+    WebConfig -- "Yes" --> Release{"Approve protected environment?"}
     Release -- "No" --> Stop
     Release -- "Yes" --> Gate{"Project, scope, and authority valid?"}
     Gate -- "No" --> Stop
@@ -37,7 +41,7 @@ flowchart TD
     Pages --> Verify["Check Pages, Netlify, runmprc.com, and providers separately"]
 ```
 
-In words: merging does not release; a request checks one exact commit and may prepare a credential-free artifact; protected approval unlocks Firebase; only verified Firebase permits Pages publication.
+In words: merging does not release; a request checks one exact commit and may prepare a credential-free artifact only when its web environment and artifact identity pass; protected approval unlocks Firebase; only verified Firebase permits Pages publication. #663 supplies the source web-environment check, not a live Firebase Hosting release.
 
 ## Current facts
 
@@ -56,6 +60,7 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - Source checked on 2026-08-01 pins every root brace-expansion dependency family to reviewed compatible releases 1.1.18, 2.1.4, and 5.0.9 after a new advisory and follow-up bypass fixes. This is internal dependency evidence only. Officers do not install packages, run audit commands, or resolve dependency warnings; the platform maintainer owns those tasks. The separate minimatch finding remains open. This source change does not publish a website, deploy Firebase, change a provider, or prove live behavior.
 - A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
 - The `staging` option deliberately stops before deployment until #113/#133 name one exact approved staging Firebase project. A future staging release remains backend-only until a separate staging browser configuration and host exist.
+- #663 source requires complete staging-named public browser configuration and gives CI a synthetic staging artifact scan. This does not satisfy the approved-project or hosted-staging requirements above.
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.

@@ -27,6 +27,27 @@ const mockReCaptchaEnterpriseProvider = jest.fn((siteKey: string) => ({
 }));
 const mockReCaptchaV3Provider = jest.fn((siteKey: string) => ({ siteKey }));
 
+const FIREBASE_BUILD_ENVIRONMENT_KEYS = [
+  'REACT_APP_FIREBASE_ENVIRONMENT',
+  'REACT_APP_FIREBASE_API_KEY',
+  'REACT_APP_FIREBASE_AUTH_DOMAIN',
+  'REACT_APP_FIREBASE_PROJECT_ID',
+  'REACT_APP_FIREBASE_STORAGE_BUCKET',
+  'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
+  'REACT_APP_FIREBASE_APP_ID',
+  'REACT_APP_FIREBASE_MEASUREMENT_ID',
+] as const;
+
+const PRODUCTION_FIREBASE_BUILD_CONFIG = {
+  REACT_APP_FIREBASE_API_KEY: 'AIzaSyD2u17HMhDPZ0Tn9D3H71fep1vZgT-njnw',
+  REACT_APP_FIREBASE_AUTH_DOMAIN: 'mid-peninsula-running-club.firebaseapp.com',
+  REACT_APP_FIREBASE_PROJECT_ID: 'mid-peninsula-running-club',
+  REACT_APP_FIREBASE_STORAGE_BUCKET: 'mid-peninsula-running-club.firebasestorage.app',
+  REACT_APP_FIREBASE_MESSAGING_SENDER_ID: '253289716314',
+  REACT_APP_FIREBASE_APP_ID: '1:253289716314:web:dcad9766d820044d7f9663',
+  REACT_APP_FIREBASE_MEASUREMENT_ID: 'G-ECN7TT0BGF',
+} as const;
+
 jest.mock('firebase/app', () => ({ initializeApp: mockInitializeApp }));
 jest.mock('firebase/analytics', () => ({
   getAnalytics: mockGetAnalytics,
@@ -59,6 +80,52 @@ function setNodeEnv(value: string | undefined) {
   });
 }
 
+function createResourcesForExplicitEnvironment(
+  nodeEnv: string,
+  firebaseEnvironment: string | undefined,
+  firebaseConfig: Partial<Record<typeof FIREBASE_BUILD_ENVIRONMENT_KEYS[number], string>> = {},
+) {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+  const originalValues = Object.fromEntries(
+    FIREBASE_BUILD_ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
+  );
+  setNodeEnv(nodeEnv);
+  process.env.REACT_APP_RECAPTCHA_SITE_KEY = 'configured-public-site-key';
+  FIREBASE_BUILD_ENVIRONMENT_KEYS.forEach((key) => delete process.env[key]);
+  if (firebaseEnvironment !== undefined) {
+    process.env.REACT_APP_FIREBASE_ENVIRONMENT = firebaseEnvironment;
+  }
+  if (firebaseEnvironment === 'production') {
+    Object.entries(PRODUCTION_FIREBASE_BUILD_CONFIG).forEach(([key, value]) => {
+      process.env[key] = value;
+    });
+  }
+  Object.entries(firebaseConfig).forEach(([key, value]) => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  });
+
+  try {
+    let resources: import('./FirebaseResources').default;
+    jest.isolateModules(() => {
+      // eslint-disable-next-line global-require
+      const FirebaseResources = require('./FirebaseResources').default;
+      resources = FirebaseResources.getInstance();
+    });
+    return resources!;
+  } finally {
+    setNodeEnv(originalNodeEnv);
+    if (originalSiteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+    else process.env.REACT_APP_RECAPTCHA_SITE_KEY = originalSiteKey;
+    FIREBASE_BUILD_ENVIRONMENT_KEYS.forEach((key) => {
+      const original = originalValues[key];
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    });
+  }
+}
+
 function createResourcesFor(
   nodeEnv: string,
   siteKey?: string,
@@ -66,8 +133,19 @@ function createResourcesFor(
 ) {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+  const originalFirebaseValues = Object.fromEntries(
+    FIREBASE_BUILD_ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
+  );
   const originalLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   setNodeEnv(nodeEnv);
+  if (nodeEnv === 'production') {
+    process.env.REACT_APP_FIREBASE_ENVIRONMENT = 'production';
+    Object.entries(PRODUCTION_FIREBASE_BUILD_CONFIG).forEach(([key, value]) => {
+      process.env[key] = value;
+    });
+  } else {
+    delete process.env.REACT_APP_FIREBASE_ENVIRONMENT;
+  }
   if (siteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
   else process.env.REACT_APP_RECAPTCHA_SITE_KEY = siteKey;
   window.history.replaceState(null, '', locationPath);
@@ -83,6 +161,11 @@ function createResourcesFor(
   } finally {
     window.history.replaceState(null, '', originalLocation);
     setNodeEnv(originalNodeEnv);
+    FIREBASE_BUILD_ENVIRONMENT_KEYS.forEach((key) => {
+      const original = originalFirebaseValues[key];
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    });
     if (originalSiteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
     else process.env.REACT_APP_RECAPTCHA_SITE_KEY = originalSiteKey;
   }
@@ -99,8 +182,19 @@ async function withFirebaseModuleFor(
 ) {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+  const originalFirebaseValues = Object.fromEntries(
+    FIREBASE_BUILD_ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
+  );
   const originalLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   setNodeEnv(nodeEnv);
+  if (nodeEnv === 'production') {
+    process.env.REACT_APP_FIREBASE_ENVIRONMENT = 'production';
+    Object.entries(PRODUCTION_FIREBASE_BUILD_CONFIG).forEach(([key, value]) => {
+      process.env[key] = value;
+    });
+  } else {
+    delete process.env.REACT_APP_FIREBASE_ENVIRONMENT;
+  }
   if (siteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
   else process.env.REACT_APP_RECAPTCHA_SITE_KEY = siteKey;
   window.history.replaceState(initialHistoryState, '', initialLocation);
@@ -115,6 +209,11 @@ async function withFirebaseModuleFor(
   } finally {
     window.history.replaceState(null, '', originalLocation);
     setNodeEnv(originalNodeEnv);
+    FIREBASE_BUILD_ENVIRONMENT_KEYS.forEach((key) => {
+      const original = originalFirebaseValues[key];
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    });
     if (originalSiteKey === undefined) delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
     else process.env.REACT_APP_RECAPTCHA_SITE_KEY = originalSiteKey;
   }
@@ -275,6 +374,114 @@ describe('FirebaseResources environment isolation', () => {
     expect(mockIsAnalyticsSupported).not.toHaveBeenCalled();
   });
 
+  test('optimized startup rejects a missing Firebase environment', () => {
+    expect(() => createResourcesForExplicitEnvironment(
+      'production',
+      undefined,
+    )).toThrow('Firebase environment configuration is unavailable; stop startup.');
+    expect(mockInitializeApp).not.toHaveBeenCalled();
+  });
+
+  test('local startup rejects a hosted Firebase environment', () => {
+    expect(() => createResourcesForExplicitEnvironment(
+      'development',
+      'production',
+    )).toThrow('Firebase environment configuration is unavailable; stop startup.');
+    expect(mockInitializeApp).not.toHaveBeenCalled();
+  });
+
+  test('optimized staging uses only its complete explicit Firebase configuration', () => {
+    const resources = createResourcesForExplicitEnvironment(
+      'production',
+      'staging',
+      {
+        REACT_APP_FIREBASE_API_KEY: 'synthetic-ci-api-key-not-a-credential',
+        REACT_APP_FIREBASE_AUTH_DOMAIN: 'mprc-staging-ci.firebaseapp.com',
+        REACT_APP_FIREBASE_PROJECT_ID: 'mprc-staging-ci',
+        REACT_APP_FIREBASE_STORAGE_BUCKET: 'mprc-staging-ci.firebasestorage.app',
+        REACT_APP_FIREBASE_MESSAGING_SENDER_ID: '100000000001',
+        REACT_APP_FIREBASE_APP_ID: '1:100000000001:web:abcdef0123456789',
+      },
+    );
+
+    expect(resources.app.options).toEqual({
+      apiKey: 'synthetic-ci-api-key-not-a-credential',
+      authDomain: 'mprc-staging-ci.firebaseapp.com',
+      projectId: 'mprc-staging-ci',
+      storageBucket: 'mprc-staging-ci.firebasestorage.app',
+      messagingSenderId: '100000000001',
+      appId: '1:100000000001:web:abcdef0123456789',
+    });
+    expect(JSON.stringify(resources.app.options)).not.toContain(
+      'mid-peninsula-running-club',
+    );
+    expect(mockConnectAuthEmulator).not.toHaveBeenCalled();
+    expect(mockConnectFirestoreEmulator).not.toHaveBeenCalled();
+    expect(mockConnectFunctionsEmulator).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['missing app ID', { REACT_APP_FIREBASE_APP_ID: undefined }],
+    ['production API key', {
+      REACT_APP_FIREBASE_API_KEY: PRODUCTION_FIREBASE_BUILD_CONFIG.REACT_APP_FIREBASE_API_KEY,
+    }],
+    ['production project', {
+      REACT_APP_FIREBASE_PROJECT_ID: 'mid-peninsula-running-club',
+    }],
+    ['production auth domain', {
+      REACT_APP_FIREBASE_AUTH_DOMAIN: 'mid-peninsula-running-club.firebaseapp.com',
+    }],
+    ['production storage bucket', {
+      REACT_APP_FIREBASE_STORAGE_BUCKET: (
+        PRODUCTION_FIREBASE_BUILD_CONFIG.REACT_APP_FIREBASE_STORAGE_BUCKET
+      ),
+    }],
+    ['production sender and app IDs', {
+      REACT_APP_FIREBASE_MESSAGING_SENDER_ID: (
+        PRODUCTION_FIREBASE_BUILD_CONFIG.REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+      ),
+      REACT_APP_FIREBASE_APP_ID: PRODUCTION_FIREBASE_BUILD_CONFIG.REACT_APP_FIREBASE_APP_ID,
+    }],
+    ['production measurement ID', {
+      REACT_APP_FIREBASE_MEASUREMENT_ID: (
+        PRODUCTION_FIREBASE_BUILD_CONFIG.REACT_APP_FIREBASE_MEASUREMENT_ID
+      ),
+    }],
+  ])('optimized staging rejects %s before SDK initialization', (_name, override) => {
+    const config = {
+      REACT_APP_FIREBASE_API_KEY: 'synthetic-ci-api-key-not-a-credential',
+      REACT_APP_FIREBASE_AUTH_DOMAIN: 'mprc-staging-ci.firebaseapp.com',
+      REACT_APP_FIREBASE_PROJECT_ID: 'mprc-staging-ci',
+      REACT_APP_FIREBASE_STORAGE_BUCKET: 'mprc-staging-ci.firebasestorage.app',
+      REACT_APP_FIREBASE_MESSAGING_SENDER_ID: '100000000001',
+      REACT_APP_FIREBASE_APP_ID: '1:100000000001:web:abcdef0123456789',
+      ...override,
+    } as Partial<Record<typeof FIREBASE_BUILD_ENVIRONMENT_KEYS[number], string>>;
+
+    expect(() => createResourcesForExplicitEnvironment(
+      'production',
+      'staging',
+      config,
+    )).toThrow('Firebase environment configuration is unavailable; stop startup.');
+    expect(mockInitializeApp).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['missing measurement ID', { REACT_APP_FIREBASE_MEASUREMENT_ID: undefined }],
+    ['changed project', {
+      REACT_APP_FIREBASE_AUTH_DOMAIN: 'mprc-production-other.firebaseapp.com',
+      REACT_APP_FIREBASE_PROJECT_ID: 'mprc-production-other',
+      REACT_APP_FIREBASE_STORAGE_BUCKET: 'mprc-production-other.firebasestorage.app',
+    }],
+  ])('optimized production rejects %s before SDK initialization', (_name, override) => {
+    expect(() => createResourcesForExplicitEnvironment(
+      'production',
+      'production',
+      override,
+    )).toThrow('Firebase environment configuration is unavailable; stop startup.');
+    expect(mockInitializeApp).not.toHaveBeenCalled();
+  });
+
   test('production uses only the Enterprise App Check provider without Analytics', async () => {
     const enterpriseProvider = {
       kind: 'enterprise',
@@ -413,8 +620,15 @@ describe('FirebaseResources environment isolation', () => {
   test('remembers the initial Auth capability after the visible URL is scrubbed', () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY;
+    const originalFirebaseValues = Object.fromEntries(
+      FIREBASE_BUILD_ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
+    );
     const originalLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     setNodeEnv('production');
+    process.env.REACT_APP_FIREBASE_ENVIRONMENT = 'production';
+    Object.entries(PRODUCTION_FIREBASE_BUILD_CONFIG).forEach(([key, value]) => {
+      process.env[key] = value;
+    });
     process.env.REACT_APP_RECAPTCHA_SITE_KEY = 'configured-public-site-key';
     window.history.replaceState(
       null,
@@ -439,6 +653,11 @@ describe('FirebaseResources environment isolation', () => {
     } finally {
       window.history.replaceState(null, '', originalLocation);
       setNodeEnv(originalNodeEnv);
+      FIREBASE_BUILD_ENVIRONMENT_KEYS.forEach((key) => {
+        const original = originalFirebaseValues[key];
+        if (original === undefined) delete process.env[key];
+        else process.env[key] = original;
+      });
       if (originalSiteKey === undefined) {
         delete process.env.REACT_APP_RECAPTCHA_SITE_KEY;
       } else {

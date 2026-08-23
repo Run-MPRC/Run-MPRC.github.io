@@ -10,6 +10,9 @@ const {
   authorizeProductionRelease,
   loadManifest,
 } = require('./netlify-release-policy');
+const {
+  verifyExecutableArtifact,
+} = require('./firebase-hosting-contract');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'build');
@@ -45,7 +48,34 @@ function safeBaseEnvironment(home, sourceEnvironment = process.env) {
 }
 
 function buildEnvironment(home, sourceEnvironment = process.env) {
-  return safeBaseEnvironment(home, sourceEnvironment);
+  return {
+    ...safeBaseEnvironment(home, sourceEnvironment),
+    REACT_APP_FIREBASE_ENVIRONMENT: 'production',
+    REACT_APP_FIREBASE_API_KEY: 'AIzaSyD2u17HMhDPZ0Tn9D3H71fep1vZgT-njnw',
+    REACT_APP_FIREBASE_AUTH_DOMAIN: 'mid-peninsula-running-club.firebaseapp.com',
+    REACT_APP_FIREBASE_PROJECT_ID: 'mid-peninsula-running-club',
+    REACT_APP_FIREBASE_STORAGE_BUCKET: (
+      'mid-peninsula-running-club.firebasestorage.app'
+    ),
+    REACT_APP_FIREBASE_MESSAGING_SENDER_ID: '253289716314',
+    REACT_APP_FIREBASE_APP_ID: '1:253289716314:web:dcad9766d820044d7f9663',
+    REACT_APP_FIREBASE_MEASUREMENT_ID: 'G-ECN7TT0BGF',
+  };
+}
+
+function previewBuildEnvironment(home, sourceEnvironment = process.env) {
+  return {
+    ...safeBaseEnvironment(home, sourceEnvironment),
+    REACT_APP_FIREBASE_ENVIRONMENT: 'staging',
+    REACT_APP_FIREBASE_API_KEY: 'synthetic-ci-api-key-not-a-credential',
+    REACT_APP_FIREBASE_AUTH_DOMAIN: 'mprc-staging-ci.firebaseapp.com',
+    REACT_APP_FIREBASE_PROJECT_ID: 'mprc-staging-ci',
+    REACT_APP_FIREBASE_STORAGE_BUCKET: (
+      'mprc-staging-ci.firebasestorage.app'
+    ),
+    REACT_APP_FIREBASE_MESSAGING_SENDER_ID: '100000000001',
+    REACT_APP_FIREBASE_APP_ID: '1:100000000001:web:abcdef0123456789',
+  };
 }
 
 function run(command, args, options = {}) {
@@ -148,7 +178,9 @@ function installAndBuild(source, temporaryDirectory) {
     ['build'],
     { cwd: source, env: environment },
   );
-  return path.join(source, 'build');
+  const output = path.join(source, 'build');
+  verifyExecutableArtifact(output, environment);
+  return output;
 }
 
 function walkFiles(directory, relative = '') {
@@ -256,7 +288,21 @@ function main() {
     }
     if (!authorization.manifest.active
       || process.env.HEAD !== authorization.manifest.previewBranch) {
-      run('npm', ['run', 'build'], { cwd: ROOT });
+      const previewDirectory = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'run-mprc-netlify-preview-'),
+      );
+      const previewHome = path.join(previewDirectory, 'home');
+      try {
+        fs.mkdirSync(previewHome);
+        const previewEnvironment = previewBuildEnvironment(previewHome);
+        run('npm', ['run', 'build'], {
+          cwd: ROOT,
+          env: previewEnvironment,
+        });
+        verifyExecutableArtifact(OUTPUT, previewEnvironment);
+      } finally {
+        fs.rmSync(previewDirectory, { force: true, recursive: true });
+      }
       return;
     }
     if (!SHA_PATTERN.test(process.env.COMMIT_REF)) {
@@ -310,6 +356,7 @@ if (require.main === module) {
 module.exports = {
   buildEnvironment,
   fetchAndVerifySource,
+  previewBuildEnvironment,
   publishArtifact,
   releaseMarkerPayload,
   safeBaseEnvironment,

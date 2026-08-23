@@ -96,16 +96,25 @@ npm --prefix functions run test:run -- --runInBand
 CI=true npm test -- --watchAll=false --runInBand
 npm run test:spa-navigation
 npm run test:rules
-CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
+CI=true DISABLE_ESLINT_PLUGIN=true \
+REACT_APP_FIREBASE_ENVIRONMENT=staging \
+REACT_APP_FIREBASE_API_KEY=synthetic-ci-api-key-not-a-credential \
+REACT_APP_FIREBASE_AUTH_DOMAIN=mprc-staging-ci.firebaseapp.com \
+REACT_APP_FIREBASE_PROJECT_ID=mprc-staging-ci \
+REACT_APP_FIREBASE_STORAGE_BUCKET=mprc-staging-ci.firebasestorage.app \
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=100000000001 \
+REACT_APP_FIREBASE_APP_ID=1:100000000001:web:abcdef0123456789 \
+npx --no-install react-scripts build
+node scripts/firebase-hosting-contract.js verify build
 ```
 
-The Rules and commerce-emulator suites need Java 21. The direct `react-scripts build` command is preferred for a diagnostic build because normal `npm run build` regenerates the sitemap. Run dependency audits for security/dependency issues, but do not apply forced automatic upgrades.
+The Rules and commerce-emulator suites need Java 21. The synthetic Firebase values above authorize no provider call or deployment. The direct `react-scripts build` command avoids regenerating the sitemap; the following verifier must pass before its output is trusted as a staging-shaped artifact. Normal `npm run build` validates its selected hosted environment and regenerates the sitemap. Run dependency audits for security/dependency issues, but do not apply forced automatic upgrades.
 
 The deterministic frontend Jest baseline is available through the command above. Hosted CI runs it as the blocking `Run frontend Jest tests` step under #124 and runs the standalone SPA suite under #126. #135 adds a tested manual, exact-commit, backend-first GitHub release gate and pauses Git-triggered Netlify production builds. This proves source shape only: protected environments/OIDC (#133), staged/live deployment (#136), fail-closed lint, required checks, Netlify publication, provider configuration, and production behavior remain separate work under #105 and WEB-001.
 
 For Firebase-backed local development, run `npm run emulators` first and wait until Auth, Firestore, and Functions are ready under `demo-mprc-local`. In a second terminal, run `npm start` and use `http://localhost:3000`. Stop if any browser Firebase request uses a non-loopback host. The emulator suite does not isolate Stripe, Strava, email, or other provider calls made by Functions; those flows remain forbidden until their test configuration and safe sink are separately proven.
 
-Optimized builds and current deploy previews still use production Firebase configuration. Do not sign in, open private/admin pages, or exercise Firebase/provider behavior in a preview. Safe staging and provider isolation remain **NOT AVAILABLE YET** under #105/CONFIG.
+Optimized builds must explicitly select `staging` or `production`. WEB-001A1 #663 provides and tests that source boundary, but it does not create an owned staging project or isolate outside providers. Do not sign in, open private/admin pages, or exercise Firebase/provider behavior in a preview until the protected staging and provider evidence required by #105/CONFIG exists.
 
 For Stripe lifecycle work, tests must include relevant negative and retry cases: invalid signature, duplicate/out-of-order Event, unpaid completion, amount/currency/environment mismatch, terminal-state protection, async success/failure, expiration, cancellation, and refund retry. Capacity/inventory work must include concurrent final-unit tests.
 

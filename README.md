@@ -66,7 +66,7 @@ npm start
 
 Open only `http://localhost:3000`. Stop if Firebase traffic uses a non-loopback host. Use synthetic records only. This does **not** make checkout, refunds, email, Strava, or other outside-provider calls safe; follow [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) before any provider test.
 
-Do not use a Netlify preview or locally served optimized `build/` for sign-in, private pages, admin work, or Firebase testing. Those production-mode builds still target production Firebase until #105/CONFIG establishes staging.
+Do not use a Netlify preview or locally served optimized `build/` for sign-in, private pages, admin work, or Firebase testing. WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) makes optimized builds choose `staging` or `production` explicitly, but it does not create or verify an owned staging project or isolate outside providers.
 
 ## Verification
 
@@ -76,10 +76,19 @@ npm --prefix functions run test:run -- --runInBand
 CI=true npm test -- --watchAll=false --runInBand
 npm run test:spa-navigation
 npm run test:rules
-CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
+CI=true DISABLE_ESLINT_PLUGIN=true \
+REACT_APP_FIREBASE_ENVIRONMENT=staging \
+REACT_APP_FIREBASE_API_KEY=synthetic-ci-api-key-not-a-credential \
+REACT_APP_FIREBASE_AUTH_DOMAIN=mprc-staging-ci.firebaseapp.com \
+REACT_APP_FIREBASE_PROJECT_ID=mprc-staging-ci \
+REACT_APP_FIREBASE_STORAGE_BUCKET=mprc-staging-ci.firebasestorage.app \
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=100000000001 \
+REACT_APP_FIREBASE_APP_ID=1:100000000001:web:abcdef0123456789 \
+npx --no-install react-scripts build
+node scripts/firebase-hosting-contract.js verify build
 ```
 
-Rules and commerce-emulator tests require Java 21. The repository pins Firebase CLI 15.24.0; use only that lockfile copy with Node 20 and explicit `demo-*` projects. The direct `react-scripts build` command is useful for a diagnostic compile because the normal `npm run build` runs the sitemap generator and may intentionally update `public/sitemap.xml`. Hosted CI runs the frontend Jest suite under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124), the SPA callback suite under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126), and the release-gate source tests under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133) still owns protected environment/OIDC configuration; [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136) owns the actual staged profile-recovery release. Required branch checks, scanning, staging, and hosting consolidation remain open under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) and their atomic children.
+Rules and commerce-emulator tests require Java 21. The repository pins Firebase CLI 15.24.0; use only that lockfile copy with Node 20 and explicit `demo-*` projects. The synthetic values above authorize no provider call or deployment. The direct `react-scripts build` command avoids regenerating `public/sitemap.xml`; the following verifier proves that executable JavaScript selected the synthetic staging project and contains no known production Firebase identity. The normal `npm run build` validates its selected hosted environment and runs the sitemap generator. Hosted CI runs the frontend Jest suite under [#124](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/124), the SPA callback suite under [#126](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/126), and the release-gate source tests under [#135](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/135). [#133](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/133) still owns protected environment/OIDC configuration; [#136](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/136) owns the actual staged profile-recovery release. Required branch checks, owned staging, protected publication, and hosting consolidation remain open under [#105](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/105) and their atomic children.
 
 These safety changes do not repair a missing member profile or prove deployed Firebase Rules/Functions. The reported profile-save failure remains [#118](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/118).
 

@@ -178,12 +178,21 @@ jobs:
           CI: 'true'
           DISABLE_ESLINT_PLUGIN: 'true'
           SITE_ORIGIN: 'https://runmprc.com'
+          REACT_APP_FIREBASE_ENVIRONMENT: 'production'
+          REACT_APP_FIREBASE_API_KEY: 'AIzaSyD2u17HMhDPZ0Tn9D3H71fep1vZgT-njnw'
+          REACT_APP_FIREBASE_AUTH_DOMAIN: 'mid-peninsula-running-club.firebaseapp.com'
+          REACT_APP_FIREBASE_PROJECT_ID: 'mid-peninsula-running-club'
+          REACT_APP_FIREBASE_STORAGE_BUCKET: 'mid-peninsula-running-club.firebasestorage.app'
+          REACT_APP_FIREBASE_MESSAGING_SENDER_ID: '253289716314'
+          REACT_APP_FIREBASE_APP_ID: '1:253289716314:web:dcad9766d820044d7f9663'
+          REACT_APP_FIREBASE_MEASUREMENT_ID: 'G-ECN7TT0BGF'
           REACT_APP_RECAPTCHA_SITE_KEY: ${{ vars.REACT_APP_RECAPTCHA_SITE_KEY }}
           REACT_APP_SENTRY_DSN: ${{ vars.REACT_APP_SENTRY_DSN }}
           SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
         run: |
           set -euo pipefail
           npm run build
+          node scripts/firebase-hosting-contract.js verify build
           printf '%s\n' "$SOURCE_COMMIT" > build/release-commit.txt
       - name: Reject server-credential material in the website artifact
         run: |

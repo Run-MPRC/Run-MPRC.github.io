@@ -66,7 +66,7 @@ Maintain an internal inventory with project/account IDs and console links:
 | Staging | **Create dedicated project** | Test/sandbox + unique endpoint | `dev.runmprc.com` | `staging` | Launch blocker |
 | Production | `mid-peninsula-running-club` (verify) | Live + unique endpoint | `runmprc.com` | `production` | Informational site only until gates close |
 
-The repository currently includes only one `.firebaserc` project mapping. Do not infer staging isolation from the historical documentation; create and verify it.
+The repository's only `.firebaserc` default is now `demo-mprc-local`, a deliberately non-deployable local namespace. It is an accidental-deploy brake, not staging. Every future deployment must still pass one exact privately approved project explicitly. Do not infer staging isolation from source or historical documentation; #113/#133 must create, own, map, and verify it.
 
 ## 4. Configuration and secrets
 
@@ -77,13 +77,23 @@ Commit a `.env.example` containing names and safe descriptions, never real secre
 Expected public/environment-specific names include:
 
 ```text
+REACT_APP_FIREBASE_ENVIRONMENT
+REACT_APP_FIREBASE_API_KEY
+REACT_APP_FIREBASE_AUTH_DOMAIN
+REACT_APP_FIREBASE_PROJECT_ID
+REACT_APP_FIREBASE_STORAGE_BUCKET
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+REACT_APP_FIREBASE_APP_ID
+REACT_APP_FIREBASE_MEASUREMENT_ID
 REACT_APP_RECAPTCHA_SITE_KEY
 REACT_APP_SENTRY_DSN
 REACT_APP_SENTRY_ENV
 REACT_APP_STRAVA_CLIENT_ID
 ```
 
-The Firebase web configuration is public application configuration. It should still be environment-specific and paired with Auth restrictions, Firestore rules, and App Check.
+The Firebase web configuration is public application configuration. It must still be environment-specific and paired with Auth restrictions, Firestore rules, and App Check. WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) makes controlled optimized builds choose `staging` or `production`; staging project IDs must include a distinct `staging` segment and the complete artifact check rejects known production identities. Production accepts only the exact reviewed public values. These values are not server credentials, but do not paste provider-console screenshots, private links, tokens, or any server credential into source or an issue.
+
+`firebase.json` now has a source-only Hosting block for `build/` and missing-path SPA rewrites. Its predeploy chain rejects a Firebase CLI project that differs from the selected browser project, then rebuilds and scans executable JavaScript before upload. **Firebase Hosting publication is NOT AVAILABLE YET.** No staging site, channel, WIF identity, protected production branch, custom domain, release marker, rollback, or DNS/TLS change is created by #663.
 
 ### App Check release state — NOT AVAILABLE YET
 
@@ -229,7 +239,7 @@ Expected result: the browser uses a fully synthetic Firebase configuration, Auth
 
 The CLI readiness messages prove the three processes listened during that run. Mocked frontend tests prove endpoint selection, not process readiness. If an emulator later stops, requests fail locally; do not change the project or disable the guard.
 
-Optimized builds are different. Netlify previews and a locally served `build/` directory use `NODE_ENV=production` and currently target production Firebase. Use them only for public, read-only visual checks. Do not sign in or open account, member, admin, event-registration, shop-purchase, or provider flows.
+Optimized builds are different. They must explicitly select `staging` or `production`; missing, local, incomplete, or cross-environment configuration stops startup. Ordinary Netlify deploy previews receive only the reserved synthetic staging configuration; the pinned release builder receives the exact reviewed public production web configuration. Both paths scan the built executable. A synthetic staging build proves artifact separation only—it is not an owned staging backend and does not isolate providers. Use previews and locally served artifacts only for public, read-only visual checks until protected staging is verified. Do not sign in or open account, member, admin, event-registration, shop-purchase, or provider flows.
 
 ### Forward Stripe events — NOT AVAILABLE YET for end-to-end use
 
@@ -340,13 +350,30 @@ AUTH-001D1 [#213](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/213) add
 
 Passing this test proves only the reviewed website source. Browser role state never authorizes a database or Function request, and it does not grant, remove, refresh, or revoke a role. A protected release must deploy and read back the exact Rules and Functions first, publish the exact website to protected staging second, and then run the complete made-up-account matrix in [Access Continuity](./docs/officers/ACCESS_CONTINUITY.md#synthetic-role-boundary-drill--not-available-yet). Stop if any layer disagrees. Do not repair a result with a real account, profile edit, or Firebase Console change.
 
-### Production build without changing generated sitemap during a diagnostic check
+### Synthetic staging build without changing generated sitemap
 
 ```bash
-CI=true DISABLE_ESLINT_PLUGIN=true npx --no-install react-scripts build
+CI=true DISABLE_ESLINT_PLUGIN=true \
+REACT_APP_FIREBASE_ENVIRONMENT=staging \
+REACT_APP_FIREBASE_API_KEY=synthetic-ci-api-key-not-a-credential \
+REACT_APP_FIREBASE_AUTH_DOMAIN=mprc-staging-ci.firebaseapp.com \
+REACT_APP_FIREBASE_PROJECT_ID=mprc-staging-ci \
+REACT_APP_FIREBASE_STORAGE_BUCKET=mprc-staging-ci.firebasestorage.app \
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=100000000001 \
+REACT_APP_FIREBASE_APP_ID=1:100000000001:web:abcdef0123456789 \
+npx --no-install react-scripts build
+
+REACT_APP_FIREBASE_ENVIRONMENT=staging \
+REACT_APP_FIREBASE_API_KEY=synthetic-ci-api-key-not-a-credential \
+REACT_APP_FIREBASE_AUTH_DOMAIN=mprc-staging-ci.firebaseapp.com \
+REACT_APP_FIREBASE_PROJECT_ID=mprc-staging-ci \
+REACT_APP_FIREBASE_STORAGE_BUCKET=mprc-staging-ci.firebasestorage.app \
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=100000000001 \
+REACT_APP_FIREBASE_APP_ID=1:100000000001:web:abcdef0123456789 \
+node scripts/firebase-hosting-contract.js verify build
 ```
 
-The normal `npm run build` executes `prebuild` and may update `public/sitemap.xml`. Use the normal command only when generated sitemap changes are intended and reviewed.
+These are reserved synthetic values and authorize no provider call or deployment. The first command is a diagnostic compile; the second proves executable JavaScript contains the synthetic staging project and no known production Firebase identity. It does not prove an owned staging project or safe provider behavior. The normal `npm run build` first validates the selected hosted environment and then regenerates `public/sitemap.xml`; use it only when that generated change is intended and reviewed. A direct diagnostic compile is never a release artifact by itself.
 
 ### Dependency review
 

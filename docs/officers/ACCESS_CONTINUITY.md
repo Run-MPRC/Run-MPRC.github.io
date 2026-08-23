@@ -38,6 +38,8 @@ Until those six steps are recorded, this guide does not claim incapacitation cov
 | Club email provider | Notices and password recovery | Communications owner plus backup |
 | Social/community accounts | Public communication and member groups | Named owner plus backup |
 
+WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds fail-closed Firebase Hosting build source, not service ownership. Continuity still requires two individual limited-access Firebase/Google Cloud administrators, an approved staging project, short-lived release identity, protected reviewers, and a tested rollback. Do not create an unofficial personal project to make the source checks pass.
+
 ## Release access to record privately
 
 Record these facts without copying a credential or private provider identifier:
@@ -95,6 +97,7 @@ For each system, record only:
 21. Compare its executable delta with the current live artifact immediately before merge.
 22. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.
 23. **NOT AVAILABLE YET:** complete the synthetic role-boundary drill below after the reviewed database, Function, and website revisions are safely available in protected staging.
+24. Confirm #663's source check is not recorded as a Firebase Hosting deploy. Until separate provider evidence exists, record staging Hosting, production Hosting, custom domain, release marker, and rollback as **NOT AVAILABLE YET**.
 
 ### Synthetic role-boundary drill — NOT AVAILABLE YET
 

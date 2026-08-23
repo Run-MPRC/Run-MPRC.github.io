@@ -26,7 +26,7 @@
 | Symptom | Safe first response |
 | --- | --- |
 | Wrong public text, image, or link | Ask the platform owner for one reviewed revert pull request. |
-| Site unavailable or old after a merge | Ask the platform owner to check Netlify and GitHub Pages separately; do not change DNS. |
+| Site unavailable or old after a merge | Ask the platform owner to check Netlify and GitHub Pages separately; do not change DNS. #663 Firebase Hosting source is not a live host. |
 | Login or member access is wrong | Stop role requests and contact the identity/platform owners. |
 | Account exists but a verification email request is unavailable | Ask the member to stop resending. Record only the time, route path `/login` or `/account`, and plain status. Omit all query/fragment text. Do not ask for the email address, password, code, action link, mailbox access, or screenshot. |
 | Verification link is unusable or temporarily unavailable | Ask the member to stop after one deliberate check and one retry. Record only the time, clean route `/auth/action`, and plain result. Never copy anything after `?` or `#`, and never ask for the link, code, email address, or screenshot. |
@@ -37,6 +37,8 @@
 | Password, secret, or recovery code exposed | Contact the owning service's two approved owners. They revoke/rotate through the service-specific procedure and record evidence. Do not rotate it from this generic guide. |
 
 Live commerce is not approved as of 2026-07-12. If the public site appears to accept a real payment, do not test it with a real card.
+
+Firebase Hosting recovery is **NOT AVAILABLE YET**. WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds source configuration only. Do not switch DNS, create a personal Firebase project, run a deploy, or assume Firebase Hosting is a fallback during an incident. Use the verified Netlify/Pages evidence and contact the platform owner plus backup.
 
 ### Unexpected “Something went wrong” page — SOURCE ONLY, NOT LIVE
 
@@ -315,6 +317,7 @@ Record:
 - What was checked on `runmprc.com`.
 - Whether Netlify identified the intended commit.
 - Whether Firebase actually deployed.
+- Whether a Firebase Hosting site actually published the intended commit; source configuration or a green synthetic build is not publication proof.
 - Whether each outside provider was checked.
 - What follow-up prevents the same problem.
 
