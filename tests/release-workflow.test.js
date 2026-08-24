@@ -42,6 +42,7 @@ const {
 } = require('../scripts/netlify-release-policy');
 const {
   buildEnvironment,
+  previewBuildEnvironment,
   releaseMarkerPayload,
 } = require('../scripts/netlify-release-build');
 
@@ -724,9 +725,10 @@ test('Netlify release builder isolates source, environment, and public proof', (
   assert.match(netlifyBuild, /run-mprc-release\.json/);
   assert.match(netlifyBuild, /siteFilesSha256/);
   assert.match(netlifyBuild, /CREDENTIAL_MARKERS/);
+  assert.match(netlifyBuild, /verifyExecutableArtifact/);
 });
 
-test('Netlify pinned build receives no provider or React application variables', () => {
+test('Netlify pinned build receives only reviewed public Firebase configuration', () => {
   const environment = buildEnvironment('/tmp/synthetic-home', {
     PATH: '/synthetic/bin',
     TMPDIR: '/tmp/synthetic',
@@ -736,6 +738,15 @@ test('Netlify pinned build receives no provider or React application variables',
     FIREBASE_SERVICE_ACCOUNT: 'blocked',
     STRIPE_SECRET_KEY: 'blocked',
   });
+  assert.equal(environment.REACT_APP_FIREBASE_ENVIRONMENT, 'production');
+  assert.equal(
+    environment.REACT_APP_FIREBASE_PROJECT_ID,
+    'mid-peninsula-running-club',
+  );
+  assert.equal(
+    environment.REACT_APP_FIREBASE_AUTH_DOMAIN,
+    'mid-peninsula-running-club.firebaseapp.com',
+  );
   assert.equal(environment.REACT_APP_RECAPTCHA_SITE_KEY, undefined);
   assert.equal(environment.REACT_APP_SENTRY_ENV, undefined);
   assert.equal(environment.REACT_APP_UNREVIEWED_VALUE, undefined);
@@ -743,6 +754,23 @@ test('Netlify pinned build receives no provider or React application variables',
   assert.equal(environment.STRIPE_SECRET_KEY, undefined);
   assert.equal(environment.PATH, '/synthetic/bin');
   assert.equal(environment.HOME, '/tmp/synthetic-home');
+});
+
+test('ordinary Netlify previews receive only synthetic staging Firebase configuration', () => {
+  const environment = previewBuildEnvironment('/tmp/synthetic-home', {
+    PATH: '/synthetic/bin',
+    REACT_APP_FIREBASE_PROJECT_ID: 'mid-peninsula-running-club',
+    REACT_APP_RECAPTCHA_SITE_KEY: 'blocked',
+    REACT_APP_SENTRY_DSN: 'blocked',
+    STRIPE_SECRET_KEY: 'blocked',
+  });
+
+  assert.equal(environment.REACT_APP_FIREBASE_ENVIRONMENT, 'staging');
+  assert.equal(environment.REACT_APP_FIREBASE_PROJECT_ID, 'mprc-staging-ci');
+  assert.equal(environment.REACT_APP_FIREBASE_MEASUREMENT_ID, undefined);
+  assert.equal(environment.REACT_APP_RECAPTCHA_SITE_KEY, undefined);
+  assert.equal(environment.REACT_APP_SENTRY_DSN, undefined);
+  assert.equal(environment.STRIPE_SECRET_KEY, undefined);
 });
 
 test('Netlify manifest file rejects duplicate-key or noncanonical JSON', () => {

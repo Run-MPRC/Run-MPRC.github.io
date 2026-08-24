@@ -13,6 +13,10 @@ const NETLIFY_RELEASE_BUILDER = path.join(
   REPOSITORY,
   'scripts/netlify-release-build.js',
 );
+const FIREBASE_HOSTING_CONTRACT = path.join(
+  REPOSITORY,
+  'scripts/firebase-hosting-contract.js',
+);
 const CI_PATH = path.join(REPOSITORY, '.github/workflows/ci.yml');
 const RELEASE_PATH = path.join(REPOSITORY, '.github/workflows/deploy.yml');
 const ciWorkflow = fs.readFileSync(CI_PATH, 'utf8');
@@ -22,7 +26,7 @@ const temporaryDirectories = [];
 const JOB_ID = 'test-artifact-scrubber';
 const JOB_NAME = 'Test artifact scrubber';
 const TEST_COMMAND = 'node --test tests/test-artifact-safety.test.js';
-const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
+const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/firebase-hosting-foundation.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
 const NEVER_RUN = ['$', '{{ false }}'].join('');
 const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const BRACKET_SECRET = ['$', "{{ secrets['SYNTHETIC_CANARY'] }}"].join('');
@@ -154,6 +158,10 @@ function makeNetlifyReleaseBuilderFixture(loadManifestBody, fakeGit = null) {
   const script = path.join(root, 'scripts/netlify-release-build.js');
   fs.mkdirSync(path.dirname(script), { recursive: true });
   fs.copyFileSync(NETLIFY_RELEASE_BUILDER, script);
+  fs.copyFileSync(
+    FIREBASE_HOSTING_CONTRACT,
+    path.join(root, 'scripts/firebase-hosting-contract.js'),
+  );
   writeArtifact(
     root,
     'scripts/netlify-release-policy.js',
@@ -1300,6 +1308,13 @@ test('frontend independently runs the exact workflow safety suite without a skip
   );
   assert.notEqual(missingDependencyTest, ciWorkflow);
   assert.notDeepEqual(frontendValidationErrors(missingDependencyTest), []);
+
+  const missingHostingTest = ciWorkflow.replace(
+    ' tests/firebase-hosting-foundation.test.js',
+    '',
+  );
+  assert.notEqual(missingHostingTest, ciWorkflow);
+  assert.notDeepEqual(frontendValidationErrors(missingHostingTest), []);
 
   const swallowedValidation = ciWorkflow.replace(
     FRONTEND_TEST_COMMAND,

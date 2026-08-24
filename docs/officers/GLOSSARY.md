@@ -23,6 +23,7 @@
 | Projection | A minimum server-only copy made for one approved task, such as finding an opted-in display name, without sending the full account record to the browser. |
 | Facial recognition | Automated processing that tries to identify or match a person from an image. The MPRC People finder does not do this and cannot accept a photo as a search. |
 | Firebase | The service used for login, database records, and backend Functions. |
+| Firebase Hosting | Google's static website host. MPRC has source configuration for a future site, but no verified staging or production Firebase Hosting release yet. |
 | Firestore | The database inside Firebase. Saving an Admin form can change its records immediately. |
 | Function | A protected backend action, such as checking access or handling a payment event. |
 | Netlify | The service currently answering requests for `runmprc.com`. |

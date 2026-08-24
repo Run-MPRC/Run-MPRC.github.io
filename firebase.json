@@ -16,6 +16,25 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "hosting": {
+    "public": "build",
+    "predeploy": [
+      "node scripts/firebase-hosting-contract.js validate-deploy",
+      "npm run build",
+      "node scripts/firebase-hosting-contract.js verify build"
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
   "emulators": {
     "auth": {
       "port": 9099

@@ -1,4 +1,4 @@
-import { FirebaseApp, initializeApp } from 'firebase/app';
+import { FirebaseApp, FirebaseOptions, initializeApp } from 'firebase/app';
 import {
   AppCheck, getToken, initializeAppCheck, ReCaptchaEnterpriseProvider,
 } from 'firebase/app-check';
@@ -27,6 +27,9 @@ import {
 const isLocalRuntime = process.env.NODE_ENV !== 'production';
 const LOCAL_FIREBASE_PROJECT_ID = 'demo-mprc-local';
 const FUNCTION_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const FIREBASE_ENVIRONMENT_ERROR = (
+  'Firebase environment configuration is unavailable; stop startup.'
+);
 const STRAVA_APP_CHECK_PREPARATION_FAILED = (
   'Strava callback App Check preparation failed.'
 );
@@ -40,19 +43,123 @@ const LOCAL_FIREBASE_CONFIG = {
   appId: '1:000000000000:web:demo',
 } as const;
 
-const PRODUCTION_FIREBASE_CONFIG = {
-  apiKey: 'AIzaSyD2u17HMhDPZ0Tn9D3H71fep1vZgT-njnw',
-  authDomain: 'mid-peninsula-running-club.firebaseapp.com',
-  projectId: 'mid-peninsula-running-club',
-  storageBucket: 'mid-peninsula-running-club.firebasestorage.app',
-  messagingSenderId: '253289716314',
-  appId: '1:253289716314:web:dcad9766d820044d7f9663',
-  measurementId: 'G-ECN7TT0BGF',
-} as const;
+type HostedFirebaseConfig = Required<Pick<FirebaseOptions,
+  | 'apiKey'
+  | 'appId'
+  | 'authDomain'
+  | 'messagingSenderId'
+  | 'projectId'
+  | 'storageBucket'
+>> & Pick<FirebaseOptions, 'measurementId'>;
 
-const FIREBASE_CONFIG = isLocalRuntime
-  ? LOCAL_FIREBASE_CONFIG
-  : PRODUCTION_FIREBASE_CONFIG;
+// Exact code-unit fixtures let staging reject a production-equal public field
+// without placing a usable production Firebase identifier in its executable.
+const PRODUCTION_FIREBASE_CONFIG_CODE_UNITS = Object.freeze({
+  apiKey: [65, 73, 122, 97, 83, 121, 68, 50, 117, 49, 55, 72, 77, 104,
+    68, 80, 90, 48, 84, 110, 57, 68, 51, 72, 55, 49, 102, 101, 112, 49,
+    118, 90, 103, 84, 45, 110, 106, 110, 119],
+  authDomain: [109, 105, 100, 45, 112, 101, 110, 105, 110, 115, 117, 108,
+    97, 45, 114, 117, 110, 110, 105, 110, 103, 45, 99, 108, 117, 98, 46,
+    102, 105, 114, 101, 98, 97, 115, 101, 97, 112, 112, 46, 99, 111, 109],
+  projectId: [109, 105, 100, 45, 112, 101, 110, 105, 110, 115, 117, 108,
+    97, 45, 114, 117, 110, 110, 105, 110, 103, 45, 99, 108, 117, 98],
+  storageBucket: [109, 105, 100, 45, 112, 101, 110, 105, 110, 115, 117,
+    108, 97, 45, 114, 117, 110, 110, 105, 110, 103, 45, 99, 108, 117, 98,
+    46, 102, 105, 114, 101, 98, 97, 115, 101, 115, 116, 111, 114, 97, 103,
+    101, 46, 97, 112, 112],
+  messagingSenderId: [50, 53, 51, 50, 56, 57, 55, 49, 54, 51, 49, 52],
+  appId: [49, 58, 50, 53, 51, 50, 56, 57, 55, 49, 54, 51, 49, 52, 58, 119,
+    101, 98, 58, 100, 99, 97, 100, 57, 55, 54, 54, 100, 56, 50, 48, 48,
+    52, 52, 100, 55, 102, 57, 54, 54, 51],
+  measurementId: [71, 45, 69, 67, 78, 55, 84, 84, 48, 66, 71, 70],
+} as const);
+
+function firebaseEnvironmentError(): never {
+  throw new Error(FIREBASE_ENVIRONMENT_ERROR);
+}
+
+function requiredHostedValue(value: string | undefined): string {
+  if (!value
+    || value.length > 256
+    || value.trim() !== value) return firebaseEnvironmentError();
+  return value;
+}
+
+function exactlyMatchesCodeUnits(
+  value: string | undefined,
+  expected: readonly number[],
+): boolean {
+  if (value === undefined || value.length !== expected.length) return false;
+  return expected.every((codeUnit, index) => value.charCodeAt(index) === codeUnit);
+}
+
+function isKnownProductionIdentity(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return Object.values(PRODUCTION_FIREBASE_CONFIG_CODE_UNITS)
+    .some((expected) => exactlyMatchesCodeUnits(value, expected));
+}
+
+function isExactProductionConfiguration(config: HostedFirebaseConfig): boolean {
+  return Object.entries(PRODUCTION_FIREBASE_CONFIG_CODE_UNITS)
+    .every(([key, expected]) => exactlyMatchesCodeUnits(
+      config[key as keyof HostedFirebaseConfig],
+      expected,
+    ));
+}
+
+function hostedFirebaseConfig(environment: 'staging' | 'production'): FirebaseOptions {
+  const measurementId = process.env.REACT_APP_FIREBASE_MEASUREMENT_ID;
+  const config: HostedFirebaseConfig = {
+    apiKey: requiredHostedValue(process.env.REACT_APP_FIREBASE_API_KEY),
+    authDomain: requiredHostedValue(process.env.REACT_APP_FIREBASE_AUTH_DOMAIN),
+    projectId: requiredHostedValue(process.env.REACT_APP_FIREBASE_PROJECT_ID),
+    storageBucket: requiredHostedValue(
+      process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+    ),
+    messagingSenderId: requiredHostedValue(
+      process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+    ),
+    appId: requiredHostedValue(process.env.REACT_APP_FIREBASE_APP_ID),
+    ...(measurementId ? { measurementId: requiredHostedValue(measurementId) } : {}),
+  };
+  const { projectId, messagingSenderId } = config;
+  if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId)
+    || !/^[A-Za-z0-9_-]{20,128}$/.test(config.apiKey)
+    || config.authDomain !== `${projectId}.firebaseapp.com`
+    || (
+      config.storageBucket !== `${projectId}.appspot.com`
+      && config.storageBucket !== `${projectId}.firebasestorage.app`
+    )
+    || !/^[0-9]{6,20}$/.test(messagingSenderId)
+    || !new RegExp(`^1:${messagingSenderId}:web:[A-Za-z0-9]{8,64}$`)
+      .test(config.appId)
+    || (config.measurementId !== undefined
+      && !/^G-[A-Z0-9]{6,20}$/.test(config.measurementId))
+    || (environment === 'production' && !isExactProductionConfiguration(config))
+    || (environment === 'staging' && (
+      !/(?:^|-)staging(?:-|$)/.test(projectId)
+      || Object.values(config).some(isKnownProductionIdentity)
+    ))) {
+    return firebaseEnvironmentError();
+  }
+  return config;
+}
+
+function selectedFirebaseConfig(): FirebaseOptions {
+  const selected = process.env.REACT_APP_FIREBASE_ENVIRONMENT;
+  if (isLocalRuntime) {
+    if (selected !== undefined && selected !== 'local') {
+      return firebaseEnvironmentError();
+    }
+    return LOCAL_FIREBASE_CONFIG;
+  }
+  if (selected === 'production' || selected === 'staging') {
+    return hostedFirebaseConfig(selected);
+  }
+  return firebaseEnvironmentError();
+}
+
+const FIREBASE_CONFIG = selectedFirebaseConfig();
 const initialPageHadUrlCapabilityCallbackState = typeof window !== 'undefined'
   && hasCapabilityCallbackState(window.location);
 const initialPagePathWasCapabilityCallback = typeof window !== 'undefined'
