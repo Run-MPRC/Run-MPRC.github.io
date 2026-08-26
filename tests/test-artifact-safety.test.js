@@ -26,7 +26,7 @@ const temporaryDirectories = [];
 const JOB_ID = 'test-artifact-scrubber';
 const JOB_NAME = 'Test artifact scrubber';
 const TEST_COMMAND = 'node --test tests/test-artifact-safety.test.js';
-const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/firebase-hosting-foundation.test.js tests/firebase-auth-staging-contract.test.js tests/staging-authority-workflow.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
+const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/firebase-hosting-foundation.test.js tests/firebase-auth-staging-contract.test.js tests/firebase-profile-functions-staging-contract.test.js tests/staging-authority-workflow.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
 const NEVER_RUN = ['$', '{{ false }}'].join('');
 const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const BRACKET_SECRET = ['$', "{{ secrets['SYNTHETIC_CANARY'] }}"].join('');
@@ -1323,6 +1323,13 @@ test('frontend independently runs the exact workflow safety suite without a skip
   );
   assert.notEqual(missingAuthTest, ciWorkflow);
   assert.notDeepEqual(frontendValidationErrors(missingAuthTest), []);
+
+  const missingProfileFunctionsTest = ciWorkflow.replace(
+    ' tests/firebase-profile-functions-staging-contract.test.js',
+    '',
+  );
+  assert.notEqual(missingProfileFunctionsTest, ciWorkflow);
+  assert.notDeepEqual(frontendValidationErrors(missingProfileFunctionsTest), []);
 
   const swallowedValidation = ciWorkflow.replace(
     FRONTEND_TEST_COMMAND,
