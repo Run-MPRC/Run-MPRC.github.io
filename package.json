@@ -43,6 +43,8 @@
     "deploy:staging-auth": "npx --no-install firebase deploy --only auth --project run-mprc-staging --non-interactive",
     "predeploy:staging-profile-functions": "node scripts/firebase-profile-functions-staging-contract.js validate-deploy",
     "deploy:staging-profile-functions": "node scripts/firebase-profile-functions-staging-contract.js deploy",
+    "predeploy:staging-hosting": "node scripts/firebase-hosting-staging-contract.js validate-deploy",
+    "deploy:staging-hosting": "node scripts/firebase-hosting-staging-contract.js deploy",
     "eject": "react-scripts eject",
     "lint:all": "find . -name '*.{js,jsx,tsx,ts}' -exec pretty-quick {} + && eslint --fix ."
   },

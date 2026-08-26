@@ -91,6 +91,8 @@ flowchart TD
     Main --> AuthSource["#671 exact-main email/password Auth source"]
     AuthSource --> StagingAuth["Staging Auth-only deploy\nprovider readback"]
     StagingAuth --> AuthProof["Disposable API + browser sign-in\ncleanup to zero users"]
+    Main --> AppCheckGuard["#676 staging Hosting/App Check\nsource guard"]
+    AppCheckGuard -. "Provider registration, publication, and enforcement not proved by source" .-> Stop
     AuthProof -. "No Functions, App Check, real identity, or records" .-> Stop
     StagingHosting -. "No complete backend/provider test estate, protected deploy authority, marker, or rollback" .-> Stop
     HostingSource -. "Production branch, headers, authority, and cutover missing" .-> FutureHosting["Production Firebase Hosting — NOT AVAILABLE YET"]
@@ -102,7 +104,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; #663 supplies build checks, #665 publishes the club-owned engineering staging site, and #671 deploys only narrow email/password Auth after exact-main review. Provider and browser proof used disposable identities and returned the project to zero users/records. It does not supply Functions, App Check, real identity or private-data testing, production release, or reusable authority. Ordinary merges cannot publish Netlify and the completed #659 exception is inactive; its deploy `6a7ece87c5ca4d0007c1a3fc` remains live while completed #623 deploy `6a7e072f8f346b0008510d29` is the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history; the future Pages branch must stop claiming the Netlify domain, and every host still needs separate proof.
+In words: merge, release request, and protected approval are separate; #663 supplies build checks, #665 publishes the club-owned engineering staging site, and #671 deploys only narrow email/password Auth after exact-main review. Provider and browser proof used disposable identities and returned the project to zero users/records. #676 adds only the exact staging Hosting/App Check source guard; its merge cannot prove a provider key, publication, enforcement, or token behavior. The current boundary does not supply Functions, live App Check, real identity or private-data testing, production release, or reusable authority. Ordinary merges cannot publish Netlify and the completed #659 exception is inactive; its deploy `6a7ece87c5ca4d0007c1a3fc` remains live while completed #623 deploy `6a7e072f8f346b0008510d29` is the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history; the future Pages branch must stop claiming the Netlify domain, and every host still needs separate proof.
 
 ## Account and permission ownership
 
