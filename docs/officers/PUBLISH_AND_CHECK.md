@@ -10,7 +10,7 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Firebase staging status:** **STATIC HOSTING AND EMPTY FIRESTORE BOUNDARY AVAILABLE; OFFICER AND PRODUCTION RELEASE NOT AVAILABLE YET.** WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) requires controlled optimized builds to name staging or production and scans executable JavaScript for environment identity. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) created the club-owned `run-mprc-staging` project and published exact merged source `a614c68d9a1a2be631a3be874a686d61e5d170a0` to [run-mprc-staging.web.app](https://run-mprc-staging.web.app). CI-001D1 [#669](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/669) adds an empty delete-protected Firestore database and exact reviewed Rules/indexes; fixed anonymous server-only reads were denied and the root collection count remained zero. The site is still for signed-out public visual review only. It has no Auth test setup, Functions, App Check, provider sandbox, protected short-lived publication, release marker, tested predecessor rollback, complete security headers, custom domain, or DNS/TLS change. Officers do not sign in, enter information, or use the site as a publish control. Production Firebase Hosting remains empty, and Netlify still serves `runmprc.com`.
+**Firebase staging status:** **STATIC HOSTING, EMPTY FIRESTORE, AND DISPOSABLE EMAIL/PASSWORD AUTH PROOF AVAILABLE; OFFICER AND PRODUCTION RELEASE NOT AVAILABLE YET.** WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) requires controlled optimized builds to name staging or production and scans executable JavaScript for environment identity. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) created the club-owned `run-mprc-staging` project and published exact merged source `a614c68d9a1a2be631a3be874a686d61e5d170a0` to [run-mprc-staging.web.app](https://run-mprc-staging.web.app). CI-001D1 [#669](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/669) adds an empty delete-protected Firestore database and exact reviewed Rules/indexes; fixed anonymous server-only reads were denied and the root collection count remained zero. CI-001D2 [#671](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/671) deploys password-required email/password Auth from exact merged source, verifies provider/privacy/domain settings, passes disposable API/browser sign-in checks, and returns the project to zero users and records. The site still has no Functions, App Check, provider sandbox, protected short-lived publication, release marker, tested predecessor rollback, complete security headers, custom domain, or DNS/TLS change. Officers do not sign in, enter information, or use the site as a publish control. Production Firebase Hosting remains empty, and Netlify still serves `runmprc.com`.
 
 **Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01; bounded #473 deploy `6a6dc9ea588b0c0008036312` is older history. #623 completed the inert-directory predecessor and remains the immediate rollback as deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`. #659 completed one separate exact-artifact accessibility release. Deploy `6a7ece87c5ca4d0007c1a3fc`, source `7496fe0881fb52908c4ff2f40f488df09c94c908`, is production now. Its exact marker/artifact and signed-out route-focus/menu checks passed. The manifest is inactive, temporary refs are absent, and the rollback ref remains. Shop is the static catalog; Events and Calendar show a fixed retry-later notice; the directory remains inert. Event records remain unavailable because this did not deploy Firebase. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
@@ -488,43 +488,45 @@ Text alternative: exact reviewed Rules and indexes protect the empty staging dat
 
 **Escalation:** platform owner first, security owner second. Use the private incident path for unexpected records, access, or credential output.
 
-## Review the staging Auth source contract — SOURCE ONLY, NOT DEPLOYED
+## Review the staging Auth boundary — AVAILABLE AFTER #671
 
-**Purpose:** let a backup officer confirm that the reviewed source permits only a narrow future staging Auth change, without signing in, creating an account, running a command, or treating source as provider proof.
+**Purpose:** let a backup officer confirm that staging has only the reviewed email/password Auth boundary and that disposable proof left no user or application record, without signing in, running a command, or handling a credential.
 
 **Approver:** platform owner plus the named security reviewer for #671.
 
-**Prerequisites:** the #671 source pull request is merged, its exact-main CI is green, and the provider phase is still recorded separately as not run.
+**Prerequisites:** source PR [#672](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/672) is merged as exact commit `42542303d043f87a8f1a04be2f0b4f2a88e0318c`; exact-main CI run `33011780449` is green; and the redacted [provider evidence](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/671#issuecomment-5431051876) is available.
 
 ```mermaid
 flowchart LR
-    Source["firebase.json\nemail/password only"] --> Guard["Exact staging project, club account,\nshort-lived token, Auth-only scope"]
-    Guard --> Future["Future reviewed provider step"]
-    Broad["Anonymous, Google, phone, production,\nADC, or broad deploy"] --> Stop["Stop"]
-    Future -. "not performed by source" .-> Stop
+    Source["Exact merged source\nemail/password only"] --> Guard["Exact staging project, club account,\nshort-lived token, Auth-only scope"]
+    Guard --> Live["Live provider, privacy,\nand domain readback"]
+    Live --> Proof["Disposable API + browser sign-in"]
+    Proof --> Empty["Sign out, delete,\nzero users and records"]
+    Broad["Other provider, billing, production,\nADC, broad deploy, or real data"] --> Stop["Stop"]
 ```
 
-Text alternative: reviewed source allows only email/password and a future Auth-only staging operation; broader providers, production, ADC, or broader deployment stop, and no provider change occurs from source or merge.
+Text alternative: exact reviewed source and a narrow club-account Auth operation produce the live email/password staging boundary; provider readback and disposable API/browser checks end with zero users and records, while broader providers, billing, production, ADC, broad deployment, and real data stop.
 
-1. Open issue [#671](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/671) and its source pull request.
-2. Confirm the pull request says `Officer impact`, `Officer documentation`, and `Deployment evidence` separately.
-3. Confirm the source names only email/password and does not name anonymous, Google, or phone sign-in as enabled.
-4. Confirm the unqualified Firebase project remains the local demo project.
-5. Confirm the future command names only Auth and `run-mprc-staging`.
-6. Confirm the guard requires the club account declaration, exact staging and quota project, short-lived token path, and no ADC file override.
-7. Confirm the five focused source tests and all five hosted CI jobs passed on the exact merge.
-8. Confirm provider deployment, a test user, email, billing, Functions, App Check, Hosting, production Firebase, production data, and `runmprc.com` are each recorded as not changed.
-9. Record the issue, pull request, exact merge, check date, approver, and provider status. Do not paste a token, console response, account record, or private screenshot.
+1. Open issue [#671](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/671), source PR [#672](https://github.com/Run-MPRC/Run-MPRC.github.io/pull/672), and the linked redacted provider evidence.
+2. Confirm the source merge is exactly `42542303d043f87a8f1a04be2f0b4f2a88e0318c` and all five jobs in exact-main CI run `33011780449` passed before deployment.
+3. Confirm the operation names only `run-mprc-staging`, `runmprc@gmail.com`, Auth scope, and Firebase CLI 15.24.0.
+4. Confirm live readback says email/password is enabled and password-required, improved email privacy is enabled, and authorized domains are only `run-mprc-staging.firebaseapp.com` and `run-mprc-staging.web.app`.
+5. Confirm anonymous, phone, native federated, OIDC, and SAML providers are absent; multi-tenancy and blocking triggers are absent; and MFA is disabled.
+6. Confirm the instrumentless Identity Platform subtype has billing disabled. Treat its no-cost daily limit as a ceiling, not approval to attach billing or add enterprise providers.
+7. Confirm disposable API signup/sign-in, anonymous denial, generic invalid-credential behavior, and browser sign-in/sign-out passed without requesting email or SMS.
+8. Confirm the final Auth user count and Firestore root collection count are both zero, and Hosting remains version `3ffadcf2ac8cc760`.
+9. Confirm Functions, App Check, outside providers, production Firebase, production data, DNS, Netlify, and `runmprc.com` are recorded separately as unchanged or unavailable.
+10. Record the issue, pull requests, exact commits, check date, approver, and any mismatch. Do not paste a token, account record, console response, or private screenshot.
 
-**Expected result:** a backup officer can distinguish a narrow reviewed Auth source contract from initialized or usable staging Auth. The staging site remains signed-out engineering review only.
+**Expected result:** a backup officer can confirm narrow staging Auth works for disposable engineering checks and can distinguish it from a usable member backend. Functions, App Check, roles, profiles, real identities, provider integrations, and production remain unavailable.
 
-**Stop conditions:** stop if source enables another provider, changes the demo default, permits another project or deployment scope, accepts ADC, lacks the focused test, claims provider success from source/CI, or asks an officer to sign in, create a user, run a command, handle a credential, or inspect an account.
+**Stop conditions:** stop if a provider, domain, project, account, commit, billing state, user count, record count, Hosting version, or remaining-gap statement differs; if evidence relies only on source or CI; or if anyone asks an officer to sign in, create a user, run a command, handle a credential, or inspect an account.
 
-**Success proof:** keep the #671 and pull-request links, exact merge, green focused/hosted tests, reviewed source summary, approver, date, and explicit provider-not-deployed statement.
+**Success proof:** keep the #671, #672, evidence-comment, and CI links; exact merge; live configuration summary; disposable test/cleanup results; zero counts; unchanged-surface list; approver; and check date.
 
-**Undo:** before provider deployment, use one reviewed revert or safe roll-forward pull request. Do not edit Firebase Console, delete a Firebase project, or create an account as an undo test.
+**Undo:** stop all staging sign-in use and open one urgent reviewed security issue for a platform maintainer to apply an Auth-only disable or safe roll-forward from exact source. Do not edit Firebase Console, delete the project or users, attach billing, or improvise a provider change.
 
-**Escalation:** platform owner first, security owner second. Use the private incident path if credential-shaped output or an unexpected account/provider appears.
+**Escalation:** platform owner first, security owner second. Use the private incident path if a real or unexpected account, provider, billing link, record, or credential-shaped output appears.
 
 ## Before a protected release — NOT AVAILABLE YET
 
