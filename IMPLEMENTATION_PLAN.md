@@ -42,6 +42,8 @@ MPRC can open a race or merchandise item for sale only when the platform can:
 
 **CI-001C1 protected staging identity proof:** [#667](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/667) creates the protected `staging` GitHub environment, two named individual reviewers, exact-`main` policy, a dedicated GitHub OIDC pool/provider, and a keyless service account with only `resourcemanager.projects.get`. Its separate manual verifier fails on a wrong repository, immutable repository/owner ID, ref, environment, project, workflow, provider, or service account before authentication; after approval it reads only the exact staging project identity. It does not grant Firebase deployment roles, provision Auth/Firestore/Functions, configure outside providers, protect production, or make `.github/workflows/deploy.yml` available.
 
+**CI-001D1 empty staging Firestore boundary:** [#669](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/669) provisions `(default)` as an empty Native/Standard database in `us-west2`, enables delete protection, keeps PITR disabled, and deploys only exact Rules/indexes from `ee16bd16220ab58bd3a2add80dd2f39a1d514dd7` with Firebase CLI 15.24.0. The Node 20/Java 21 Rules suite passes 418/418; provider readback matches the active Rules digest, four composite indexes, and 28 field overrides; fixed anonymous server-only reads are denied; root collection count remains zero. This completes only the first staging data boundary. Auth test configuration, Functions, App Check, outside-provider sandboxes, keyless Firebase deployment roles, synthetic signed-in flows, website republication, production protection, and production behavior remain later children of #105/#133/#136.
+
 ## 3. Dependency map
 
 ```mermaid

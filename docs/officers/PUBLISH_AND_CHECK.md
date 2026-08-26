@@ -10,7 +10,7 @@
 
 **Protected release status:** **NOT AVAILABLE YET.** Issue #135 provides the fail-closed source gate. Issue #133 must still configure protected `staging` and `production` environments, their named reviewers, and a short-lived cloud identity. Public browser build values must be named repository or organization variables because artifact preparation has no protected-environment access; #133/#136 must record and verify them separately. Do not add a long-lived Firebase key as a shortcut.
 
-**Firebase Hosting status:** **ENGINEERING STAGING AVAILABLE; OFFICER AND PRODUCTION RELEASE NOT AVAILABLE YET.** WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) requires controlled optimized builds to name staging or production and scans executable JavaScript for environment identity. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) created the club-owned `run-mprc-staging` project and published exact merged source `a614c68d9a1a2be631a3be874a686d61e5d170a0` to [run-mprc-staging.web.app](https://run-mprc-staging.web.app). The site is for signed-out public visual review only. It has no approved staging backend/provider data, App Check key, protected short-lived publication, release marker, tested predecessor rollback, complete security headers, custom domain, or DNS/TLS change. Officers do not sign in, enter information, or use the site as a publish control. Production Firebase Hosting remains empty, and Netlify still serves `runmprc.com`.
+**Firebase staging status:** **STATIC HOSTING AND EMPTY FIRESTORE BOUNDARY AVAILABLE; OFFICER AND PRODUCTION RELEASE NOT AVAILABLE YET.** WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) requires controlled optimized builds to name staging or production and scans executable JavaScript for environment identity. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) created the club-owned `run-mprc-staging` project and published exact merged source `a614c68d9a1a2be631a3be874a686d61e5d170a0` to [run-mprc-staging.web.app](https://run-mprc-staging.web.app). CI-001D1 [#669](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/669) adds an empty delete-protected Firestore database and exact reviewed Rules/indexes; fixed anonymous server-only reads were denied and the root collection count remained zero. The site is still for signed-out public visual review only. It has no Auth test setup, Functions, App Check, provider sandbox, protected short-lived publication, release marker, tested predecessor rollback, complete security headers, custom domain, or DNS/TLS change. Officers do not sign in, enter information, or use the site as a publish control. Production Firebase Hosting remains empty, and Netlify still serves `runmprc.com`.
 
 **Live Netlify publication status:** a reusable protected release is **NOT AVAILABLE YET**. Ordinary Git-triggered production builds are paused by repository configuration. An overbroad #473 artifact was published and then rolled back on 2026-08-01; bounded #473 deploy `6a6dc9ea588b0c0008036312` is older history. #623 completed the inert-directory predecessor and remains the immediate rollback as deploy `6a7e072f8f346b0008510d29`, source `c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec`. #659 completed one separate exact-artifact accessibility release. Deploy `6a7ece87c5ca4d0007c1a3fc`, source `7496fe0881fb52908c4ff2f40f488df09c94c908`, is production now. Its exact marker/artifact and signed-out route-focus/menu checks passed. The manifest is inactive, temporary refs are absent, and the rollback ref remains. Shop is the static catalog; Events and Calendar show a fixed retry-later notice; the directory remains inert. Event records remain unavailable because this did not deploy Firebase. GitHub Pages currently still claims the same custom domain; future source omits that claim, but #136/WEB-001 must publish and verify its removal.
 
@@ -55,12 +55,13 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - A caller cannot type a Firebase project or deployment target into the release form.
 - Missing environment configuration or cloud authority makes the release red before backend dependencies, cloud authentication, or deployment. A public website artifact may be prepared without cloud authority, but it cannot be published.
 - The separate #667 staging verifier uses a short-lived cloud identity after named approval. That identity can read only the staging project identity. The backend release still has no deployment authority. The website job receives public browser values only.
+- #669 used one bounded maintainer operation to provision empty staging Firestore and deploy exact Rules/indexes. It did not give the #667 identity or the general release workflow a deploy role.
 - The Firebase CLI comes from the committed lockfile. The release does not install `latest`.
 - Source checked on 2026-07-22 pins the internal Firebase CLI to 15.24.0, and its emulator checks use Java 21. Officers do not install or run either tool; the platform maintainer owns them. This source change does not alter the release diagram or prove that Firebase was deployed. The provider and live-host facts below were not reverified for this tooling update.
 - Source checked on 2026-08-01 pins every root brace-expansion dependency family to reviewed compatible releases 1.1.18, 2.1.4, and 5.0.9 after a new advisory and follow-up bypass fixes. This is internal dependency evidence only. Officers do not install packages, run audit commands, or resolve dependency warnings; the platform maintainer owns those tasks. The separate minimatch finding remains open. This source change does not publish a website, deploy Firebase, change a provider, or prove live behavior.
 - A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
-- The club-owned `run-mprc-staging` project now supplies one static signed-out Hosting surface. Its first release is exact source `a614c68d9a1a2be631a3be874a686d61e5d170a0`; direct `/events` rewriting and desktop/phone public rendering passed.
-- #663 source requires complete staging-named public browser configuration and gives CI a synthetic staging artifact scan. #665's provider readback proves only the static staging host. #667 adds a protected read-only identity check, not Firebase deployment authority. These slices do not supply backend/provider isolation, App Check, a release marker, predecessor rollback, or permission to test sign-in/private/admin/commerce behavior.
+- The club-owned `run-mprc-staging` project supplies one static signed-out Hosting surface and one empty Firestore boundary. Its Hosting release remains exact source `a614c68d9a1a2be631a3be874a686d61e5d170a0`; direct `/events` rewriting and desktop/phone public rendering passed. Its Rules/index release comes from exact source `ee16bd16220ab58bd3a2add80dd2f39a1d514dd7`; the 418-case emulator suite, provider definition match, fixed anonymous denial probes, and zero-root-collection readback passed.
+- #663 source requires complete staging-named public browser configuration and gives CI a synthetic staging artifact scan. #665 proves the static staging host. #667 adds a protected read-only identity check, not Firebase deployment authority. #669 proves only the empty Firestore Rules/index boundary. These slices do not supply Auth, Functions, App Check, provider isolation, a release marker, predecessor rollback, or permission to test sign-in/private/admin/commerce behavior.
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
@@ -449,6 +450,43 @@ In words: the release preview and production must contain the same pinned fronte
 **Undo:** ask the platform owner through one reviewed security issue to remove the staging locator secrets and disable the federation provider or service-account binding. Do not delete the Firebase project or edit IAM ad hoc.
 
 **Escalation:** platform owner, then security owner. Use the private incident path if output may contain a sensitive value.
+
+## Review the empty staging Firestore boundary — AVAILABLE AFTER #669
+
+**Purpose:** let a backup officer confirm what the staging database change proves without signing in to the website, entering data, or running a command.
+
+**Approver:** platform owner plus the named security reviewer for #669.
+
+**Prerequisites:** merged and closed issue #669; its public redacted evidence comment; private provider readback held by the platform owner; and confirmation that no real or made-up application record was created.
+
+```mermaid
+flowchart LR
+    Source["Exact reviewed Rules and indexes"] --> Stage["Empty run-mprc-staging Firestore"]
+    Visitor["Signed-out browser"] --> Rules["Active staging Rules"]
+    Rules -- "server-only path" --> Deny["Denied"]
+    Rules --> Stage
+    Stage -. "no application records" .-> Empty["Zero root collections"]
+```
+
+Text alternative: exact reviewed Rules and indexes protect the empty staging database; signed-out requests to server-only paths are denied, and no application records exist.
+
+1. Open issue [#669](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/669).
+2. Confirm its outcome names only project `run-mprc-staging` and exact source `ee16bd16220ab58bd3a2add80dd2f39a1d514dd7`.
+3. Confirm the redacted evidence says Native, Standard, `us-west2`, delete protection on, and point-in-time recovery off.
+4. Confirm the Rules digest, four composite indexes, and 28 field overrides matched the reviewed files.
+5. Confirm the three fixed signed-out probes were denied and the final root collection count was zero.
+6. Confirm the evidence separately says Auth, Functions, App Check, providers, Hosting, production Firebase, production data, and `runmprc.com` were unchanged.
+7. Record the issue link, check date, approver, and any mismatch. Do not paste a console response, token, account record, or screenshot containing private details.
+
+**Expected result:** the officer can distinguish an empty protected staging database from a usable backend. The public staging website remains signed-out visual review only.
+
+**Stop conditions:** stop if the project, source commit, location, database mode, protection state, digest, index counts, denial result, or empty count differs; if any record exists; if evidence mentions a production mutation; or if anyone asks the officer to sign in, run a command, or handle a credential.
+
+**Success proof:** keep the redacted #669 evidence link, exact source commit, Rules digest, provider configuration summary, fixed denial statuses, zero collection count, approver, and check date.
+
+**Undo:** there is no casual officer undo. The chosen database location is permanent and delete protection is intentional. If Rules or indexes are wrong, stop use and open one reviewed security issue for a platform maintainer to deploy the exact known-good source. Do not delete the database or edit Rules in the console.
+
+**Escalation:** platform owner first, security owner second. Use the private incident path for unexpected records, access, or credential output.
 
 ## Before a protected release — NOT AVAILABLE YET
 
