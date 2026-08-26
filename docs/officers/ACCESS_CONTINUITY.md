@@ -38,7 +38,7 @@ Until those six steps are recorded, this guide does not claim incapacitation cov
 | Club email provider | Notices and password recovery | Communications owner plus backup |
 | Social/community accounts | Public communication and member groups | Named owner plus backup |
 
-WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds fail-closed Firebase Hosting build source. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) records that the club account can reach production and owns the dedicated `run-mprc-staging` project and its static Hosting site. Continuity is still incomplete: name a second individual limited-access Firebase/Google Cloud administrator, configure the short-lived release identity and protected reviewers, and rehearse rollback after a second staging release exists. Do not create another project or use a personal project as a shortcut.
+WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds fail-closed Firebase Hosting build source. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) records that the club account can reach production and owns the dedicated `run-mprc-staging` project and its static Hosting site. CI-001C1 [#667](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/667) protects a staging-only read-only identity check with individual reviewers Dave Liu and Jeff Chang; neither handles a cloud key. Continuity is still incomplete: name a second individual limited-access Firebase/Google Cloud administrator, protect production, add only reviewed backend deployment roles, and rehearse rollback after a second staging release exists. Do not create another project or use a personal project as a shortcut.
 
 ## Release access to record privately
 
@@ -46,7 +46,7 @@ Record these facts without copying a credential or private provider identifier:
 
 1. Dave Liu is the current primary production release approver.
 2. Name the backup/security reviewer who can approve when Dave is unavailable.
-3. Name two reviewers for the protected `staging` environment.
+3. Record Dave Liu (`daliu`) and Jeff Chang (`jeffchang5`) as the two current individual reviewers for the protected `staging` environment.
 4. Name two reviewers for the protected `production` environment.
 5. Record that `Protected release` is the approved GitHub workflow.
 6. Record the fixed environment-to-Firebase-project map: local `demo-mprc-local`, engineering staging `run-mprc-staging`, and production `mid-peninsula-running-club`.
@@ -56,7 +56,45 @@ Record these facts without copying a credential or private provider identifier:
 10. Record the latest backend-first rollback or safe roll-forward drill.
 11. Record the Netlify team owner, live site, protected trigger, and rollback location.
 
-The repository stores none of the cloud identity value, provider path, access token, password, or recovery code. The protected release is **NOT AVAILABLE YET** until #133 completes these records and tests the environment approvals.
+The repository stores no access token, password, private key, or recovery code. The protected staging identity check is available after #667; the general protected release is **NOT AVAILABLE YET** until #133 adds reviewed Firebase deployment roles, protects production, and tests the complete release path.
+
+### Protected staging identity check — available after #667
+
+**Purpose:** prove that one reviewed GitHub job can obtain a short-lived staging identity without a downloaded key and read only the approved project identity.
+
+**Approver:** Dave Liu or Jeff Chang as a named `staging` reviewer. The requester and reviewer should be different people when both are available.
+
+**Prerequisites:** the request comes from exact `main`; the workflow is **Verify staging cloud authority**; the environment is `staging`; and no backend, website, member, payment, or provider test is part of the request.
+
+```mermaid
+flowchart LR
+    Request["Platform maintainer requests verifier from main"] --> Review{"Dave or Jeff approves staging?"}
+    Review -- "No" --> Stop["Stop with no cloud token"]
+    Review -- "Yes" --> Token["GitHub exchanges exact claims for a five-minute token"]
+    Token --> Read["Read only the staging project identity"]
+    Read --> Record["Record fixed success and the run link"]
+```
+
+Text alternative: the platform maintainer requests the exact verifier from `main`; Dave or Jeff may approve it; approval permits one five-minute keyless token and one project-identity read, while rejection stops before cloud access.
+
+1. Ask the platform maintainer for the GitHub run link.
+2. Confirm the workflow name is **Verify staging cloud authority**.
+3. Confirm the source branch shown by GitHub is `main`.
+4. Confirm the environment shown by GitHub is `staging`.
+5. Confirm the request says **read-only identity check** and names no deployment target.
+6. Approve only if every fact above matches.
+7. Wait for **Read exact staging project through protected OIDC** to finish.
+8. Record the run link, approver, date, source commit, and fixed `staging_authority_read_verified` result.
+
+**Expected result:** one protected job succeeds after named approval. It deploys nothing and shows no provider locator, access token, cloud response, member data, or secret.
+
+**Stop conditions:** stop if the branch is not `main`; the environment is not `staging`; the workflow or project is unfamiliar; GitHub shows an unnamed reviewer; any step says deploy, create, update, delete, enable, or write; or anyone asks for a key, token, password, screenshot of private settings, member record, or payment data.
+
+**Success proof:** retain the public run link, exact commit, named approval, fixed success marker, and a dated private cloud readback stating that the service account has zero user-managed keys and one project-read permission. Do not copy the provider path or raw logs into the public record.
+
+**Undo:** open a reviewed security issue asking the platform owner to remove the two environment locator secrets and disable the staging federation provider or its service-account binding. Do not delete the Firebase project, service account, or unrelated IAM bindings as an improvised response. A later re-enable must repeat source review and the protected proof.
+
+**Escalation:** platform owner first; security owner second. If a token, private locator, or unexpected cloud response appears, stop and use the private incident path.
 
 ## Private service record
 

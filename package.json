@@ -32,6 +32,7 @@
     "lint:ci": "node .github/scripts/check-frontend-lint.cjs",
     "lint:fix": "eslint --fix --ext .js,.jsx .",
     "test:firebase-hosting": "node --test tests/firebase-hosting-foundation.test.js",
+    "test:staging-authority": "node --test tests/staging-authority-workflow.test.js",
     "test": "react-scripts test",
     "test:spa-navigation": "node --test tests/spa-navigation.test.js",
     "test:rules": "firebase emulators:exec --only firestore --project demo-rules-test \"npx --no-install jest --config tests/firestore-rules/jest.config.js\"",

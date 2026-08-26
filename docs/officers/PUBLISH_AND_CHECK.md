@@ -54,13 +54,13 @@ As of **2026-07-13**, with the internal tooling note below checked from source o
 - Its only current release plan is the reviewed profile-recovery set: Firestore Rules, `createMemberOnSignUp`, and `ensureMemberProfile`.
 - A caller cannot type a Firebase project or deployment target into the release form.
 - Missing environment configuration or cloud authority makes the release red before backend dependencies, cloud authentication, or deployment. A public website artifact may be prepared without cloud authority, but it cannot be published.
-- The backend uses a short-lived cloud identity when #133 configures it. The website job receives public browser values only.
+- The separate #667 staging verifier uses a short-lived cloud identity after named approval. That identity can read only the staging project identity. The backend release still has no deployment authority. The website job receives public browser values only.
 - The Firebase CLI comes from the committed lockfile. The release does not install `latest`.
 - Source checked on 2026-07-22 pins the internal Firebase CLI to 15.24.0, and its emulator checks use Java 21. Officers do not install or run either tool; the platform maintainer owns them. This source change does not alter the release diagram or prove that Firebase was deployed. The provider and live-host facts below were not reverified for this tooling update.
 - Source checked on 2026-08-01 pins every root brace-expansion dependency family to reviewed compatible releases 1.1.18, 2.1.4, and 5.0.9 after a new advisory and follow-up bypass fixes. This is internal dependency evidence only. Officers do not install packages, run audit commands, or resolve dependency warnings; the platform maintainer owns those tasks. The separate minimatch finding remains open. This source change does not publish a website, deploy Firebase, change a provider, or prove live behavior.
 - A production Pages publication job cannot start until Firebase deployment and Function verification succeed.
 - The club-owned `run-mprc-staging` project now supplies one static signed-out Hosting surface. Its first release is exact source `a614c68d9a1a2be631a3be874a686d61e5d170a0`; direct `/events` rewriting and desktop/phone public rendering passed.
-- #663 source requires complete staging-named public browser configuration and gives CI a synthetic staging artifact scan. #665's provider readback proves only the static staging host. It does not supply protected authority, backend/provider isolation, App Check, a release marker, predecessor rollback, or permission to test sign-in/private/admin/commerce behavior.
+- #663 source requires complete staging-named public browser configuration and gives CI a synthetic staging artifact scan. #665's provider readback proves only the static staging host. #667 adds a protected read-only identity check, not Firebase deployment authority. These slices do not supply backend/provider isolation, App Check, a release marker, predecessor rollback, or permission to test sign-in/private/admin/commerce behavior.
 - `runmprc.com` is served by Netlify, not GitHub Pages.
 - GitHub Pages currently reports `runmprc.com` as its custom domain and redirects its normal address there. It is not an independently reachable copy today.
 - Future source stops writing that Pages domain claim. Only provider readback after #136/WEB-001 can prove it cleared.
@@ -425,6 +425,30 @@ In words: the release preview and production must contain the same pinned fronte
 **Undo:** if nothing published, leave the prior deploy live. If the wrong result published, ask a Netlify team owner to restore deploy `6a54a3c93db9d300082e1f5f`. If that owner is unavailable, rebase the prepared rollback projection onto the exact current `main`, set its expected parent to that same current `main` commit, and verify its preview still pins previous source `e86a0f702cff6495f50630c5de3337290db8b8cb`. Confirm `main` has not advanced, then merge that exact rollback projection with a merge commit. Stop, refresh the projection, and rerun its checks and preview if `main` changes at any point. Disabling the source manifest prevents builds of later `main` commits but does not roll back an already published deploy; deleting the release-specific source ref makes a later rebuild of the old release commit fail its fetch.
 
 **Escalation:** platform owner first; website/content owner second. Escalate to the security owner if private data or an unexpected application version appears.
+
+## Verify staging cloud identity — AVAILABLE AFTER #667
+
+**Purpose:** prove protected keyless staging authentication without deploying or reading application data.
+
+**Approver:** Dave Liu or Jeff Chang as a named `staging` environment reviewer.
+
+1. Ask the platform maintainer to request **Verify staging cloud authority** from `main`.
+2. Open the run link.
+3. Confirm GitHub shows the `staging` environment and exact `main` source.
+4. Confirm the run contains only context validation, short-lived authentication, and an exact project-identity read.
+5. Approve the environment if those facts match.
+6. Confirm the protected job finishes with `staging_authority_read_verified`.
+7. Record the run link, commit, approver, and date.
+
+**Expected result:** the identity check succeeds after approval. Firebase, Hosting, Auth, Firestore, Rules, indexes, Functions, App Check, outside providers, and production remain unchanged.
+
+**Stop conditions:** stop if GitHub shows another branch, environment, workflow, project, or reviewer; a step proposes a write or deploy; output contains a provider locator, token, or response body; or anyone asks for private data or a credential.
+
+**Success proof:** keep the run link, exact commit, named approval, and fixed success marker. Pair it with private readback that the service account has no user-managed key and only project-identity read permission.
+
+**Undo:** ask the platform owner through one reviewed security issue to remove the staging locator secrets and disable the federation provider or service-account binding. Do not delete the Firebase project or edit IAM ad hoc.
+
+**Escalation:** platform owner, then security owner. Use the private incident path if output may contain a sensitive value.
 
 ## Before a protected release — NOT AVAILABLE YET
 

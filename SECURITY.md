@@ -325,6 +325,8 @@ Backups and exports must honor eventual deletion/anonymization schedules and hav
 - Deploy backward-compatible backend/rules/indexes before dependent frontend changes.
 - Record release commit, migration, function version, Stripe webhook/API version, test evidence, and rollback point.
 
+CI-001C1 [#667](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/667) establishes the first external proof of this pattern in staging only. The protected `staging` environment requires one of two named individual organization administrators and exact `main`; its GitHub OIDC provider also binds immutable organization/repository IDs, the environment, ref, and one verifier workflow. The dedicated service account has no user-managed key and only a custom `resourcemanager.projects.get` permission. The verifier performs one fixed project `GET` with a five-minute token and emits fixed success/failure markers without response data. This is not Firebase deployment authority, production protection, backend isolation, or permission to inspect staging data.
+
 ## 10. Incident response
 
 ### Severity examples

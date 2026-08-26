@@ -233,9 +233,21 @@ AUTH-MAIL-002C2 [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194
 
 The direct-rewrite hosting path does not need browser storage. #663 adds that catch-all Hosting rewrite to source, but it is **NOT DEPLOYED** and does not remove the current Pages bridge. The existing GitHub Pages fallback from #99 briefly places the complete return route in tab-local `sessionStorage`, then its first root-page script reads and deletes that value before React starts. If the root page never loads, the value can remain until the tab closes. #194 accepts that already-merged residual only for Pages compatibility; it does not call this “memory only.” A verified Firebase Hosting cutover should remove the bridge only after callback and rollback proof. The component itself never writes the code to storage or router state.
 
+**CI-001C1 staging authority boundary:** [#667](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/667) protects a separate manual verifier with the `staging` GitHub environment, two named individual organization administrators, and an exact `main` deployment branch policy. GitHub OIDC is admitted only for immutable organization/repository IDs, that environment, that ref, and `.github/workflows/verify-staging-authority.yml`. The dedicated keyless service account has one custom permission: `resourcemanager.projects.get`. The workflow obtains a five-minute token and reads only the exact active staging project identity. It cannot deploy Firebase, enable an API, inspect Firestore data, create a resource, reach an outside provider, or act in production.
+
+```mermaid
+flowchart LR
+    Workflow["Manual verifier on exact main"] --> Review["Protected staging review\ntwo named officers"]
+    Review --> OIDC["GitHub OIDC\nimmutable repo and workflow claims"]
+    OIDC --> ServiceAccount["Keyless staging service account\none project-read permission"]
+    ServiceAccount --> ProjectRead["Read exact staging project identity"]
+```
+
+Text alternative: a manual verifier from exact `main` waits for a named staging reviewer, exchanges its tightly restricted GitHub identity for a short-lived keyless service-account token, and reads only the staging project identity.
+
 ## 4. Target deployment topology
 
-The target keeps React, Firebase, and Stripe, but places stronger boundaries around them. Migrating the frontend from GitHub Pages/Netlify to Firebase Hosting is recommended before live commerce because it supports controlled SPA rewrites, preview channels, and security headers. #663 supplies only the fail-closed build selector and inert Hosting rewrite configuration. Staging project ownership, protected short-lived deployment authority, automatic exact-commit release, readback, rollback, headers, and DNS/TLS cutover remain separate work under #113/#133/#460. The migration is not required to design or test the backend and is not live merely because its source configuration exists.
+The target keeps React, Firebase, and Stripe, but places stronger boundaries around them. Migrating the frontend from GitHub Pages/Netlify to Firebase Hosting is recommended before live commerce because it supports controlled SPA rewrites, preview channels, and security headers. #663 supplies the fail-closed build selector and inert Hosting rewrite configuration. #665 owns the isolated static staging host. CI-001C1 [#667](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/667) adds only a protected, read-only staging identity proof; it grants no Firebase deployment permission. Backend deployment authority, automatic exact-commit release, readback, rollback, headers, production protection, and DNS/TLS cutover remain separate work under #113/#133/#460. The migration is not required to design or test the backend and is not live merely because its source configuration exists.
 
 ```mermaid
 flowchart TB
@@ -1720,7 +1732,7 @@ Returning a `2xx` response to Stripe means the event has been durably accepted o
 | --- | --- | --- | --- | --- |
 | Local source runtime | Firebase Emulator Suite under `demo-mprc-local` | Not safe by Firebase emulation alone | `localhost:3000` | Synthetic data only; browser Firebase traffic is loopback-only |
 | CI | Ephemeral emulators and mocks | Stripe fixtures/signature tests; optional isolated test account | None | Synthetic data, no production secrets |
-| Staging | `run-mprc-staging`; static Hosting and one web app only | Not configured; no provider testing authorized | `run-mprc-staging.web.app`; `dev.runmprc.com` not configured | Signed-out public visual review only; no real data |
+| Staging | `run-mprc-staging`; static Hosting, one web app, and protected read-only OIDC proof | Not configured; no provider testing authorized | `run-mprc-staging.web.app`; `dev.runmprc.com` not configured | Signed-out public visual review plus synthetic identity verification only; no real data |
 | Production | Dedicated production Firebase project | Live restricted keys and production webhook secret | `runmprc.com` | Real data under documented retention and access policies |
 
 ```mermaid
