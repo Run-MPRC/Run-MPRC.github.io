@@ -78,6 +78,8 @@ The bounded provider phase ran on 2026-08-26 from exact merged source `42542303d
 
 CI-001D3 [#674](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/674) adds `npm run deploy:staging-profile-functions` as a source-only, argument-closed wrapper. Before Firebase CLI it checks the demo-only default alias, one reviewed Functions codebase, both exact profile exports, lockfile CLI 15.24.0, `run-mprc-staging` as both project and quota project, `runmprc@gmail.com` as the declared operator, an in-memory short-lived token, no credential-file override, and exactly `functions:createMemberOnSignUp,functions:ensureMemberProfile`. Do not add arguments or invoke the command directly from a branch. Read-only preflight on 2026-08-26 showed the club account is project Owner, project billing is disabled, and that account can see zero open billing accounts. Firebase requires Blaze for Function deployment, so do not enable APIs or run this command until a separately approved billing account, budget/alerts, exact-main source, and provider release issue exist. The guard itself deploys nothing and does not make App Check or staging profile behavior available.
 
+CI-001D4 [#676](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/676) adds `npm run deploy:staging-hosting` as a separate source-only, argument-closed wrapper. It checks the demo-only default alias, exact Hosting predeploy chain, lockfile CLI 15.24.0, exact staging project/quota/account, Hosting-only scope, in-memory short-lived token, no credential-file override, and a bounded non-placeholder Enterprise site key. The existing executable scanner must find that same public key in the built JavaScript. Do not run it from a branch, append arguments, use a debug token, add localhost to provider domains, or treat the public site key as a server credential. Source/tests/merge do not configure the provider, publish Hosting, or enable service enforcement; #676 records those as separate later states.
+
 The repository's only `.firebaserc` default is now `demo-mprc-local`, a deliberately non-deployable local namespace. It is an accidental-deploy brake, not staging. Every future deployment must still pass one exact privately approved project explicitly. Do not infer backend/provider isolation or release authority from the static host; #113/#133 must protect, map, and verify those remaining boundaries.
 
 ## 4. Configuration and secrets
@@ -117,10 +119,11 @@ The safe sequence remains:
 
 1. Confirm the approved Firebase project and host inventory under #113.
 2. Merge and verify #159 source/tests without a real key.
-3. Have the named owner create the Enterprise site key and allowed-domain policy for the approved environment.
-4. Bind website preparation to the approved protected Actions scope under #133/a dedicated CI child, then store only that public site key there. The current preparation job has no environment binding and can read only repository/organization variables; do not use that gap as a production shortcut.
-5. Rehearse a synthetic staging page, observe App Check metrics, and prove expected token behavior before ABUSE-001A2 enables any callable enforcement.
-6. Publish and verify the website, Firebase, provider, and live behavior as separate states under #136/WEB-001.
+3. Merge and verify the #676 staging-only Hosting/App Check deploy guard without a real key.
+4. Under the #676 provider phase, have the named owner create one score-based Enterprise key restricted to the two staging hosts and register it only to the staging web app.
+5. Use the exact merged source and guarded Hosting-only command to publish the staging client, then prove token-bearing browser Auth/Firestore behavior before changing enforcement.
+6. Enable only staging Authentication and Firestore enforcement, prove missing-token denial plus continued browser success, and retain the documented monitoring-only rollback.
+7. Keep native callable enforcement and Function deployment separate until the billing gate is explicitly approved; publish and verify production website, Firebase, provider, and live behavior separately under #136/WEB-001.
 
 A source merge, green CI run, or public-key variable alone does not prove Enterprise is configured or protecting a callable.
 

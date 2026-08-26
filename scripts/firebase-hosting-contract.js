@@ -27,6 +27,11 @@ const STAGING_FIELDS = Object.freeze([
   'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
   'REACT_APP_FIREBASE_APP_ID',
 ]);
+const APP_CHECK_SITE_KEY_FIELD = 'REACT_APP_RECAPTCHA_SITE_KEY';
+const APP_CHECK_SITE_KEY_PATTERN = /^[A-Za-z0-9_-]{30,128}$/u;
+const APP_CHECK_PLACEHOLDER_PATTERN = (
+  /(?:dummy|example|placeholder|public[-_]?site|replace|synthetic|test[-_]?key)/iu
+);
 const MAX_EXECUTABLE_FILES = 10000;
 const MAX_EXECUTABLE_BYTES = 32 * 1024 * 1024;
 const MAX_TOTAL_EXECUTABLE_BYTES = 128 * 1024 * 1024;
@@ -48,6 +53,14 @@ function requiredValue(environment, key) {
 
 function includesProductionIdentity(value) {
   return PRODUCTION_IDENTIFIERS.some((identity) => value.includes(identity));
+}
+
+function validateStagingAppCheckSiteKey(environment) {
+  const siteKey = requiredValue(environment, APP_CHECK_SITE_KEY_FIELD);
+  if (!APP_CHECK_SITE_KEY_PATTERN.test(siteKey)
+    || APP_CHECK_PLACEHOLDER_PATTERN.test(siteKey)
+    || includesProductionIdentity(siteKey)) reject();
+  return siteKey;
 }
 
 function validateStagingConfiguration(environment) {
@@ -103,6 +116,9 @@ function validateDeployEnvironment(environment = process.env) {
   if (requiredValue(environment, 'GCLOUD_PROJECT') !== selected.projectId) {
     reject();
   }
+  if (selected.environment === 'staging') {
+    validateStagingAppCheckSiteKey(environment);
+  }
   return selected;
 }
 
@@ -146,6 +162,9 @@ function verifyExecutableArtifact(directory, environment = process.env) {
       ...(environment.REACT_APP_FIREBASE_MEASUREMENT_ID === undefined
         ? []
         : [requiredValue(environment, 'REACT_APP_FIREBASE_MEASUREMENT_ID')]),
+      ...(environment[APP_CHECK_SITE_KEY_FIELD] === undefined
+        ? []
+        : [requiredValue(environment, APP_CHECK_SITE_KEY_FIELD)]),
     ];
   const foundIdentifiers = new Set();
   let totalBytes = 0;
