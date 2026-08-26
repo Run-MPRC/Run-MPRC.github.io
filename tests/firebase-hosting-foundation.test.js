@@ -401,6 +401,14 @@ test('CI-001D4 deploy context is exact, Hosting-only, and token-bound', () => {
   });
 
   const invalidEnvironments = [
+    {
+      ...PRODUCTION_BUILD_ENVIRONMENT,
+      GCLOUD_PROJECT: 'mid-peninsula-running-club',
+      GOOGLE_CLOUD_QUOTA_PROJECT: 'mid-peninsula-running-club',
+      FIREBASE_DEPLOY_SCOPE: 'hosting',
+      RUN_MPRC_FIREBASE_ACCOUNT: 'runmprc@gmail.com',
+      FIREBASE_TOKEN: 'synthetic-short-lived-credential',
+    },
     { ...EXACT_STAGING_DEPLOY_ENVIRONMENT, GCLOUD_PROJECT: 'mid-peninsula-running-club' },
     { ...EXACT_STAGING_DEPLOY_ENVIRONMENT, GOOGLE_CLOUD_QUOTA_PROJECT: 'another-project' },
     { ...EXACT_STAGING_DEPLOY_ENVIRONMENT, FIREBASE_DEPLOY_SCOPE: 'hosting,auth' },
