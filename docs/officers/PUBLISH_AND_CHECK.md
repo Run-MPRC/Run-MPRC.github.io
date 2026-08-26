@@ -556,7 +556,7 @@ Text alternative: exact merged source passed the staging-only guard, one restric
 2. Confirm exact merge `bce911a7083201cfe2141edaa9660f210287bf57` and all five successful jobs in CI run `33018136439` are recorded before the provider checkpoint.
 3. Confirm the guard names only `run-mprc-staging`, `runmprc@gmail.com`, Hosting scope, and Firebase CLI 15.24.0.
 4. Confirm the redacted provider evidence says exactly one score-based key, exactly the two staging hosts, one matching web app, and a one-hour token lifetime. It must not contain a key or provider locator.
-5. Confirm the guarded release names exact source `bce911a7083201cfe2141edaa9660f210287bf57` and Hosting version `8556fc51210bdc66`.
+5. Confirm the guarded release names exact source `bce911a7083201cfe2141edaa9660f210287bf57`, Hosting version `8556fc51210bdc66`, 61 files, and artifact-manifest SHA-256 `157e2048aa86d45cec1111e091643870d18ced808ef88d610ec70aae1bbe1ace`.
 6. Confirm root and direct Events returned 200, the empty Events state rendered, the 1280-by-720 layout was intact, and browser warnings/errors were absent.
 7. Confirm Authentication and Firestore still read `UNENFORCED`, replay protection is off, users and root collections are zero, billing is disabled, and no Functions-related API or Function exists.
 8. Confirm the new disposable browser Auth proof, `ENFORCED` readback, missing-token denial, token-bearing replay, final cleanup, and completion evidence remain pending.
