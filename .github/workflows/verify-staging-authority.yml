@@ -1,0 +1,50 @@
+name: Verify staging cloud authority
+
+run-name: Verify protected staging authority from ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: verify-staging-authority
+  cancel-in-progress: false
+
+jobs:
+  verify-staging-authority:
+    name: Read exact staging project through protected OIDC
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: staging
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TARGET_ENVIRONMENT: staging
+      TARGET_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      - name: Check out reviewed authority verifier
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Validate immutable repository and protected environment context
+        env:
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: .github/scripts/validate-staging-authority-context.sh
+      - id: auth
+        name: Obtain one short-lived read-only Google Cloud token
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          token_format: access_token
+          access_token_lifetime: 300s
+          create_credentials_file: false
+          export_environment_variables: false
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Read and verify only the exact staging project identity
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: .github/scripts/verify-staging-project-read.sh

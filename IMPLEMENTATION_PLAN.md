@@ -40,6 +40,8 @@ MPRC can open a race or merchandise item for sale only when the platform can:
 
 **WEB-001A2 isolated static staging:** [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) creates the club-owned `run-mprc-staging` Firebase project, one web app, and the static [run-mprc-staging.web.app](https://run-mprc-staging.web.app) Hosting site from exact merged source `a614c68d9a1a2be631a3be874a686d61e5d170a0`. The executable artifact scanner found the staging identity and rejected known production identities; provider, direct-route, desktop, and phone readback passed. This is signed-out visual staging only. It does not configure App Check, Auth test users, Firestore, Functions, Rules, indexes, Storage data, provider sandboxes, protected short-lived authority, a release marker, tested predecessor rollback, security headers, `production-web`, custom domains, DNS/TLS, or production publication.
 
+**CI-001C1 protected staging identity proof:** [#667](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/667) creates the protected `staging` GitHub environment, two named individual reviewers, exact-`main` policy, a dedicated GitHub OIDC pool/provider, and a keyless service account with only `resourcemanager.projects.get`. Its separate manual verifier fails on a wrong repository, immutable repository/owner ID, ref, environment, project, workflow, provider, or service account before authentication; after approval it reads only the exact staging project identity. It does not grant Firebase deployment roles, provision Auth/Firestore/Functions, configure outside providers, protect production, or make `.github/workflows/deploy.yml` available.
+
 ## 3. Dependency map
 
 ```mermaid
