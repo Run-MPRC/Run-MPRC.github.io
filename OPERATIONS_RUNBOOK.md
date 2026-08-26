@@ -63,10 +63,12 @@ Maintain an internal inventory with project/account IDs and console links:
 | --- | --- | --- | --- | --- | --- |
 | Local source runtime | `demo-mprc-local` emulators | Providers remain separately gated | `localhost:3000` | None | Available for synthetic Firebase work after all three loopback emulators report ready |
 | CI | Separate named demo/emulator projects | Fixtures/test only | None | CI | Frontend, Functions, Rules, SPA, and commerce-journal checks run; broader gates remain partial |
-| Staging | **Create dedicated project** | Test/sandbox + unique endpoint | `dev.runmprc.com` | `staging` | Launch blocker |
+| Staging | `run-mprc-staging` | No provider sandbox or backend test configuration yet | `run-mprc-staging.web.app`; `dev.runmprc.com` not configured | No protected environment yet | Static signed-out engineering Hosting is available; backend/provider staging remains a launch blocker |
 | Production | `mid-peninsula-running-club` (verify) | Live + unique endpoint | `runmprc.com` | `production` | Informational site only until gates close |
 
-The repository's only `.firebaserc` default is now `demo-mprc-local`, a deliberately non-deployable local namespace. It is an accidental-deploy brake, not staging. Every future deployment must still pass one exact privately approved project explicitly. Do not infer staging isolation from source or historical documentation; #113/#133 must create, own, map, and verify it.
+WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) created and provider-read back `run-mprc-staging`, one web app, and Hosting version `3ffadcf2ac8cc760` from source `a614c68d9a1a2be631a3be874a686d61e5d170a0` on 2026-08-26. Always name that project explicitly; `.firebaserc` still defaults to the demo namespace. The static host is not complete environment isolation: App Check, Auth test configuration, Firestore, Functions, Rules, indexes, Storage data, provider sandboxes, protected deployment authority, `dev.runmprc.com`, release-marker readback, and tested rollback remain unavailable.
+
+The repository's only `.firebaserc` default is now `demo-mprc-local`, a deliberately non-deployable local namespace. It is an accidental-deploy brake, not staging. Every future deployment must still pass one exact privately approved project explicitly. Do not infer backend/provider isolation or release authority from the static host; #113/#133 must protect, map, and verify those remaining boundaries.
 
 ## 4. Configuration and secrets
 
@@ -93,7 +95,7 @@ REACT_APP_STRAVA_CLIENT_ID
 
 The Firebase web configuration is public application configuration. It must still be environment-specific and paired with Auth restrictions, Firestore rules, and App Check. WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) makes controlled optimized builds choose `staging` or `production`; staging project IDs must include a distinct `staging` segment and the complete artifact check rejects known production identities. Production accepts only the exact reviewed public values. These values are not server credentials, but do not paste provider-console screenshots, private links, tokens, or any server credential into source or an issue.
 
-`firebase.json` now has a source-only Hosting block for `build/` and missing-path SPA rewrites. Its predeploy chain rejects a Firebase CLI project that differs from the selected browser project, then rebuilds and scans executable JavaScript before upload. **Firebase Hosting publication is NOT AVAILABLE YET.** No staging site, channel, WIF identity, protected production branch, custom domain, release marker, rollback, or DNS/TLS change is created by #663.
+`firebase.json` has a Hosting block for `build/` and missing-path SPA rewrites. Its predeploy chain rejects a Firebase CLI project that differs from the selected browser project, then rebuilds and scans executable JavaScript before upload. **Static engineering staging is available; protected and production publication are NOT AVAILABLE YET.** #665 used that chain for the first `run-mprc-staging` release. No WIF identity, protected production branch, custom domain, release marker, tested rollback, production release, or DNS/TLS change exists.
 
 ### App Check release state — NOT AVAILABLE YET
 
@@ -239,7 +241,7 @@ Expected result: the browser uses a fully synthetic Firebase configuration, Auth
 
 The CLI readiness messages prove the three processes listened during that run. Mocked frontend tests prove endpoint selection, not process readiness. If an emulator later stops, requests fail locally; do not change the project or disable the guard.
 
-Optimized builds are different. They must explicitly select `staging` or `production`; missing, local, incomplete, or cross-environment configuration stops startup. Ordinary Netlify deploy previews receive only the reserved synthetic staging configuration; the pinned release builder receives the exact reviewed public production web configuration. Both paths scan the built executable. A synthetic staging build proves artifact separation only—it is not an owned staging backend and does not isolate providers. Use previews and locally served artifacts only for public, read-only visual checks until protected staging is verified. Do not sign in or open account, member, admin, event-registration, shop-purchase, or provider flows.
+Optimized builds are different. They must explicitly select `staging` or `production`; missing, local, incomplete, or cross-environment configuration stops startup. Ordinary Netlify deploy previews receive only the reserved synthetic staging configuration; `run-mprc-staging.web.app` receives the owned static staging web-app configuration; the pinned release builder receives the exact reviewed public production web configuration. Every path scans the built executable. Neither synthetic previews nor the static owned host provide an isolated backend or outside-provider sandbox. Use them only for public, signed-out, read-only visual checks until protected backend/provider staging is verified. Do not sign in or open account, member, admin, event-registration, shop-purchase, or provider flows.
 
 ### Forward Stripe events — NOT AVAILABLE YET for end-to-end use
 

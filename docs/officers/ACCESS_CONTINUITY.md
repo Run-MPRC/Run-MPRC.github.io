@@ -38,7 +38,7 @@ Until those six steps are recorded, this guide does not claim incapacitation cov
 | Club email provider | Notices and password recovery | Communications owner plus backup |
 | Social/community accounts | Public communication and member groups | Named owner plus backup |
 
-WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds fail-closed Firebase Hosting build source, not service ownership. Continuity still requires two individual limited-access Firebase/Google Cloud administrators, an approved staging project, short-lived release identity, protected reviewers, and a tested rollback. Do not create an unofficial personal project to make the source checks pass.
+WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds fail-closed Firebase Hosting build source. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) records that the club account can reach production and owns the dedicated `run-mprc-staging` project and its static Hosting site. Continuity is still incomplete: name a second individual limited-access Firebase/Google Cloud administrator, configure the short-lived release identity and protected reviewers, and rehearse rollback after a second staging release exists. Do not create another project or use a personal project as a shortcut.
 
 ## Release access to record privately
 
@@ -49,7 +49,7 @@ Record these facts without copying a credential or private provider identifier:
 3. Name two reviewers for the protected `staging` environment.
 4. Name two reviewers for the protected `production` environment.
 5. Record that `Protected release` is the approved GitHub workflow.
-6. Record the fixed environment-to-Firebase-project map.
+6. Record the fixed environment-to-Firebase-project map: local `demo-mprc-local`, engineering staging `run-mprc-staging`, and production `mid-peninsula-running-club`.
 7. Record the fixed release plans and named resources.
 8. Record the owner of the short-lived cloud identity and its revocation procedure.
 9. Record the latest missing-authority failure drill.
