@@ -92,8 +92,12 @@ flowchart TD
     AuthSource --> StagingAuth["Staging Auth-only deploy\nprovider readback"]
     StagingAuth --> AuthProof["Disposable API + browser sign-in\ncleanup to zero users"]
     Main --> AppCheckGuard["#676 staging Hosting/App Check\nsource guard"]
-    AppCheckGuard -. "Provider registration, publication, and enforcement not proved by source" .-> Stop
-    AuthProof -. "No Functions, App Check, real identity, or records" .-> Stop
+    AppCheckGuard --> AppCheckProvider["One score key; two staging hosts;\none-hour web-app registration"]
+    AppCheckProvider --> AppCheckHosting["Exact bce911a7 Hosting\nversion 8556fc51210bdc66"]
+    AppCheckProvider --> AppCheckMonitor["Auth + Firestore UNENFORCED\nreplay protection off"]
+    AppCheckHosting --> AppCheckPublicProof["Root and Events 200; empty UI;\nno browser warning or error"]
+    AppCheckMonitor -. "Disposable Auth, ENFORCED, missing-token,\nand token-bearing replay pending" .-> Stop
+    AuthProof -. "No Functions, new App Check Auth proof, real identity, or records" .-> Stop
     StagingHosting -. "No complete backend/provider test estate, protected deploy authority, marker, or rollback" .-> Stop
     HostingSource -. "Production branch, headers, authority, and cutover missing" .-> FutureHosting["Production Firebase Hosting — NOT AVAILABLE YET"]
     Main -. "Completed #659 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
@@ -104,7 +108,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; #663 supplies build checks, #665 publishes the club-owned engineering staging site, and #671 deploys only narrow email/password Auth after exact-main review. Provider and browser proof used disposable identities and returned the project to zero users/records. #676 adds only the exact staging Hosting/App Check source guard; its merge cannot prove a provider key, publication, enforcement, or token behavior. The current boundary does not supply Functions, live App Check, real identity or private-data testing, production release, or reusable authority. Ordinary merges cannot publish Netlify and the completed #659 exception is inactive; its deploy `6a7ece87c5ca4d0007c1a3fc` remains live while completed #623 deploy `6a7e072f8f346b0008510d29` is the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history; the future Pages branch must stop claiming the Netlify domain, and every host still needs separate proof.
+In words: merge, release request, and protected approval are separate; #663 supplies build checks, #665 publishes the club-owned engineering staging site, and #671 deploys only narrow email/password Auth after exact-main review. Its earlier disposable identities were removed. #676 now adds one restricted score-based provider registration, publishes exact source `bce911a7` as Hosting version `8556fc51210bdc66`, and places Auth plus Firestore in monitoring mode; public Hosting and empty Firestore/UI checks passed. That checkpoint is not the new disposable Auth proof, enforcement/readback, missing-token denial, or token-bearing replay, and the current boundary still supplies no Functions, real identity/private-data testing, production release, or reusable authority. Ordinary merges cannot publish Netlify and the completed #659 exception is inactive; its deploy `6a7ece87c5ca4d0007c1a3fc` remains live while completed #623 deploy `6a7e072f8f346b0008510d29` is the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history; the future Pages branch must stop claiming the Netlify domain, and every host still needs separate proof.
 
 ## Account and permission ownership
 
