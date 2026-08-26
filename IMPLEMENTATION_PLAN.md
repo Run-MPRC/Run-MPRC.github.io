@@ -44,6 +44,8 @@ MPRC can open a race or merchandise item for sale only when the platform can:
 
 **CI-001D1 empty staging Firestore boundary:** [#669](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/669) provisions `(default)` as an empty Native/Standard database in `us-west2`, enables delete protection, keeps PITR disabled, and deploys only exact Rules/indexes from `ee16bd16220ab58bd3a2add80dd2f39a1d514dd7` with Firebase CLI 15.24.0. The Node 20/Java 21 Rules suite passes 418/418; provider readback matches the active Rules digest, four composite indexes, and 28 field overrides; fixed anonymous server-only reads are denied; root collection count remains zero. This completes only the first staging data boundary. Auth test configuration, Functions, App Check, outside-provider sandboxes, keyless Firebase deployment roles, synthetic signed-in flows, website republication, production protection, and production behavior remain later children of #105/#133/#136.
 
+**CI-001D2 staging Auth source contract:** [#671](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/671) adds only `emailPassword: true` under the Firebase Auth provider source, preserves the `demo-mprc-local` default alias, and pins a guarded staging-only `--only auth` command to Firebase CLI 15.24.0. The guard requires the exact staging project, quota project, club-account declaration, Auth-only scope, and short-lived token path while rejecting an ADC override. This source phase does not initialize Auth, enable a provider, create a user, send email, configure Google sign-in, change billing, deploy Functions, or prove signed-in behavior. Provider deployment and disposable create/sign-in/delete evidence follow only after this source reaches exact `main`.
+
 ## 3. Dependency map
 
 ```mermaid

@@ -488,6 +488,44 @@ Text alternative: exact reviewed Rules and indexes protect the empty staging dat
 
 **Escalation:** platform owner first, security owner second. Use the private incident path for unexpected records, access, or credential output.
 
+## Review the staging Auth source contract — SOURCE ONLY, NOT DEPLOYED
+
+**Purpose:** let a backup officer confirm that the reviewed source permits only a narrow future staging Auth change, without signing in, creating an account, running a command, or treating source as provider proof.
+
+**Approver:** platform owner plus the named security reviewer for #671.
+
+**Prerequisites:** the #671 source pull request is merged, its exact-main CI is green, and the provider phase is still recorded separately as not run.
+
+```mermaid
+flowchart LR
+    Source["firebase.json\nemail/password only"] --> Guard["Exact staging project, club account,\nshort-lived token, Auth-only scope"]
+    Guard --> Future["Future reviewed provider step"]
+    Broad["Anonymous, Google, phone, production,\nADC, or broad deploy"] --> Stop["Stop"]
+    Future -. "not performed by source" .-> Stop
+```
+
+Text alternative: reviewed source allows only email/password and a future Auth-only staging operation; broader providers, production, ADC, or broader deployment stop, and no provider change occurs from source or merge.
+
+1. Open issue [#671](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/671) and its source pull request.
+2. Confirm the pull request says `Officer impact`, `Officer documentation`, and `Deployment evidence` separately.
+3. Confirm the source names only email/password and does not name anonymous, Google, or phone sign-in as enabled.
+4. Confirm the unqualified Firebase project remains the local demo project.
+5. Confirm the future command names only Auth and `run-mprc-staging`.
+6. Confirm the guard requires the club account declaration, exact staging and quota project, short-lived token path, and no ADC file override.
+7. Confirm the five focused source tests and all five hosted CI jobs passed on the exact merge.
+8. Confirm provider deployment, a test user, email, billing, Functions, App Check, Hosting, production Firebase, production data, and `runmprc.com` are each recorded as not changed.
+9. Record the issue, pull request, exact merge, check date, approver, and provider status. Do not paste a token, console response, account record, or private screenshot.
+
+**Expected result:** a backup officer can distinguish a narrow reviewed Auth source contract from initialized or usable staging Auth. The staging site remains signed-out engineering review only.
+
+**Stop conditions:** stop if source enables another provider, changes the demo default, permits another project or deployment scope, accepts ADC, lacks the focused test, claims provider success from source/CI, or asks an officer to sign in, create a user, run a command, handle a credential, or inspect an account.
+
+**Success proof:** keep the #671 and pull-request links, exact merge, green focused/hosted tests, reviewed source summary, approver, date, and explicit provider-not-deployed statement.
+
+**Undo:** before provider deployment, use one reviewed revert or safe roll-forward pull request. Do not edit Firebase Console, delete a Firebase project, or create an account as an undo test.
+
+**Escalation:** platform owner first, security owner second. Use the private incident path if credential-shaped output or an unexpected account/provider appears.
+
 ## Before a protected release — NOT AVAILABLE YET
 
 Do not use this section until #133 records that both GitHub environments are protected and tested.
