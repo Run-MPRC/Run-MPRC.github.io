@@ -32,6 +32,7 @@
     "lint:ci": "node .github/scripts/check-frontend-lint.cjs",
     "lint:fix": "eslint --fix --ext .js,.jsx .",
     "test:firebase-auth-staging": "node --test tests/firebase-auth-staging-contract.test.js",
+    "test:firebase-profile-functions-staging": "node --test tests/firebase-profile-functions-staging-contract.test.js",
     "test:firebase-hosting": "node --test tests/firebase-hosting-foundation.test.js",
     "test:staging-authority": "node --test tests/staging-authority-workflow.test.js",
     "test": "react-scripts test",
@@ -40,6 +41,8 @@
     "test:rules:watch": "firebase emulators:exec --only firestore --project demo-rules-test \"npx --no-install jest --config tests/firestore-rules/jest.config.js --watch\"",
     "predeploy:staging-auth": "node scripts/firebase-auth-staging-contract.js validate-deploy",
     "deploy:staging-auth": "npx --no-install firebase deploy --only auth --project run-mprc-staging --non-interactive",
+    "predeploy:staging-profile-functions": "node scripts/firebase-profile-functions-staging-contract.js validate-deploy",
+    "deploy:staging-profile-functions": "node scripts/firebase-profile-functions-staging-contract.js deploy",
     "eject": "react-scripts eject",
     "lint:all": "find . -name '*.{js,jsx,tsx,ts}' -exec pretty-quick {} + && eslint --fix ."
   },
