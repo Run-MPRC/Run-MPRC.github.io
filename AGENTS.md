@@ -114,7 +114,7 @@ The deterministic frontend Jest baseline is available through the command above.
 
 For Firebase-backed local development, run `npm run emulators` first and wait until Auth, Firestore, and Functions are ready under `demo-mprc-local`. In a second terminal, run `npm start` and use `http://localhost:3000`. Stop if any browser Firebase request uses a non-loopback host. The emulator suite does not isolate Stripe, Strava, email, or other provider calls made by Functions; those flows remain forbidden until their test configuration and safe sink are separately proven.
 
-Optimized builds must explicitly select `staging` or `production`. WEB-001A1 #663 provides and tests that source boundary, but it does not create an owned staging project or isolate outside providers. Do not sign in, open private/admin pages, or exercise Firebase/provider behavior in a preview until the protected staging and provider evidence required by #105/CONFIG exists.
+Optimized builds must explicitly select `staging` or `production`. WEB-001A1 #663 provides and tests that source boundary. WEB-001A2 #665 adds the owned `run-mprc-staging` static Hosting surface, but it does not configure a staging backend, protected release authority, or isolated outside providers. Do not sign in, open private/admin pages, or exercise Firebase/provider behavior in a preview until the protected backend and provider evidence required by #105/CONFIG exists.
 
 For Stripe lifecycle work, tests must include relevant negative and retry cases: invalid signature, duplicate/out-of-order Event, unpaid completion, amount/currency/environment mismatch, terminal-state protection, async success/failure, expiration, cancellation, and refund retry. Capacity/inventory work must include concurrent final-unit tests.
 

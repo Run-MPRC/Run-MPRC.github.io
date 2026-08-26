@@ -77,7 +77,7 @@ Every issue inherits `AGENTS.md` and the definition of done in `IMPLEMENTATION_P
 | 21 | DATA-002 | Create immutable, truthful waiver evidence | P1 | M | blocked_owner_decision | RACE-001, LEGAL-001 decision |
 | 22 | ADMIN-001 | Move sensitive admin operations behind scoped APIs and durable audit | P1 | L | proposed | SEC-001, AUTH-003, PAY-002 |
 | 23 | MERCH-002 | Configure shipping, tax, returns, and order communications | P1 | L | blocked_owner_decision | MERCH-001, LEGAL-001 |
-| 24 | WEB-001 | Move to controlled hosting and add browser security policy | P1 | L | source foundation in progress through #460/#663; not deployed | SAFETY-001, CI-001 |
+| 24 | WEB-001 | Move to controlled hosting and add browser security policy | P1 | L | static staging active through #460/#663/#665; production cutover blocked | SAFETY-001, CI-001 |
 | 25 | OBS-001 | Add payment observability, alerts, SLOs, and redaction | P1 | M | proposed | PAY-003, PAY-005 |
 | 26 | RESILIENCE-001 | Establish backup, restore, retention, and audited repair | P1 | L | proposed | DATA-001, PAY-005 |
 | 27 | TEST-001 | Build the Stripe/Firebase security integration and E2E suite | P0 | L | in progress through #177; most children proposed | core security/payment/data children |
@@ -134,7 +134,7 @@ GitHub Pages routes unknown SPA paths through `public/404.html`. The original br
 
 ### Agent handoff
 
-Do not redesign routing or hosting in this issue; WEB-001 owns that. WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) now makes ordinary optimized previews select a reserved synthetic staging configuration, but private preview behavior remains blocked because no owned staging project or provider isolation is verified under #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A must explicitly defer App Check enforcement on `lookupRegistration`, `lookupOrder`, and `stravaExchangeCode` while the initial capability guard is active. DATA-001A owns the two payment-confirmation handoffs; OAUTH-001C within live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) owns the Strava exchange handoff. Do not weaken the guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
+Do not redesign routing or hosting in this issue; WEB-001 owns that. WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) makes ordinary optimized previews select a reserved synthetic staging configuration. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) adds an owned static Hosting stage, but private preview behavior remains blocked because its backend and outside-provider isolation are not configured under #105/CONFIG. Firebase emulators do not make Stripe, Strava, or email safe. ABUSE-001A must explicitly defer App Check enforcement on `lookupRegistration`, `lookupOrder`, and `stravaExchangeCode` while the initial capability guard is active. DATA-001A owns the two payment-confirmation handoffs; OAUTH-001C within live [#88](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/88) owns the Strava exchange handoff. Do not weaken the guard. Do not include any real callback token in fixtures. #118 still owns the reported profile failure.
 
 ---
 
@@ -468,7 +468,7 @@ Use OAUTH-001A/B/C as bounded outcomes within canonical tracker [#88](https://gi
 ## AUTH-003 — Introduce scoped admin capabilities, MFA, and recent authentication
 
 **Labels:** `priority:P1`, `type:security`, `area:auth`, `area:firebase`, `size:L`, `needs-migration`, `needs-external-config`
-**Status:** In progress through tracker [#460](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/460). Source-only child WEB-001A1 [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) adds environment-explicit builds, artifact checks, and inert Firebase Hosting SPA configuration; no staging/production Hosting site, headers, release authority, deployment, domain, or cutover is verified.
+**Status:** Proposed. WEB-001A2 [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) adds static website staging only; it does not deploy or verify scoped capabilities, MFA, recent authentication, Rules, Functions, or operator behavior.
 **Depends on:** AUTH-001, AUTH-002, SEC-001
 
 ### Problem
@@ -1171,7 +1171,7 @@ Do not enable Stripe Tax, Canada shipping, or collect additional addresses until
 ## WEB-001 — Move to controlled hosting and add browser security policy
 
 **Labels:** `priority:P1`, `type:security`, `type:maintenance`, `area:web`, `size:L`, `needs-external-config`
-**Status:** Proposed
+**Status:** In progress through tracker [#460](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/460), source foundation [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663), and static staging [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665). Production cutover remains blocked.
 **Depends on:** SAFETY-001, CI-001
 
 ### Problem
@@ -1383,7 +1383,7 @@ Repository code cannot prove external production configuration. MPRC needs owned
 ### Scope
 
 - Complete the ownership roster in `OPERATIONS_RUNBOOK.md` with primary/backup and least privilege.
-- Create/verify dedicated staging Firebase project and Stripe test/sandbox endpoint; keep production isolated.
+- Extend the dedicated `run-mprc-staging` static project into a protected backend test environment, create and verify the Stripe test/sandbox endpoint, and keep production isolated.
 - Configure Secret Manager bindings, expected livemode/origin, commerce kill switch, App Check Enterprise/enforcement, TTL, budgets, IAM, protected GitHub environments/OIDC, email domain, Sentry redaction, backups, DNS/hosting, and Stripe event allowlist.
 - Verify Stripe account legal/support/statement/payout settings, team MFA/passkeys/roles, Radar, tax/shipping decisions, webhook secret rotation, alert ownership, and reconciliation schedule.
 - Run full staging dress rehearsal and incident/kill-switch/restore drills.

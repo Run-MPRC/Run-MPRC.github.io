@@ -38,6 +38,8 @@ MPRC can open a race or merchandise item for sale only when the platform can:
 
 **WEB-001A1 Firebase Hosting source foundation:** [#663](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/663) is the first bounded child of #460. It makes controlled optimized builds environment-explicit, keeps local/test on the demo emulators, requires complete staging-named public Firebase configuration, rejects production identities in staging, scans the executable synthetic CI artifact, changes the unqualified CLI default to `demo-mprc-local`, and adds the inert `build/` Hosting rewrite. It deliberately does not provision staging, configure short-lived authority or branch/environment protection, deploy Hosting/Firebase, automate `production-web`, add release readback/rollback/headers, alter Netlify/Pages, or touch DNS/TLS. Source/tests/merge and a synthetic build are not staging or production evidence.
 
+**WEB-001A2 isolated static staging:** [#665](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/665) creates the club-owned `run-mprc-staging` Firebase project, one web app, and the static [run-mprc-staging.web.app](https://run-mprc-staging.web.app) Hosting site from exact merged source `a614c68d9a1a2be631a3be874a686d61e5d170a0`. The executable artifact scanner found the staging identity and rejected known production identities; provider, direct-route, desktop, and phone readback passed. This is signed-out visual staging only. It does not configure App Check, Auth test users, Firestore, Functions, Rules, indexes, Storage data, provider sandboxes, protected short-lived authority, a release marker, tested predecessor rollback, security headers, `production-web`, custom domains, DNS/TLS, or production publication.
+
 ## 3. Dependency map
 
 ```mermaid

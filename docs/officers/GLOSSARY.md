@@ -23,7 +23,7 @@
 | Projection | A minimum server-only copy made for one approved task, such as finding an opted-in display name, without sending the full account record to the browser. |
 | Facial recognition | Automated processing that tries to identify or match a person from an image. The MPRC People finder does not do this and cannot accept a photo as a search. |
 | Firebase | The service used for login, database records, and backend Functions. |
-| Firebase Hosting | Google's static website host. MPRC has source configuration for a future site, but no verified staging or production Firebase Hosting release yet. |
+| Firebase Hosting | Google's static website host. MPRC has a verified engineering staging release, but no officer-controlled or production Firebase Hosting release yet. |
 | Firestore | The database inside Firebase. Saving an Admin form can change its records immediately. |
 | Function | A protected backend action, such as checking access or handling a payment event. |
 | Netlify | The service currently answering requests for `runmprc.com`. |
@@ -34,7 +34,7 @@
 | Service account | A non-human account used by automation. Its key is a secret and must have limited access. |
 | Two-factor authentication (2FA) | A second sign-in check, preferably a passkey, authenticator, or hardware key rather than a text message. |
 | Least privilege | Giving a person or service only the access needed for its job. |
-| Staging | A separate safe environment used to test before production. MPRC does not yet have a proven isolated staging environment. |
+| Staging | A separate environment used to test before production. MPRC has isolated static website staging, but its login, database, Functions, and outside-provider test environment are not proven yet. |
 | Index | A database helper that makes an approved query work. It is not the website home page. |
 | Test mode | A safe provider mode that uses fake payments and test data. |
 | Rollback or revert | A reviewed change that restores the last known-good version. |
