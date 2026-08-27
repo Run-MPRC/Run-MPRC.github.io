@@ -516,11 +516,11 @@ Text alternative: exact reviewed source and a narrow club-account Auth operation
 5. Confirm anonymous, phone, native federated, OIDC, and SAML providers are absent; multi-tenancy and blocking triggers are absent; and MFA is disabled.
 6. Confirm the instrumentless Identity Platform subtype has billing disabled. Treat its no-cost daily limit as a ceiling, not approval to attach billing or add enterprise providers.
 7. Confirm disposable API signup/sign-in, anonymous denial, generic invalid-credential behavior, and browser sign-in/sign-out passed without requesting email or SMS.
-8. Confirm the final Auth user count and Firestore root collection count are both zero, and Hosting remains version `3ffadcf2ac8cc760`.
-9. Confirm Functions, App Check, outside providers, production Firebase, production data, DNS, Netlify, and `runmprc.com` are recorded separately as unchanged or unavailable.
+8. Confirm the #671 evidence ended with zero Auth users, zero Firestore root collections, and then-current Hosting version `3ffadcf2ac8cc760`. Do not mistake that historical Hosting version for the later #676 release.
+9. Confirm Functions, App Check, outside providers, production Firebase, production data, DNS, Netlify, and `runmprc.com` were recorded separately as unchanged or unavailable at the #671 checkpoint. Then use the [current App Check review](#review-staging-app-check-enforcement--available-after-676) for the later enforcement state.
 10. Record the issue, pull requests, exact commits, check date, approver, and any mismatch. Do not paste a token, account record, console response, or private screenshot.
 
-**Expected result:** a backup officer can confirm narrow staging Auth works for disposable engineering checks and can distinguish it from a usable member backend. Functions, App Check, roles, profiles, real identities, provider integrations, and production remain unavailable.
+**Expected result:** a backup officer can confirm the narrow #671 staging Auth proof and distinguish it from the current environment and a usable member backend. #676 now separately verifies App Check for Auth plus Firestore; Functions, roles, profiles, real identities, provider integrations, and production remain unavailable.
 
 **Stop conditions:** stop if a provider, domain, project, account, commit, billing state, user count, record count, Hosting version, or remaining-gap statement differs; if evidence relies only on source or CI; or if anyone asks an officer to sign in, create a user, run a command, handle a credential, or inspect an account.
 
