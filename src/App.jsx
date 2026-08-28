@@ -1,4 +1,6 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import {
+  BrowserRouter, Navigate, Route, Routes,
+} from 'react-router-dom';
 import React, { lazy, Suspense } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import Home from './pages/home/Home';
@@ -9,7 +11,6 @@ import Committee from './pages/officers/Committee';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
-import Activities from './pages/activities/Activities';
 import ServiceLocatorProvider from './services/ServiceLocatorProvider';
 import LoginForm from './pages/login/LoginForm';
 import Events from './pages/events/Events';
@@ -66,7 +67,7 @@ function App() {
                 <Route path="admin/products/:slug/edit" element={<Suspense fallback={AdminFallback}><AdminProductEditor /></Suspense>} />
                 <Route path="admin/orders" element={<Suspense fallback={AdminFallback}><AdminOrders /></Suspense>} />
                 <Route path="about" element={<About />} />
-                <Route path="activities" element={<Activities />} />
+                <Route path="activities" element={<Navigate to="/events" replace />} />
                 <Route path="events" element={<Events />} />
                 <Route path="events/calendar" element={<EventCalendar />} />
                 <Route path="events/:slug" element={<EventDetail />} />

@@ -13,6 +13,9 @@ let _initialized = false;
 
 export function initSentry(): void {
   if (_initialized) return;
+  // Local/test sessions can contain synthetic secrets and must not make
+  // non-emulated monitoring calls, even if a developer has a DSN in `.env`.
+  if (process.env.NODE_ENV !== 'production') return;
   const dsn = process.env.REACT_APP_SENTRY_DSN;
   if (!dsn) return;
   const environment = process.env.REACT_APP_SENTRY_ENV

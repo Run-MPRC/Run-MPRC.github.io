@@ -3,12 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Redirecting...</title>
-  <script>
-    // GitHub Pages SPA redirect: store the path and redirect to root
-    // where React Router picks up the route
-    sessionStorage.setItem('redirect', window.location.pathname);
-    window.location.replace('/');
-  </script>
+  <script src="/spa-navigation.js" data-mprc-spa-action="capture"></script>
 </head>
 <body></body>
 </html>

@@ -44,7 +44,7 @@ function Connected({
       </div>
 
       {loading && <p className="text-sm text-gray-600 mt-3">Loading recent activity...</p>}
-      {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-700 mt-3">{error}</p>}
 
       {stats?.yearToDate && (
         <div className="grid grid-cols-2 gap-3 mt-3">
@@ -143,7 +143,10 @@ function StravaSection({ uid }: { uid: string }) {
     setLoadingStats(true);
     stravaFetchStats(services.firebaseResources.app)
       .then((s) => { setStats(s); setLoadingStats(false); })
-      .catch((err) => { setError(err?.message || 'Failed to load Strava stats'); setLoadingStats(false); });
+      .catch(() => {
+        setError('Recent Strava activity is unavailable right now.');
+        setLoadingStats(false);
+      });
   }, [services, conn]);
 
   function handleConnect() {
@@ -166,8 +169,8 @@ function StravaSection({ uid }: { uid: string }) {
       await stravaDisconnect(services.firebaseResources.app);
       setConn(null);
       setStats(null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to disconnect');
+    } catch {
+      setError('Strava could not be disconnected. Please try again.');
     } finally {
       setDisconnecting(false);
     }

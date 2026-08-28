@@ -1,5 +1,7 @@
 # Proposal: Newsletter & Member Login Features
 
+> **Historical proposal—do not use as current-state or security guidance:** deployment claims, effort estimates, role assumptions, and “no additional security concerns” language below predate the current platform assessment. Use the repository-root system design, security plan, issue backlog, and operations runbook. Do not execute or implement this proposal without a current scoped issue and privacy/security review.
+
 ## Executive Summary
 
 This document outlines options for implementing newsletter subscriptions and enhancing the existing member login system. The good news: **significant infrastructure already exists** in the codebase.

@@ -115,11 +115,14 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
   const { services } = useServiceLocator();
   const [profile, setProfile] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState(false);
+  const [profileRetry, setProfileRetry] = useState(0);
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [regsData, setRegsData] = useState<MyRegistrationsResponse | null>(null);
   const [regsLoading, setRegsLoading] = useState(true);
@@ -127,27 +130,41 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
 
   useEffect(() => {
     if (!services) return;
+    setLoading(true);
+    setProfileError(false);
     getMyProfile(services.firebaseResources.firestore, user.uid)
       .then((p) => {
+        if (!p) {
+          setProfileError(true);
+          setLoading(false);
+          return;
+        }
         setProfile(p);
         setFullName(p?.fullName || '');
         setPhoneNumber(p?.phoneNumber || '');
         setLoading(false);
       })
-      .catch(() => setLoading(false));
-  }, [services, user.uid]);
+      .catch(() => {
+        setProfileError(true);
+        setLoading(false);
+      });
+  }, [services, user.uid, profileRetry]);
 
   useEffect(() => {
     if (!services) return;
     listMyRegistrations(services.firebaseResources.app)
       .then((r) => { setRegsData(r); setRegsLoading(false); })
-      .catch((err) => { setRegsError(err.message); setRegsLoading(false); });
+      .catch(() => {
+        setRegsError('We could not load your registrations. Try again later.');
+        setRegsLoading(false);
+      });
   }, [services]);
 
   async function handleSave() {
     if (!services) return;
     setSaving(true);
     setSaveError(null);
+    setSaveSuccess(false);
     try {
       await updateMyProfile(
         services.firebaseResources.firestore,
@@ -157,8 +174,9 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
       const fresh = await getMyProfile(services.firebaseResources.firestore, user.uid);
       setProfile(fresh);
       setEditing(false);
-    } catch (err: any) {
-      setSaveError(err?.message || 'Save failed');
+      setSaveSuccess(true);
+    } catch {
+      setSaveError('Your changes could not be saved. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -180,13 +198,24 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
     return ms > Date.now();
   }) || [];
   const past = regsData?.registrations.filter((r) => !upcoming.includes(r)) || [];
+  const trimmedName = fullName.trim();
+  const trimmedPhone = phoneNumber.trim();
+  const profileChanged = profile != null
+    && (trimmedName !== (profile.fullName || '')
+      || trimmedPhone !== (profile.phoneNumber || ''));
+  const formValid = trimmedName.length <= 200 && trimmedPhone.length <= 40;
 
   return (
     <>
       <SEO title="My Account" noindex />
-      <div className="container mx-auto p-4 max-w-3xl">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Account</h1>
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="flex justify-between items-start gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">My Account</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Manage your contact details, registrations, and connected services.
+            </p>
+          </div>
           <button
             type="button"
             onClick={handleSignOut}
@@ -196,19 +225,39 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
           </button>
         </div>
 
-        <section className="border rounded-lg p-4 mt-4 bg-gray-50">
+        <section className="border border-gray-200 rounded-xl p-5 mt-6 bg-white shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-lg font-semibold">Profile</h2>
-            {!editing && (
+            {!editing && profile && (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="text-sm text-blue-600 hover:underline"
+                className="text-sm font-semibold text-blue-700 hover:underline"
               >
                 Edit
               </button>
             )}
           </div>
+          {profileError && (
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+              <p className="font-semibold text-amber-900">Account details are unavailable</p>
+              <p className="mt-1 text-sm text-amber-800">
+                We could not securely load your profile. Your account is still signed in.
+              </p>
+              <button
+                type="button"
+                onClick={() => setProfileRetry((value) => value + 1)}
+                className="mt-3 rounded border border-amber-700 px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {saveSuccess && !editing && (
+            <p role="status" className="mb-3 rounded bg-green-50 px-3 py-2 text-sm text-green-800">
+              Profile updated.
+            </p>
+          )}
           {!editing && profile && (
             <dl className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm">
               <div>
@@ -241,34 +290,49 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
             </dl>
           )}
           {editing && (
-            <div className="space-y-3">
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSave();
+              }}
+            >
               <label className="block">
                 <span className="text-sm font-medium">Full name</span>
                 <input
                   type="text"
-                  className="border rounded px-3 py-2 w-full"
+                  maxLength={200}
+                  autoComplete="name"
+                  className="mt-1 border rounded-lg px-3 py-2.5 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                 />
+                <span className="mt-1 block text-xs text-gray-500">
+                  The name other club members and event organizers should use.
+                </span>
               </label>
               <label className="block">
-                <span className="text-sm font-medium">Phone</span>
+                <span className="text-sm font-medium">Phone number</span>
                 <input
                   type="tel"
-                  className="border rounded px-3 py-2 w-full"
+                  maxLength={40}
+                  autoComplete="tel"
+                  className="mt-1 border rounded-lg px-3 py-2.5 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                 />
+                <span className="mt-1 block text-xs text-gray-500">
+                  Optional. Used only for club-related communication.
+                </span>
               </label>
-              {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+              {saveError && <p role="alert" className="text-sm text-red-700">{saveError}</p>}
               <div className="flex gap-2">
                 <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving}
+                  type="submit"
+                  disabled={saving || !profileChanged || !formValid}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded"
                 >
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Saving...' : 'Save changes'}
                 </button>
                 <button
                   type="button"
@@ -277,13 +341,14 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
                     setFullName(profile?.fullName || '');
                     setPhoneNumber(profile?.phoneNumber || '');
                     setSaveError(null);
+                    setSaveSuccess(false);
                   }}
                   className="border px-4 py-2 rounded hover:bg-gray-100"
                 >
                   Cancel
                 </button>
               </div>
-            </div>
+            </form>
           )}
           {profile && !profile.emailVerified && (
             <div className="mt-3 p-3 bg-amber-100 border border-amber-300 rounded text-sm flex justify-between items-center gap-2">
@@ -302,7 +367,11 @@ function AccountContent({ user }: { user: NonNullable<ReturnType<typeof useAuth>
         <section className="mt-6">
           <h2 className="text-lg font-semibold mb-3">Upcoming events</h2>
           {regsLoading && <p className="text-gray-500 text-sm">Loading...</p>}
-          {regsError && <p className="text-red-500 text-sm">{regsError}</p>}
+          {regsError && (
+            <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 text-sm">
+              {regsError}
+            </p>
+          )}
           {!regsLoading && upcoming.length === 0 && (
             <p className="text-gray-500 text-sm">
               You haven&apos;t registered for any upcoming events.

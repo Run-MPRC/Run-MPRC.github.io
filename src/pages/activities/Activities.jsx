@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import './activities.css';
 import { Link } from 'react-router-dom';
 import SEO from '../../components/SEO';
@@ -51,14 +52,14 @@ const videoTitles = [
   'Club Activities and Social Events',
 ];
 
-function Activities() {
+function Activities({ embedded = false }) {
   const year = new Date().getFullYear();
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     name: 'MPRC Activities and Events',
     description: 'Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners.',
-    url: 'https://runmprc.com/activities',
+    url: 'https://runmprc.com/events',
     mainEntity: {
       '@type': 'Organization',
       name: 'Mid-Peninsula Running Club',
@@ -132,15 +133,17 @@ function Activities() {
 
   return (
     <>
-      <SEO
-        title="Running Club Activities and Events"
-        description="Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners."
-        keywords="running club activities, Bay Trail running, Saturday running group, running club social events, Bay Area running events, MPRC activities, running club brunch, monthly running social"
-        url="https://runmprc.com/activities"
-        canonicalUrl="https://runmprc.com/activities"
-        structuredData={structuredData}
-      />
-      <Header title="Activities" image={HeaderImage} />
+      {!embedded && (
+        <SEO
+          title="Running Club Activities and Events"
+          description="Discover Mid-Peninsula Running Club activities: Saturday morning runs on the Bay Trail, social brunches, monthly gatherings, picnics, and special events for Bay Area runners."
+          keywords="running club activities, Bay Trail running, Saturday running group, running club social events, Bay Area running events, MPRC activities, running club brunch, monthly running social"
+          url="https://runmprc.com/events"
+          canonicalUrl="https://runmprc.com/events"
+          structuredData={structuredData}
+        />
+      )}
+      {!embedded && <Header title="Activities" image={HeaderImage} />}
       <FlexColumnContainer className="activities-content">
         <div className="first:mt-8">
           <Subheader title="Saturday Morning Runs" />
@@ -196,5 +199,9 @@ function Activities() {
     </>
   );
 }
+
+Activities.propTypes = {
+  embedded: PropTypes.bool,
+};
 
 export default Activities;

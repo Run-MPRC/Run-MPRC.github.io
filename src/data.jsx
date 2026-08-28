@@ -10,11 +10,6 @@ export const links = [
     id: 'joinus',
   },
   {
-    name: 'Activities',
-    path: '/activities',
-    id: 'activities',
-  },
-  {
     name: 'Events',
     path: '/events',
     id: 'events',

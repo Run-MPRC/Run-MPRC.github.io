@@ -122,7 +122,7 @@ async function countActiveRegistrations(eventId) {
   const snap = await admin.firestore()
     .collection('events').doc(eventId)
     .collection('registrations')
-    .where('status', 'in', ['paid', 'pending', 'comp'])
+    .where('status', 'in', ['paid', 'pending', 'comp', 'partially_refunded'])
     .get();
   let count = 0;
   snap.forEach((d) => {

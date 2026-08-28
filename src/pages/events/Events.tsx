@@ -10,6 +10,7 @@ import {
 } from '../../services/events/eventsService';
 import { Event } from '../../types/events';
 import { useAuth } from '../../services/hooks/useAuth';
+import Activities from '../activities/Activities';
 
 const SEO_CONFIG = {
   title: 'Running Club Events Calendar',
@@ -89,7 +90,7 @@ function Events() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { services, isReady } = useServiceLocator();
-  const { isMember } = useAuth();
+  const { isAuthenticated, isMember, isAdmin } = useAuth();
 
   useEffect(() => {
     if (!isReady || !services) return undefined;
@@ -113,12 +114,33 @@ function Events() {
         canonicalUrl={SEO_CONFIG.url}
         structuredData={structuredData}
       />
+      {!isAuthenticated && (
+        <section aria-labelledby="club-experience-heading">
+          <div className="container mx-auto px-4 pt-8 max-w-3xl text-center">
+            <h1 id="club-experience-heading" className="text-3xl font-bold">
+              Run and connect with MPRC
+            </h1>
+            <p className="mt-3 text-gray-700">
+              New here? See what our weekly runs and club community are like, then check
+              the current schedule below.
+            </p>
+          </div>
+          <Activities embedded />
+        </section>
+      )}
       <div className="container mx-auto p-4 max-w-3xl">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Upcoming Events</h2>
+          <h2 className="text-2xl font-bold">
+            {isMember ? 'Your upcoming events' : 'Current and upcoming events'}
+          </h2>
           <Link to="/events/calendar" className="text-sm text-blue-600 hover:underline">
             Calendar view →
           </Link>
+          {isAdmin && (
+            <Link to="/admin/events" className="text-sm text-blue-600 hover:underline">
+              Manage events →
+            </Link>
+          )}
         </div>
         {loading && <p className="text-gray-500">Loading events...</p>}
         {error && <p className="text-red-500">Error: {error}</p>}

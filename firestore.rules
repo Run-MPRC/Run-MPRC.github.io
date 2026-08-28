@@ -3,32 +3,131 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------------------------------------------------------
-    // Admin has full access to everything via this catch-all rule.
-    // Specific allow rules below EXTEND access for other roles;
-    // they do not restrict admin access (Firestore rules are additive).
-    // ---------------------------------------------------------------
-    match /{document=**} {
-      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == 'admin';
+    }
+
+    function hasOnlyEventCreateFields(data) {
+      return data.keys().hasOnly([
+        'slug',
+        'title',
+        'description',
+        'startAt',
+        'endAt',
+        'location',
+        'locationDetails',
+        'capacity',
+        'registeredCount',
+        'status',
+        'visibility',
+        'pricing',
+        'stripePriceIds',
+        'waiverText',
+        'waiverVersion',
+        'customFields',
+        'volunteerEnabled',
+        'volunteerFields',
+        'resultsUrl',
+        'resultsText',
+        'resultsPublishedAt',
+        'registrationOpensAt',
+        'registrationClosesAt',
+        'heroImageUrl',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function hasOnlyEventUpdateFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'title',
+        'description',
+        'startAt',
+        'endAt',
+        'location',
+        'locationDetails',
+        'capacity',
+        'status',
+        'visibility',
+        'pricing',
+        'waiverText',
+        'waiverVersion',
+        'customFields',
+        'volunteerEnabled',
+        'volunteerFields',
+        'resultsUrl',
+        'resultsText',
+        'resultsPublishedAt',
+        'registrationOpensAt',
+        'registrationClosesAt',
+        'heroImageUrl',
+        'updatedAt'
+      ]);
+    }
+
+    function hasValidEventPricingShape(pricing) {
+      return pricing is map
+        && pricing.keys().hasAll(['memberCents', 'nonMemberCents'])
+        && pricing.keys().hasOnly([
+          'memberCents',
+          'nonMemberCents',
+          'earlyBirdCents',
+          'earlyBirdUntil'
+        ]);
+    }
+
+    function hasOnlyProductCreateFields(data) {
+      return data.keys().hasOnly([
+        'slug',
+        'title',
+        'description',
+        'priceCents',
+        'imageUrl',
+        'sizes',
+        'colors',
+        'status',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function hasOnlyProductUpdateFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'title',
+        'description',
+        'priceCents',
+        'imageUrl',
+        'sizes',
+        'colors',
+        'status',
+        'updatedAt'
+      ]);
     }
 
     // Members-only legacy collection
     match /members_only/{document} {
-      allow read: if request.auth != null && request.auth.token.role == 'member';
+      allow read: if request.auth != null
+        && (request.auth.token.role == 'member' || isAdmin());
     }
 
     // A signed-in user can read and update their own member doc.
     // Member docs are CREATED only by the onSignUp Cloud Function (Admin SDK);
     // there is intentionally no client `create` rule.
     match /members/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      // Admin screens may enumerate profiles, but role and profile creation
+      // remain server-managed. In particular, an admin claim in a browser is
+      // not authority to change another user's role mirror.
+      allow read: if request.auth != null
+        && (request.auth.uid == uid || isAdmin());
 
       // Self-service edits are restricted to an explicit field allowlist.
       // An allowlist (rather than pinning each protected field individually)
       // blocks BOTH tampering with managed fields — role, email, createdAt,
       // emailVerified, provider — AND injection of arbitrary new fields (e.g.
       // a planted `isAdmin` flag or a multi-MB blob). Managed fields are set
-      // only by Cloud Functions (Admin SDK) or by admins via the catch-all.
+      // only by Cloud Functions (Admin SDK).
       allow update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -63,36 +162,61 @@ service cloud.firestore {
     //   - status:     'draft' | 'open' | 'closed' | 'cancelled'
     //   - member_only: legacy boolean (pre-stripe schema)
     //
-    // Writes flow only through admin (catch-all) or Cloud Functions
-    // (Admin SDK bypasses rules). No direct client writes.
+    // The current admin editor reads and writes event catalog/configuration
+    // documents directly. Registration and payment lifecycle data remains a
+    // separate server-owned boundary below.
     // ---------------------------------------------------------------
     match /events/{eventId} {
+      allow read: if isAdmin();
+
+      // The editor initializes server-owned fields only to inert values. Any
+      // Stripe reference, payment/audit field, non-zero counter, or unknown
+      // field must be created by trusted server code instead.
+      allow create: if isAdmin()
+        && hasOnlyEventCreateFields(request.resource.data)
+        && request.resource.data.slug == eventId
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.registeredCount == 0
+        && request.resource.data.stripePriceIds is map
+        && request.resource.data.stripePriceIds.keys().hasOnly([])
+        && hasValidEventPricingShape(request.resource.data.pricing);
+
+      // Updates are limited to fields emitted by updateEvent. In particular,
+      // slug/ownership, Stripe references, registration counters, capacity
+      // counters, payment state, inventory, and audit data are immutable from
+      // a browser, even with an admin claim. Delete is intentionally absent.
+      allow update: if isAdmin()
+        && hasOnlyEventUpdateFields()
+        && hasValidEventPricingShape(request.resource.data.pricing);
+
       // Public read: new-schema event with public visibility and not draft
       allow read: if resource.data.visibility == 'public'
         && resource.data.status != 'draft';
 
       // Public read: legacy event (no visibility field) not flagged member_only
       allow read: if !('visibility' in resource.data)
-        && resource.data.member_only != true;
+        && resource.data.member_only != true
+        && (!('status' in resource.data) || resource.data.status != 'draft');
 
       // Authenticated member/admin read: members-only events
       allow read: if request.auth != null
         && (request.auth.token.role == 'member' || request.auth.token.role == 'admin')
         && (resource.data.visibility == 'members_only' || resource.data.member_only == true);
 
-      // Registrations subcollection — clients CANNOT read or write directly.
-      // Creation, updates, refunds, and substitutions all go through
-      // Cloud Functions which use the Admin SDK. Admins still get access
-      // via the top-level catch-all rule.
+      // Registrations subcollection — browser admins may read rosters for the
+      // current admin UI, but no client may write lifecycle or financial
+      // fields directly. Creation, updates, refunds, and substitutions all go
+      // through Cloud Functions which use the Admin SDK.
       match /registrations/{regId} {
-        allow read, write: if false;
+        allow read: if isAdmin();
+        allow write: if false;
       }
     }
 
     // ---------------------------------------------------------------
-    // Promo codes — admin-only via catch-all. Clients may not read,
-    // even to validate: validation happens in the Cloud Function
-    // that creates the Stripe Checkout Session.
+    // Promo codes — server-only. Clients may not read or mutate discount
+    // authority; validation happens in the Cloud Function that creates the
+    // Stripe Checkout Session.
     // ---------------------------------------------------------------
     match /promoCodes/{codeId} {
       allow read, write: if false;
@@ -107,17 +231,55 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
-    // Shop products — publicly readable when active or sold_out.
-    // Drafts and archived are hidden from clients. Writes via admin.
+    // Shop products — publicly readable when active or sold_out. The current
+    // admin editor may manage product catalog documents directly. Drafts and
+    // archived products remain hidden from other clients.
     // ---------------------------------------------------------------
     match /products/{productId} {
+      allow read: if isAdmin();
+
+      allow create: if isAdmin()
+        && hasOnlyProductCreateFields(request.resource.data)
+        && request.resource.data.slug == productId
+        && request.resource.data.createdBy == request.auth.uid;
+
+      // Stripe references, variant inventory/counters, payment fields, and
+      // audit data are not editor fields. Delete is intentionally absent.
+      allow update: if isAdmin() && hasOnlyProductUpdateFields();
+
       allow read: if resource.data.status == 'active'
         || resource.data.status == 'sold_out';
     }
 
-    // Orders — client-inaccessible. All reads/writes via Cloud Functions.
-    // Admin gets access via the top-level catch-all.
+    // Orders contain financial state and PII. Browser admins may read them for
+    // the current admin UI; every mutation goes through Cloud Functions.
     match /orders/{orderId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // Server-owned operational boundaries. Explicit deny rules document the
+    // known sensitive collections; unmatched/future collections are denied by
+    // default because there is intentionally no recursive admin catch-all.
+    // ---------------------------------------------------------------
+    match /mail/{messageId} {
+      allow read, write: if false;
+    }
+
+    match /stripeEvents/{stripeEventId} {
+      allow read, write: if false;
+    }
+
+    match /checkoutRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /auditEvents/{auditEventId} {
+      allow read, write: if false;
+    }
+
+    match /retentionJobs/{jobId} {
       allow read, write: if false;
     }
   }

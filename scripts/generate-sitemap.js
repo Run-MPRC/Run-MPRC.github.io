@@ -25,7 +25,6 @@ const OUTPUT = path.join(__dirname, '..', 'public', 'sitemap.xml');
 const STATIC_PAGES = [
   { loc: '/', priority: '1.0', changefreq: 'weekly' },
   { loc: '/about', priority: '0.8', changefreq: 'monthly' },
-  { loc: '/activities', priority: '0.8', changefreq: 'monthly' },
   { loc: '/events', priority: '0.9', changefreq: 'daily' },
   { loc: '/committee', priority: '0.7', changefreq: 'monthly' },
   { loc: '/joinus', priority: '0.8', changefreq: 'monthly' },
