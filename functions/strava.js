@@ -18,6 +18,8 @@ const STRAVA_OAUTH_STATE_LIFETIME_SECONDS = 600;
 const STRAVA_OAUTH_STATE_SCHEMA_VERSION = 1;
 const STRAVA_TOKEN_MAX_LENGTH = 2_048;
 const STRAVA_TOKEN_RESPONSE_MAX_BYTES = 65_536;
+const STRAVA_ACTIVITIES_RESPONSE_MAX_BYTES = 1_048_576;
+const STRAVA_STATS_RESPONSE_MAX_BYTES = 65_536;
 const STRAVA_RESPONSE_MAX_CHUNKS = 4_096;
 const STRAVA_SCOPE_MAX_LENGTH = 1_024;
 const STRAVA_PROFILE_TEXT_MAX_LENGTH = 1_024;
@@ -314,6 +316,17 @@ function nativeResponseParts(response) {
   } catch (_error) {
     return null;
   }
+}
+
+function cancelUnreadConfirmedStravaResponse(response) {
+  if (
+    !isExactNativeValue(response, NATIVE_RESPONSE_PROTOTYPE)
+    || !isConfirmedStravaHttpSuccess(response)
+  ) {
+    return;
+  }
+  const parts = nativeResponseParts(response);
+  if (parts) cancelNativeStream(parts.body);
 }
 
 function declaredContentLength(headers, maximumBytes) {
@@ -1297,25 +1310,38 @@ exports.stravaFetchStats = functions
       throw stravaDataError('unavailable');
     }
 
-    if (!isConfirmedStravaHttpSuccess(activitiesResp)) {
-      throw stravaDataError('internal');
-    }
-    let rawActivities;
+    let recentActivities;
+    let activitiesReady = false;
     try {
-      rawActivities = await activitiesResp.json();
-    } catch (_error) {
-      throw stravaDataError('unavailable');
-    }
-    const recentActivities = snapshotProviderActivities(rawActivities);
-    if (!recentActivities) {
-      throw stravaDataError('internal');
+      if (!isConfirmedStravaHttpSuccess(activitiesResp)) {
+        throw stravaDataError('internal');
+      }
+      let rawActivities;
+      try {
+        rawActivities = await readBoundedStravaJson(
+          activitiesResp,
+          STRAVA_ACTIVITIES_RESPONSE_MAX_BYTES,
+        );
+      } catch (_error) {
+        throw stravaDataError('unavailable');
+      }
+      recentActivities = snapshotProviderActivities(rawActivities);
+      if (!recentActivities) {
+        throw stravaDataError('internal');
+      }
+      activitiesReady = true;
+    } finally {
+      if (!activitiesReady) cancelUnreadConfirmedStravaResponse(statsResp);
     }
 
     let projectedStats = null;
     if (isConfirmedStravaHttpSuccess(statsResp)) {
       let rawStats;
       try {
-        rawStats = await statsResp.json();
+        rawStats = await readBoundedStravaJson(
+          statsResp,
+          STRAVA_STATS_RESPONSE_MAX_BYTES,
+        );
       } catch (_error) {
         throw stravaDataError('unavailable');
       }
@@ -1433,6 +1459,10 @@ exports.stravaDisconnect = functions
 exports.__testOnlyStravaProviderBoundaries = objectFreeze({
   readBoundedStravaJson,
   snapshotAuthorizationExchangeResponse,
+  snapshotProviderActivities,
+  snapshotProviderStats,
   snapshotRefreshTokenResponse,
+  activitiesResponseMaxBytes: STRAVA_ACTIVITIES_RESPONSE_MAX_BYTES,
+  statsResponseMaxBytes: STRAVA_STATS_RESPONSE_MAX_BYTES,
   tokenResponseMaxBytes: STRAVA_TOKEN_RESPONSE_MAX_BYTES,
 });

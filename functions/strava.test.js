@@ -441,9 +441,13 @@ const {
   stravaFetchStats,
 } = require('./strava');
 const {
+  activitiesResponseMaxBytes,
   readBoundedStravaJson,
   snapshotAuthorizationExchangeResponse,
+  snapshotProviderActivities,
+  snapshotProviderStats,
   snapshotRefreshTokenResponse,
+  statsResponseMaxBytes,
   tokenResponseMaxBytes,
 } = __testOnlyStravaProviderBoundaries;
 
@@ -535,9 +539,15 @@ function nativeChunkedResponse(chunks, {
   };
 }
 
-function nativeJsonResponse(value, { headers, onBodyRead, status = 200 } = {}) {
+function nativeJsonResponse(value, {
+  cancel,
+  headers,
+  onBodyRead,
+  status = 200,
+} = {}) {
   const bytes = Buffer.from(JSON.stringify(value), 'utf8');
   const native = nativeChunkedResponse([bytes], {
+    cancel,
     headers,
     onChunk: onBodyRead,
     status,
@@ -3196,36 +3206,28 @@ describe('Strava token refresh failure boundary', () => {
 
   function mockValidRefreshFlow(response = validRefreshResponse()) {
     const refreshJson = mockRefreshResponse(response);
+    const activitiesNative = nativeJsonResponse([]);
+    const statsNative = nativeJsonResponse({
+      ytd_run_totals: { distance: 0, count: 0 },
+      ytd_ride_totals: { distance: 0, count: 0 },
+      all_run_totals: { distance: 0, count: 0 },
+    });
     fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue([]),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue({
-          ytd_run_totals: { distance: 0, count: 0 },
-          ytd_ride_totals: { distance: 0, count: 0 },
-          all_run_totals: { distance: 0, count: 0 },
-        }),
-      });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
     return refreshJson;
   }
 
   function mockValidStatsFlow() {
+    const activitiesNative = nativeJsonResponse([]);
+    const statsNative = nativeJsonResponse({
+      ytd_run_totals: { distance: 0, count: 0 },
+      ytd_ride_totals: { distance: 0, count: 0 },
+      all_run_totals: { distance: 0, count: 0 },
+    });
     fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue([]),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue({
-          ytd_run_totals: { distance: 0, count: 0 },
-          ytd_ride_totals: { distance: 0, count: 0 },
-          all_run_totals: { distance: 0, count: 0 },
-        }),
-      });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
   }
 
   async function expectInvalidSuccessfulRefresh(response) {
@@ -3709,20 +3711,16 @@ describe('Strava token refresh failure boundary', () => {
       const native = nativeJsonResponse(validRefreshResponse(), {
         onBodyRead: () => admin.__setDocument(SECRET_PATH, newerSecret),
       });
+      const activitiesNative = nativeJsonResponse([]);
+      const statsNative = nativeJsonResponse({
+        ytd_run_totals: { distance: 0, count: 0 },
+        ytd_ride_totals: { distance: 0, count: 0 },
+        all_run_totals: { distance: 0, count: 0 },
+      });
       fetchMock
         .mockResolvedValueOnce(native.response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: jest.fn().mockResolvedValue([]),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: jest.fn().mockResolvedValue({
-            ytd_run_totals: { distance: 0, count: 0 },
-            ytd_ride_totals: { distance: 0, count: 0 },
-            all_run_totals: { distance: 0, count: 0 },
-          }),
-        });
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
@@ -5043,27 +5041,23 @@ describe('Strava token refresh failure boundary', () => {
       refresh_token: 'refreshed_refresh_token_test',
       expires_at: 1_900_000_000,
     });
+    const activitiesNative = nativeJsonResponse([{
+      id: 987654,
+      name: 'Synthetic Morning Run',
+      sport_type: 'Run',
+      distance: 5000,
+      moving_time: 1500,
+      start_date: '2026-01-02T12:00:00Z',
+    }]);
+    const statsNative = nativeJsonResponse({
+      ytd_run_totals: { distance: 12000, count: 3 },
+      ytd_ride_totals: { distance: 20000, count: 2 },
+      all_run_totals: { distance: 345000, count: 84 },
+    });
     fetchMock
       .mockResolvedValueOnce(nativeRefresh.response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue([{
-          id: 987654,
-          name: 'Synthetic Morning Run',
-          sport_type: 'Run',
-          distance: 5000,
-          moving_time: 1500,
-          start_date: '2026-01-02T12:00:00Z',
-        }]),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue({
-          ytd_run_totals: { distance: 12000, count: 3 },
-          ytd_ride_totals: { distance: 20000, count: 2 },
-          all_run_totals: { distance: 345000, count: 84 },
-        }),
-      });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
 
     const result = await stravaFetchStats({}, CONTEXT);
 
@@ -5197,8 +5191,8 @@ describe('Strava activity data failure boundary', () => {
   }
 
   function mockSuccessfulActivityData(onActivitiesRequest) {
-    const activitiesJson = jest.fn().mockResolvedValue([]);
-    const statsJson = jest.fn().mockResolvedValue({
+    const activitiesNative = nativeJsonResponse([]);
+    const statsNative = nativeJsonResponse({
       ytd_run_totals: { distance: 0, count: 0 },
       ytd_ride_totals: { distance: 0, count: 0 },
       all_run_totals: { distance: 0, count: 0 },
@@ -5206,10 +5200,10 @@ describe('Strava activity data failure boundary', () => {
     fetchMock
       .mockImplementationOnce(async () => {
         if (onActivitiesRequest) onActivitiesRequest();
-        return { ok: true, json: activitiesJson };
+        return activitiesNative.response;
       })
-      .mockResolvedValueOnce({ ok: true, json: statsJson });
-    return { activitiesJson, statsJson };
+      .mockResolvedValueOnce(statsNative.response);
+    return { activitiesNative, statsNative };
   }
 
   function validProviderActivity(overrides = {}) {
@@ -5240,12 +5234,12 @@ describe('Strava activity data failure boundary', () => {
     const stats = Object.prototype.hasOwnProperty.call(options, 'stats')
       ? options.stats
       : validProviderStats();
-    const activitiesJson = jest.fn(() => activities);
-    const statsJson = jest.fn(() => stats);
+    const activitiesNative = nativeJsonResponse(activities);
+    const statsNative = nativeJsonResponse(stats);
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-      .mockResolvedValueOnce({ ok: true, json: statsJson });
-    return { activitiesJson, statsJson };
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
+    return { activitiesNative, statsNative };
   }
 
   function expectTwoFreshBearerReads(athleteId = 123456) {
@@ -5268,27 +5262,607 @@ describe('Strava activity data failure boundary', () => {
     consoleSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   }
 
+  describe('OAUTH-001A2L bounded activity and statistics native JSON boundary', () => {
+    const APPROVED_ACTIVITIES_RESPONSE_BYTES = 1_048_576;
+    const APPROVED_STATS_RESPONSE_BYTES = 65_536;
+
+    function ownNativeJsonWitness(response) {
+      const nativeText = Response.prototype.text;
+      const realmParse = JSON.parse;
+      const applicationBodyRead = jest.fn(() => Reflect.apply(nativeText, response, []));
+      const json = jest.fn(async () => realmParse(await applicationBodyRead()));
+      Object.defineProperty(response, 'json', {
+        configurable: true,
+        value: json,
+      });
+      return { applicationBodyRead, json };
+    }
+
+    async function settleDataRequest() {
+      try {
+        return { status: 'fulfilled', value: await stravaFetchStats({}, CONTEXT) };
+      } catch (error) {
+        return { status: 'rejected', error: publicError(error) };
+      }
+    }
+
+    function fixedDataFailure(code) {
+      return {
+        status: 'rejected',
+        error: {
+          code,
+          message: FIXED_DATA_ERROR,
+          details: undefined,
+          cause: undefined,
+        },
+      };
+    }
+
+    function expectFreshReadOnlyProviderAttempt() {
+      expectTwoFreshBearerReads();
+      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+      expect(admin.__getDocument(CONNECTION_PATH)).toBe(CONNECTION);
+      expect(admin.__getDocument(SECRET_PATH)).toBe(FRESH_SECRET);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(dateNowSpy).toHaveBeenCalledTimes(1);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+    }
+
+    test('rejects one activity byte over budget and cancels the unread statistics body', async () => {
+      seedFreshConnection();
+      expect(activitiesResponseMaxBytes).toBe(APPROVED_ACTIVITIES_RESPONSE_BYTES);
+      const activityBytes = paddedJsonBytes(
+        [validProviderActivity()],
+        activitiesResponseMaxBytes + 1,
+      );
+      const activityChunks = [
+        activityBytes.subarray(0, activitiesResponseMaxBytes),
+        activityBytes.subarray(activitiesResponseMaxBytes),
+      ];
+      const activitiesNative = nativeChunkedResponse(activityChunks);
+      const statsNative = nativeJsonResponse(validProviderStats());
+      const activitiesMixin = ownNativeJsonWitness(activitiesNative.response);
+      const statsMixin = ownNativeJsonWitness(statsNative.response);
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect({
+        outcome,
+        activityChunks: activitiesNative.chunkRead.mock.calls.map(([chunk, index]) => [
+          chunk.byteLength,
+          index,
+        ]),
+        activityCancelCalls: activitiesNative.cancel.mock.calls.length,
+        statsCancelCalls: statsNative.cancel.mock.calls.length,
+        activityJsonCalls: activitiesMixin.json.mock.calls.length,
+        activityApplicationReadCalls: activitiesMixin.applicationBodyRead.mock.calls.length,
+        statsJsonCalls: statsMixin.json.mock.calls.length,
+        statsApplicationReadCalls: statsMixin.applicationBodyRead.mock.calls.length,
+      }).toEqual({
+        outcome: {
+          status: 'rejected',
+          error: {
+            code: 'unavailable',
+            message: FIXED_DATA_ERROR,
+            details: undefined,
+            cause: undefined,
+          },
+        },
+        activityChunks: [
+          [activitiesResponseMaxBytes, 0],
+          [1, 1],
+        ],
+        activityCancelCalls: 1,
+        statsCancelCalls: 1,
+        activityJsonCalls: 0,
+        activityApplicationReadCalls: 0,
+        statsJsonCalls: 0,
+        statsApplicationReadCalls: 0,
+      });
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test('rejects one statistics byte over budget and cancels its native reader', async () => {
+      seedFreshConnection();
+      expect(statsResponseMaxBytes).toBe(APPROVED_STATS_RESPONSE_BYTES);
+      const activitiesNative = nativeJsonResponse([validProviderActivity()]);
+      const statsBytes = paddedJsonBytes(
+        validProviderStats(),
+        statsResponseMaxBytes + 1,
+      );
+      const statsChunks = [
+        statsBytes.subarray(0, statsResponseMaxBytes),
+        statsBytes.subarray(statsResponseMaxBytes),
+      ];
+      const statsNative = nativeChunkedResponse(statsChunks);
+      const activitiesMixin = ownNativeJsonWitness(activitiesNative.response);
+      const statsMixin = ownNativeJsonWitness(statsNative.response);
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect({
+        outcome,
+        statsChunks: statsNative.chunkRead.mock.calls.map(([chunk, index]) => [
+          chunk.byteLength,
+          index,
+        ]),
+        activityCancelCalls: activitiesNative.cancel.mock.calls.length,
+        statsCancelCalls: statsNative.cancel.mock.calls.length,
+        activityJsonCalls: activitiesMixin.json.mock.calls.length,
+        activityApplicationReadCalls: activitiesMixin.applicationBodyRead.mock.calls.length,
+        statsJsonCalls: statsMixin.json.mock.calls.length,
+        statsApplicationReadCalls: statsMixin.applicationBodyRead.mock.calls.length,
+      }).toEqual({
+        outcome: {
+          status: 'rejected',
+          error: {
+            code: 'unavailable',
+            message: FIXED_DATA_ERROR,
+            details: undefined,
+            cause: undefined,
+          },
+        },
+        statsChunks: [
+          [statsResponseMaxBytes, 0],
+          [1, 1],
+        ],
+        activityCancelCalls: 0,
+        statsCancelCalls: 1,
+        activityJsonCalls: 0,
+        activityApplicationReadCalls: 0,
+        statsJsonCalls: 0,
+        statsApplicationReadCalls: 0,
+      });
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities one byte below', 'activities', activitiesResponseMaxBytes - 1],
+      ['activities exact', 'activities', activitiesResponseMaxBytes],
+      ['statistics one byte below', 'stats', statsResponseMaxBytes - 1],
+      ['statistics exact', 'stats', statsResponseMaxBytes],
+    ])('accepts a valid %s application ceiling body', async (_case, surface, byteLength) => {
+      seedFreshConnection();
+      const activitiesNative = surface === 'activities'
+        ? nativeChunkedResponse([paddedJsonBytes([validProviderActivity()], byteLength)])
+        : nativeJsonResponse([validProviderActivity()]);
+      const statsNative = surface === 'stats'
+        ? nativeChunkedResponse([paddedJsonBytes(validProviderStats(), byteLength)])
+        : nativeJsonResponse(validProviderStats());
+      const activitiesMixin = ownNativeJsonWitness(activitiesNative.response);
+      const statsMixin = ownNativeJsonWitness(statsNative.response);
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.recentActivities).toHaveLength(1);
+      expect(result.yearToDate).toEqual({
+        runMeters: 12000.5,
+        runCount: 3,
+        rideMeters: 20000.25,
+        rideCount: 2,
+      });
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(Object.isFrozen(result.athlete)).toBe(true);
+      expect(Object.isFrozen(result.recentActivities)).toBe(true);
+      expect(Object.isFrozen(result.recentActivities[0])).toBe(true);
+      expect(Object.isFrozen(result.yearToDate)).toBe(true);
+      expect(Object.isFrozen(result.allTime)).toBe(true);
+      expect(activitiesNative.chunkRead).toHaveBeenCalledTimes(1);
+      expect(statsNative.chunkRead).toHaveBeenCalledTimes(1);
+      expect(activitiesNative.cancel).not.toHaveBeenCalled();
+      expect(statsNative.cancel).not.toHaveBeenCalled();
+      expect(activitiesMixin.json).not.toHaveBeenCalled();
+      expect(activitiesMixin.applicationBodyRead).not.toHaveBeenCalled();
+      expect(statsMixin.json).not.toHaveBeenCalled();
+      expect(statsMixin.applicationBodyRead).not.toHaveBeenCalled();
+      expect(activitiesNative.response.headers.get('content-length')).toBeNull();
+      expect(statsNative.response.headers.get('content-length')).toBeNull();
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities', 'activities', activitiesResponseMaxBytes],
+      ['statistics', 'stats', statsResponseMaxBytes],
+    ])('rejects actual %s overflow behind a false-low Content-Length', async (
+      _case,
+      surface,
+      maximumBytes,
+    ) => {
+      seedFreshConnection();
+      const activitiesNative = surface === 'activities'
+        ? nativeChunkedResponse([
+          paddedJsonBytes([validProviderActivity()], maximumBytes + 1),
+        ], { headers: { 'Content-Length': '1' } })
+        : nativeJsonResponse([validProviderActivity()]);
+      const statsNative = surface === 'stats'
+        ? nativeChunkedResponse([
+          paddedJsonBytes(validProviderStats(), maximumBytes + 1),
+        ], { headers: { 'Content-Length': '1' } })
+        : nativeJsonResponse(validProviderStats());
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect(outcome).toEqual(fixedDataFailure('unavailable'));
+      if (surface === 'activities') {
+        expect(activitiesNative.cancel).toHaveBeenCalledTimes(1);
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      } else {
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      }
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities truthful', 'activities', 'truthful'],
+      ['activities false-low', 'activities', 'false-low'],
+      ['statistics truthful', 'stats', 'truthful'],
+      ['statistics false-low', 'stats', 'false-low'],
+    ])('accepts %s Content-Length while counting actual bytes', async (
+      _case,
+      surface,
+      lengthCase,
+    ) => {
+      seedFreshConnection();
+      const activityBytes = Buffer.from(JSON.stringify([validProviderActivity()]), 'utf8');
+      const statsBytes = Buffer.from(JSON.stringify(validProviderStats()), 'utf8');
+      const selectedBytes = surface === 'activities' ? activityBytes : statsBytes;
+      const headers = {
+        'Content-Length': lengthCase === 'truthful'
+          ? String(selectedBytes.byteLength)
+          : '1',
+      };
+      const activitiesNative = nativeChunkedResponse([activityBytes], {
+        headers: surface === 'activities' ? headers : undefined,
+      });
+      const statsNative = nativeChunkedResponse([statsBytes], {
+        headers: surface === 'stats' ? headers : undefined,
+      });
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const result = await stravaFetchStats({}, CONTEXT);
+
+      expect(result.recentActivities).toHaveLength(1);
+      expect(result.yearToDate.runCount).toBe(3);
+      expect(activitiesNative.chunkRead).toHaveBeenCalledTimes(1);
+      expect(statsNative.chunkRead).toHaveBeenCalledTimes(1);
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities', 'activities', activitiesResponseMaxBytes],
+      ['statistics', 'stats', statsResponseMaxBytes],
+    ])('rejects declared-over-limit %s before its first body read', async (
+      _case,
+      surface,
+      maximumBytes,
+    ) => {
+      seedFreshConnection();
+      const activityBytes = Buffer.from(JSON.stringify([validProviderActivity()]), 'utf8');
+      const statsBytes = Buffer.from(JSON.stringify(validProviderStats()), 'utf8');
+      const headers = { 'Content-Length': String(maximumBytes + 1) };
+      const activitiesNative = nativeChunkedResponse([activityBytes], {
+        headers: surface === 'activities' ? headers : undefined,
+      });
+      const statsNative = nativeChunkedResponse([statsBytes], {
+        headers: surface === 'stats' ? headers : undefined,
+      });
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect(outcome).toEqual(fixedDataFailure('unavailable'));
+      if (surface === 'activities') {
+        expect(activitiesNative.chunkRead).not.toHaveBeenCalled();
+        expect(activitiesNative.cancel).toHaveBeenCalledTimes(1);
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      } else {
+        expect(activitiesNative.chunkRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.chunkRead).not.toHaveBeenCalled();
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      }
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities', 'activities'],
+      ['statistics', 'stats'],
+    ])('does not let a plain successful %s mock bypass the native reader', async (
+      _case,
+      surface,
+    ) => {
+      seedFreshConnection();
+      const plainJson = jest.fn();
+      const plainResponse = { ok: true, json: plainJson };
+      const activitiesNative = nativeJsonResponse([validProviderActivity()]);
+      const statsNative = nativeJsonResponse(validProviderStats());
+      fetchMock
+        .mockResolvedValueOnce(surface === 'activities'
+          ? plainResponse
+          : activitiesNative.response)
+        .mockResolvedValueOnce(surface === 'stats'
+          ? plainResponse
+          : statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect(outcome).toEqual(fixedDataFailure('unavailable'));
+      expect(plainJson).not.toHaveBeenCalled();
+      if (surface === 'activities') {
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      } else {
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+      }
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities', 'activities'],
+      ['statistics', 'stats'],
+    ])('keeps bounded invalid %s schema on fixed internal', async (_case, surface) => {
+      seedFreshConnection();
+      const activities = surface === 'activities'
+        ? [validProviderActivity({ id: 0 })]
+        : [validProviderActivity()];
+      const stats = surface === 'stats'
+        ? validProviderStats({ ytd_run_totals: { distance: -1, count: 1 } })
+        : validProviderStats();
+      const activitiesNative = nativeJsonResponse(activities);
+      const statsNative = nativeJsonResponse(stats);
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect(outcome).toEqual(fixedDataFailure('internal'));
+      expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+      if (surface === 'activities') {
+        expect(statsNative.bodyRead).not.toHaveBeenCalled();
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      } else {
+        expect(statsNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.cancel).not.toHaveBeenCalled();
+      }
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['activities', 'activities'],
+      ['statistics', 'stats'],
+    ])('cancels unfinished %s native body failure', async (_case, surface) => {
+      seedFreshConnection();
+      const activitiesNative = surface === 'activities'
+        ? nativeChunkedResponse(['not-an-activity-byte-chunk'], { stayOpen: true })
+        : nativeJsonResponse([validProviderActivity()]);
+      const statsNative = surface === 'stats'
+        ? nativeChunkedResponse(['not-a-statistics-byte-chunk'], { stayOpen: true })
+        : nativeJsonResponse(validProviderStats());
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+
+      const outcome = await settleDataRequest();
+      await Promise.resolve();
+
+      expect(outcome).toEqual(fixedDataFailure('unavailable'));
+      if (surface === 'activities') {
+        expect(activitiesNative.cancel).toHaveBeenCalledTimes(1);
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      } else {
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+      }
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['throws', () => { throw new Error('sibling-cancel-throw-canary'); }],
+      ['rejects', () => Promise.reject(new Error('sibling-cancel-reject-canary'))],
+      ['never settles', () => new Promise(() => {})],
+    ])('keeps the activity result when statistics cancellation %s', async (
+      _case,
+      cancelBehavior,
+    ) => {
+      seedFreshConnection();
+      const activitiesNative = nativeJsonResponse([validProviderActivity({ id: 0 })]);
+      const cancel = jest.fn(cancelBehavior);
+      const statsNative = nativeJsonResponse(validProviderStats(), { cancel });
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+      const timeout = Symbol('timeout');
+
+      const outcome = await Promise.race([
+        settleDataRequest(),
+        new Promise((resolve) => setImmediate(() => resolve(timeout))),
+      ]);
+      await Promise.resolve();
+
+      expect(outcome).not.toBe(timeout);
+      expect(outcome).toEqual(fixedDataFailure('internal'));
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expectFreshReadOnlyProviderAttempt();
+    });
+
+    test.each([
+      ['locked native body', 'locked'],
+      ['used native body', 'used'],
+      ['plain success mock', 'plain'],
+      ['hostile Proxy', 'proxy'],
+      ['forged Response prototype', 'forged'],
+      ['native non-success response', 'non-success'],
+    ])('keeps the activity failure without disturbing a %s statistics sibling', async (
+      _case,
+      siblingCase,
+    ) => {
+      seedFreshConnection();
+      const activitiesNative = nativeJsonResponse([], { status: 500 });
+      let statsResponse;
+      let verifySibling;
+      let cleanup = async () => undefined;
+
+      if (siblingCase === 'locked') {
+        const native = nativeJsonResponse(validProviderStats());
+        const reader = native.response.body.getReader();
+        statsResponse = native.response;
+        verifySibling = () => {
+          expect(native.cancel).not.toHaveBeenCalled();
+          expect(native.response.bodyUsed).toBe(false);
+        };
+        cleanup = async () => {
+          await reader.cancel();
+          reader.releaseLock();
+        };
+      } else if (siblingCase === 'used') {
+        const native = nativeJsonResponse(validProviderStats());
+        await Response.prototype.text.call(native.response);
+        statsResponse = native.response;
+        verifySibling = () => {
+          expect(native.cancel).not.toHaveBeenCalled();
+          expect(native.response.bodyUsed).toBe(true);
+        };
+      } else if (siblingCase === 'plain') {
+        const json = jest.fn();
+        statsResponse = { ok: true, json };
+        verifySibling = () => expect(json).not.toHaveBeenCalled();
+      } else if (siblingCase === 'proxy') {
+        const getTrap = jest.fn((_target, key) => {
+          if (key === 'then') return undefined;
+          throw new Error(`statistics-cleanup-proxy-canary ${String(key)}`);
+        });
+        statsResponse = new Proxy({ ok: true }, {
+          get: getTrap,
+          getOwnPropertyDescriptor: jest.fn(() => {
+            throw new Error('statistics-cleanup-proxy descriptor');
+          }),
+          getPrototypeOf: jest.fn(() => {
+            throw new Error('statistics-cleanup-proxy prototype');
+          }),
+          ownKeys: jest.fn(() => {
+            throw new Error('statistics-cleanup-proxy keys');
+          }),
+        });
+        verifySibling = () => {
+          const requestedKeys = getTrap.mock.calls.map(([, key]) => key);
+          expect(requestedKeys.length).toBeGreaterThanOrEqual(1);
+          expect(requestedKeys.every((key) => key === 'then')).toBe(true);
+        };
+      } else if (siblingCase === 'forged') {
+        const okGetter = jest.fn(() => true);
+        const bodyGetter = jest.fn(() => null);
+        statsResponse = Object.create(Response.prototype);
+        Object.defineProperties(statsResponse, {
+          body: { configurable: true, get: bodyGetter },
+          ok: { configurable: true, get: okGetter },
+        });
+        verifySibling = () => {
+          expect(okGetter).not.toHaveBeenCalled();
+          expect(bodyGetter).not.toHaveBeenCalled();
+        };
+      } else {
+        const native = nativeJsonResponse(validProviderStats(), { status: 500 });
+        statsResponse = native.response;
+        verifySibling = () => {
+          expect(native.cancel).not.toHaveBeenCalled();
+          expect(native.response.bodyUsed).toBe(false);
+        };
+      }
+
+      try {
+        fetchMock
+          .mockResolvedValueOnce(activitiesNative.response)
+          .mockResolvedValueOnce(statsResponse);
+
+        const outcome = await settleDataRequest();
+        await Promise.resolve();
+
+        expect(outcome).toEqual(fixedDataFailure('internal'));
+        expect(activitiesNative.bodyRead).not.toHaveBeenCalled();
+        expect(activitiesNative.cancel).not.toHaveBeenCalled();
+        verifySibling();
+        expectFreshReadOnlyProviderAttempt();
+      } finally {
+        await cleanup();
+      }
+    });
+
+    test('does not inspect statistics or settle before the activity stream reaches EOF', async () => {
+      seedFreshConnection();
+      let markActivityChunkRead;
+      const activityChunkRead = new Promise((resolve) => { markActivityChunkRead = resolve; });
+      const activitiesNative = nativeChunkedResponse([
+        Buffer.from(JSON.stringify([validProviderActivity()]), 'utf8'),
+      ], {
+        onChunk: () => markActivityChunkRead(),
+        stayOpen: true,
+      });
+      const statsNative = nativeJsonResponse(validProviderStats());
+      fetchMock
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
+      let settled = false;
+
+      const resultPromise = stravaFetchStats({}, CONTEXT);
+      resultPromise.then(
+        () => { settled = true; },
+        () => { settled = true; },
+      );
+      await activityChunkRead;
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      expect(statsNative.response.bodyUsed).toBe(false);
+      expect(statsNative.bodyRead).not.toHaveBeenCalled();
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+
+      activitiesNative.close();
+      const result = await resultPromise;
+
+      expect(result.recentActivities).toHaveLength(1);
+      expect(statsNative.bodyRead).toHaveBeenCalledTimes(1);
+      expectFreshReadOnlyProviderAttempt();
+    });
+  });
+
   async function expectInvalidSuccessfulProviderData(options) {
     const { invalidSurface } = options;
-    seedFreshConnection();
-    const { activitiesJson, statsJson } = mockSuccessfulProviderData(options);
+    const projected = invalidSurface === 'activities'
+      ? snapshotProviderActivities(options.activities)
+      : snapshotProviderStats(options.stats);
 
-    const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
-
-    expect(publicError(error)).toEqual({
-      code: 'internal',
-      message: FIXED_DATA_ERROR,
-      details: undefined,
-      cause: undefined,
-    });
-    expect(JSON.stringify(publicError(error)))
-      .not.toMatch(/provider|canary|secret|token|access|refresh/i);
-    expect(activitiesJson).toHaveBeenCalledTimes(1);
-    expect(statsJson).toHaveBeenCalledTimes(invalidSurface === 'activities' ? 0 : 1);
-    expectTwoFreshBearerReads();
-    expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
-    expect(admin.__getWrites()).toEqual([]);
+    expect(projected).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.__getReads()).toEqual([]);
     expect(admin.__getDeletes()).toEqual([]);
+    expect(dateNowSpy).not.toHaveBeenCalled();
     expect(Timestamp.now).not.toHaveBeenCalled();
     expectNoWritesOrLogs();
   }
@@ -5704,7 +6278,7 @@ describe('Strava activity data failure boundary', () => {
     });
   });
 
-  describe('successful Strava activity and statistics response validation', () => {
+  describe('Strava activity and statistics projector validation', () => {
     class ProviderActivities extends Array {}
 
     class ProviderActivity {
@@ -5738,7 +6312,7 @@ describe('Strava activity data failure boundary', () => {
       });
     });
 
-    test('rejects a transparent activities Proxy without inspecting it after await', async () => {
+    test('rejects a transparent activities Proxy without inspecting it', async () => {
       const getTrap = jest.fn((_target, key) => {
         if (key === 'then') return undefined;
         throw new Error(`activities-root-canary ${String(key)}`);
@@ -5761,34 +6335,17 @@ describe('Strava activity data failure boundary', () => {
         invalidSurface: 'activities',
       });
 
-      expect(getTrap.mock.calls.map(([, key]) => key)).toEqual(['then']);
+      expect(getTrap).not.toHaveBeenCalled();
     });
 
-    test('keeps a revoked activities root inside the fixed unavailable JSON boundary', async () => {
-      seedFreshConnection();
+    test('rejects a revoked activities root without reflection', async () => {
       const { proxy, revoke } = Proxy.revocable([validProviderActivity()], {});
       revoke();
-      const activitiesJson = jest.fn(() => proxy);
-      const statsJson = jest.fn(() => validProviderStats());
-      fetchMock
-        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-        .mockResolvedValueOnce({ ok: true, json: statsJson });
 
-      const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
-
-      expect(publicError(error)).toEqual({
-        code: 'unavailable',
-        message: FIXED_DATA_ERROR,
-        details: undefined,
-        cause: undefined,
+      await expectInvalidSuccessfulProviderData({
+        activities: proxy,
+        invalidSurface: 'activities',
       });
-      expect(activitiesJson).toHaveBeenCalledTimes(1);
-      expect(statsJson).not.toHaveBeenCalled();
-      expectTwoFreshBearerReads();
-      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
-      expect(admin.__getDeletes()).toEqual([]);
-      expect(Timestamp.now).not.toHaveBeenCalled();
-      expectNoWritesOrLogs();
     });
 
     test('rejects a revoked Proxy activity entry without reflection', async () => {
@@ -5900,18 +6457,41 @@ describe('Strava activity data failure boundary', () => {
     });
 
     describe('OAUTH-001A2H precision-safe activity IDs', () => {
-      test('rejects the first precision-unsafe integer before statistics JSON', async () => {
-        await expectInvalidSuccessfulProviderData({
-          activities: [validProviderActivity({
+      test('rejects the first precision-unsafe integer before statistics body read', async () => {
+        seedFreshConnection();
+        const activitiesNative = nativeJsonResponse([
+          validProviderActivity({
             id: Number.MAX_SAFE_INTEGER + 1,
-          })],
-          invalidSurface: 'activities',
+          }),
+        ]);
+        const statsNative = nativeJsonResponse(validProviderStats());
+        fetchMock
+          .mockResolvedValueOnce(activitiesNative.response)
+          .mockResolvedValueOnce(statsNative.response);
+
+        const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+        await Promise.resolve();
+
+        expect(publicError(error)).toEqual({
+          code: 'internal',
+          message: FIXED_DATA_ERROR,
+          details: undefined,
+          cause: undefined,
         });
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.bodyRead).not.toHaveBeenCalled();
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+        expectTwoFreshBearerReads();
+        expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+        expect(admin.__getWrites()).toEqual([]);
+        expect(admin.__getDeletes()).toEqual([]);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expectNoWritesOrLogs();
       });
 
       test('preserves the safe-integer ceiling as an exact numeric result', async () => {
         seedFreshConnection();
-        const { activitiesJson, statsJson } = mockSuccessfulProviderData({
+        const { activitiesNative, statsNative } = mockSuccessfulProviderData({
           activities: [validProviderActivity({
             id: Number.MAX_SAFE_INTEGER,
           })],
@@ -5928,8 +6508,8 @@ describe('Strava activity data failure boundary', () => {
           startDate: '2026-01-02T12:00:00Z',
         });
         expect(typeof result.recentActivities[0].id).toBe('number');
-        expect(activitiesJson).toHaveBeenCalledTimes(1);
-        expect(statsJson).toHaveBeenCalledTimes(1);
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.bodyRead).toHaveBeenCalledTimes(1);
         expectTwoFreshBearerReads();
         expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
         expect(admin.__getDeletes()).toEqual([]);
@@ -5939,22 +6519,43 @@ describe('Strava activity data failure boundary', () => {
     });
 
     describe('OAUTH-001A2I unique activity IDs', () => {
-      test('rejects a repeated valid ID before statistics JSON', async () => {
-        await expectInvalidSuccessfulProviderData({
-          activities: [
-            validProviderActivity({ id: 987654 }),
-            validProviderActivity({
-              id: 987654,
-              name: 'Synthetic Evening Run',
-            }),
-          ],
-          invalidSurface: 'activities',
+      test('rejects a repeated valid ID before statistics body read', async () => {
+        seedFreshConnection();
+        const activitiesNative = nativeJsonResponse([
+          validProviderActivity({ id: 987654 }),
+          validProviderActivity({
+            id: 987654,
+            name: 'Synthetic Evening Run',
+          }),
+        ]);
+        const statsNative = nativeJsonResponse(validProviderStats());
+        fetchMock
+          .mockResolvedValueOnce(activitiesNative.response)
+          .mockResolvedValueOnce(statsNative.response);
+
+        const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+        await Promise.resolve();
+
+        expect(publicError(error)).toEqual({
+          code: 'internal',
+          message: FIXED_DATA_ERROR,
+          details: undefined,
+          cause: undefined,
         });
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.bodyRead).not.toHaveBeenCalled();
+        expect(statsNative.cancel).toHaveBeenCalledTimes(1);
+        expectTwoFreshBearerReads();
+        expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
+        expect(admin.__getWrites()).toEqual([]);
+        expect(admin.__getDeletes()).toEqual([]);
+        expect(Timestamp.now).not.toHaveBeenCalled();
+        expectNoWritesOrLogs();
       });
 
       test('preserves distinct boundary IDs in provider order as numbers', async () => {
         seedFreshConnection();
-        const { activitiesJson, statsJson } = mockSuccessfulProviderData({
+        const { activitiesNative, statsNative } = mockSuccessfulProviderData({
           activities: [
             validProviderActivity({ id: 1 }),
             validProviderActivity({ id: Number.MAX_SAFE_INTEGER }),
@@ -5968,8 +6569,8 @@ describe('Strava activity data failure boundary', () => {
           Number.MAX_SAFE_INTEGER,
         ]);
         result.recentActivities.forEach(({ id }) => expect(typeof id).toBe('number'));
-        expect(activitiesJson).toHaveBeenCalledTimes(1);
-        expect(statsJson).toHaveBeenCalledTimes(1);
+        expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+        expect(statsNative.bodyRead).toHaveBeenCalledTimes(1);
         expectTwoFreshBearerReads();
         expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
         expect(admin.__getDeletes()).toEqual([]);
@@ -6005,7 +6606,6 @@ describe('Strava activity data failure boundary', () => {
     });
 
     test('preserves fallback precedence without touching hostile fallback fields', async () => {
-      seedFreshConnection();
       const sportTypeGetter = jest.fn(() => {
         throw new Error('sport-type-fallback-canary');
       });
@@ -6034,18 +6634,16 @@ describe('Strava activity data failure boundary', () => {
         start_date_local: null,
         start_date: '2026-03-04T05:06:07Z',
       });
-      mockSuccessfulProviderData({ activities: [preferred, fallback] });
+      const result = snapshotProviderActivities([preferred, fallback]);
 
-      const result = await stravaFetchStats({}, CONTEXT);
-
-      expect(result.recentActivities.map(({ id, type, startDate }) => ({ id, type, startDate })))
+      expect(result.map(({ id, type, startDate }) => ({ id, type, startDate })))
         .toEqual([
           { id: 1, type: 'TrailRun', startDate: '2026-02-03T04:05:06Z' },
           { id: 2, type: 'Run', startDate: '2026-03-04T05:06:07Z' },
         ]);
       expect(sportTypeGetter).not.toHaveBeenCalled();
       expect(startDateGetter).not.toHaveBeenCalled();
-      expectTwoFreshBearerReads();
+      expect(fetchMock).not.toHaveBeenCalled();
       expectNoWritesOrLogs();
     });
 
@@ -6097,7 +6695,7 @@ describe('Strava activity data failure boundary', () => {
       });
     });
 
-    test('rejects a transparent statistics Proxy without inspecting it after await', async () => {
+    test('rejects a transparent statistics Proxy without inspecting it', async () => {
       const getTrap = jest.fn((_target, key) => {
         if (key === 'then') return undefined;
         throw new Error(`stats-root-canary ${String(key)}`);
@@ -6117,34 +6715,14 @@ describe('Strava activity data failure boundary', () => {
 
       await expectInvalidSuccessfulProviderData({ stats, invalidSurface: 'stats' });
 
-      expect(getTrap.mock.calls.map(([, key]) => key)).toEqual(['then']);
+      expect(getTrap).not.toHaveBeenCalled();
     });
 
-    test('keeps a revoked statistics root inside the fixed unavailable JSON boundary', async () => {
-      seedFreshConnection();
+    test('rejects a revoked statistics root without reflection', async () => {
       const { proxy, revoke } = Proxy.revocable(validProviderStats(), {});
       revoke();
-      const activitiesJson = jest.fn(() => [validProviderActivity()]);
-      const statsJson = jest.fn(() => proxy);
-      fetchMock
-        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-        .mockResolvedValueOnce({ ok: true, json: statsJson });
 
-      const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
-
-      expect(publicError(error)).toEqual({
-        code: 'unavailable',
-        message: FIXED_DATA_ERROR,
-        details: undefined,
-        cause: undefined,
-      });
-      expect(activitiesJson).toHaveBeenCalledTimes(1);
-      expect(statsJson).toHaveBeenCalledTimes(1);
-      expectTwoFreshBearerReads();
-      expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
-      expect(admin.__getDeletes()).toEqual([]);
-      expect(Timestamp.now).not.toHaveBeenCalled();
-      expectNoWritesOrLogs();
+      await expectInvalidSuccessfulProviderData({ stats: proxy, invalidSurface: 'stats' });
     });
 
     test.each([
@@ -6330,7 +6908,6 @@ describe('Strava activity data failure boundary', () => {
     });
 
     test('ignores unknown provider getters, symbols, hooks, and cycles', async () => {
-      seedFreshConnection();
       const unknownActivityGetter = jest.fn(() => {
         throw new Error('unknown-activity-canary');
       });
@@ -6364,27 +6941,18 @@ describe('Strava activity data failure boundary', () => {
         get: unknownStatsGetter,
       });
       stats.self = stats;
-      mockSuccessfulProviderData({ activities: [activity], stats });
+      const recentActivities = snapshotProviderActivities([activity]);
+      const projectedStats = snapshotProviderStats(stats);
 
-      const result = await stravaFetchStats({}, CONTEXT);
-
-      expect(result).toEqual({
-        connected: true,
-        athlete: {
-          id: 123456,
-          firstName: 'Synthetic',
-          lastName: 'Athlete',
-          username: 'synthetic-athlete',
-          profileUrl: 'https://images.example.test/synthetic-athlete.png',
-        },
-        recentActivities: [{
-          id: 987654,
-          name: 'Synthetic Morning Run',
-          type: 'Run',
-          distanceMeters: 5000.5,
-          movingTimeSeconds: 1500,
-          startDate: '2026-01-02T12:00:00Z',
-        }],
+      expect(recentActivities).toEqual([{
+        id: 987654,
+        name: 'Synthetic Morning Run',
+        type: 'Run',
+        distanceMeters: 5000.5,
+        movingTimeSeconds: 1500,
+        startDate: '2026-01-02T12:00:00Z',
+      }]);
+      expect(projectedStats).toEqual({
         yearToDate: {
           runMeters: 12000.5,
           runCount: 3,
@@ -6393,47 +6961,50 @@ describe('Strava activity data failure boundary', () => {
         },
         allTime: { runMeters: 345000.75, runCount: 84 },
       });
-      expect(JSON.stringify(result)).not.toMatch(/provider-secret|symbol-secret|canary/i);
+      expect(JSON.stringify({ recentActivities, projectedStats }))
+        .not.toMatch(/provider-secret|symbol-secret|canary/i);
       expect(unknownActivityGetter).not.toHaveBeenCalled();
       expect(unknownStatsGetter).not.toHaveBeenCalled();
       expect(unknownTotalGetter).not.toHaveBeenCalled();
-      expect(Object.isFrozen(result)).toBe(true);
-      expect(Object.isFrozen(result.athlete)).toBe(true);
-      expect(Object.isFrozen(result.recentActivities)).toBe(true);
-      expect(Object.isFrozen(result.recentActivities[0])).toBe(true);
-      expect(Object.isFrozen(result.yearToDate)).toBe(true);
-      expect(Object.isFrozen(result.allTime)).toBe(true);
-      expectTwoFreshBearerReads();
+      expect(Object.isFrozen(recentActivities)).toBe(true);
+      expect(Object.isFrozen(recentActivities[0])).toBe(true);
+      expect(Object.isFrozen(projectedStats)).toBe(true);
+      expect(Object.isFrozen(projectedStats.yearToDate)).toBe(true);
+      expect(Object.isFrozen(projectedStats.allTime)).toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
       expectNoWritesOrLogs();
     });
 
-    test('snapshots activities before awaiting statistics JSON', async () => {
+    test('does not return before the successful statistics stream reaches EOF', async () => {
       seedFreshConnection();
-      const activity = validProviderActivity();
-      let resolveStats;
-      let markStatsStarted;
-      const statsStarted = new Promise((resolve) => { markStatsStarted = resolve; });
-      const statsPending = new Promise((resolve) => { resolveStats = resolve; });
-      const activitiesJson = jest.fn(() => [activity]);
-      const statsJson = jest.fn(() => {
-        markStatsStarted();
-        return statsPending;
+      const activitiesNative = nativeJsonResponse([validProviderActivity()]);
+      let markStatsChunkRead;
+      const statsChunkRead = new Promise((resolve) => { markStatsChunkRead = resolve; });
+      const statsNative = nativeChunkedResponse([
+        Buffer.from(JSON.stringify(validProviderStats()), 'utf8'),
+      ], {
+        onChunk: () => markStatsChunkRead(),
+        stayOpen: true,
       });
       fetchMock
-        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-        .mockResolvedValueOnce({ ok: true, json: statsJson });
+        .mockResolvedValueOnce(activitiesNative.response)
+        .mockResolvedValueOnce(statsNative.response);
 
+      let settled = false;
       const resultPromise = stravaFetchStats({}, CONTEXT);
-      await statsStarted;
-      Object.assign(activity, {
-        id: 999999,
-        name: 'Mutated Provider Activity',
-        sport_type: 'Ride',
-        distance: 999999,
-        moving_time: 999999,
-        start_date: '2099-01-01T00:00:00Z',
-      });
-      resolveStats(validProviderStats());
+      resultPromise.finally(() => { settled = true; });
+      await statsChunkRead;
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+      expect(statsNative.chunkRead).toHaveBeenCalledTimes(1);
+      expect(admin.__getWrites()).toEqual([]);
+      expect(admin.__getDeletes()).toEqual([]);
+      expect(Timestamp.now).not.toHaveBeenCalled();
+      expectNoWritesOrLogs();
+
+      statsNative.close();
       const result = await resultPromise;
 
       expect(result.recentActivities).toEqual([{
@@ -6444,6 +7015,12 @@ describe('Strava activity data failure boundary', () => {
         movingTimeSeconds: 1500,
         startDate: '2026-01-02T12:00:00Z',
       }]);
+      expect(result.yearToDate).toEqual({
+        runMeters: 12000.5,
+        runCount: 3,
+        rideMeters: 20000.25,
+        rideCount: 2,
+      });
       expectTwoFreshBearerReads();
       expectNoWritesOrLogs();
     });
@@ -6455,17 +7032,20 @@ describe('Strava activity data failure boundary', () => {
       'provider-body-canary access_token=provider-secret-canary',
     );
     const activitiesJson = jest.fn();
-    const statsJson = jest.fn().mockResolvedValue({});
+    const activitiesNative = nativeChunkedResponse([
+      Buffer.from('provider-body-canary access_token=provider-secret-canary', 'utf8'),
+    ], { status: 599 });
+    Object.defineProperties(activitiesNative.response, {
+      json: { configurable: true, value: activitiesJson },
+      text: { configurable: true, value: text },
+    });
+    const statsNative = nativeJsonResponse(validProviderStats());
     fetchMock
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 599,
-        text,
-        json: activitiesJson,
-      })
-      .mockResolvedValueOnce({ ok: true, json: statsJson });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
 
     const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+    await Promise.resolve();
 
     expect(publicError(error)).toEqual({
       code: 'internal',
@@ -6477,7 +7057,10 @@ describe('Strava activity data failure boundary', () => {
       .not.toMatch(/599|provider-body-canary|provider-secret-canary/i);
     expect(text).not.toHaveBeenCalled();
     expect(activitiesJson).not.toHaveBeenCalled();
-    expect(statsJson).not.toHaveBeenCalled();
+    expect(activitiesNative.chunkRead).not.toHaveBeenCalled();
+    expect(activitiesNative.cancel).not.toHaveBeenCalled();
+    expect(activitiesNative.response.bodyUsed).toBe(false);
+    expect(statsNative.cancel).toHaveBeenCalledTimes(1);
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
@@ -6499,12 +7082,13 @@ describe('Strava activity data failure boundary', () => {
         enumerable: true,
         get: okGetter,
       });
-      const statsJson = jest.fn();
+      const statsNative = nativeJsonResponse(validProviderStats());
       fetchMock
         .mockResolvedValueOnce(activitiesResponse)
-        .mockResolvedValueOnce({ ok: true, json: statsJson });
+        .mockResolvedValueOnce(statsNative.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+      await Promise.resolve();
 
       expect(rejection).not.toBe(statusFailure);
       expect(publicError(rejection)).toEqual({
@@ -6517,7 +7101,7 @@ describe('Strava activity data failure boundary', () => {
         .not.toMatch(/activities-ok-canary|provider-secret-canary/i);
       expect(okGetter).not.toHaveBeenCalled();
       expect(activitiesJson).not.toHaveBeenCalled();
-      expect(statsJson).not.toHaveBeenCalled();
+      expect(statsNative.cancel).toHaveBeenCalledTimes(1);
       expectTwoFreshBearerReads();
       expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
       expect(admin.__getWrites()).toEqual([]);
@@ -6545,12 +7129,13 @@ describe('Strava activity data failure boundary', () => {
           throw new Error('activities-response-canary keys');
         }),
       });
-      const statsJson = jest.fn();
+      const statsNative = nativeJsonResponse(validProviderStats());
       fetchMock
         .mockResolvedValueOnce(response)
-        .mockResolvedValueOnce({ ok: true, json: statsJson });
+        .mockResolvedValueOnce(statsNative.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+      await Promise.resolve();
 
       expect(publicError(rejection)).toEqual({
         code: 'internal',
@@ -6562,7 +7147,7 @@ describe('Strava activity data failure boundary', () => {
       expect(requestedKeys.length).toBeGreaterThanOrEqual(1);
       expect(requestedKeys.every((key) => key === 'then')).toBe(true);
       expect(activitiesJson).not.toHaveBeenCalled();
-      expect(statsJson).not.toHaveBeenCalled();
+      expect(statsNative.cancel).toHaveBeenCalledTimes(1);
       expectTwoFreshBearerReads();
       expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
       expectNoWritesOrLogs();
@@ -6572,10 +7157,10 @@ describe('Strava activity data failure boundary', () => {
       seedFreshConnection();
       const { proxy: activitiesResponse, revoke } = Proxy.revocable({ ok: true }, {});
       revoke();
-      const statsJson = jest.fn();
+      const statsNative = nativeJsonResponse(validProviderStats());
       fetchMock
         .mockResolvedValueOnce(activitiesResponse)
-        .mockResolvedValueOnce({ ok: true, json: statsJson });
+        .mockResolvedValueOnce(statsNative.response);
 
       const rejection = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
@@ -6585,7 +7170,7 @@ describe('Strava activity data failure boundary', () => {
         details: undefined,
         cause: undefined,
       });
-      expect(statsJson).not.toHaveBeenCalled();
+      expect(statsNative.cancel).not.toHaveBeenCalled();
       expectTwoFreshBearerReads();
       expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
       expect(admin.__getWrites()).toEqual([]);
@@ -6596,7 +7181,7 @@ describe('Strava activity data failure boundary', () => {
 
     test('rejects a statistics Proxy revoked after Promise fulfillment without inspecting it', async () => {
       seedFreshConnection();
-      const activitiesJson = jest.fn().mockResolvedValue([validProviderActivity()]);
+      const activitiesNative = nativeJsonResponse([validProviderActivity()]);
       const statsJson = jest.fn();
       const { proxy: statsResponse, revoke } = Proxy.revocable({
         ok: true,
@@ -6605,7 +7190,7 @@ describe('Strava activity data failure boundary', () => {
       const fulfilledStatsResponse = Promise.resolve(statsResponse);
       revoke();
       fetchMock
-        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockResolvedValueOnce(activitiesNative.response)
         .mockReturnValueOnce(fulfilledStatsResponse);
 
       const result = await stravaFetchStats({}, CONTEXT);
@@ -6613,7 +7198,7 @@ describe('Strava activity data failure boundary', () => {
       expect(result.recentActivities).toHaveLength(1);
       expect(result.yearToDate).toBeNull();
       expect(result.allTime).toBeNull();
-      expect(activitiesJson).toHaveBeenCalledTimes(1);
+      expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
       expect(statsJson).not.toHaveBeenCalled();
       expectTwoFreshBearerReads();
       expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
@@ -6625,7 +7210,7 @@ describe('Strava activity data failure boundary', () => {
 
     test('treats a statistics ok accessor as optional failure without invoking it', async () => {
       seedFreshConnection();
-      const activitiesJson = jest.fn().mockResolvedValue([validProviderActivity()]);
+      const activitiesNative = nativeJsonResponse([validProviderActivity()]);
       const statsJson = jest.fn();
       const okGetter = jest.fn(() => {
         throw new Error('statistics-ok-canary access_token=provider-secret-canary');
@@ -6637,7 +7222,7 @@ describe('Strava activity data failure boundary', () => {
         get: okGetter,
       });
       fetchMock
-        .mockResolvedValueOnce({ ok: true, json: activitiesJson })
+        .mockResolvedValueOnce(activitiesNative.response)
         .mockResolvedValueOnce(statsResponse);
 
       const result = await stravaFetchStats({}, CONTEXT);
@@ -6646,7 +7231,7 @@ describe('Strava activity data failure boundary', () => {
       expect(result.yearToDate).toBeNull();
       expect(result.allTime).toBeNull();
       expect(okGetter).not.toHaveBeenCalled();
-      expect(activitiesJson).toHaveBeenCalledTimes(1);
+      expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
       expect(statsJson).not.toHaveBeenCalled();
       expectTwoFreshBearerReads();
       expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
@@ -6659,12 +7244,13 @@ describe('Strava activity data failure boundary', () => {
 
   test('turns an activities transport failure into one fixed unavailable result', async () => {
     seedFreshConnection();
+    const statsNative = nativeJsonResponse(validProviderStats());
     fetchMock
       .mockRejectedValueOnce(Object.assign(
         new Error('activities-transport-canary https://provider.example.test/?token=secret-canary'),
         { providerBody: 'provider-body-canary' },
       ))
-      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue({}) });
+      .mockResolvedValueOnce(statsNative.response);
 
     const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
@@ -6676,6 +7262,7 @@ describe('Strava activity data failure boundary', () => {
     });
     expect(JSON.stringify(publicError(error)))
       .not.toMatch(/transport-canary|provider\.example|secret-canary|provider-body-canary/i);
+    expect(statsNative.cancel).not.toHaveBeenCalled();
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
@@ -6683,8 +7270,9 @@ describe('Strava activity data failure boundary', () => {
 
   test('turns a statistics transport failure into one fixed unavailable result', async () => {
     seedFreshConnection();
+    const activitiesNative = nativeJsonResponse([]);
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: jest.fn().mockResolvedValue([]) })
+      .mockResolvedValueOnce(activitiesNative.response)
       .mockRejectedValueOnce(Object.assign(
         new Error('stats-transport-canary https://provider.example.test/?token=secret-canary'),
         { providerBody: 'provider-body-canary' },
@@ -6700,6 +7288,8 @@ describe('Strava activity data failure boundary', () => {
     });
     expect(JSON.stringify(publicError(error)))
       .not.toMatch(/transport-canary|provider\.example|secret-canary|provider-body-canary/i);
+    expect(activitiesNative.bodyRead).not.toHaveBeenCalled();
+    expect(activitiesNative.cancel).not.toHaveBeenCalled();
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
@@ -6707,15 +7297,16 @@ describe('Strava activity data failure boundary', () => {
 
   test('turns malformed activities JSON into one fixed unavailable result', async () => {
     seedFreshConnection();
-    const activitiesJson = jest.fn().mockRejectedValue(
-      new Error('activities-json-canary access_token=provider-secret-canary'),
-    );
-    const statsJson = jest.fn().mockResolvedValue({});
+    const activitiesNative = nativeChunkedResponse([
+      Buffer.from('[{"id":987654}', 'utf8'),
+    ]);
+    const statsNative = nativeJsonResponse(validProviderStats());
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-      .mockResolvedValueOnce({ ok: true, json: statsJson });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
 
     const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
+    await Promise.resolve();
 
     expect(publicError(error)).toEqual({
       code: 'unavailable',
@@ -6723,24 +7314,23 @@ describe('Strava activity data failure boundary', () => {
       details: undefined,
       cause: undefined,
     });
-    expect(JSON.stringify(publicError(error)))
-      .not.toMatch(/json-canary|provider-secret-canary/i);
-    expect(activitiesJson).toHaveBeenCalledTimes(1);
-    expect(statsJson).not.toHaveBeenCalled();
+    expect(activitiesNative.chunkRead).toHaveBeenCalledTimes(1);
+    expect(activitiesNative.cancel).not.toHaveBeenCalled();
+    expect(statsNative.cancel).toHaveBeenCalledTimes(1);
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
   });
 
-  test('turns malformed statistics JSON into one fixed unavailable result', async () => {
+  test('turns invalid UTF-8 statistics bytes into one fixed unavailable result', async () => {
     seedFreshConnection();
-    const activitiesJson = jest.fn().mockResolvedValue([]);
-    const statsJson = jest.fn().mockRejectedValue(
-      new Error('stats-json-canary access_token=provider-secret-canary'),
-    );
+    const activitiesNative = nativeJsonResponse([]);
+    const statsNative = nativeChunkedResponse([
+      Buffer.from([0x7b, 0xc3, 0x28, 0x7d]),
+    ]);
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-      .mockResolvedValueOnce({ ok: true, json: statsJson });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
 
     const error = await captureFailure(() => stravaFetchStats({}, CONTEXT));
 
@@ -6750,10 +7340,9 @@ describe('Strava activity data failure boundary', () => {
       details: undefined,
       cause: undefined,
     });
-    expect(JSON.stringify(publicError(error)))
-      .not.toMatch(/json-canary|provider-secret-canary/i);
-    expect(activitiesJson).toHaveBeenCalledTimes(1);
-    expect(statsJson).toHaveBeenCalledTimes(1);
+    expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
+    expect(statsNative.chunkRead).toHaveBeenCalledTimes(1);
+    expect(statsNative.cancel).not.toHaveBeenCalled();
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
@@ -6761,7 +7350,7 @@ describe('Strava activity data failure boundary', () => {
 
   test('preserves recent activities when optional statistics HTTP access fails', async () => {
     seedFreshConnection();
-    const activitiesJson = jest.fn().mockResolvedValue([{
+    const activitiesNative = nativeJsonResponse([{
       id: 987654,
       name: 'Synthetic Morning Run',
       sport_type: 'Run',
@@ -6773,14 +7362,16 @@ describe('Strava activity data failure boundary', () => {
       'provider-body-canary access_token=provider-secret-canary',
     );
     const statsJson = jest.fn();
+    const statsNative = nativeChunkedResponse([
+      Buffer.from('provider-body-canary access_token=provider-secret-canary', 'utf8'),
+    ], { status: 599 });
+    Object.defineProperties(statsNative.response, {
+      json: { configurable: true, value: statsJson },
+      text: { configurable: true, value: statsText },
+    });
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: activitiesJson })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 599,
-        text: statsText,
-        json: statsJson,
-      });
+      .mockResolvedValueOnce(activitiesNative.response)
+      .mockResolvedValueOnce(statsNative.response);
 
     const result = await stravaFetchStats({}, CONTEXT);
 
@@ -6804,9 +7395,12 @@ describe('Strava activity data failure boundary', () => {
       yearToDate: null,
       allTime: null,
     });
-    expect(activitiesJson).toHaveBeenCalledTimes(1);
+    expect(activitiesNative.bodyRead).toHaveBeenCalledTimes(1);
     expect(statsText).not.toHaveBeenCalled();
     expect(statsJson).not.toHaveBeenCalled();
+    expect(statsNative.chunkRead).not.toHaveBeenCalled();
+    expect(statsNative.cancel).not.toHaveBeenCalled();
+    expect(statsNative.response.bodyUsed).toBe(false);
     expectTwoFreshBearerReads();
     expect(admin.__getReads()).toEqual([CONNECTION_PATH, SECRET_PATH]);
     expectNoWritesOrLogs();
