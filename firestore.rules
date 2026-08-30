@@ -503,6 +503,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Approval-gated social posts (INSTAGRAM-002). The lifecycle, approval, and
+    // concurrency decisions and every write are one server-authoritative
+    // operation via a capability-scoped callable Function; the browser reaches
+    // this collection for no read or write, including a browser admin. The
+    // append-only audit trail lives in the shared server-only auditEvents
+    // collection above under the social_post aggregate discriminator.
+    match /socialPosts/{postId} {
+      allow read, write: if false;
+
+      // Subcollections do not inherit the parent document rule. Keep any
+      // future nested revision or draft records behind the same boundary.
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
     match /retentionJobs/{jobId} {
       allow read, write: if false;
     }
