@@ -4,6 +4,19 @@ const { onSignUp } = require('./signup');
 const { ensureMemberProfile } = require('./ensureMemberProfile');
 
 describe('minimal profile backend resource limits', () => {
+  const originalProject = process.env.GCLOUD_PROJECT;
+
+  beforeAll(() => {
+    // Auth endpoint metadata needs a project label even though no request is
+    // sent. Keep this fixture self-contained in credential-free hosted CI.
+    process.env.GCLOUD_PROJECT = 'demo-mprc-local';
+  });
+
+  afterAll(() => {
+    if (originalProject === undefined) delete process.env.GCLOUD_PROJECT;
+    else process.env.GCLOUD_PROJECT = originalProject;
+  });
+
   test.each([
     ['createMemberOnSignUp', onSignUp],
     ['ensureMemberProfile', ensureMemberProfile],
