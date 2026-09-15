@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14",
   "issueNumber": 685,
   "previewBranch": "codex/issue-685-netlify-release",

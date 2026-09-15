@@ -244,10 +244,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the active bounded #685 meeting-location release', () => {
+test('Netlify manifest pins the inactive bounded #685 meeting-location release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(
     loaded.manifest.releaseId,
     'WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14',
@@ -291,7 +291,7 @@ test('Netlify manifest pins the active bounded #685 meeting-location release', (
 test('pending #685 records keep #659 live until exact publication', () => {
   assert.match(
     netlifyConfig,
-    /#685 control-branch preview verifies its exact pinned source/i,
+    /temporary #685 production authority is inactive again/i,
   );
   pendingReleaseTruth.forEach((contents, relativePath) => {
     assert.match(contents, /#685/);
