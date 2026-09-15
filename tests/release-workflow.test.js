@@ -34,6 +34,16 @@ const FINAL_RELEASE_TRUTH_PATHS = [
   'docs/officers/SYSTEM_MAPS.md',
   'docs/officers/UPDATE_PUBLIC_CONTENT.md',
 ];
+const PENDING_RELEASE_TRUTH_PATHS = [
+  'IMPLEMENTATION_PLAN.md',
+  'OFFICER_START_HERE.md',
+  'OPERATIONS_RUNBOOK.md',
+  'SECURITY.md',
+  'SYSTEM_DESIGN.md',
+  'docs/officers/PUBLISH_AND_CHECK.md',
+  'docs/officers/README.md',
+  'docs/officers/UPDATE_PUBLIC_CONTENT.md',
+];
 const {
   authorizeProductionRelease,
   evaluateProductionRelease,
@@ -52,6 +62,12 @@ const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
 const finalReleaseTruth = new Map(
   FINAL_RELEASE_TRUTH_PATHS.map((relativePath) => [
+    relativePath,
+    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
+  ]),
+);
+const pendingReleaseTruth = new Map(
+  PENDING_RELEASE_TRUTH_PATHS.map((relativePath) => [
     relativePath,
     fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
   ]),
@@ -228,60 +244,68 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the inactive bounded #659 keyboard-focus release', () => {
+test('Netlify manifest pins the active bounded #685 meeting-location release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, false);
+  assert.equal(loaded.manifest.active, true);
   assert.equal(
     loaded.manifest.releaseId,
-    'WEB-002D-KEYBOARD-FOCUS-2026-08-14',
+    'WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14',
   );
-  assert.equal(loaded.manifest.issueNumber, 659);
+  assert.equal(loaded.manifest.issueNumber, 685);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    '95880748e15c03b0ee58da6e1ed11ac6c9526529',
+    '925a677cd807dad1f925b4a85e89fc317b7a38b7',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    '7496fe0881fb52908c4ff2f40f488df09c94c908',
+    '41a9ae4ebc719212df610ff5cdcf9ca4eab18e71',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    'ccac4c189c195db8ab594e0eefe256ea9fa04996',
+    '7f75ebda7b9d295c5be26acc11b06b452dcc20c6',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    'c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec',
+    '7496fe0881fb52908c4ff2f40f488df09c94c908',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
-    '6a7e072f8f346b0008510d29',
+    '6a7ece87c5ca4d0007c1a3fc',
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-659-keyboard-focus',
+    'refs/heads/codex/netlify-source-685-september-locations',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-659-netlify-release',
+    'codex/issue-685-netlify-release',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 62);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    'e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7',
+    'cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850',
   );
 });
 
-test('completed #659 records are live while #623 remains rollback history', () => {
+test('pending #685 records keep #659 live until exact publication', () => {
   assert.match(
     netlifyConfig,
-    /temporary #659 production authority is inactive again/i,
+    /#685 control-branch preview verifies its exact pinned source/i,
   );
-  assert.match(
-    netlifyConfig,
-    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
-  );
+  pendingReleaseTruth.forEach((contents, relativePath) => {
+    assert.match(contents, /#685/);
+    assert.match(contents, /under review and is not published/i);
+    assert.match(contents, /6a7ece87c5ca4d0007c1a3fc/);
+    assert.doesNotMatch(
+      contents,
+      /#685[^\n]{0,180}(?:completed|is live|published deploy)/i,
+      `${relativePath} must not claim the pending #685 release is live`,
+    );
+  });
+});
 
+test('completed #659 records are live while #623 remains rollback history', () => {
   finalReleaseTruth.forEach((contents, relativePath) => {
     assert.match(contents, /#659/);
     assert.match(contents, /6a7ece87c5ca4d0007c1a3fc/);
@@ -297,8 +321,6 @@ test('completed #659 records are live while #623 remains rollback history', () =
       /#473's narrower replacement is \*\*NOT AVAILABLE YET\*\*/i,
       /WEB-002D pending/i,
       /Temporary #659[^\n]*— (?:UNDER REVIEW|PENDING)/i,
-      /#659[^\n]{0,180}(?:under review|is not published|not published|not live yet)/i,
-      /(?:under review|not published)[^\n]{0,180}#659/i,
       /#659 LIVE CHECK UNDER REVIEW/i,
       /ONLY AFTER THE EXACT #659 MARKER IS LIVE/i,
       /production remains #623/i,

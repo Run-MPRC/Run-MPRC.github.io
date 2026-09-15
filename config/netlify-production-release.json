@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "active": false,
-  "releaseId": "WEB-002D-KEYBOARD-FOCUS-2026-08-14",
-  "issueNumber": 659,
-  "previewBranch": "codex/issue-659-netlify-release",
-  "expectedProductionParent": "95880748e15c03b0ee58da6e1ed11ac6c9526529",
+  "active": true,
+  "releaseId": "WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14",
+  "issueNumber": 685,
+  "previewBranch": "codex/issue-685-netlify-release",
+  "expectedProductionParent": "925a677cd807dad1f925b4a85e89fc317b7a38b7",
   "sourceRepository": "https://github.com/Run-MPRC/Run-MPRC.github.io.git",
-  "sourceRef": "refs/heads/codex/netlify-source-659-keyboard-focus",
-  "sourceCommit": "7496fe0881fb52908c4ff2f40f488df09c94c908",
-  "sourceTree": "ccac4c189c195db8ab594e0eefe256ea9fa04996",
-  "previousSourceCommit": "c2d87d1f69f15e128a0bc9b1b9f915b7c8417aec",
-  "rollbackDeployId": "6a7e072f8f346b0008510d29",
+  "sourceRef": "refs/heads/codex/netlify-source-685-september-locations",
+  "sourceCommit": "41a9ae4ebc719212df610ff5cdcf9ca4eab18e71",
+  "sourceTree": "7f75ebda7b9d295c5be26acc11b06b452dcc20c6",
+  "previousSourceCommit": "7496fe0881fb52908c4ff2f40f488df09c94c908",
+  "rollbackDeployId": "6a7ece87c5ca4d0007c1a3fc",
   "expectedSiteFileCount": 62,
-  "expectedSiteFilesSha256": "e4c26e6f0fbcd086663d86238675f0be228fb649a00628c1c97d1166612f49c7"
+  "expectedSiteFilesSha256": "cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850"
 }
