@@ -92,6 +92,52 @@ are separate states. This procedure describes #618 source and preview behavior
 only. It is **NOT LIVE** until an approved exact website release is published
 and the same checks pass on `runmprc.com`.
 
+## Temporary September 2026 meeting locations — UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** show prospective members the two temporary Saturday meeting points, then remove each notice automatically after it is no longer useful.
+
+**Approver:** communications lead or the officer who owns Saturday-run announcements, plus the platform owner for the one-shot release.
+
+**Before you start:** have issue [#685](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/685), the approved wording below, both public map links, the exact pinned preview, and a signed-out browser. Use Pacific time. Do not sign in or enter any information.
+
+Approved public notice:
+
+- **Sept. 19, 8:45 AM:** meet at the restrooms next to the Seal Point dog park. Parking may be limited, so allow extra time. Use the [exact restroom pin](https://www.google.com/maps/search/?api=1&query=37.5733685%2C-122.3007770), not the site's usual Seal Point restroom pin.
+- **Sept. 26, 8:45 AM:** meet at [The Kite School in Baywinds Park](https://maps.app.goo.gl/eWoXjkF2Brt8ujh88), 30 Lakeside Drive, Foster City, for the run and social. Gather on the artificial turf south of the restrooms, toward the San Mateo Bridge.
+
+```mermaid
+flowchart LR
+    A["Through Sept. 19\nboth notices"] --> B["Sept. 20–26\nSept. 26 only"]
+    B --> C["From Sept. 27\nno banner"]
+```
+
+In words: both notices show through the end of Sept. 19 Pacific time; only the Sept. 26 notice shows from Sept. 20 through Sept. 26; the whole banner is gone from Sept. 27.
+
+1. Open the exact pinned preview while signed out at 390×844.
+2. Confirm the red banner begins below the blue navigation and does not cover the page heading.
+3. Compare every date, time, landmark, city, parking note, social note, and map link with the approved notice.
+4. Open each map. Confirm Sept. 19 points to the dog-park-adjacent south restroom and Sept. 26 points to The Kite School at Baywinds Park in Foster City.
+5. Confirm no private address, member information, account control, registration, payment, or form appears.
+6. Confirm there is no horizontal overflow and all link text remains readable.
+7. Repeat steps 2–6 at 1280×900.
+8. Review the automated tests showing both notices before Sept. 20, only Sept. 26 afterward, Sept. 26 through the end of that Saturday, and no banner from Sept. 27.
+9. After publication, repeat the same checks on `runmprc.com` and verify the release marker identifies #685's exact frozen artifact.
+10. Confirm the release is immediately re-paused and its follow-up attempt publishes nothing.
+
+**Expected result:** prospective members see the correct temporary place and time without signing in. The page stays usable at phone and computer sizes. Stale text disappears automatically on the documented Pacific-time boundaries.
+
+**Stop conditions:** stop if a date, time, city, landmark, link, parking note, social note, or expiry is wrong; the ordinary Seal Point pin is used; text is clipped or hidden; the page requires sign-in; unrelated content changed; or the marker does not identify the exact reviewed artifact.
+
+**Success proof:** record the exact source and preview, check date, both viewport sizes, both map destinations, banner and page-heading visibility, no-overflow result, four expiry-test results, exact public marker, and the repause attempt. A green workflow alone is not website proof.
+
+**Undo:** before publication, reject the pull request. After publication, ask the platform owner to restore the recorded #659 deploy or use the reviewed rollback projection. Do not remove the banner by editing production directly; the automatic cutoff is the normal content undo.
+
+**Escalation:** communications owner for wording or meeting-place questions; platform owner for layout, expiry, release, marker, or rollback; security owner for any unexpected account, private-data, or provider behavior.
+
+#685 is under review and is not published. Production remains #659 deploy `6a7ece87c5ca4d0007c1a3fc` until the exact release and live checks pass.
+
+Remote readback on 2026-09-14 also found the old #473, #623, and #659 hot source refs still present, superseding older absent/retired wording. Their inactive manifests keep ordinary merges paused, but the manual-rebuild residual still needs a separate approved cleanup after rollback refs are confirmed.
+
 ## Photos
 
 1. Get permission to publish the photo.

@@ -16,6 +16,63 @@
 
 **Completed #659 exception:** WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) completed one exact-artifact accessibility release on 2026-08-14. The frozen source contains only reviewed #291 visible focus, #490 phone-menu disclosure/close behavior, and #657 client-side route focus. Production is deploy `6a7ece87c5ca4d0007c1a3fc`; #623 deploy `6a7e072f8f346b0008510d29` is its rollback target. This is not an officer-operated or reusable control. The no-terminal section below is retained as the audit record.
 
+## Temporary #685 meeting-location release — UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** publish one frozen public banner that tells prospective members where the 8:45 AM runs meet on Sept. 19 and Sept. 26, 2026. The Sept. 19 item disappears at midnight after that run. The whole banner disappears at midnight after Sept. 26. Both cutoffs use Pacific time.
+
+**Approver:** Dave Liu as platform owner and the communications owner who supplied the notice. Officers observe the public result only; they do not run commands, handle credentials, or reuse this exception.
+
+**Prerequisites:** issue [#685](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/685); exact approved public wording and map links; frozen source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`; tree `7f75ebda7b9d295c5be26acc11b06b452dcc20c6`; 62-file digest `cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850`; source ref `codex/netlify-source-685-september-locations`; exact expected first parent `925a677cd807dad1f925b4a85e89fc317b7a38b7`; current deploy `6a7ece87c5ca4d0007c1a3fc`; rollback ref `codex/netlify-source-685-rollback`; all required checks; a signed-out pinned preview; and a prepared manifest-disable change.
+
+```mermaid
+flowchart LR
+    Live["#659 deploy remains live"] --> Preview["Review exact #685 frozen preview"]
+    Preview --> Parent{"main still equals the recorded parent?"}
+    Parent -- "No" --> Stop["Stop and rebuild the control"]
+    Parent -- "Yes" --> Merge["One exact two-parent merge"]
+    Merge --> Marker{"Marker and public banner match?"}
+    Marker -- "No" --> Rollback["Keep or restore #659 deploy"]
+    Marker -- "Yes" --> Repause["Merge prepared disable change"]
+    Repause --> Quiet["Later merges publish nothing"]
+```
+
+In words: #659 stays live while the exact #685 preview is reviewed. Only an unchanged recorded `main` parent may merge the control. The public marker and banner must match before the prepared disable change makes ordinary publication inactive again. Any mismatch stops or restores #659.
+
+1. Stay signed out. Use no member, account, payment, or private information.
+2. Confirm the source diff contains only `src/components/AnnouncementBanner.jsx` and `src/components/AnnouncementBanner.test.jsx` on top of source `7496fe0881fb52908c4ff2f40f488df09c94c908`.
+3. Confirm all four expiry tests, the full frontend suite, the SPA safety suite, the diagnostic build, lint, and artifact checks passed under Node 20.
+4. Open the pinned Deploy Preview. Confirm its marker names issue 685, the frozen source/tree, 62 files, the exact digest, and the preview control head.
+5. At 390×844, confirm the banner is below the blue navigation, fits without horizontal overflow, and leaves the page heading visible below it.
+6. Confirm Sept. 19 says **8:45 AM**, names the restrooms next to the Seal Point dog park, warns that parking may be limited, and opens the approved exact restroom pin.
+7. Confirm Sept. 26 says **8:45 AM**, names The Kite School in Baywinds Park, gives 30 Lakeside Drive, Foster City, says run and social, identifies the artificial turf south of the restrooms toward the San Mateo Bridge, and opens the approved map.
+8. Repeat the content and layout check at 1280×900.
+9. Confirm production still reports deploy `6a7ece87c5ca4d0007c1a3fc`. A preview is not live proof.
+10. Confirm all hosted checks are green and no unrelated pull request merged after expected parent `925a677cd807dad1f925b4a85e89fc317b7a38b7`.
+11. Confirm the manifest-disable branch and rollback ref are already prepared and independently reviewed.
+12. Merge with a merge commit only. Confirm its first parent is the expected production parent and its second parent is the exact reviewed control head.
+13. Wait for the Netlify production attempt. Do not promote a preview, use a build hook, or deploy with a local CLI.
+14. Read `/.well-known/run-mprc-release.json`. Confirm every identity and artifact field matches the approved record.
+15. Repeat the signed-out 390×844 and 1280×900 content, link, visibility, and overflow checks on `runmprc.com`.
+16. Confirm Firebase, GitHub Pages, DNS, accounts, sign-in, private data, payments, routes, and permissions did not change.
+17. Merge the prepared disable pull request immediately.
+18. Confirm its production attempt publishes nothing and the verified #685 deploy remains live.
+19. Retire only the #685 hot source, control, and repause refs after readback. Retain the exact rollback ref.
+20. Record exact commits, checks, preview, deploy, marker, public checks, repause, retained rollback, and any residual risk before closing #685.
+
+**Expected result:** one exact public artifact shows both notices through Sept. 19, only the Sept. 26 notice from Sept. 20 through Sept. 26, and no banner from Sept. 27. Ordinary production publication is inactive again. Firebase and every other named surface are unchanged.
+
+**Stop conditions:** stop if `main` advances; a required check fails; any source/tree/file-count/digest/parent/ref/deploy/marker value differs; either location, time, link, city, parking note, social note, or cutoff is wrong; layout clips or covers content; an account or private route is requested; any unrelated source enters the artifact; the disable change or rollback ref is absent; or Netlify attempts to build accumulated `main` instead of the frozen source.
+
+**Success proof:** record the exact source/tree/digest, control head, PR and hosted run, pinned preview and marker, phone/computer dimensions and results, exact two-parent merge, production attempt/deploy time, public marker, both public map links, no-overflow result, manifest-disable PR/merge/attempt, retained rollback ref, and separate unchanged statements for Firebase, Pages, DNS, providers, accounts, data, and payments. Redact screenshots and include the check date.
+
+**Undo:** before publication, reject the control PR. If publication fails before replacing production, keep #659 live. If a bad #685 artifact becomes live, ask a Netlify team owner to atomically restore deploy `6a7ece87c5ca4d0007c1a3fc`; if that control is unavailable, use a newly reviewed exact-parent Git projection of rollback source `7496fe0881fb52908c4ff2f40f488df09c94c908`. A manifest-disable commit alone is not rollback.
+
+**Escalation:** communications owner for wording or location; platform owner for source, CI, Netlify, marker, or rollback; security owner for any unexpected account, data, credential, provider, or permission behavior.
+
+#685 is under review and is not published. Production remains #659 deploy `6a7ece87c5ca4d0007c1a3fc` until every step above passes.
+
+Remote readback on 2026-09-14 found the old #473, #623, and #659 hot source refs still present; this supersedes older absent/retired wording in this guide. Their manifests are inactive, so ordinary merges remain paused, but the manual-rebuild residual is not retired. Officers do not remove refs. The platform owner must confirm the rollback refs and use a separate approved cleanup.
+
 ## The release gate
 
 ```mermaid
