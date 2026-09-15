@@ -20,6 +20,7 @@ Attach the exact wording, public link, or approved photo when you have it. The A
 | Approve a change and check whether it is really live | [Publish and check](./docs/officers/PUBLISH_AND_CHECK.md) |
 | The site is wrong, down, unsafe, or showing private information | [Emergency and recovery](./docs/officers/EMERGENCY_AND_RECOVERY.md) |
 | Prepare backup officers and account access | [Access continuity](./docs/officers/ACCESS_CONTINUITY.md) |
+| Keep the community website simple and review costs | [Low-cost community scope](./docs/officers/LOW_COST_COMMUNITY.md) |
 | Understand the pages and services | [Simple system maps](./docs/officers/SYSTEM_MAPS.md) |
 | Understand an unfamiliar word | [Plain-language glossary](./docs/officers/GLOSSARY.md) |
 

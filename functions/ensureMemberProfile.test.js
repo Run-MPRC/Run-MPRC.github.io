@@ -68,13 +68,14 @@ jest.mock('firebase-functions', () => {
     }
   }
 
-  return {
+  const builder = {
     auth: { user: () => ({ onCreate: (handler) => handler }) },
     https: {
       onCall: (handler) => handler,
       HttpsError,
     },
   };
+  return { ...builder, runWith: () => builder };
 });
 
 jest.mock('./stripeHelpers', () => ({

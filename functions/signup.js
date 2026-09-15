@@ -1,4 +1,5 @@
 const functions = require('firebase-functions');
+const profileRuntime = require('./profileRuntime');
 const { ensureMemberProfileDocument } = require('./memberProfile');
 
 /**
@@ -8,7 +9,7 @@ async function createMemberDocument(user) {
   return ensureMemberProfileDocument(user);
 }
 
-exports.onSignUp = functions.auth.user().onCreate(async (user) => {
+exports.onSignUp = functions.runWith(profileRuntime).auth.user().onCreate(async (user) => {
   try {
     // Missing claims already fail closed. Only the reviewed role-grant path may
     // change them; a delayed signup trigger must never replace a claim map.

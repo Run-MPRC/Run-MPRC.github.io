@@ -37,14 +37,24 @@ export function firestoreReleaseNames(project) {
   };
 }
 
-function summarizeFunction(id, value) {
+export function summarizeFunction(id, value) {
   if (!value) return null;
+  // The v1 API's min_instances is an implicit-presence proto3 int32: its
+  // zero value can be omitted from JSON. Normalize only that omission and
+  // preserve its provenance; null/malformed values and other gaps still fail.
+  // https://protobuf.dev/programming-guides/json/#presence-and-default-values
+  const hasMinInstances = Object.hasOwn(value, 'minInstances');
   return {
     id,
     name: value.name,
     status: value.status,
     entryPoint: value.entryPoint,
     runtime: value.runtime,
+    minInstances: hasMinInstances ? value.minInstances : 0,
+    minInstancesReadback: hasMinInstances ? 'explicit' : 'proto3-default-zero',
+    maxInstances: value.maxInstances,
+    availableMemoryMb: value.availableMemoryMb,
+    timeout: value.timeout,
     updateTime: value.updateTime,
     versionId: value.versionId,
     buildId: value.buildId,
@@ -128,6 +138,10 @@ export function validateBackendState(before, after, expectedRulesDigest) {
     }
     if (current.runtime !== RUNTIME || current.entryPoint !== spec.entryPoint) {
       errors.push(`${id} has the wrong runtime or entry point.`);
+    }
+    if (current.minInstances !== 0 || current.maxInstances !== 2
+      || current.availableMemoryMb !== 256 || current.timeout !== '30s') {
+      errors.push(`${id} has unverified or different profile resource limits.`);
     }
     if (current.trigger !== spec.trigger) {
       errors.push(`${id} has the wrong trigger type.`);

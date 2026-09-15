@@ -10,6 +10,12 @@ The repository already contains a substantial prototype: a public React site, Fi
 
 ## 1. Goals and non-goals
 
+### Community-first cost direction — 2026-09-11
+
+The owner requests a simpler, low-cost community experience and is willing to supply a personal card as fallback. Prioritize public run/event/join/contact information and optional secure accounts; prefer static delivery and bounded data reads. The first profile release remains only `createMemberOnSignUp` plus `ensureMemberProfile`, not the prototype's commerce, mail, photo-directory, or synchronization services. Preserve their source and security requirements for separately approved later work; this is not permission to weaken trust boundaries or remove existing club services.
+
+COST-001 [#683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) explicitly binds both profile Functions to zero reserved instances, maximum two instances each, 256 MB memory and a 30-second execution timeout. The release verifier requires matching provider readback. It records the v1 API's documented omitted-zero encoding for minimum instances; missing nonzero settings and malformed evidence remain unverified. Source and tests do not make these settings live or guarantee a bill ceiling. Cold-start, saturation, uncertain-timeout/retry and public-page availability checks remain required before release. The [officer guide](./docs/officers/LOW_COST_COMMUNITY.md) records scope, cost-control limits, proof, and recovery. Node runtime maintenance and existing provider/release gates remain open; no schema, role, price, domain, or deployed service changes in this slice.
+
 ### Goals
 
 - Publish public club content, events, and merchandise.

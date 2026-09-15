@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const profileRuntime = require('./profileRuntime');
 const { requireAppCheck } = require('./stripeHelpers');
 const {
   ensureMemberProfileDocument,
@@ -13,7 +14,7 @@ function isEmptyRequest(data) {
     && Object.keys(data).length === 0;
 }
 
-exports.ensureMemberProfile = functions.https.onCall(async (data, context) => {
+exports.ensureMemberProfile = functions.runWith(profileRuntime).https.onCall(async (data, context) => {
   requireAppCheck(context);
 
   if (!context.auth) {
