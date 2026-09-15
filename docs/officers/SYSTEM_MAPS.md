@@ -103,7 +103,7 @@ flowchart TD
     AuthProof -. "No Functions, real identity, or records" .-> Stop
     StagingHosting -. "No complete backend/provider test estate, protected deploy authority, marker, or rollback" .-> Stop
     HostingSource -. "Production branch, headers, authority, and cutover missing" .-> FutureHosting["Production Firebase Hosting — NOT AVAILABLE YET"]
-    Main -. "Completed #659 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
+    Main -. "Completed #685 exact release; manifest inactive" .-> WebGate{"Temporary authority active?"}
     WebGate -- "No" --> Stop
     WebGate -- "Yes" --> Netlify
     Netlify["Netlify — current live host; reusable protected publication unavailable"] --> Live["runmprc.com"]
@@ -111,7 +111,7 @@ flowchart TD
     Dev["dev — legacy branch"] -. "do not use for new release work" .-> PR
 ```
 
-In words: merge, release request, and protected approval are separate; #663 supplies build checks, #665 publishes the club-owned engineering staging site, and #671 deploys only narrow email/password Auth after exact-main review. Its earlier disposable identities were removed. #676 adds one restricted score-based provider registration, publishes exact source `bce911a7` as Hosting version `8556fc51210bdc66`, and sets Auth plus Firestore to `ENFORCED` with replay protection `OFF`; tokenless Auth/Firestore requests were denied, genuine browser Auth/Events passed, and cleanup returned users and root collections to zero. The current boundary still supplies no Functions, real identity/private-data testing, production release, or reusable authority. Ordinary merges cannot publish Netlify and the completed #659 exception is inactive; its deploy `6a7ece87c5ca4d0007c1a3fc` remains live while completed #623 deploy `6a7e072f8f346b0008510d29` is the immediate rollback and completed #473 deploy `6a6dc9ea588b0c0008036312` is older history; the future Pages branch must stop claiming the Netlify domain, and every host still needs separate proof.
+In words: merge, release request, and protected approval are separate; #663 supplies build checks, #665 publishes the club-owned engineering staging site, and #671 deploys only narrow email/password Auth after exact-main review. Its earlier disposable identities were removed. #676 adds one restricted score-based provider registration, publishes exact source `bce911a7` as Hosting version `8556fc51210bdc66`, and sets Auth plus Firestore to `ENFORCED` with replay protection `OFF`; tokenless Auth/Firestore requests were denied, genuine browser Auth/Events passed, and cleanup returned users and root collections to zero. The current boundary still supplies no Functions, real identity/private-data testing, production release, or reusable authority. Ordinary merges cannot publish Netlify. The completed #685 exception is inactive after exact repause; deploy `6aa8c5b3fddd040009eba99c` remains live from source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`. #659 deploy `6a7ece87c5ca4d0007c1a3fc` and source `7496fe0881fb52908c4ff2f40f488df09c94c908` are immediate rollback; completed #623 deploy `6a7e072f8f346b0008510d29` and #473 deploy `6a6dc9ea588b0c0008036312` are older history. The temporary #685 refs are absent, while old #473/#623/#659 hot refs preserve a documented latent manual-rebuild risk. The future Pages branch must stop claiming the Netlify domain, and every host still needs separate proof.
 
 ## Account and permission ownership
 

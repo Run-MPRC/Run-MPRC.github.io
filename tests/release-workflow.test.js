@@ -34,16 +34,6 @@ const FINAL_RELEASE_TRUTH_PATHS = [
   'docs/officers/SYSTEM_MAPS.md',
   'docs/officers/UPDATE_PUBLIC_CONTENT.md',
 ];
-const PENDING_RELEASE_TRUTH_PATHS = [
-  'IMPLEMENTATION_PLAN.md',
-  'OFFICER_START_HERE.md',
-  'OPERATIONS_RUNBOOK.md',
-  'SECURITY.md',
-  'SYSTEM_DESIGN.md',
-  'docs/officers/PUBLISH_AND_CHECK.md',
-  'docs/officers/README.md',
-  'docs/officers/UPDATE_PUBLIC_CONTENT.md',
-];
 const {
   authorizeProductionRelease,
   evaluateProductionRelease,
@@ -62,12 +52,6 @@ const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
 const finalReleaseTruth = new Map(
   FINAL_RELEASE_TRUTH_PATHS.map((relativePath) => [
-    relativePath,
-    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
-  ]),
-);
-const pendingReleaseTruth = new Map(
-  PENDING_RELEASE_TRUTH_PATHS.map((relativePath) => [
     relativePath,
     fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
   ]),
@@ -288,25 +272,19 @@ test('Netlify manifest pins the inactive bounded #685 meeting-location release',
   );
 });
 
-test('pending #685 records keep #659 live until exact publication', () => {
+test('completed #685 records are current while #659 is immediate rollback', () => {
   assert.match(
     netlifyConfig,
     /temporary #685 production authority is inactive again/i,
   );
-  pendingReleaseTruth.forEach((contents, relativePath) => {
-    assert.match(contents, /#685/);
-    assert.match(contents, /under review and is not published/i);
-    assert.match(contents, /6a7ece87c5ca4d0007c1a3fc/);
-    assert.doesNotMatch(
-      contents,
-      /#685[^\n]{0,180}(?:completed|is live|published deploy)/i,
-      `${relativePath} must not claim the pending #685 release is live`,
-    );
-  });
-});
+  assert.match(
+    netlifyConfig,
+    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
+  );
 
-test('completed #659 records are live while #623 remains rollback history', () => {
   finalReleaseTruth.forEach((contents, relativePath) => {
+    assert.match(contents, /#685/);
+    assert.match(contents, /6aa8c5b3fddd040009eba99c/);
     assert.match(contents, /#659/);
     assert.match(contents, /6a7ece87c5ca4d0007c1a3fc/);
     assert.match(contents, /#623/);
@@ -321,14 +299,22 @@ test('completed #659 records are live while #623 remains rollback history', () =
       /#473's narrower replacement is \*\*NOT AVAILABLE YET\*\*/i,
       /WEB-002D pending/i,
       /Temporary #659[^\n]*— (?:UNDER REVIEW|PENDING)/i,
+      /WEB-CONTENT-001 pending/i,
+      /Temporary #685[^\n]*— (?:UNDER REVIEW|PENDING)/i,
+      /#685 is under review and is not published/i,
+      /#685[^\n]{0,100}(?:release|publication)[^\n]{0,100}(?:under review|not published|not live yet)/i,
+      /(?:under review|not published)[^\n]{0,100}#685/i,
+      /production remains #659/i,
       /#659 LIVE CHECK UNDER REVIEW/i,
       /ONLY AFTER THE EXACT #659 MARKER IS LIVE/i,
+      /#685 LIVE CHECK UNDER REVIEW/i,
+      /ONLY AFTER THE EXACT #685 MARKER IS LIVE/i,
       /production remains #623/i,
     ].forEach((staleClaim) => {
       assert.doesNotMatch(
         contents,
         staleClaim,
-        `${relativePath} must not retain stale #659 or #473 release status`,
+        `${relativePath} must not retain stale #685, #659, or #473 release status`,
       );
     });
   });
@@ -336,55 +322,55 @@ test('completed #659 records are live while #623 remains rollback history', () =
   const completedTruth = new Map([
     [
       'IMPLEMENTATION_PLAN.md',
-      /WEB-002D completed release boundary:[^\n]*#659[^\n]*completed[^\n]*6a7ece87c5ca4d0007c1a3fc/i,
+      /WEB-CONTENT-001 completed website release boundary:[^\n]*#685[^\n]*completed[^\n]*6aa8c5b3fddd040009eba99c/i,
     ],
     [
       'OFFICER_START_HERE.md',
-      /#659[^\n]*completed[^\n]*6a7ece87c5ca4d0007c1a3fc[^\n]*live/i,
+      /#685[^\n]*published[^\n]*deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'OPERATIONS_RUNBOOK.md',
-      /#659[^\n]*completed[^\n]*6a7ece87c5ca4d0007c1a3fc[^\n]*published/i,
+      /#685[^\n]*completed[^\n]*website publication[^\n]*6aa8c5b3fddd040009eba99c/i,
     ],
     [
       'README.md',
-      /#659[^\n]*completed one bounded accessibility release[^\n]*published deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+      /#685[^\n]*completed one bounded content-only release[^\n]*published deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'SECURITY.md',
-      /WEB-002D completed exact-artifact containment[^\n]*#659[^\n]*completed[^\n]*published deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+      /WEB-CONTENT-001 completed exact-artifact containment[^\n]*#685[^\n]*completed[^\n]*published deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'SYSTEM_DESIGN.md',
-      /#659[^\n]*completed[^\n]*published deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+      /#685[^\n]*completed[^\n]*published deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'docs/officers/ACCESS_CONTINUITY.md',
-      /live #659 marker[^\n]*deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+      /live #685 marker[^\n]*deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'docs/officers/EVENTS_SHOP_MEMBERS.md',
-      /live #659 deploy `6a7ece87c5ca4d0007c1a3fc` preserves the inert #623/i,
+      /live #685 deploy `6aa8c5b3fddd040009eba99c`[^\n]*#659/i,
     ],
     [
       'docs/officers/PUBLISH_AND_CHECK.md',
-      /Temporary #659 keyboard-navigation and route-focus release — COMPLETED 2026-08-14/i,
+      /Temporary #685 meeting-location release — WEBSITE COMPLETED 2026-09-14/i,
     ],
     [
       'docs/officers/README.md',
-      /#659[^\n]*completed[^\n]*Deploy `6a7ece87c5ca4d0007c1a3fc`[^\n]*live/i,
+      /#685[^\n]*completed[^\n]*meeting-location banner release[^\n]*deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'docs/officers/REQUEST_A_CHANGE.md',
-      /completed #659 exception published accessibility deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+      /completed WEB-CONTENT-001[^\n]*#685[^\n]*published temporary-notice deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
     [
       'docs/officers/SYSTEM_MAPS.md',
-      /completed #659 exception[^\n]*deploy `6a7ece87c5ca4d0007c1a3fc` remains live/i,
+      /completed #685 exception[^\n]*deploy `6aa8c5b3fddd040009eba99c` remains live/i,
     ],
     [
       'docs/officers/UPDATE_PUBLIC_CONTENT.md',
-      /#659 LIVE AND VERIFIED 2026-08-14[\s\S]*production deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+      /#685's website work is complete[^\n]*Production is deploy `6aa8c5b3fddd040009eba99c`/i,
     ],
   ]);
   completedTruth.forEach((expectedTruth, relativePath) => {
@@ -392,7 +378,7 @@ test('completed #659 records are live while #623 remains rollback history', () =
     assert.match(
       record,
       expectedTruth,
-      `${relativePath} must bind #659's completed state to the live deploy`,
+      `${relativePath} must bind #685's completed website state to the live deploy`,
     );
   });
 
@@ -400,6 +386,72 @@ test('completed #659 records are live while #623 remains rollback history', () =
     finalReleaseTruth.get('OPERATIONS_RUNBOOK.md'),
     finalReleaseTruth.get('docs/officers/PUBLISH_AND_CHECK.md'),
   ];
+  [
+    'WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14',
+    '6aa8c3e0e5faba00080fd632',
+    'f0c2d2378fd30b684ecb2fede447a184a414ab1c',
+    '34927419640',
+    'd25b0fe497e0179d62c060a2df3e3a7a9a2c68c6',
+    '925a677cd807dad1f925b4a85e89fc317b7a38b7',
+    '0d7452a7a3c95c43a65784724aea56f0d214477f',
+    '34927937346',
+    '6aa8c5b3fddd040009eba99c',
+    '41a9ae4ebc719212df610ff5cdcf9ca4eab18e71',
+    '7f75ebda7b9d295c5be26acc11b06b452dcc20c6',
+    'cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850',
+    '6aa8c6b7e93356000806c950',
+    '9b450d4a7ef118fd4cd114b87a7a9e079f949bb2',
+    '55150c633ed81cb2913c413c24c5733da5ef5733',
+    '34928224571',
+    '609d7884e0242abce23449562e7e0da04794da1e',
+    '34928449093',
+    '6aa8c78dd7b9d1000952eaa2',
+  ].forEach((identifier) => {
+    canonicalRecords.forEach((record) => {
+      assert.match(record, new RegExp(identifier));
+    });
+  });
+  canonicalRecords.forEach((record) => {
+    assert.match(record, /(?:62 files|62-file)/i);
+    assert.match(record, /2026-09-15T04:13:59\.373Z/);
+    assert.match(
+      record,
+      /(?:6aa8c78dd7b9d1000952eaa2[\s\S]{0,240}(?:unpublished|published nothing|publish nothing)|(?:unpublished|published nothing|publish nothing)[\s\S]{0,240}6aa8c78dd7b9d1000952eaa2)/i,
+    );
+    assert.match(
+      record,
+      /(?:6aa8c5b3fddd040009eba99c[\s\S]{0,300}(?:retained|remained|left|stayed)|(?:retained|remained|left|stayed)[\s\S]{0,300}6aa8c5b3fddd040009eba99c)/i,
+    );
+    assert.match(record, /published_at[^\n]{0,40}null/i);
+    assert.match(
+      record,
+      /temporary #685 source\/control\/repause refs[^\n]{0,100}(?:retired|absent)/i,
+    );
+    assert.match(
+      record,
+      /rollback ref `codex\/netlify-source-685-rollback`[^\n]{0,120}(?:remains|retained|pinned)/i,
+    );
+    assert.doesNotMatch(record, /#685[^\n]*refs remain pending verified cleanup/i);
+    assert.match(
+      record,
+      /(?:old #473\/#623\/#659 hot (?:source )?refs|hot source refs for #473, #623, and #659)[^\n]{0,120}(?:remain|present)/i,
+    );
+    assert.match(
+      record,
+      /(?:latent[^\n]{0,100}manual-rebuild|manual rebuild[^\n]{0,100}latent)/i,
+    );
+    assert.match(
+      record,
+      /(?:email[^\n]{0,100}(?:already )?sent[^\n]{0,40}Sept\.? 12|Sept\.? 12[^\n]{0,40}email[^\n]{0,80}(?:already )?sent)/i,
+    );
+    assert.match(
+      record,
+      /WhatsApp[^\n]{0,160}(?:pending|awaits)[^\n]{0,120}action-time confirmation/i,
+    );
+    assert.match(record, /issue #685[^\n]{0,100}(?:remains|stays) open/i);
+  });
+
+  // Preserve the complete historical #659 release and rollback chain.
   [
     '6a7ec998bf8fde00086d2bfe',
     '137d8a8721339a6ca1079283cc34c1bd7cc2706c',
@@ -426,7 +478,6 @@ test('completed #659 records are live while #623 remains rollback history', () =
     });
   });
   canonicalRecords.forEach((record) => {
-    assert.match(record, /(?:62 files|62-file)/i);
     assert.match(
       record,
       /(?:6a7ed0ddb00a46000818878d[\s\S]{0,240}(?:unpublished|published nothing|publish nothing)|(?:unpublished|published nothing|publish nothing)[\s\S]{0,240}6a7ed0ddb00a46000818878d)/i,
@@ -497,6 +548,39 @@ test('completed #659 records are live while #623 remains rollback history', () =
     /We could not load events right now\. Please try again later\./,
   );
   assert.match(eventsAndShop, /event records remain unavailable/i);
+});
+
+test('officer live checks reject stale #659 production and ref-cleanup claims', () => {
+  const publishGuide = finalReleaseTruth.get(
+    'docs/officers/PUBLISH_AND_CHECK.md',
+  );
+
+  [
+    /Production is deploy `6a7ece87c5ca4d0007c1a3fc`/i,
+    /#659 completed one exact-artifact exception[^\n]{0,200}its marker matches/i,
+    /host still identifies #623 or another revision/i,
+    /#473[^\n]{0,120}release source is retired/i,
+    /#659[^\n]{0,160}temporary refs are retired/i,
+  ].forEach((staleClaim) => {
+    assert.doesNotMatch(
+      publishGuide,
+      staleClaim,
+      'repeatable officer checks must use #685 as current and preserve old hot-ref risk',
+    );
+  });
+
+  assert.match(
+    publishGuide,
+    /current host marker must identify #685 deploy `6aa8c5b3fddd040009eba99c`/i,
+  );
+  assert.match(
+    publishGuide,
+    /current host identifies #659, #623, or any revision other than the exact #685 marker/i,
+  );
+  assert.match(
+    publishGuide,
+    /old hot source refs remain[^\n]{0,160}latent manual-rebuild risk/i,
+  );
 });
 
 test('Netlify preview and production markers separate control from stable provenance', () => {
