@@ -92,13 +92,13 @@ are separate states. This procedure describes #618 source and preview behavior
 only. It is **NOT LIVE** until an approved exact website release is published
 and the same checks pass on `runmprc.com`.
 
-## Temporary September 2026 meeting locations — UNDER REVIEW, NOT PUBLISHED
+## Temporary September 2026 meeting locations — #685 WEBSITE LIVE AND VERIFIED 2026-09-14
 
 **Purpose:** show prospective members the two temporary Saturday meeting points, then remove each notice automatically after it is no longer useful.
 
 **Approver:** communications lead or the officer who owns Saturday-run announcements, plus the platform owner for the one-shot release.
 
-**Before you start:** have issue [#685](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/685), the approved wording below, both public map links, the exact pinned preview, and a signed-out browser. Use Pacific time. Do not sign in or enter any information.
+**Before you start:** have issue [#685](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/685), the approved wording below, both public map links, verified deploy `6aa8c5b3fddd040009eba99c`, and a signed-out browser. Use Pacific time. Do not sign in or enter any information.
 
 Approved public notice:
 
@@ -128,13 +128,13 @@ In words: both notices show through the end of Sept. 19 Pacific time; only the S
 
 **Stop conditions:** stop if a date, time, city, landmark, link, parking note, social note, or expiry is wrong; the ordinary Seal Point pin is used; text is clipped or hidden; the page requires sign-in; unrelated content changed; or the marker does not identify the exact reviewed artifact.
 
-**Success proof:** record the exact source and preview, check date, both viewport sizes, both map destinations, banner and page-heading visibility, no-overflow result, four expiry-test results, exact public marker, and the repause attempt. A green workflow alone is not website proof.
+**Success proof:** release PR #686 preview `6aa8c3e0e5faba00080fd632` matched head `f0c2d2378fd30b684ecb2fede447a184a414ab1c` and passed all five jobs in run `34927419640`. Exact merge `d25b0fe497e0179d62c060a2df3e3a7a9a2c68c6` published deploy `6aa8c5b3fddd040009eba99c` at `2026-09-15T04:13:59.373Z`. The public marker and all 62 files matched source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`, tree `7f75ebda7b9d295c5be26acc11b06b452dcc20c6`, rollback deploy `6a7ece87c5ca4d0007c1a3fc`, and digest `cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850`. Signed-out 390×844 and 1280×900 checks passed for both exact map destinations, banner and page-heading visibility, and no horizontal overflow; no screenshot was retained. Repause PR #687 and merge `609d7884e0242abce23449562e7e0da04794da1e` passed all checks. Attempt `6aa8c78dd7b9d1000952eaa2` errored unpublished with `published_at` null and retained the verified deploy. The manifest is inactive, temporary #685 refs are absent, and its rollback ref remains. A green workflow alone is not website proof.
 
 **Undo:** before publication, reject the pull request. After publication, ask the platform owner to restore the recorded #659 deploy or use the reviewed rollback projection. Do not remove the banner by editing production directly; the automatic cutoff is the normal content undo.
 
 **Escalation:** communications owner for wording or meeting-place questions; platform owner for layout, expiry, release, marker, or rollback; security owner for any unexpected account, private-data, or provider behavior.
 
-#685 is under review and is not published. Production remains #659 deploy `6a7ece87c5ca4d0007c1a3fc` until the exact release and live checks pass.
+#685's website work is complete. Production is deploy `6aa8c5b3fddd040009eba99c`; #659 deploy `6a7ece87c5ca4d0007c1a3fc` and source `7496fe0881fb52908c4ff2f40f488df09c94c908` are immediate rollback, while #623 and #473 are older history. Both notices show through Sept. 19, only Sept. 26 shows from Sept. 20 through Sept. 26, and the banner is absent from Sept. 27 Pacific time. Email was already sent Sept. 12. WhatsApp remains pending the user's action-time confirmation, so issue #685 remains open.
 
 Remote readback on 2026-09-14 also found the old #473, #623, and #659 hot source refs still present, superseding older absent/retired wording. Their inactive manifests keep ordinary merges paused, but the manual-rebuild residual still needs a separate approved cleanup after rollback refs are confirmed.
 
