@@ -12,9 +12,10 @@ This plan turns the target architecture into a dependency-ordered delivery progr
 Owner-authorized runner connections are tracked in [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689).
 The [implementation record](./docs/RUNNER_CONNECTIONS.md) distinguishes the initial
 synthetic domain/persistence and disabled profile/recommendation-service tests
-(including bounded windows, hide/block and delivery rechecks) from outstanding
-canonical membership population, retention/account-deletion approval, member UI and
-live-release work. Explicit 18+ self-attestation
+(including bounded windows, hide/block and delivery rechecks), and the disabled
+member form/preview/recommendation UI, from outstanding canonical membership
+population, retention/account-deletion approval, persistent privacy-choice
+management, integrated staging and live-release work. Explicit 18+ self-attestation
 is selected; no birth date is collected. The existing small profile deployment
 scope is unchanged.
 

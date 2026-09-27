@@ -35,8 +35,10 @@ acceptance cases. The draft source adds a tested private storage primitive and
 member-confirmed 18+ with no DOB. A disabled callable factory now checks current
 Auth and canonical membership before saves and recommendations, with bounded
 daily windows, directed hide/block and fresh delivery checks. Approved membership
-population, retention/account-deletion handling and the member interface remain
-incomplete. This is
+population, retention/account-deletion handling, persistent privacy-choice
+management and integrated staging remain incomplete. The member interface now
+has a tested form, exact preview, consent, withdrawal, recommendations and
+this-visit privacy undo; its source gate remains literally false. This is
 not a live feature or permission to
 deploy additional Functions through the two-profile-Function release.
 

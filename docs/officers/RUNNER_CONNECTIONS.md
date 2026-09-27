@@ -18,13 +18,16 @@ with made-up runners and accounts in local test systems. The service checks
 current accounts and membership terms; a member/admin role alone does not grant
 access. The disabled recommendation service also has local tests for daily
 suggestions, hide/block controls and privacy checks before returning a card.
-There is no member form or published card. Nothing in this change is deployed.
+The member form, preview, suggestions and privacy controls now also pass tests
+with made-up data. The page remains disabled and no card is published.
+Nothing in this change is deployed.
 The officer lookup setting does not authorize member discovery.
 
-The planned form will ask members to confirm they are 18 or older. It will not
-collect a birth date or claim to verify age or identity. The box must start
-unchecked. Withdrawal clears the confirmation, so joining again requires a new
-confirmation. Club membership is checked separately by the tested server code.
+The tested form asks members to confirm they are 18 or older. It does not
+collect a birth date or claim to verify age or identity. For a new profile the
+box starts unchecked, as do all sharing choices. Withdrawal clears the
+confirmation, so joining again requires a new confirmation. Club membership is
+checked separately by the tested server code.
 Approved membership records and officer procedures are still a release
 prerequisite. Do not enter records directly to bypass that work.
 
@@ -39,10 +42,24 @@ one separately opted-in broadening suggestion per day. Refreshing or hiding
 cards does not reveal more people that day. Hiding affects only your results;
 blocking prevents the pair from appearing to either person. Undo changes only
 your own choice. Suggestions are checked again before they are returned, but
-information already delivered cannot be taken back. The future interface still
-needs a clear way to review existing privacy choices. Retention and account
+information already delivered cannot be taken back. The tested interface allows
+undo for choices made during the current visit only. It still needs a clear way
+to recover and review choices from earlier visits. Retention and account
 deletion procedures must be approved before a pilot; no retention period has
 been selected by this code.
+
+The form shows the exact card before saving. Changing card details removes the
+old preview. Turning discovery off clears both suggestion choices; turning it
+back on does not recheck them. If a save reply is uncertain, the form stops other
+edits and offers **Retry the same change** instead of claiming success. Switching
+accounts clears the old page state. Suggestions clear when the page loses focus,
+when today's window ends, or when a new request fails. These safeguards do not
+prove hosted access is ready. Public club-run information needs no runner profile.
+
+The September 27 phone and desktop demonstration used a disposable, made-up
+in-memory service. It did not connect to Firebase or create accounts. The phone
+layout had no horizontal overflow; preview, save, block, own-choice undo and
+withdrawal screens worked. No screenshot artifact was retained.
 
 ## Review steps
 
@@ -53,7 +70,11 @@ been selected by this code.
    current member access, the unchecked 18+ confirmation and private-data protection.
 5. Request a demonstration that hiding, blocking, withdrawal and membership loss
    remove suggestions without filling the space with new people that day.
-6. Request separate website and Firebase deployment evidence before announcing
+6. Check that the card preview excludes contact details and private preferences.
+7. Ask to see an uncertain save and its same-request retry, using made-up data.
+8. Before a pilot, request a working way to recover privacy choices after leaving
+   and returning to the page. The current visit-only undo is insufficient.
+9. Request separate website and Firebase deployment evidence before announcing
    the feature. A calculation test or green build is not proof of availability.
 
 **Expected result:** officers can distinguish source development from a usable
@@ -66,8 +87,11 @@ as verified age, a minor is included, or anyone claims the code is a live servic
 
 **Success proof:** for now, the recorded synthetic calculation, local account,
 membership, storage, bounded recommendations, privacy-control, request-limit and
-browser-denial tests. The member interface, actual hosted authentication checks and a live pilot remain
-outstanding. A specialist is still needed for every implementation/release step.
+browser-denial tests, plus separate form/client tests and a fake-service browser
+demonstration. Connected browser-to-server checks, persistent privacy-choice
+management, hosted authentication checks and a live pilot remain outstanding.
+A specialist is still needed to arrange a demonstration and every release step;
+backup officers can review the evidence above without a terminal.
 
 **Undo:** keep the capability unavailable and request a reviewed code revert if
 needed. Do not delete member records, grant roles or change billing as a repair.

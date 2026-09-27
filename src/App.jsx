@@ -40,6 +40,7 @@ const AdminMemberDirectory = lazy(() => import('./pages/admin/members/AdminMembe
 const AdminProducts = lazy(() => import('./pages/admin/shop/AdminProducts'));
 const AdminProductEditor = lazy(() => import('./pages/admin/shop/AdminProductEditor'));
 const AdminOrders = lazy(() => import('./pages/admin/shop/AdminOrders'));
+const RunnerConnections = lazy(() => import('./pages/account/RunnerConnections'));
 
 const AdminFallback = (
   <div className="container mx-auto p-6 text-sm text-gray-500">Loading admin...</div>
@@ -85,6 +86,7 @@ function App() {
                 <Route path="shop/purchase/success" element={<PurchaseSuccess />} />
                 <Route path="shop/:slug" element={<ProductDetail />} />
                 <Route path="account" element={<Account />} />
+                <Route path="account/running-partners" element={<Suspense fallback={<p role="status">Loading running partners…</p>}><RunnerConnections /></Suspense>} />
                 <Route path="account/strava/callback" element={<StravaCallback />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="suggestions" element={<Suggestions />} />

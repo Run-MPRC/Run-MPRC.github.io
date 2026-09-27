@@ -13,11 +13,20 @@ the existing two-profile-Function release. Read the
 [officer review guide](./docs/officers/RUNNER_CONNECTIONS.md) for the selected
 18+ self-attestation, evidence boundary and stop conditions. The disabled profile
 service's current-account/membership checks pass local tests; approved membership
-population, hosted Auth/App Check proof, member UI and a protected pilot remain
+population, hosted Auth/App Check proof and a protected pilot remain
 outstanding. The disabled recommendation service has local synthetic tests for
 bounded daily windows, hide/block and fresh delivery checks. It adds no usable
 officer tool; retention/account-deletion and privacy-choice recovery still need
-approved procedures before a pilot.
+approved procedures before a pilot. The member form, exact-card preview,
+recommendations, withdrawal and this-visit privacy undo now pass synthetic UI
+tests; the route and account link remain disabled by a literal source gate.
+The browser demo used an in-memory fake client, not Firebase. It proves layout
+and interface transitions, not hosted access or an integrated release.
+
+The #689 frontend increment expands the lint inventory to 127 files: 12 JS,
+35 JSX, 46 TS and 34 TSX. All seven new TypeScript files are finding-free;
+the exact existing 113 errors and six warnings are unchanged. Only the inventory
+and fingerprint are updated. This is not a clean-lint claim.
 
 Club officers and backup maintainers should start with [OFFICER_START_HERE.md](./OFFICER_START_HERE.md). It converts this technical runbook into short request, approval, verification, access, and emergency steps without terminal commands.
 

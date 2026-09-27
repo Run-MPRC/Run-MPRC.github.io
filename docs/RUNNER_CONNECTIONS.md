@@ -167,7 +167,7 @@ endpoint. All six handlers stay disabled and absent from the deployment index.
   minimal audit. Identical retries do not duplicate changes; changed/stale
   commands conflict. A known reference can still be hidden/blocked after term
   expiry or target withdrawal, with a current verified/non-revoked account.
-  No endpoint lists hidden people or arbitrary references; the future UI must
+  No endpoint lists hidden people or arbitrary references; release work must
   define an approved, bounded recovery/manage-controls experience.
 - Limits are separate: six recommendation requests, 30 exclusion lookups and
   30 exclusion changes per account/hour. Each attempt counts. Recommendation
@@ -192,6 +192,48 @@ Firestore provides a consistent transaction snapshot, not an atomic lock across
 Auth, Firestore and network delivery. A change after the final read cannot recall
 already sent data. These tests do not prove live middleware or provider settings.
 
+### Member interface — disabled source, synthetic tests only
+
+`/account/running-partners` and its My Account link are controlled by the literal
+`RUNNER_CONNECTIONS_AVAILABLE = false`. No query, environment or stored browser
+value enables them. A direct visit currently shows an unavailable notice and
+public-run/contact links without starting runner-profile work. Backend exports
+remain absent; the existing two-profile-Function release scope is unchanged.
+
+- The form has explicit pace units, bounded distance and usual Pacific-time
+  windows, coarse running areas and optional interests. New profiles start
+  with unchecked 18+, discovery, similarity and broadening choices. The initial
+  Saturday window is marked for review, not an attendance claim. Unit changes
+  clear both pace inputs rather than reinterpreting them.
+- A valid exact-card preview is required before saving. Preview and suggestions
+  use the same renderer; private experience preferences are omitted. Editing
+  invalidates the preview. Turning discovery off clears both recommendation
+  permissions; turning it back on does not silently restore them. Withdrawal
+  clears all card, sharing and age state. No DOB or verified-age claim is used.
+- The client snapshots closed requests and validates closed responses from the
+  six scoped callables. Mutation replies must match the intended revision and
+  content before success appears. Unknown outcomes retain the identical UUID,
+  revision and payload for retry while other edits are disabled; known rejection
+  requires reloading current state. Raw provider errors are never displayed.
+- UI state is keyed to the UID and Firebase app object. The client checks the
+  current UID before sending and after awaiting. This prevents stale display
+  across accounts; it is not the trusted authorization boundary. No card is
+  persisted to browser storage or sent to logs/analytics by this feature.
+- Suggestions load only on request. Empty copy describes today's limited
+  selection, not the whole club. Unavailable, blurred/hidden or expired results
+  are cleared, including an in-flight response after blur. Hide/block first read
+  the requester's current exclusion revision and preserve the other flag.
+  Changes clear suggestions without requesting replacement people.
+- Up to five privacy choices from the current visit have own-choice undo.
+  This is **not** persistent history management: leaving/reloading the page
+  loses that display. A bounded way to recover/manage past choices is still a
+  release gate. Private introductions, messaging and contact disclosure are absent.
+
+Migration impact: additive inactive route/client only; no backfill, deployment,
+membership writer, new dependency, lockfile or generated sitemap change. UI
+checks are defense in depth; all membership, consent and disclosure authority
+stays on the server. Public club information remains available without a profile.
+
 ## Integration still required before the first slice is complete
 
 1. Establish and independently verify approved canonical membership population,
@@ -200,11 +242,10 @@ already sent data. These tests do not prove live middleware or provider settings
    the tested callbacks are not proof that a hosted endpoint exists.
 3. Approve privacy wording, retention/account-deletion handling, and a bounded
    member-facing way to find and manage one's existing hide/block choices.
-4. Independently review the integrated recommendation/privacy interface and
-   failure cases; backend callback tests alone are not end-to-end acceptance.
-5. Add the member form, exact-card preview, explicit consent and recommendation
-   interface with empty/unavailable/uncertain-save behavior. Keep its capability
-   disabled until backend-first deployment and privacy/release review pass.
+4. Rehearse the browser and real callable transport together in isolated staging;
+   backend callback tests and a fake-client browser demo are not end-to-end acceptance.
+5. Keep the implemented member interface disabled until backend-first deployment,
+   persistent privacy-choice management and privacy/release review pass.
 6. Complete full validation, independent review, officer handoff, a synthetic
    staging rehearsal and separate exact website/Firebase/provider verification.
 
@@ -223,12 +264,16 @@ flowchart LR
   Recheck --> Core
   Service --> Controls["Own scoped exclusion lookup/change and audit"]
   Controls --> Recheck
-  Future["NOT IMPLEMENTED: member interface"] -.-> Service
+  UI["Implemented member form, preview and privacy UI: source gate OFF"] -.-> Client["Closed client contract: six scoped callables"]
+  Client -.-> Service
+  UI --> Demo["Synthetic browser demo: fake in-memory client only"]
+  Public["Public club run information: no runner profile needed"]
 ```
 
 Text alternative: synthetic callbacks exercise current account/membership checks
 and private profile storage, bounded recommendation windows and fresh privacy
-checks in local emulators; the member interface is missing and nothing is live.
+checks in local emulators; the disabled member UI has separate fake-client browser
+checks, public run information needs no runner profile, and no runner service is live.
 
 ## Evidence boundary
 
@@ -245,8 +290,10 @@ and Firestore for all three runner emulator suites, separately from unit tests.
 
 The preceding profile-service checkpoint's exact CI run 36309661314 passed all
 five jobs, including the actually executed emulator and build/artifact steps.
-That run is not evidence for later revisions; use the PR's exact-head checks for
-the new recommendation change.
+The recommendation checkpoint `e57ad41` passed all five jobs in CI run
+36310998065; 468 Rules cases, all 107 runner emulator cases and build/artifact
+verification actually executed. Those runs do not prove later revisions; use
+the PR's exact-head checks for the new frontend increment.
 
 The focused storage review found no actionable defect. Its suggested concurrent
 save/withdrawal and forced authorization-loss-on-retry cases now pass. A
@@ -258,13 +305,29 @@ live revocation policy. Review does not complete the outstanding integration.
 Independent read-only review of the recommendation increment found no actionable
 defect, and independently passed seven service-unit and eleven CI-contract tests.
 Its residuals are recorded above: limited daily sampling, point-in-time Auth
-freshness, missing member UI/retention procedures and unproven hosted enforcement.
+freshness, then-missing member UI/retention procedures and unproven hosted enforcement.
 The main-task emulator run also proves exclusion audit rollback, exact recovery
 after a lost reply, authorization loss on transaction retry, and midnight retry.
 These results do **not** prove deployed authorization, verified age,
-provider billing limits, the member UI or real connections. The issue and draft PR
+provider billing limits or real connections. The issue and draft PR
 remain open until integrated acceptance cases pass. No live member data is
 needed for development.
+
+The September 27 frontend checkpoint passes 38 focused synthetic cases and the
+full 1,384-case frontend suite. Client/server parity tests compare every integer
+pace input from 120 through 3,000 seconds in both units with the actual pure server
+validator, including rejected inputs, and compare the exact public-card projection.
+Tests also cover invalid windows, midnight, unchecked age/consent, exact preview,
+withdrawal, same-command retry, account/app changes and stale-result clearing.
+Independent read-only UI review found no actionable defect; it did not rerun tests
+or inspect a live integration. The owner-run browser check on September 27 used
+only an explicitly labeled, disposable in-memory fake client. At desktop and
+390×844 phone width, preview/save, suggestion display, block/own undo and withdrawal
+behaved as expected; phone width had no horizontal overflow and captured console
+warnings/errors were empty. No screenshot artifact is retained. This is layout
+and UI-transition evidence, not real persistence, App Check or hosted authorization.
+The temporary browser and local server were closed afterward. TypeScript, exact
+lint-baseline and optimized artifact checks are recorded with the PR's head evidence.
 
 With Node 20, Java 21 and committed lockfile installs, run the focused storage
 check with:

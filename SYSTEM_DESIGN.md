@@ -23,8 +23,10 @@ The September 27 owner direction adds in-house, opt-in runner connections under
 [implementation record](./docs/RUNNER_CONNECTIONS.md) contains a synthetic-tested
 validator/ranker, private transactional storage and a disabled callable
 factory with current Auth/canonical-membership reads, bounded daily suggestions
-and directed hide/block controls. The member interface is still absent and no
-service is deployed. Approved membership population remains a release
+and directed hide/block controls. The member form, exact-card preview and
+recommendation/privacy interface now have synthetic tests, but remain disabled
+behind a literal source gate. No service is deployed. Approved membership
+population remains a release
 dependency; roles and officer-directory consent never replace it.
 The selected 18+ policy is explicit member self-attestation,
 with no DOB or verified-age claim; current membership remains independently

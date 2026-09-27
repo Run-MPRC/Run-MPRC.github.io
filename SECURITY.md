@@ -21,8 +21,12 @@ and separate request limits; its callback tests do not prove hosted enforcement.
 Source now bounds daily recommendations to five references, with fresh candidate,
 consent and directed-exclusion checks before delivery; all locator, window and
 exclusion records deny browser access. These point-in-time reads cannot recall
-data already sent. Approved membership population, retention/account-deletion
-approval, member UI and protected release proof remain required; see the
+data already sent. The source-gated browser interface uses closed projections,
+unchecked initial consent/age confirmation, exact previews, account/app-bound
+state and identical-command recovery after uncertain saves. It clears suggestions
+on blur, expiry or failed requests; that is not a substitute for server checks.
+Approved membership population, retention/account-deletion approval, persistent
+privacy-choice management and protected integration/release proof remain required; see the
 [implementation record](./docs/RUNNER_CONNECTIONS.md).
 
 ## 2. Reporting a vulnerability

@@ -24,6 +24,7 @@ import MemberDirectoryProfile from './MemberDirectoryProfile';
 import { getLocationReturnPath } from '../login/loginReturnPath';
 import { getSpamGuidance } from '../../services/accountEmail/accountEmailSender';
 import './Account.css';
+import { RUNNER_CONNECTIONS_AVAILABLE } from '../../services/account/runnerConnectionService';
 
 function tsToDate(ts: Timestamp | null | undefined) {
   if (!ts) return '';
@@ -1028,6 +1029,7 @@ export function AccountContent({
           )}
         </section>
 
+        {RUNNER_CONNECTIONS_AVAILABLE && <Link to="/account/running-partners">Find running partners</Link>}
         {profileState === 'ready' && profile && firebaseApp && (
           <MemberDirectoryProfile
             app={firebaseApp}
