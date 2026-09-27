@@ -38,6 +38,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 7. [Simple system maps](./SYSTEM_MAPS.md)
 8. [Plain-language glossary](./GLOSSARY.md)
 9. [Low-cost community scope and release review](./LOW_COST_COMMUNITY.md)
+10. [Runner connections — not available yet](./RUNNER_CONNECTIONS.md)
 
 ## Five rules
 

@@ -18,6 +18,13 @@ COST-001 [#683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) expli
 
 ### Goals
 
+The September 27 owner direction adds in-house, opt-in runner connections under
+[#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689). The current
+[implementation record](./docs/RUNNER_CONNECTIONS.md) contains a synthetic-only
+validator/ranker, not a connected member service. Member-discovery consent is
+separate from officer lookup. Payment processing, demographic matching and live
+release remain separate decisions; no existing member is automatically enrolled.
+
 - Publish public club content, events, and merchandise.
 - Support anonymous and signed-in race registration.
 - Apply member pricing only when the server verifies a current member role.

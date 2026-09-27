@@ -9,6 +9,11 @@ This plan turns the target architecture into a dependency-ordered delivery progr
 
 ## 1. Program outcome
 
+Owner-authorized runner connections are tracked in [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689).
+The [implementation record](./docs/RUNNER_CONNECTIONS.md) distinguishes the initial
+synthetic domain tests from outstanding persistence, access rechecks, member UI
+and live-release work. The existing small profile deployment scope is unchanged.
+
 MPRC can open a race or merchandise item for sale only when the platform can:
 
 - Prove one client request creates at most one active Checkout Session and business record.
