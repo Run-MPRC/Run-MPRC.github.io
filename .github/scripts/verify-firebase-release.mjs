@@ -16,7 +16,7 @@ const FUNCTION_SPECS = Object.freeze({
 });
 
 const REGION = 'us-central1';
-const RUNTIME = 'nodejs20';
+const RUNTIME = 'nodejs22';
 const FIRESTORE_RELEASE_REQUEST = 'cloud.firestore/(default)';
 const FIRESTORE_RELEASE_CANONICAL = 'cloud.firestore';
 const PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;

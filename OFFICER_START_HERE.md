@@ -10,6 +10,8 @@
 
 Attach the exact wording, public link, or approved photo when you have it. The AI should ask questions if anything is unclear.
 
+**Backend maintenance, 2026-09-27:** [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares a supported server runtime, Node 22, in source. It does not publish a website, deploy Functions, or add billing. The first backend release is still on hold. Follow the [low-cost review](./docs/officers/LOW_COST_COMMUNITY.md) and ask a maintainer for separate hosted proof; no officer terminal work is needed.
+
 ## Choose the closest task
 
 | What you need | Open this short guide |

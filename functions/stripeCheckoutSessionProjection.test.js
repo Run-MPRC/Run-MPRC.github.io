@@ -267,6 +267,30 @@ function project(overrides = {}) {
 }
 
 describe('server-only Stripe Checkout Session projection', () => {
+  test('error stack is fixed data, not a mutable runtime accessor or formatting hook', () => {
+    const original = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    let formatterCalls = 0;
+    let error;
+    try {
+      Error.prepareStackTrace = () => {
+        formatterCalls += 1;
+        return SECRET_CANARY;
+      };
+      error = new StripeCheckoutSessionProjectionError();
+      expect(Reflect.set(error, 'stack', PERSONAL_DATA_CANARY)).toBe(false);
+      expect(Object.getOwnPropertyDescriptor(error, 'stack')).toEqual({
+        value: 'StripeCheckoutSessionProjectionError: Stripe Checkout Session observation is invalid.',
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+      expect(formatterCalls).toBe(0);
+    } finally {
+      if (original) Object.defineProperty(Error, 'prepareStackTrace', original);
+      else delete Error.prepareStackTrace;
+    }
+  });
+
   test('exports one frozen, versioned, unused projection API', () => {
     const api = require('./stripeCheckoutSessionProjection');
     expect(checkoutSessionProjectionSchemaVersion === 1).toBe(true);

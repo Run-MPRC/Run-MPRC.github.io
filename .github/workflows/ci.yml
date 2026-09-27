@@ -107,6 +107,37 @@ jobs:
       # firebase-admin so no emulator is needed.
       - run: npm run test:run
 
+  functions-node22:
+    name: Node 22 backend compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Install committed root dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+      - name: Install committed Functions dependencies
+        run: npm --prefix functions ci --ignore-scripts
+      - name: Run Node 22 backend tests with profile persistence
+        env:
+          REQUIRE_MEMBER_PROFILE_EMULATOR: '1'
+        run: >-
+          npx --no-install firebase emulators:exec
+          --project demo-functions-test
+          --only firestore,auth
+          "npm --prefix functions run test:run -- --runInBand"
+
   commerce-command-journal:
     name: Commerce command journal emulator
     runs-on: ubuntu-latest

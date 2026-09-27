@@ -43,6 +43,8 @@ function sourceContract(overrides = {}) {
     functionIndex: read('functions/index.js'),
     packageJson: readJson('package.json'),
     packageLock: readJson('package-lock.json'),
+    functionsPackageJson: readJson('functions/package.json'),
+    functionsPackageLock: readJson('functions/package-lock.json'),
     ...overrides,
   };
 }
@@ -58,6 +60,22 @@ test('CI-001D3 accepts only the exact staging profile Function source contract',
     projectId: 'run-mprc-staging',
     scope: 'functions:createMemberOnSignUp,functions:ensureMemberProfile',
   });
+});
+
+test('runtime source and committed lock metadata both require exact Node 22', () => {
+  const { validateSourceContract } = loadContract();
+  assert.equal(readJson('functions/package.json').engines.node, '22');
+  assert.equal(readJson('functions/package-lock.json').packages[''].engines.node, '22');
+  for (const runtime of ['20', '18', '24', '>=22', undefined]) {
+    const manifest = readJson('functions/package.json');
+    manifest.engines.node = runtime;
+    assert.throws(() => validateSourceContract(sourceContract({ functionsPackageJson: manifest })),
+      /firebase_profile_functions_staging_contract_rejected/);
+    const lock = readJson('functions/package-lock.json');
+    lock.packages[''].engines.node = runtime;
+    assert.throws(() => validateSourceContract(sourceContract({ functionsPackageLock: lock })),
+      /firebase_profile_functions_staging_contract_rejected/);
+  }
 });
 
 test('CI-001D3 rejects a changed deploy alias or Functions codebase', () => {

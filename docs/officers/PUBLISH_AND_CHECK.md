@@ -642,8 +642,8 @@ Do not use this section until #133 records that both GitHub environments are pro
 2. Copy the exact 40-character merged commit. Do not use a branch name.
 3. Choose the fixed release plan. Do not type a project or Function name.
 4. Confirm the environment's Firebase project is the approved one.
-5. Confirm the required checks belong to the same exact commit.
-6. Confirm the rollback or safe roll-forward commit.
+5. Confirm all six required checks belong to the same exact commit, including “Node 22 backend compatibility.” This check is source proof, not a live backend check.
+6. Confirm the rollback or safe roll-forward commit uses a supported server runtime. Do not assume Node 20 remains deployable after its scheduled October 30, 2026 retirement.
 7. Confirm the named observer is available.
 8. Ask the platform maintainer to request the manual release.
 9. Record the release-run link.
@@ -660,7 +660,7 @@ Do not use this section until #133 records that both GitHub environments are pro
 5. Confirm short-lived cloud authentication succeeds.
 6. Confirm Firestore Rules deploy first.
 7. Confirm only `createMemberOnSignUp` and `ensureMemberProfile` deploy next.
-8. Confirm both Functions are found by the verification step.
+8. Confirm both Functions are found by the verification step with Node 22 and the four settings in the [low-cost guide](./LOW_COST_COMMUNITY.md). These settings are prepared in source by #683/#691; hosted behavior is NOT AVAILABLE YET until separately verified.
 9. Stop if any backend step is missing, skipped, failed, partial, or mismatched.
 10. Confirm the GitHub Pages publication job starts only after backend success.
 11. Confirm the Pages artifact uses the same exact commit.
