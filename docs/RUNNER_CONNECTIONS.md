@@ -45,7 +45,8 @@ defaults for synthetic evaluation. They are not approved club policy.
 not a callable endpoint. It is not imported by `functions/index.js` or the app.
 Every operation requires an injected trusted authorization callback; there is
 no default grant. The callback runs on every transaction attempt, including
-idempotent retries. Synthetic tests supply a fake policy, not membership proof.
+idempotent retries. The storage-only tests use fake admission; the service tests
+below instead use local Auth and canonical membership records.
 
 - Dave selected **member-confirmed 18+** on September 27. A save requires
   `adultConfirmed: true` and `consentVersion: 1`. This is self-attestation, not
@@ -75,17 +76,69 @@ idempotent retries. Synthetic tests supply a fake policy, not membership proof.
 These are additive, unused source paths. No backfill, data migration, existing
 client contract change, new dependency or Cloud Function export is introduced.
 
+### Profile callable integration — disabled source, local emulator only
+
+`functions/runnerConnectionService.js` connects the store to three callable
+handlers for reading, saving and withdrawing one's own card. Its factory defaults
+disabled and is not imported by the deployment index. Request data and environment
+variables cannot enable it. Each handler uses native App Check, zero reserved
+instances, a two-instance maximum, 256 MB memory and a 30-second timeout. These
+source settings are not provider configuration or a bill ceiling.
+
+- The callable runtime supplies verified identity/App Check context. A fresh
+  Auth Admin lookup on every transaction attempt then requires the same UID,
+  a verified, enabled account and a session not older than the revocation time.
+  A never-revoked account's absent timestamp has the installed SDK's meaning
+  of no revocation; malformed present timestamps deny access. Provider failures
+  return fixed unavailability, without raw errors or profile data.
+- Saves query at most two `memberships` records by explicit `association.uid`.
+  Exactly one must have a document ID matching its stable `membershipId` and
+  satisfy the existing `deriveMembershipEntitlement` contract at the server
+  time after the query returns. Missing, ambiguous, malformed, pending, expired,
+  future, suspended or ended membership denies saving, including exact retries.
+  Browser/profile roles, an admin claim and email matches are never fallbacks.
+- `memberships/{membershipId}` is an **additive consumer schema**, containing
+  the existing version-1 authority snapshot. This feature writes no membership,
+  term, payment, evidence, association or claim. Approved population, durable
+  UID uniqueness and membership operations remain #81/#114/#115 dependencies.
+  Do not manually seed real membership records to make this feature work.
+  Explicit Rules deny browser access to this collection and its descendants.
+- A current verified, non-revoked account may read or withdraw only its own
+  card after membership expires. This grants no access to other cards or
+  recommendations and cannot republish a profile. Deleted, disabled, revoked
+  or unverified accounts need account recovery/private support before removal.
+- Closed requests are snapshotted before asynchronous work. Per-account limits
+  allow 30 reads, 12 saves and 12 withdrawals per hour. Every attempt, including
+  an exact retry, counts. Withdrawal has a separate bucket; exhausting saves
+  cannot exhaust it. Limits reuse private `ratelimits` storage and its pending
+  TTL setup; keys are linkable pseudonyms, not anonymous data. These limits
+  bound this service's work, not all invocation or provider charges.
+- Every response is private/no-store. Only the saved owner's closed profile
+  projection is returned; no membership, payment, Auth or roster record travels
+  to the browser.
+
+The 34 service emulator cases use real local Auth/Firestore and invoke the
+installed SDK's callable callback with synthetic context. They prove the
+implemented admission, persistence and metering behavior, **not** HTTP token
+verification or hosted App Check enforcement. Seven additional unit checks
+cover the disabled gate, real SDK runtime configuration and request snapshots.
+Independent read-only review found no actionable service/Rules/CI defect and
+separately passed the seven unit and eleven CI contract checks. Auth freshness
+is a point-in-time server read, not an atomic lock spanning Auth and Firestore;
+an account change after that read cannot retroactively recall a completed save.
+The recommendation delivery boundary must be reviewed separately.
+
 ## Integration still required before the first slice is complete
 
-1. Connect authoritative current membership and the saved adult affirmation
-   without trusting request roles, a profile role mirror or officer consent.
-2. Wrap the storage primitive in authenticated, App Check-enforced, rate-limited
-   server operations. Permit a safe withdrawal path even after membership ends.
+1. Establish and independently verify approved canonical membership population,
+   unique associations and operator procedures before enabling the consumer.
+2. Rehearse callable HTTP Auth/App Check enforcement and account-loss recovery;
+   the tested callbacks are not proof that a hosted endpoint exists.
 3. Add requester-scoped exclusions, block/hide, bounded reads and abuse limits.
    Recheck current identity, eligibility, visibility and blocks before delivery;
    a cache or prior ranker result cannot authorize a card.
-4. Extend the passing persistence/Rules tests to the real admission adapter and
-   concurrent withdrawal/blocking during recommendation delivery.
+4. Extend the passing profile-service tests to candidate admission and concurrent
+   withdrawal/blocking during recommendation delivery.
 5. Add the member form, exact-card preview, explicit consent and recommendation
    interface with empty/unavailable/uncertain-save behavior. Keep its capability
    disabled until backend-first deployment and privacy/release review pass.
@@ -96,27 +149,36 @@ client contract change, new dependency or Cloud Function export is introduced.
 flowchart LR
   Fixture["Synthetic profile and eligibility assertions"] --> Core["Implemented bounded validator and ranker"]
   Core --> Cards["Synthetic card results only"]
-  Commands["Synthetic commands and injected test authorization"] --> Store["Implemented transaction storage primitive"]
+  Commands["Synthetic callable context"] --> Service["Disabled profile callable factory"]
+  Service --> Auth["Local Auth: current account and revocation"]
+  Service --> Membership["Local Firestore: bounded canonical membership read"]
+  Auth --> Store["Implemented transaction storage primitive"]
+  Membership --> Store
   Store --> Private["Local emulator: private profiles and minimal audit receipts"]
-  Future["NOT IMPLEMENTED: member UI and authenticated service"] -.-> Store
-  Future -.-> Recheck["NOT IMPLEMENTED: current membership, exclusions and delivery rechecks"]
+  Future["NOT IMPLEMENTED: member UI and recommendations service"] -.-> Service
+  Future -.-> Recheck["NOT IMPLEMENTED: candidate membership, exclusions and delivery rechecks"]
   Recheck -.-> Core
 ```
 
-Text alternative: synthetic fixtures exercise the ranker and emulator storage;
-the member interface, authenticated service, current membership and delivery
-checks remain to be implemented before any real recommendation can be returned.
+Text alternative: synthetic callbacks exercise current account/membership checks
+and profile storage in local emulators; the member interface, recommendation
+service and delivery checks remain unimplemented and nothing is enabled live.
 
 ## Evidence boundary
 
 The initial 50 synthetic unit tests cover validation, unit conversion, hard
 compatibility, consent, eligibility assertions, exclusions, broadening, sparse
-results, bounded input and deterministic output. The September 27 storage
-checkpoint also passes 35 Firestore-emulator persistence cases and 428 Rules
-tests, including ten new browser-denial cases. The full Functions unit run
-passes 7,622 cases; emulator-only cases are skipped there, not counted as passes.
-CI explicitly requires and runs the new persistence suite in the existing
-Firestore job, separately from the ordinary unit run.
+results, bounded input and deterministic output. Current local Node 20/Java 21
+checks pass 35 persistence plus 34 service-emulator cases, 438 Rules cases,
+and 134 workflow/release/security checks. Functions lint passes. The ordinary
+Functions run passes 7,629 cases with 133 emulator-only skips; the Auth/Firestore
+run passes 7,699 with 63 separately opted-in commerce-journal cases skipped.
+Skipped tests are not counted as passes. CI now requires both Auth and Firestore
+for the two runner emulator suites, separately from the ordinary unit run.
+
+The preceding storage checkpoint's exact CI run 36308568014 passed all five
+jobs, including the actually executed persistence step. That run is not evidence
+for later revisions; use the PR's exact-head checks for the new service change.
 
 The focused storage review found no actionable defect. Its suggested concurrent
 save/withdrawal and forced authorization-loss-on-retry cases now pass. A
@@ -127,7 +189,7 @@ live revocation policy. Review does not complete the outstanding integration.
 
 These results do **not** prove deployed authorization, verified age, withdrawal
 during recommendation computation, stable server-side candidate windows,
-request throttling, the member UI or real connections. The issue and draft PR
+provider billing limits, the member UI or real connections. The issue and draft PR
 remain open until integrated acceptance cases pass. No live member data is
 needed for development.
 
@@ -135,9 +197,15 @@ With Node 20, Java 21 and committed lockfile installs, run the focused storage
 check with:
 
 ```sh
-REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR=1 npx --no-install firebase emulators:exec --project demo-functions-test --only firestore "npm --prefix functions run test:run -- --runInBand runnerConnectionProfiles.emulator.test.js"
+REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR=1 REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR=1 npx --no-install firebase emulators:exec --project demo-functions-test --only firestore,auth "npm --prefix functions run test:run -- --runInBand runnerConnectionProfiles.emulator.test.js runnerConnectionService.emulator.test.js"
 npm run test:rules
 ```
+
+Platform references: [native callable App Check](https://firebase.google.com/docs/app-check/cloud-functions)
+and [Auth session revocation](https://firebase.google.com/docs/auth/admin/manage-sessions).
+The installed Admin SDK's `verifyDecodedJWTNotRevokedOrDisabled` also confirms
+the absent revocation-timestamp behavior. These explain implementation choices;
+they do not verify an MPRC deployment.
 
 The separate September 27 backend preflight found staging billing disabled and
 zero billing accounts accessible to the authorized club account. The existing

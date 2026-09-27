@@ -13,15 +13,25 @@ release. A specialist is still required for implementation and release.
 
 ## What works now
 
-An internal matching calculation and private profile-storage code pass tests
-with made-up runners in a local test database. There is no member form, published
+An internal matching calculation, private storage and profile service pass tests
+with made-up runners and accounts in local test systems. The service checks
+current accounts and membership terms; a member/admin role alone does not grant
+access. There is no member form, published
 card or connected recommendation service. Nothing in this change is deployed.
 The officer lookup setting does not authorize member discovery.
 
 The planned form will ask members to confirm they are 18 or older. It will not
 collect a birth date or claim to verify age or identity. The box must start
 unchecked. Withdrawal clears the confirmation, so joining again requires a new
-confirmation. Club membership must still be checked separately by the server.
+confirmation. Club membership is checked separately by the tested server code.
+Approved membership records and officer procedures are still a release
+prerequisite. Do not enter records directly to bypass that work.
+
+The tested service allows a person whose membership expired to read or withdraw
+only their own card while their verified account remains usable. Saving requires
+current membership. Disabled, deleted, revoked or unverified accounts need
+account recovery or private support. Separate limits preserve withdrawal when
+the save limit has been reached. These are source behaviors, not live tools.
 
 ## Review steps
 
@@ -41,8 +51,9 @@ consent is reused, results include private contacts, unavailable saves look
 successful, an age-confirmation box is preselected, confirmation is described
 as verified age, a minor is included, or anyone claims the code is a live service.
 
-**Success proof:** for now, the recorded synthetic calculation, local storage
-and browser-denial tests. Integrated member/server tests and a live pilot remain
+**Success proof:** for now, the recorded synthetic calculation, local account,
+membership, storage, request-limit and browser-denial tests. The member interface,
+recommendations, actual hosted authentication checks and a live pilot remain
 outstanding. A specialist is still needed for every implementation/release step.
 
 **Undo:** keep the capability unavailable and request a reviewed code revert if

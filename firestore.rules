@@ -499,6 +499,16 @@ service cloud.firestore {
       }
     }
 
+    // Canonical membership authority is consumed only by trusted server code.
+    // Roles and browser profile mirrors are not permission to read or edit it.
+    match /memberships/{membershipId} {
+      allow read, write: if false;
+
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
     // Member-discovery cards are not the officer directory or a browser-readable
     // roster. Even the owner/admin must use the separately authorized server
     // boundary for consent, revisions, withdrawal and private projections.

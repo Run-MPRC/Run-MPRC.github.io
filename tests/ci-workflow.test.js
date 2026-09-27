@@ -179,11 +179,15 @@ function expectedFirestoreRulesJob() {
       },
       {
         name: 'Run runner profile persistence tests against the emulator',
-        env: { REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1' },
+        env: {
+          REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1',
+          REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1',
+        },
         run: 'npx --no-install firebase emulators:exec '
-          + '--project demo-functions-test --only firestore '
+          + '--project demo-functions-test --only firestore,auth '
           + '"npm --prefix functions run test:run -- '
-          + '--runInBand runnerConnectionProfiles.emulator.test.js"',
+          + '--runInBand runnerConnectionProfiles.emulator.test.js '
+          + 'runnerConnectionService.emulator.test.js"',
       },
     ],
   };
@@ -811,6 +815,9 @@ test('guard rejects skipped, misdirected or weakened runner-profile emulator exe
   const stepName = 'Run runner profile persistence tests against the emulator';
   const mutations = [
     ciWorkflow.replace("REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '0'"),
+    ciWorkflow.replace("REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '0'"),
+    ciWorkflow.replace('--only firestore,auth', '--only firestore'),
+    ciWorkflow.replace('runnerConnectionService.emulator.test.js', 'runnerConnectionService.test.js'),
     ciWorkflow.replace('--project demo-functions-test', '--project synthetic-hosted-project'),
     ciWorkflow.replace('runnerConnectionProfiles.emulator.test.js', 'runnerConnections.test.js'),
     ciWorkflow.replace(`      - name: ${stepName}`, `      - name: ${stepName}\n        if: ${NEVER_RUN}`),

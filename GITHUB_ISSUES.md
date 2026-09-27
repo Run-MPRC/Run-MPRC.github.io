@@ -32,8 +32,10 @@ September 27 addition: [COMMUNITY-001 / #689](https://github.com/Run-MPRC/Run-MP
 tracks owner-authorized opt-in runner connections. See [the implementation
 record](./docs/RUNNER_CONNECTIONS.md) for current source and remaining integrated
 acceptance cases. The draft source adds a tested private storage primitive and
-member-confirmed 18+ with no DOB; membership authorization and the connected
-member service remain incomplete. This is not a live feature or permission to
+member-confirmed 18+ with no DOB. A disabled callable factory now checks current
+Auth and canonical membership before saves; approved membership population,
+recommendation delivery and the member interface remain incomplete. This is
+not a live feature or permission to
 deploy additional Functions through the two-profile-Function release.
 
 ### Labels

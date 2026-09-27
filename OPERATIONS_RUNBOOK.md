@@ -11,9 +11,10 @@ code is exercised only with synthetic local data and exports no new Cloud
 Function. Do not collect profiles, run backfills or deploy these paths through
 the existing two-profile-Function release. Read the
 [officer review guide](./docs/officers/RUNNER_CONNECTIONS.md) for the selected
-18+ self-attestation, evidence boundary and stop conditions. Membership checks,
-App Check-enforced service integration, member UI and a protected pilot remain
-outstanding.
+18+ self-attestation, evidence boundary and stop conditions. The disabled profile
+service's current-account/membership checks pass local tests; approved membership
+population, hosted Auth/App Check proof, recommendation service, member UI and
+a protected pilot remain outstanding.
 
 Club officers and backup maintainers should start with [OFFICER_START_HERE.md](./OFFICER_START_HERE.md). It converts this technical runbook into short request, approval, verification, access, and emergency steps without terminal commands.
 

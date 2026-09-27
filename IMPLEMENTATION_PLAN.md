@@ -11,8 +11,9 @@ This plan turns the target architecture into a dependency-ordered delivery progr
 
 Owner-authorized runner connections are tracked in [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689).
 The [implementation record](./docs/RUNNER_CONNECTIONS.md) distinguishes the initial
-synthetic domain/persistence tests from outstanding authenticated integration,
-access rechecks, member UI and live-release work. Explicit 18+ self-attestation
+synthetic domain/persistence and disabled profile-service tests from outstanding
+canonical membership population, candidate/delivery checks, member UI and
+live-release work. Explicit 18+ self-attestation
 is selected; no birth date is collected. The existing small profile deployment
 scope is unchanged.
 

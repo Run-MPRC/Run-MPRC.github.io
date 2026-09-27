@@ -58,6 +58,21 @@ function readCommand(input, operation) {
   } catch { return fail('invalid-argument'); }
 }
 
+// Snapshot a closed wire request before any asynchronous service work. The
+// store validates again so its direct callers cannot bypass the same contract.
+function readRunnerProfileRequest(input, operation) {
+  if (!['save', 'withdraw'].includes(operation)) fail('invalid-argument');
+  const command = readCommand(input, operation);
+  const request = { requestId: command.requestId, expectedRevision: command.expectedRevision };
+  if (operation === 'save') Object.assign(request, {
+    profile: command.profile,
+    consent: command.consent,
+    consentVersion: command.consentVersion,
+    adultConfirmed: command.adultConfirmed,
+  });
+  return Object.freeze(request);
+}
+
 function publicState(state) {
   return Object.freeze({
     schemaVersion: 1,
@@ -104,8 +119,9 @@ function readAudit(value) {
  * Unexported-by-Firebase persistence primitive. The required trusted authorize
  * callback must check the current actor for each operation/transaction attempt.
  * No default grants access. It must NOT be supplied by a browser or replaced
- * by the ranker's booleans. Callable auth/App Check, rate limiting and the actual
- * membership/adult policy adapter remain required before this is a service.
+ * by the ranker's booleans. runnerConnectionService supplies the disabled,
+ * emulator-tested Auth/membership/App Check adapter; live release still needs
+ * approved canonical membership population and hosted enforcement evidence.
  */
 function createRunnerProfileStore({ db, authorize, now = Date.now } = {}) {
   if (!db || typeof db.runTransaction !== 'function' || typeof db.collection !== 'function'
@@ -183,4 +199,6 @@ function createRunnerProfileStore({ db, authorize, now = Date.now } = {}) {
   });
 }
 
-module.exports = { PROFILE_COLLECTION, CONSENT_VERSION, createRunnerProfileStore };
+module.exports = {
+  PROFILE_COLLECTION, CONSENT_VERSION, createRunnerProfileStore, readRunnerProfileRequest,
+};

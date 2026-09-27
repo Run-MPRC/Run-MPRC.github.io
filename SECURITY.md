@@ -15,10 +15,12 @@ remain source-only and unavailable. Their separate private storage paths deny
 all browser access, including owner/admin access. Transactional saves require
 versioned discovery consent and explicit 18+ self-attestation; withdrawal clears
 both the card and affirmation. This is not age/identity verification and never
-accepts a DOB. The injected storage authorization callback is not a completed
-membership policy. Auth/App Check, current membership, abuse limits, exclusion
-and delivery-time rechecks, retention approval and protected release proof are
-still required; see the [implementation record](./docs/RUNNER_CONNECTIONS.md).
+accepts a DOB. The disabled profile-service factory checks current verified
+Auth, revocation and a bounded canonical membership read, with native App Check
+and separate request limits; its callback tests do not prove hosted enforcement.
+Approved membership population, candidate/exclusion/delivery-time rechecks,
+retention approval and protected release proof remain required; see the
+[implementation record](./docs/RUNNER_CONNECTIONS.md).
 
 ## 2. Reporting a vulnerability
 
