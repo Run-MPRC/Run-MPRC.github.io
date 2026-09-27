@@ -4,7 +4,7 @@
 
 **Approver:** Dave Liu for the current simplification request. Any release still uses the named platform/security reviewers. Regular club expenditure needs the club's finance approval; willingness to supply a personal card is not an unlimited club budget.
 
-**Checked:** 2026-09-11. This is a scope and source-review guide, not proof that the new settings are live.
+**Checked:** 2026-09-27. This is a scope and source-review guide, not proof that the new settings are live.
 
 ## What we are prioritizing
 
@@ -31,11 +31,13 @@ The first profile backend remains exactly two server operations: create a missin
 
 These are resource settings, **not a maximum monthly bill**. Google can briefly exceed the instance limit during traffic surges. A busy HTTP operation can queue requests and return a temporary busy response. Persistent storage, deployment files, database use, and other services can still cost money. The profile remains create-once so retrying an uncertain result does not overwrite existing information or grant membership.
 
-No budget, spending cap, artifact-cleanup policy, billing account, Function, or new host is configured by this source change. Billing was separately checked as disabled/unlinked on 2026-09-11. A personal card has been offered as fallback; card details belong only in Google's secure payment form.
+No budget, spending cap, artifact-cleanup policy, billing account, Function, or new host is configured by this source change. Billing was separately checked as disabled/unlinked on 2026-09-27; the club account could access zero billing accounts. A personal card has been offered as fallback; card details belong only in Google's secure payment form.
+
+[Issue #691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22, the program that runs the server code. Google schedules the old Node 20 runtime to be taken out of service on October 30, 2026. The update keeps the same two operations and resource limits. It adds automated compatibility and made-up profile checks, but does not deploy anything or fix every dependency warning. Hosted Node 22 behavior is **NOT AVAILABLE YET**.
 
 ## Review before a low-cost release
 
-**Prerequisites:** issue #683 and its reviewed pull request; the exact release source and test results; a named release approver; a private billing/payment-owner decision; and a platform maintainer. The existing release dependencies still apply. Never put payment details, passwords, or member records in an issue.
+**Prerequisites:** issues #683 and #691 and their reviewed pull requests; the exact release source and test results; a named release approver; a private billing/payment-owner decision; and a platform maintainer. The existing release dependencies still apply. Never put payment details, passwords, or member records in an issue.
 
 ```mermaid
 flowchart LR
@@ -51,8 +53,8 @@ Text alternative: confirm the small scope, review source, verify provider contro
 
 1. Confirm the public pages to keep and the two profile operations to deploy.
 2. Confirm the release adds no payment, email, photo, or synchronization service.
-3. Ask the maintainer for the exact merged source and passing tests.
-4. Ask for separate provider evidence of all four resource settings on each Function. Google may leave out a zero minimum-instance value; the maintainer must show that this was decoded using Google's documented format. Other missing or malformed settings are not proof of safe defaults.
+3. Ask the maintainer for the exact merged source and all six passing checks, including “Node 22 backend compatibility.”
+4. Ask for separate provider evidence of Node 22 and all four resource settings on each Function. Google may leave out a zero minimum-instance value; the maintainer must show that this was decoded using Google's documented format. Other missing or malformed settings are not proof of safe defaults.
 5. Ask for the agreed alert recipients and budget amount. Alerts do not stop charges.
 6. Ask whether a service spending cap is available and configured. It does not guarantee a whole-project bill ceiling or instant shutdown.
 7. Ask for deployment-file cleanup and storage-retention evidence. Do not delete database backups as a cost shortcut.
@@ -66,12 +68,13 @@ Text alternative: confirm the small scope, review source, verify provider contro
 
 **Success proof:** a reviewed source/CI record plus separate provider readback and synthetic quality evidence. Source tests alone cannot prove lower bills or a good hosted experience.
 
-**Undo:** before release, hold the change. After release, ask the platform maintainer to use the reviewed compatible rollback or safe roll-forward. Reverting the limits can raise spending exposure and requires review. Do not edit a profile, widen permissions, switch off billing, or delete resources as an improvised fix.
+**Undo:** before release, hold the change. After release, ask the platform maintainer to use the reviewed compatible rollback or safe roll-forward on a supported runtime. Do not assume the old Node 20 version can be redeployed after its retirement date. Reverting the limits can raise spending exposure and requires review. Do not edit a profile, widen permissions, switch off billing, or delete resources as an improvised fix.
 
 **Escalation:** platform/security owner for reliability or access; treasurer/finance approver for recurring club costs; cardholder for payment authority. A specialist is still needed for provider setup, release, and rollback. This guide does not claim independent officer deployment is available.
 
 ## References
 
+- [Google's server runtime support dates](https://docs.cloud.google.com/functions/docs/runtime-support)
 - [Firebase resource settings and saturation behavior](https://firebase.google.com/docs/functions/1st-gen/manage-functions-1st)
 - [Google maximum-instance caveat](https://docs.cloud.google.com/functions/docs/reference/rest/v1/projects.locations.functions)
 - [Google's zero-value response format](https://protobuf.dev/programming-guides/json/#presence-and-default-values)

@@ -1,6 +1,11 @@
 const admin = require('firebase-admin');
 const { ensureMemberProfileDocument } = require('./memberProfile');
 
+if (process.env.REQUIRE_MEMBER_PROFILE_EMULATOR === '1'
+  && (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST)) {
+  throw new Error('Member profile integration requires both local Auth and Firestore.');
+}
+
 const describeWithEmulator = process.env.FIRESTORE_EMULATOR_HOST
   ? describe
   : describe.skip;

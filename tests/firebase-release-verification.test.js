@@ -17,7 +17,7 @@ function functionState(project, id, overrides = {}) {
     name: `projects/${project}/locations/us-central1/functions/${id}`,
     status: 'ACTIVE',
     entryPoint: id,
-    runtime: 'nodejs20',
+    runtime: 'nodejs22',
     minInstances: 0,
     maxInstances: 2,
     availableMemoryMb: 256,
@@ -231,6 +231,24 @@ test('rejects missing Function revision evidence', async () => {
 
   const errors = validateBackendState({ project, functions: {} }, after, digest);
   assert.ok(errors.includes('createMemberOnSignUp revision metadata is unreadable.'));
+});
+
+test('requires Node 22 readback for both profile Functions, not stale or missing runtime', async () => {
+  const { validateBackendState } = await import(SCRIPT_URL);
+  const project = 'demo-approved-project';
+  for (const id of ['createMemberOnSignUp', 'ensureMemberProfile']) {
+    for (const runtime of ['nodejs20', 'nodejs18', 'nodejs24', undefined, null, '22']) {
+      const functions = {
+        createMemberOnSignUp: functionState(project, 'createMemberOnSignUp'),
+        ensureMemberProfile: functionState(project, 'ensureMemberProfile'),
+      };
+      functions[id].runtime = runtime;
+      assert.deepEqual(validateBackendState({ project }, {
+        project, functions,
+        rules: rulesState(project, 'new', [{ name: 'firestore.rules', digest: 'expected' }]),
+      }, 'expected'), [`${id} has the wrong runtime or entry point.`]);
+    }
+  }
 });
 
 test('rejects missing, malformed or different resource limits on either Function', async () => {

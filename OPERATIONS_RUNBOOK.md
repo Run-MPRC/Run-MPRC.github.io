@@ -8,6 +8,14 @@ This runbook explains how to operate the website, Firebase services, and Stripe 
 
 Club officers and backup maintainers should start with [OFFICER_START_HERE.md](./OFFICER_START_HERE.md). It converts this technical runbook into short request, approval, verification, access, and emergency steps without terminal commands.
 
+### Node 22 profile release prerequisite — hosted behavior NOT AVAILABLE YET
+
+RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) changes source runtime selection, not a hosted service. The protected backend builder uses Node 22; frontend and baseline CI remain Node 20. Both pre-approval and post-approval checks require all six named jobs, including `Node 22 backend compatibility`. That job requires local Auth and Firestore and runs the profile create-once persistence test; it does not prove hosted Auth or App Check.
+
+Before any approved #136 release, the platform maintainer must obtain exact-main CI, the named environment approval, private billing/cost-control decisions, #113/#133 evidence, and a compatible rollback or roll-forward. Deploy only the two profile Functions and the separately reviewed Rules scope. Read back `nodejs22` on both Functions plus min 0/max 2/256 MB/30 seconds; then perform the approved synthetic hosted checks. Do not use Node 20 as an assumed fallback after Google's scheduled October 30, 2026 decommissioning. No package versions, trigger generation, data format, or migration changes are included here. Officers use the [low-cost review](./docs/officers/LOW_COST_COMMUNITY.md), not terminal commands.
+
+Read-only check on 2026-09-27: `runmprc@gmail.com` could access zero billing accounts; staging billing remained disabled, and Functions, Cloud Build, and Artifact Registry APIs remained disabled. No billing, IAM, API, hosted runtime, website, or production behavior was changed by #691.
+
 ## 1. Ownership roster
 
 Complete this table in the private operations system before live payments. Do not put personal phone numbers or recovery codes in this public repository.

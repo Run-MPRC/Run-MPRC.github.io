@@ -78,6 +78,15 @@ class StripeCheckoutSessionProjectionError extends Error {
       writable: false,
       configurable: false,
     });
+    // Node 22 exposes a stack setter even on a frozen Error. Keep this
+    // redacted error surface immutable without invoking a stack formatter.
+    delete this.stack;
+    SAFE_DEFINE_PROPERTY(this, 'stack', {
+      value: `StripeCheckoutSessionProjectionError: ${ERROR_MESSAGE}`,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
     SAFE_FREEZE(this);
   }
 }

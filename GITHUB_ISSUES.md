@@ -26,6 +26,18 @@ Published foundation mapping:
 
 Before creating or claiming anything from this catalog, search GitHub, confirm the predecessor is merged, then follow the timestamped claim protocol in the live issue.
 
+## Current runtime prerequisite
+
+RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares the initial profile backend for Node 22. Scope: Functions engine and lock metadata; exact staging guard/provider readback; a required sixth CI job; backend builder runtime; a fixed immutable redacted error stack; and officer handoff. Existing Node 20 checks, first-generation triggers, schema, auth, create-once semantics, two-Function scope, and #683 limits stay unchanged. No dependency versions or migrations change. #113/#133/#136, billing, hosted checks, and existing security advisories remain open; this is not a release or runner-matching activation. GitHub holds exact review/merge/CI evidence.
+
+Officer impact: no website or account behavior changes until a separately approved deployment.
+
+Officer documentation: `OFFICER_START_HERE.md`, `docs/officers/README.md`, `docs/officers/LOW_COST_COMMUNITY.md`, and `docs/officers/PUBLISH_AND_CHECK.md` distinguish runtime source preparation from hosted proof and explain the supported-runtime undo requirement.
+
+Deployment evidence: source/test work only; no website publication, `runmprc.com` change, Firebase deployment, provider configuration, or production behavior verification in #691.
+
+The 2026-09-27 production-dependency audit remains nonzero: root 5 findings (1 low, 2 moderate, 2 high: `browserslist`/`minimatch`); Functions 12 (11 moderate, 1 high: `sharp`). The lockfile differs only in the root engine field; no dependency finding is fixed or accepted as safe by this runtime update.
+
 ## Backlog conventions
 
 ### Labels

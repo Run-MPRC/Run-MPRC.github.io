@@ -16,6 +16,8 @@ The owner requests a simpler, low-cost community experience and is willing to su
 
 COST-001 [#683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) explicitly binds both profile Functions to zero reserved instances, maximum two instances each, 256 MB memory and a 30-second execution timeout. The release verifier requires matching provider readback. It records the v1 API's documented omitted-zero encoding for minimum instances; missing nonzero settings and malformed evidence remain unverified. Source and tests do not make these settings live or guarantee a bill ceiling. Cold-start, saturation, uncertain-timeout/retry and public-page availability checks remain required before release. The [officer guide](./docs/officers/LOW_COST_COMMUNITY.md) records scope, cost-control limits, proof, and recovery. Node runtime maintenance and existing provider/release gates remain open; no schema, role, price, domain, or deployed service changes in this slice.
 
+RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node.js 22 in the Functions manifest and lock metadata, staging source guard, backend release builder, and provider verifier. First-generation triggers, names, schema, authorization, create-once semantics, and all four COST-001 limits are unchanged. Existing Node 20 CI remains the baseline; a separate required Node 22 job exercises the backend and synthetic profile persistence. The immutable redacted Checkout observation error now uses a fixed stack data property because Node 22 otherwise leaves a mutable stack setter on frozen errors. This changes no checkout decision or provider call. No dependency version, billing, IAM, API, deployment, or data migration changes are included; hosted runtime and service quality remain unverified.
+
 ### Goals
 
 - Publish public club content, events, and merchandise.
@@ -59,7 +61,7 @@ flowchart LR
     Web["React single-page app\nNetlify live; Pages domain conflict unresolved"]
     Auth["Firebase Authentication"]
     FS["Cloud Firestore"]
-    Fn["Firebase Cloud Functions\nNode.js 20"]
+    Fn["Firebase Cloud Functions\nNode.js 22 source; hosted runtime unverified"]
     Stripe["Stripe-hosted Checkout\nand Stripe API"]
     Hook["Stripe webhook endpoint"]
     Mail["Firestore Email extension\nand mail provider"]
@@ -81,7 +83,7 @@ flowchart LR
     Web --> Sentry
 ```
 
-Text alternative: browsers can use the React app, Auth, Firestore, Functions, Stripe, email, Strava, and the separately bounded Sentry path; #139 source has no browser-to-Firebase-Analytics data path, but website publication and provider behavior are not proven here.
+Text alternative: browsers can use the React app, Auth, Firestore, Functions, Stripe, email, Strava, and the separately bounded Sentry path; #139 source has no browser-to-Firebase-Analytics data path. Functions source targets Node 22, but website publication, hosted runtime, and provider behavior are not proven here.
 
 ### Current component inventory
 
