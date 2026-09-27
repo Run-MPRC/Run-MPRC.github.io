@@ -2,6 +2,7 @@
 
 const admin = require('firebase-admin');
 const { createRunnerProfileStore, PROFILE_COLLECTION } = require('./runnerConnectionProfiles');
+const { ENTRY_COLLECTION, runnerEntryId } = require('./runnerConnectionReferences');
 const { profile } = require('./testSupport/runnerConnectionsFixtures');
 
 // Firestore's transaction-conflict backoff can exceed Jest's five-second unit
@@ -40,7 +41,10 @@ describeEmulator('runner profile persistence against local Firestore', () => {
 
   beforeEach(async () => {
     // Only this suite's known synthetic roots are touched; no real project IDs.
-    for (const uid of [UID, OTHER]) await db.collection(PROFILE_COLLECTION).doc(uid).delete();
+    for (const uid of [UID, OTHER]) {
+      await db.collection(PROFILE_COLLECTION).doc(uid).delete();
+      await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(uid)).delete();
+    }
     const audits = await db.collection('auditEvents').where('actorUid', '==', UID).get();
     await Promise.all(audits.docs.map((doc) => doc.ref.delete()));
     clock = INITIAL_TIME;
@@ -51,7 +55,10 @@ describeEmulator('runner profile persistence against local Firestore', () => {
   });
 
   afterAll(async () => {
-    for (const uid of [UID, OTHER]) await db.collection(PROFILE_COLLECTION).doc(uid).delete();
+    for (const uid of [UID, OTHER]) {
+      await db.collection(PROFILE_COLLECTION).doc(uid).delete();
+      await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(uid)).delete();
+    }
     const audits = await db.collection('auditEvents').where('actorUid', '==', UID).get();
     await Promise.all(audits.docs.map((doc) => doc.ref.delete()));
     await app.delete();
@@ -129,6 +136,8 @@ describeEmulator('runner profile persistence against local Firestore', () => {
 
   test('withdrawal clears the card and consent; stale save/replay cannot resurrect it', async () => {
     await store.saveOwn(UID, save(6));
+    expect((await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(UID)).get()).data())
+      .toEqual({ schemaVersion: 1, uid: UID });
     const command = { requestId: requestId(7), expectedRevision: 1 };
     const withdrawn = await store.withdrawOwn(UID, command);
     expect(withdrawn).toMatchObject({ revision: 2, adultConfirmed: false, profile: null, consent: {
@@ -136,6 +145,7 @@ describeEmulator('runner profile persistence against local Firestore', () => {
     } });
     const stored = (await db.collection(PROFILE_COLLECTION).doc(UID).get()).data();
     expect(stored.discoverable).toBe(false);
+    expect((await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(UID)).get()).exists).toBe(false);
     expect(JSON.stringify(stored)).not.toMatch(/Synthetic Runner|first_10k|coffee/);
     expect(await store.withdrawOwn(UID, command)).toEqual(withdrawn);
     await expect(store.saveOwn(UID, save(6))).rejects.toMatchObject({ code: 'aborted' });
@@ -204,6 +214,7 @@ describeEmulator('runner profile persistence against local Firestore', () => {
       memberDiscovery: false, similarity: false, broadenCircle: false,
     } }));
     expect((await db.collection(PROFILE_COLLECTION).doc(UID).get()).data().discoverable).toBe(false);
+    expect((await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(UID)).get()).exists).toBe(false);
   });
 
   test.each([
@@ -282,6 +293,7 @@ describeEmulator('runner profile persistence against local Firestore', () => {
     const failingStore = createRunnerProfileStore({ db: failingDb, authorize, now: () => clock });
     await expect(failingStore.saveOwn(UID, save(19))).rejects.toMatchObject({ code: 'unavailable' });
     expect((await db.collection(PROFILE_COLLECTION).doc(UID).get()).exists).toBe(false);
+    expect((await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(UID)).get()).exists).toBe(false);
     expect(await auditCount()).toBe(0);
   });
 

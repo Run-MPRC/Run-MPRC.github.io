@@ -78,8 +78,9 @@ client contract change, new dependency or Cloud Function export is introduced.
 
 ### Profile callable integration — disabled source, local emulator only
 
-`functions/runnerConnectionService.js` connects the store to three callable
-handlers for reading, saving and withdrawing one's own card. Its factory defaults
+`functions/runnerConnectionService.js` connects the stores to six callable
+handlers: read/save/withdraw one's own card, get recommendations, and read/change
+one's own exclusion for a previously selected reference. Its factory defaults
 disabled and is not imported by the deployment index. Request data and environment
 variables cannot enable it. Each handler uses native App Check, zero reserved
 instances, a two-instance maximum, 256 MB memory and a 30-second timeout. These
@@ -126,7 +127,70 @@ Independent read-only review found no actionable service/Rules/CI defect and
 separately passed the seven unit and eleven CI contract checks. Auth freshness
 is a point-in-time server read, not an atomic lock spanning Auth and Firestore;
 an account change after that read cannot retroactively recall a completed save.
-The recommendation delivery boundary must be reviewed separately.
+The recommendation delivery boundary below has the same point-in-time limitation.
+
+### Bounded recommendations and privacy controls — disabled source only
+
+`runnerConnectionRecommendations.js` adds server-selected daily windows and
+requester-scoped hide/block controls. It is not a browser roster or a deployed
+endpoint. All six handlers stay disabled and absent from the deployment index.
+
+- A profile save atomically adds/removes `runnerConnectionEntries/{hashedUid}`
+  alongside the profile and audit. Entries only locate candidates; they cannot
+  authorize a card. A deterministic per-viewer, per-UTC-day pivot selects at
+  most 48 entries with two bounded document-ID queries. No composite index,
+  browser cursor, search query or caller-selected pool size is introduced.
+- A window holds at most four ordinary and one mutually opted-in broadening
+  suggestion. `runnerConnectionWindows/{uid}` stores only those private UID
+  references and version/time metadata, never cached cards. Refresh, profile
+  edits, hides and blocks cannot fill vacated slots with new people that day.
+  Sparse/empty results remain honest. The UI must say no matches in today's
+  selection, not no compatible club members: the sample is not exhaustive.
+  The next UTC day permits a new window.
+  A deterministic daily audit prevents silent rebuilding if a cache is lost.
+- After selection, a fresh transaction checks the actor's current Auth and
+  canonical membership, profiles/consent, both directed exclusions, and each
+  candidate's enabled/verified account and current canonical membership.
+  Candidate accounts have no calling session to authenticate; caller session
+  revocation remains mandatory. Fresh feasibility/consent checks run again.
+  The actor is checked once more after candidate work. Removed or ineligible
+  cards are omitted, not replaced. Unknown provider failure returns fixed
+  unavailability, never partial results or a raw provider message.
+- A requester-scoped `seen` receipt is created for each selected reference;
+  this means selected, not proof a response was delivered or viewed. It permits
+  privacy changes later, without exposing another UID. A closed lookup returns
+  only the requester's current exclusion flags/revision for that reference.
+  `runnerConnectionExclusions/{hashedPair}` records directed hide/block state.
+  Hide affects only one's own results; either person's block prevents the pair
+  in both directions. Undo changes only the requester's own choice.
+- Exclusion commands require a UUID and current revision, and commit with a
+  minimal audit. Identical retries do not duplicate changes; changed/stale
+  commands conflict. A known reference can still be hidden/blocked after term
+  expiry or target withdrawal, with a current verified/non-revoked account.
+  No endpoint lists hidden people or arbitrary references; the future UI must
+  define an approved, bounded recovery/manage-controls experience.
+- Limits are separate: six recommendation requests, 30 exclusion lookups and
+  30 exclusion changes per account/hour. Each attempt counts. Recommendation
+  exhaustion cannot consume withdrawal or exclusion budgets. These bounds and
+  the daily cadence are reversible engineering defaults, not a bill ceiling,
+  a club retention policy, or a guarantee against multi-account abuse.
+- Entries, windows (including nested receipts) and exclusions deny every
+  browser read/write, query and collection-group query, including admins.
+  Pair/reference hashes are linkable pseudonyms, not anonymous or secret data.
+  Receipts/exclusions/audits require approved retention and account-deletion
+  handling before live use; this change sets no retention period.
+
+Migration impact: additive unused collections only. No real records are copied
+or backfilled. An older profile with no locator remains undiscoverable until a
+fresh explicit save; replay of an old command does not silently enroll it.
+Withdrawal clears the locator atomically but retains private anti-replay and
+privacy-control records pending approved retention. No dependencies changed.
+
+Freshness proof is limited: emulator tests mutate consent, membership, account
+state and blocks **between selection and final delivery** and require withholding.
+Firestore provides a consistent transaction snapshot, not an atomic lock across
+Auth, Firestore and network delivery. A change after the final read cannot recall
+already sent data. These tests do not prove live middleware or provider settings.
 
 ## Integration still required before the first slice is complete
 
@@ -134,11 +198,10 @@ The recommendation delivery boundary must be reviewed separately.
    unique associations and operator procedures before enabling the consumer.
 2. Rehearse callable HTTP Auth/App Check enforcement and account-loss recovery;
    the tested callbacks are not proof that a hosted endpoint exists.
-3. Add requester-scoped exclusions, block/hide, bounded reads and abuse limits.
-   Recheck current identity, eligibility, visibility and blocks before delivery;
-   a cache or prior ranker result cannot authorize a card.
-4. Extend the passing profile-service tests to candidate admission and concurrent
-   withdrawal/blocking during recommendation delivery.
+3. Approve privacy wording, retention/account-deletion handling, and a bounded
+   member-facing way to find and manage one's existing hide/block choices.
+4. Independently review the integrated recommendation/privacy interface and
+   failure cases; backend callback tests alone are not end-to-end acceptance.
 5. Add the member form, exact-card preview, explicit consent and recommendation
    interface with empty/unavailable/uncertain-save behavior. Keep its capability
    disabled until backend-first deployment and privacy/release review pass.
@@ -149,36 +212,41 @@ The recommendation delivery boundary must be reviewed separately.
 flowchart LR
   Fixture["Synthetic profile and eligibility assertions"] --> Core["Implemented bounded validator and ranker"]
   Core --> Cards["Synthetic card results only"]
-  Commands["Synthetic callable context"] --> Service["Disabled profile callable factory"]
+  Commands["Synthetic callable context"] --> Service["Disabled six-handler callable factory"]
   Service --> Auth["Local Auth: current account and revocation"]
   Service --> Membership["Local Firestore: bounded canonical membership read"]
   Auth --> Store["Implemented transaction storage primitive"]
   Membership --> Store
-  Store --> Private["Local emulator: private profiles and minimal audit receipts"]
-  Future["NOT IMPLEMENTED: member UI and recommendations service"] -.-> Service
-  Future -.-> Recheck["NOT IMPLEMENTED: candidate membership, exclusions and delivery rechecks"]
-  Recheck -.-> Core
+  Store --> Private["Local emulator: private profiles, locators and minimal audit receipts"]
+  Service --> Window["At most 48 locators; daily window of at most five references"]
+  Window --> Recheck["Fresh account, membership, consent and directed-block checks"]
+  Recheck --> Core
+  Service --> Controls["Own scoped exclusion lookup/change and audit"]
+  Controls --> Recheck
+  Future["NOT IMPLEMENTED: member interface"] -.-> Service
 ```
 
 Text alternative: synthetic callbacks exercise current account/membership checks
-and profile storage in local emulators; the member interface, recommendation
-service and delivery checks remain unimplemented and nothing is enabled live.
+and private profile storage, bounded recommendation windows and fresh privacy
+checks in local emulators; the member interface is missing and nothing is live.
 
 ## Evidence boundary
 
 The initial 50 synthetic unit tests cover validation, unit conversion, hard
 compatibility, consent, eligibility assertions, exclusions, broadening, sparse
 results, bounded input and deterministic output. Current local Node 20/Java 21
-checks pass 35 persistence plus 34 service-emulator cases, 438 Rules cases,
+checks pass 35 persistence, 34 profile-service and 38 recommendation-emulator
+cases, 468 Rules cases,
 and 134 workflow/release/security checks. Functions lint passes. The ordinary
-Functions run passes 7,629 cases with 133 emulator-only skips; the Auth/Firestore
-run passes 7,699 with 63 separately opted-in commerce-journal cases skipped.
-Skipped tests are not counted as passes. CI now requires both Auth and Firestore
-for the two runner emulator suites, separately from the ordinary unit run.
+Functions checkpoint passed 7,629 cases with 133 emulator-only skips; the current
+Auth/Firestore run passes 7,737 with 63 separately opted-in commerce-journal
+cases skipped. Skipped tests are not counted as passes. CI requires both Auth
+and Firestore for all three runner emulator suites, separately from unit tests.
 
-The preceding storage checkpoint's exact CI run 36308568014 passed all five
-jobs, including the actually executed persistence step. That run is not evidence
-for later revisions; use the PR's exact-head checks for the new service change.
+The preceding profile-service checkpoint's exact CI run 36309661314 passed all
+five jobs, including the actually executed emulator and build/artifact steps.
+That run is not evidence for later revisions; use the PR's exact-head checks for
+the new recommendation change.
 
 The focused storage review found no actionable defect. Its suggested concurrent
 save/withdrawal and forced authorization-loss-on-retry cases now pass. A
@@ -187,8 +255,13 @@ caller must refresh and submit a new withdrawal. No accepted withdrawal is
 undone by a stale command. This is still injected test admission, not a proven
 live revocation policy. Review does not complete the outstanding integration.
 
-These results do **not** prove deployed authorization, verified age, withdrawal
-during recommendation computation, stable server-side candidate windows,
+Independent read-only review of the recommendation increment found no actionable
+defect, and independently passed seven service-unit and eleven CI-contract tests.
+Its residuals are recorded above: limited daily sampling, point-in-time Auth
+freshness, missing member UI/retention procedures and unproven hosted enforcement.
+The main-task emulator run also proves exclusion audit rollback, exact recovery
+after a lost reply, authorization loss on transaction retry, and midnight retry.
+These results do **not** prove deployed authorization, verified age,
 provider billing limits, the member UI or real connections. The issue and draft PR
 remain open until integrated acceptance cases pass. No live member data is
 needed for development.
@@ -197,7 +270,7 @@ With Node 20, Java 21 and committed lockfile installs, run the focused storage
 check with:
 
 ```sh
-REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR=1 REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR=1 npx --no-install firebase emulators:exec --project demo-functions-test --only firestore,auth "npm --prefix functions run test:run -- --runInBand runnerConnectionProfiles.emulator.test.js runnerConnectionService.emulator.test.js"
+REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR=1 REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR=1 REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR=1 npx --no-install firebase emulators:exec --project demo-functions-test --only firestore,auth "npm --prefix functions run test:run -- --runInBand runnerConnectionProfiles.emulator.test.js runnerConnectionService.emulator.test.js runnerConnectionRecommendations.emulator.test.js"
 npm run test:rules
 ```
 

@@ -17,8 +17,8 @@ const { profile } = require('./testSupport/runnerConnectionsFixtures');
 test('native callable builder requires App Check and bounded resources for every operation', () => {
   functions.runWith.mockClear();
   const callables = createRunnerConnectionCallables();
-  expect(Object.keys(callables)).toHaveLength(3);
-  expect(functions.runWith).toHaveBeenCalledTimes(3);
+  expect(Object.keys(callables)).toHaveLength(6);
+  expect(functions.runWith).toHaveBeenCalledTimes(6);
   for (const [options] of functions.runWith.mock.calls) expect(options).toEqual(RUNTIME);
   expect(RUNTIME.enforceAppCheck).toBe(true);
   for (const callable of Object.values(callables)) {

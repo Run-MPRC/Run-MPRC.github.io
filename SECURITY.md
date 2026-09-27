@@ -18,8 +18,11 @@ both the card and affirmation. This is not age/identity verification and never
 accepts a DOB. The disabled profile-service factory checks current verified
 Auth, revocation and a bounded canonical membership read, with native App Check
 and separate request limits; its callback tests do not prove hosted enforcement.
-Approved membership population, candidate/exclusion/delivery-time rechecks,
-retention approval and protected release proof remain required; see the
+Source now bounds daily recommendations to five references, with fresh candidate,
+consent and directed-exclusion checks before delivery; all locator, window and
+exclusion records deny browser access. These point-in-time reads cannot recall
+data already sent. Approved membership population, retention/account-deletion
+approval, member UI and protected release proof remain required; see the
 [implementation record](./docs/RUNNER_CONNECTIONS.md).
 
 ## 2. Reporting a vulnerability

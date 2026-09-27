@@ -13,8 +13,11 @@ the existing two-profile-Function release. Read the
 [officer review guide](./docs/officers/RUNNER_CONNECTIONS.md) for the selected
 18+ self-attestation, evidence boundary and stop conditions. The disabled profile
 service's current-account/membership checks pass local tests; approved membership
-population, hosted Auth/App Check proof, recommendation service, member UI and
-a protected pilot remain outstanding.
+population, hosted Auth/App Check proof, member UI and a protected pilot remain
+outstanding. The disabled recommendation service has local synthetic tests for
+bounded daily windows, hide/block and fresh delivery checks. It adds no usable
+officer tool; retention/account-deletion and privacy-choice recovery still need
+approved procedures before a pilot.
 
 Club officers and backup maintainers should start with [OFFICER_START_HERE.md](./OFFICER_START_HERE.md). It converts this technical runbook into short request, approval, verification, access, and emergency steps without terminal commands.
 

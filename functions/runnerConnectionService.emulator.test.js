@@ -3,6 +3,7 @@
 const admin = require('firebase-admin');
 const { createRunnerConnectionCallables, MEMBERSHIP_COLLECTION, accountRateKey } = require('./runnerConnectionService');
 const { PROFILE_COLLECTION } = require('./runnerConnectionProfiles');
+const { ENTRY_COLLECTION, runnerEntryId } = require('./runnerConnectionReferences');
 const { createMembershipAuthority, applyMembershipAuthorityCommand } = require('./membershipAuthority');
 const { profile } = require('./testSupport/runnerConnectionsFixtures');
 
@@ -57,6 +58,7 @@ describeEmulator('runner profile callable integration with local Auth and Firest
         if (failure.code !== 'auth/user-not-found') throw failure;
       }
       await db.collection(PROFILE_COLLECTION).doc(uid).delete();
+      await db.collection(ENTRY_COLLECTION).doc(runnerEntryId(uid)).delete();
       await db.collection('members').doc(uid).delete();
       for (const operation of ['read', 'save', 'withdraw']) {
         await db.collection('ratelimits').doc(`runner_connection_${operation}__${accountRateKey(uid)}`).delete();

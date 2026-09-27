@@ -19,6 +19,12 @@ describe.each(actors)('runner connection profile boundary — %s', (_label, auth
     'runnerConnectionProfiles/synthetic-runner/privateRecords',
     'memberships',
     'memberships/synthetic-runner/privateRecords',
+    'runnerConnectionEntries',
+    'runnerConnectionEntries/synthetic-runner/privateRecords',
+    'runnerConnectionWindows',
+    'runnerConnectionWindows/synthetic-runner/seen',
+    'runnerConnectionExclusions',
+    'runnerConnectionExclusions/synthetic-runner/privateRecords',
   ])('cannot read, enumerate or mutate %s', async (collectionPath) => {
     const documentPath = `${collectionPath}/synthetic-runner`;
     await seed(documentPath, { marker: 'synthetic-private-card' });

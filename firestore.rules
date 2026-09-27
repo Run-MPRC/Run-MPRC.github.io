@@ -520,6 +520,18 @@ service cloud.firestore {
       }
     }
 
+    // Candidate locators, daily windows/receipts and directed exclusions are
+    // server-only. Hashing identifiers does not make these anonymous records.
+    match /runnerConnectionEntries/{document=**} {
+      allow read, write: if false;
+    }
+    match /runnerConnectionWindows/{document=**} {
+      allow read, write: if false;
+    }
+    match /runnerConnectionExclusions/{document=**} {
+      allow read, write: if false;
+    }
+
     match /auditEvents/{auditEventId} {
       allow read, write: if false;
     }

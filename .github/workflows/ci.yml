@@ -165,10 +165,12 @@ jobs:
         env:
           REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'
           REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1'
+          REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '1'
         run: >-
           npx --no-install firebase emulators:exec
           --project demo-functions-test
           --only firestore,auth
           "npm --prefix functions run test:run --
           --runInBand runnerConnectionProfiles.emulator.test.js
-          runnerConnectionService.emulator.test.js"
+          runnerConnectionService.emulator.test.js
+          runnerConnectionRecommendations.emulator.test.js"

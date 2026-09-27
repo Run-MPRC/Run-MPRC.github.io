@@ -21,9 +21,10 @@ COST-001 [#683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) expli
 The September 27 owner direction adds in-house, opt-in runner connections under
 [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689). The current
 [implementation record](./docs/RUNNER_CONNECTIONS.md) contains a synthetic-tested
-validator/ranker, private transactional storage and a disabled profile callable
-factory with current Auth/canonical-membership reads, not a connected member
-recommendation service. Approved membership population remains a release
+validator/ranker, private transactional storage and a disabled callable
+factory with current Auth/canonical-membership reads, bounded daily suggestions
+and directed hide/block controls. The member interface is still absent and no
+service is deployed. Approved membership population remains a release
 dependency; roles and officer-directory consent never replace it.
 The selected 18+ policy is explicit member self-attestation,
 with no DOB or verified-age claim; current membership remains independently

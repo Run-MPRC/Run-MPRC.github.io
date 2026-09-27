@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { readRunnerProfileInput, readConnectionConsent } = require('./runnerConnections');
 // Reuse the strict shape/UID primitives, never officer consent or directory data.
 const { readExactDataObject, isSafeUid, REQUEST_ID_PATTERN } = require('./memberDirectoryProjection');
+const { ENTRY_COLLECTION, runnerEntryId } = require('./runnerConnectionReferences');
 
 const PROFILE_COLLECTION = 'runnerConnectionProfiles';
 // Version of this source contract, not evidence that a consent notice is approved.
@@ -178,6 +179,11 @@ function createRunnerProfileStore({ db, authorize, now = Date.now } = {}) {
       // Audit contains operation metadata only, never the card/pace/goals or raw
       // request. The fingerprint is server-only, not anonymous public data.
       transaction.set(ref, next);
+      // This index is a candidate locator only. Discovery must re-read the
+      // profile, current account/membership and exclusions before returning it.
+      const entryRef = db.collection(ENTRY_COLLECTION).doc(runnerEntryId(uid));
+      if (next.discoverable) transaction.set(entryRef, { schemaVersion: 1, uid });
+      else transaction.delete(entryRef);
       transaction.create(auditRef, {
         schemaVersion: 1,
         actorUid: uid,
@@ -201,4 +207,5 @@ function createRunnerProfileStore({ db, authorize, now = Date.now } = {}) {
 
 module.exports = {
   PROFILE_COLLECTION, CONSENT_VERSION, createRunnerProfileStore, readRunnerProfileRequest,
+  readStoredProfile,
 };

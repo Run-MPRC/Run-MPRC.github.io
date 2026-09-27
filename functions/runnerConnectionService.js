@@ -7,6 +7,7 @@ const { checkRateLimit } = require('./rateLimit');
 const { readExactDataObject, isSafeUid } = require('./memberDirectoryProjection');
 const { deriveMembershipEntitlement } = require('./membershipAuthority');
 const { createRunnerProfileStore, readRunnerProfileRequest } = require('./runnerConnectionProfiles');
+const { createRunnerRecommendationStore, readExclusionRequest, readExclusionLookup } = require('./runnerConnectionRecommendations');
 
 // Additive consumer contract, NOT an enrollment/payment writer. Before enabling
 // a service, #81/#114/#115 must establish approved canonical records and unique
@@ -15,7 +16,7 @@ const MEMBERSHIP_COLLECTION = 'memberships';
 const RUNTIME = Object.freeze({
   enforceAppCheck: true, minInstances: 0, maxInstances: 2, memory: '256MB', timeoutSeconds: 30,
 });
-const LIMITS = Object.freeze({ read: 30, save: 12, withdraw: 12 });
+const LIMITS = Object.freeze({ read: 30, save: 12, withdraw: 12, recommend: 6, exclude: 30, exclusionRead: 30 });
 const MESSAGES = Object.freeze({
   'failed-precondition': 'Runner connections are not available yet.',
   unauthenticated: 'Sign in again to use runner connections.',
@@ -58,7 +59,9 @@ async function currentAccount(auth, subject) {
     : (typeof user.tokensValidAfterTime === 'string' ? Date.parse(user.tokensValidAfterTime) : NaN);
   return user.uid === subject.uid && user.disabled === false && user.emailVerified === true
     && Number.isSafeInteger(validAfter) && validAfter >= 0
-    && subject.authTime * 1000 >= validAfter;
+    // A candidate has no calling session. Only the server supplies null here;
+    // requireContext still requires a positive auth_time from every caller.
+    && (subject.authTime === null || subject.authTime * 1000 >= validAfter);
 }
 
 async function currentMembership(db, transaction, uid, now) {
@@ -97,8 +100,10 @@ function createRunnerConnectionCallables({
         const subject = requireContext(context, timestamp);
         let request;
         try {
-          request = operation === 'read'
-            ? readExactDataObject(data, []) : readRunnerProfileRequest(data, operation);
+          if (operation === 'read' || operation === 'recommend') request = readExactDataObject(data, []);
+          else if (operation === 'exclude') request = readExclusionRequest(data);
+          else if (operation === 'exclusionRead') request = readExclusionLookup(data);
+          else request = readRunnerProfileRequest(data, operation);
         } catch { throw error('invalid-argument'); }
         // Meter each network attempt, even retries and denied members. Withdrawal
         // has its own bucket so exhausted browsing/save limits cannot strand it.
@@ -108,6 +113,23 @@ function createRunnerConnectionCallables({
         });
         const database = db || admin.firestore();
         const authentication = auth || admin.auth();
+        if (['recommend', 'exclude', 'exclusionRead'].includes(operation)) {
+          const recommendations = createRunnerRecommendationStore({
+            db: database, now,
+            authorize: async ({ uid, operation: attemptedOperation, transaction }) => {
+              if (uid !== subject.uid || attemptedOperation !== operation
+                || !await currentAccount(authentication, subject)) return false;
+              return operation !== 'recommend'
+                || currentMembership(database, transaction, uid, now);
+            },
+            candidateEligible: async ({ uid, transaction }) =>
+              await currentAccount(authentication, { uid, authTime: null })
+                && currentMembership(database, transaction, uid, now),
+          });
+          if (operation === 'recommend') return await recommendations.recommend(subject.uid);
+          if (operation === 'exclusionRead') return await recommendations.readExclusion(subject.uid, request);
+          return await recommendations.setExclusion(subject.uid, request);
+        }
         const store = createRunnerProfileStore({
           db: database, now,
           authorize: async ({ uid, operation: attemptedOperation, transaction }) => {
@@ -135,6 +157,9 @@ function createRunnerConnectionCallables({
     getMyRunnerConnectionProfile: callable('read'),
     saveMyRunnerConnectionProfile: callable('save'),
     withdrawMyRunnerConnectionProfile: callable('withdraw'),
+    getMyRunnerConnectionRecommendations: callable('recommend'),
+    getMyRunnerConnectionExclusion: callable('exclusionRead'),
+    setMyRunnerConnectionExclusion: callable('exclude'),
   });
 }
 
