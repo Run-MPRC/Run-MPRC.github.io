@@ -6,6 +6,15 @@
 
 This runbook explains how to operate the website, Firebase services, and Stripe integration safely. Unless a procedure is explicitly marked **available now**, it describes the **target** operating model and must not be represented as implemented or deployed. The implementation source of truth is [GITHUB_ISSUES.md](./GITHUB_ISSUES.md); any procedure whose owning issue is not `done` is unavailable for production use.
 
+Runner connections (#689) are **NOT AVAILABLE YET**. The draft matching/storage
+code is exercised only with synthetic local data and exports no new Cloud
+Function. Do not collect profiles, run backfills or deploy these paths through
+the existing two-profile-Function release. Read the
+[officer review guide](./docs/officers/RUNNER_CONNECTIONS.md) for the selected
+18+ self-attestation, evidence boundary and stop conditions. Membership checks,
+App Check-enforced service integration, member UI and a protected pilot remain
+outstanding.
+
 Club officers and backup maintainers should start with [OFFICER_START_HERE.md](./OFFICER_START_HERE.md). It converts this technical runbook into short request, approval, verification, access, and emergency steps without terminal commands.
 
 ## 1. Ownership roster

@@ -119,16 +119,37 @@ function readRunner(input) {
     'entryRef', 'memberEligible', 'adultEligible', 'pairExcluded', 'consent', 'profile',
   ]);
   if (typeof data.entryRef !== 'string' || !/^runner_[0-9a-f]{64}$/.test(data.entryRef)) invalid();
-  const consent = exactObject(data.consent, ['memberDiscovery', 'similarity', 'broadenCircle']);
-  for (const value of [data.memberEligible, data.adultEligible, data.pairExcluded, ...Object.values(consent)]) {
+  const consent = readConnectionConsent(data.consent);
+  for (const value of [data.memberEligible, data.adultEligible, data.pairExcluded]) {
     if (typeof value !== 'boolean') invalid();
   }
-  if (!consent.memberDiscovery && (consent.similarity || consent.broadenCircle)) invalid();
   return Object.freeze({
     entryRef: data.entryRef,
     eligible: data.memberEligible && data.adultEligible && !data.pairExcluded && consent.memberDiscovery,
     consent: Object.freeze(consent),
     profile: readRunnerProfile(data.profile),
+  });
+}
+
+function readConnectionConsent(input) {
+  const consent = exactObject(input, ['memberDiscovery', 'similarity', 'broadenCircle']);
+  if (Object.values(consent).some((value) => typeof value !== 'boolean')) invalid();
+  if (!consent.memberDiscovery && (consent.similarity || consent.broadenCircle)) invalid();
+  return Object.freeze({
+    memberDiscovery: consent.memberDiscovery,
+    similarity: consent.similarity,
+    broadenCircle: consent.broadenCircle,
+  });
+}
+
+function readRunnerProfileInput(input) {
+  const canonical = readRunnerProfile(input);
+  const pace = exactObject(exactObject(input, PROFILE_FIELDS).pace, ['unit', 'fastSeconds', 'slowSeconds']);
+  // Preserve the entered unit/seconds for an exact edit round trip. All other
+  // fields come from the closed, freshly allocated canonical projection.
+  return Object.freeze({
+    ...canonical,
+    pace: Object.freeze({ unit: pace.unit, fastSeconds: pace.fastSeconds, slowSeconds: pace.slowSeconds }),
   });
 }
 
@@ -216,4 +237,7 @@ function rankRunnerConnections(viewerInput, candidateInputs) {
     : []);
 }
 
-module.exports = { RANKER_VERSION, MAX_CANDIDATES, normalizePace, readRunnerProfile, rankRunnerConnections };
+module.exports = {
+  RANKER_VERSION, MAX_CANDIDATES, normalizePace, readRunnerProfile,
+  readRunnerProfileInput, readConnectionConsent, rankRunnerConnections,
+};

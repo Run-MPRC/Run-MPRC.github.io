@@ -31,8 +31,10 @@ Before creating or claiming anything from this catalog, search GitHub, confirm t
 September 27 addition: [COMMUNITY-001 / #689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689)
 tracks owner-authorized opt-in runner connections. See [the implementation
 record](./docs/RUNNER_CONNECTIONS.md) for current source and remaining integrated
-acceptance cases. This is not a live feature or permission to deploy additional
-Functions through the two-profile-Function release.
+acceptance cases. The draft source adds a tested private storage primitive and
+member-confirmed 18+ with no DOB; membership authorization and the connected
+member service remain incomplete. This is not a live feature or permission to
+deploy additional Functions through the two-profile-Function release.
 
 ### Labels
 

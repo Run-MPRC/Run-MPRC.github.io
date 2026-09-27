@@ -173,6 +173,18 @@ function expectedFirestoreRulesJob() {
       },
       { run: 'npm ci --legacy-peer-deps --ignore-scripts' },
       { name: FIRESTORE_RULES_STEP_NAME, run: 'npm run test:rules' },
+      {
+        name: 'Install Functions dependencies for runner profile tests',
+        run: 'npm --prefix functions ci --ignore-scripts',
+      },
+      {
+        name: 'Run runner profile persistence tests against the emulator',
+        env: { REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1' },
+        run: 'npx --no-install firebase emulators:exec '
+          + '--project demo-functions-test --only firestore '
+          + '"npm --prefix functions run test:run -- '
+          + '--runInBand runnerConnectionProfiles.emulator.test.js"',
+      },
     ],
   };
 }
@@ -792,6 +804,21 @@ test('guard rejects unsafe Firestore Rules runtime or lockfile mutations', () =>
   ];
   lifecycleMutations.forEach((scripts) => {
     assert.notDeepEqual(firestoreRulesErrors(ciWorkflow, scripts), []);
+  });
+});
+
+test('guard rejects skipped, misdirected or weakened runner-profile emulator execution', () => {
+  const stepName = 'Run runner profile persistence tests against the emulator';
+  const mutations = [
+    ciWorkflow.replace("REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '0'"),
+    ciWorkflow.replace('--project demo-functions-test', '--project synthetic-hosted-project'),
+    ciWorkflow.replace('runnerConnectionProfiles.emulator.test.js', 'runnerConnections.test.js'),
+    ciWorkflow.replace(`      - name: ${stepName}`, `      - name: ${stepName}\n        if: ${NEVER_RUN}`),
+    ciWorkflow.replace(`      - name: ${stepName}`, `      - name: ${stepName}\n        continue-on-error: true`),
+  ];
+  mutations.forEach((mutated) => {
+    assert.notEqual(mutated, ciWorkflow);
+    assert.notDeepEqual(firestoreRulesErrors(mutated), []);
   });
 });
 

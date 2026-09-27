@@ -20,8 +20,11 @@ COST-001 [#683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) expli
 
 The September 27 owner direction adds in-house, opt-in runner connections under
 [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689). The current
-[implementation record](./docs/RUNNER_CONNECTIONS.md) contains a synthetic-only
-validator/ranker, not a connected member service. Member-discovery consent is
+[implementation record](./docs/RUNNER_CONNECTIONS.md) contains a synthetic-tested
+validator/ranker and private transactional storage primitive, not a connected
+member service. The selected 18+ policy is explicit member self-attestation,
+with no DOB or verified-age claim; current membership remains independently
+server-authoritative. Member-discovery consent is
 separate from officer lookup. Payment processing, demographic matching and live
 release remain separate decisions; no existing member is automatically enrolled.
 

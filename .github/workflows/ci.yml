@@ -159,3 +159,14 @@ jobs:
       - run: npm ci --legacy-peer-deps --ignore-scripts
       - name: Run Firestore rules tests against the emulator
         run: npm run test:rules
+      - name: Install Functions dependencies for runner profile tests
+        run: npm --prefix functions ci --ignore-scripts
+      - name: Run runner profile persistence tests against the emulator
+        env:
+          REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'
+        run: >-
+          npx --no-install firebase emulators:exec
+          --project demo-functions-test
+          --only firestore
+          "npm --prefix functions run test:run --
+          --runInBand runnerConnectionProfiles.emulator.test.js"

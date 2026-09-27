@@ -10,6 +10,16 @@ This is both the repository security policy and the current engineering risk reg
 
 The public informational website can continue operating with normal care. **Live race or merchandise payments should remain disabled until every P0 launch blocker below is closed and verified in a staging dress rehearsal.** The existing payment implementation is a useful prototype, but several correctness defects could mark unpaid transactions paid, lose payment callbacks, oversell race capacity, fail to reconcile late-payment links, or allow overly broad administrative access.
 
+Runner connections [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689)
+remain source-only and unavailable. Their separate private storage paths deny
+all browser access, including owner/admin access. Transactional saves require
+versioned discovery consent and explicit 18+ self-attestation; withdrawal clears
+both the card and affirmation. This is not age/identity verification and never
+accepts a DOB. The injected storage authorization callback is not a completed
+membership policy. Auth/App Check, current membership, abuse limits, exclusion
+and delivery-time rechecks, retention approval and protected release proof are
+still required; see the [implementation record](./docs/RUNNER_CONNECTIONS.md).
+
 ## 2. Reporting a vulnerability
 
 Do not disclose a suspected vulnerability, secret, customer record, payment reference, or exploit in a public GitHub issue. Until MPRC publishes a dedicated security address:

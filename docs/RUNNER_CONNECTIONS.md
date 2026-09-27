@@ -39,17 +39,53 @@ current membership/adult eligibility**. It is not imported by the application.
 The area, goal, interest, bounds and weight choices are reversible engineering
 defaults for synthetic evaluation. They are not approved club policy.
 
+### Private profile persistence — source and emulator only
+
+`functions/runnerConnectionProfiles.js` adds a server-only storage primitive,
+not a callable endpoint. It is not imported by `functions/index.js` or the app.
+Every operation requires an injected trusted authorization callback; there is
+no default grant. The callback runs on every transaction attempt, including
+idempotent retries. Synthetic tests supply a fake policy, not membership proof.
+
+- Dave selected **member-confirmed 18+** on September 27. A save requires
+  `adultConfirmed: true` and `consentVersion: 1`. This is self-attestation, not
+  verified age or identity. No date of birth is accepted or stored. The future
+  form must present an unchecked-by-default affirmation. Current membership
+  must still be checked separately on the server.
+- Missing profiles default to private without creating a record. A separate
+  `runnerConnectionProfiles/{uid}` document stores only the selected card,
+  consent and revision metadata. No existing member or officer-directory
+  record is copied, changed or automatically enrolled.
+- A UUID command and expected revision make each save/withdrawal retry-safe.
+  Profile changes and a minimal `auditEvents` receipt commit together. A
+  reused command with changed content or stale revision is rejected. An
+  uncertain reply can be recovered with the identical command.
+- Withdrawal removes the card and clears discovery, matching, broadening and
+  adult affirmation. A revision tombstone prevents a stale save from restoring
+  it. A new save requires the current revision and fresh explicit affirmation.
+  Receipt/tombstone retention still requires owner approval before live use;
+  this implementation does not choose a retention schedule.
+- Malformed stored data, clock rollback and provider failure fail closed with
+  fixed messages. No request, profile or provider error is logged. The private
+  receipt contains operation metadata and a fingerprint, not card fields.
+- Explicit Rules deny every browser read/write, including owner/admin access,
+  nested records, queries and collection-group queries. Admin SDK access still
+  requires the separate trusted authorization boundary; Rules do not police it.
+
+These are additive, unused source paths. No backfill, data migration, existing
+client contract change, new dependency or Cloud Function export is introduced.
+
 ## Integration still required before the first slice is complete
 
-1. Define the authoritative current member/adult eligibility adapter without
-   trusting request fields, a profile role mirror or officer-directory consent.
-2. Persist separate opt-in profile/consent records through versioned, retry-safe
-   server operations, with explicit pause/removal and no automatic enrollment.
+1. Connect authoritative current membership and the saved adult affirmation
+   without trusting request roles, a profile role mirror or officer consent.
+2. Wrap the storage primitive in authenticated, App Check-enforced, rate-limited
+   server operations. Permit a safe withdrawal path even after membership ends.
 3. Add requester-scoped exclusions, block/hide, bounded reads and abuse limits.
    Recheck current identity, eligibility, visibility and blocks before delivery;
    a cache or prior ranker result cannot authorize a card.
-4. Prove these private collections deny all direct browser reads/writes and that
-   server behavior passes concurrent, negative and withdrawal emulator tests.
+4. Extend the passing persistence/Rules tests to the real admission adapter and
+   concurrent withdrawal/blocking during recommendation delivery.
 5. Add the member form, exact-card preview, explicit consent and recommendation
    interface with empty/unavailable/uncertain-save behavior. Keep its capability
    disabled until backend-first deployment and privacy/release review pass.
@@ -60,23 +96,48 @@ defaults for synthetic evaluation. They are not approved club policy.
 flowchart LR
   Fixture["Synthetic profile and eligibility assertions"] --> Core["Implemented bounded validator and ranker"]
   Core --> Cards["Synthetic card results only"]
-  Future["NOT IMPLEMENTED: member UI and trusted server persistence"] -.-> Recheck["NOT IMPLEMENTED: current access and withdrawal rechecks"]
+  Commands["Synthetic commands and injected test authorization"] --> Store["Implemented transaction storage primitive"]
+  Store --> Private["Local emulator: private profiles and minimal audit receipts"]
+  Future["NOT IMPLEMENTED: member UI and authenticated service"] -.-> Store
+  Future -.-> Recheck["NOT IMPLEMENTED: current membership, exclusions and delivery rechecks"]
   Recheck -.-> Core
 ```
 
-Text alternative: only synthetic fixtures currently reach the validator and
-ranker; the member interface, persistence and current-access checks remain to be
-implemented before any real recommendation can be returned.
+Text alternative: synthetic fixtures exercise the ranker and emulator storage;
+the member interface, authenticated service, current membership and delivery
+checks remain to be implemented before any real recommendation can be returned.
 
 ## Evidence boundary
 
 The initial 50 synthetic unit tests cover validation, unit conversion, hard
 compatibility, consent, eligibility assertions, exclusions, broadening, sparse
-results, bounded input and deterministic output. They do **not** prove deployed
-authorization, adult verification, withdrawal during computation, stable
-server-side candidate windows, request throttling, persistence, the member UI or
-real connections. The issue remains open until the integrated acceptance cases
-pass. No live member data is needed for development.
+results, bounded input and deterministic output. The September 27 storage
+checkpoint also passes 35 Firestore-emulator persistence cases and 428 Rules
+tests, including ten new browser-denial cases. The full Functions unit run
+passes 7,622 cases; emulator-only cases are skipped there, not counted as passes.
+CI explicitly requires and runs the new persistence suite in the existing
+Firestore job, separately from the ordinary unit run.
+
+The focused storage review found no actionable defect. Its suggested concurrent
+save/withdrawal and forced authorization-loss-on-retry cases now pass. A
+withdrawal that loses a revision race reports a conflict, not success; the
+caller must refresh and submit a new withdrawal. No accepted withdrawal is
+undone by a stale command. This is still injected test admission, not a proven
+live revocation policy. Review does not complete the outstanding integration.
+
+These results do **not** prove deployed authorization, verified age, withdrawal
+during recommendation computation, stable server-side candidate windows,
+request throttling, the member UI or real connections. The issue and draft PR
+remain open until integrated acceptance cases pass. No live member data is
+needed for development.
+
+With Node 20, Java 21 and committed lockfile installs, run the focused storage
+check with:
+
+```sh
+REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR=1 npx --no-install firebase emulators:exec --project demo-functions-test --only firestore "npm --prefix functions run test:run -- --runInBand runnerConnectionProfiles.emulator.test.js"
+npm run test:rules
+```
 
 The separate September 27 backend preflight found staging billing disabled and
 zero billing accounts accessible to the authorized club account. The existing

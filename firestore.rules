@@ -499,6 +499,17 @@ service cloud.firestore {
       }
     }
 
+    // Member-discovery cards are not the officer directory or a browser-readable
+    // roster. Even the owner/admin must use the separately authorized server
+    // boundary for consent, revisions, withdrawal and private projections.
+    match /runnerConnectionProfiles/{uid} {
+      allow read, write: if false;
+
+      match /{nestedDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
     match /auditEvents/{auditEventId} {
       allow read, write: if false;
     }
