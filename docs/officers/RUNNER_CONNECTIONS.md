@@ -20,7 +20,8 @@ access. The disabled recommendation service also has local tests for daily
 suggestions, hide/block controls and privacy checks before returning a card.
 The member form, preview, suggestions and privacy controls now also pass tests
 with made-up data. The page remains disabled and no card is published.
-Nothing in this change is deployed.
+The runner service has not been released to members. An automatic pull-request
+preview is not a member release or a connected backend test.
 The officer lookup setting does not authorize member discovery.
 
 The tested form asks members to confirm they are 18 or older. It does not
@@ -61,6 +62,14 @@ in-memory service. It did not connect to Firebase or create accounts. The phone
 layout had no horizontal overflow; preview, save, block, own-choice undo and
 withdrawal screens worked. No screenshot artifact was retained.
 
+A separate local test now sends the actual client requests through the local
+backend, using only made-up accounts. It proves saves, suggestions, blocking,
+undo, withdrawal, membership/account checks and recovery after a lost save reply.
+This is stronger than the fake-service demonstration, but still not a connected
+browser pilot. The local test system does not verify Google's token signatures;
+the hosted identity and app-protection checks still need separate proof. The
+test does not use an officer's credentials or change billing.
+
 ## Review steps
 
 1. Ask the platform owner for the issue's current source and test record.
@@ -76,6 +85,8 @@ withdrawal screens worked. No screenshot artifact was retained.
    and returning to the page. The current visit-only undo is insufficient.
 9. Request separate website and Firebase deployment evidence before announcing
    the feature. A calculation test or green build is not proof of availability.
+10. Ask which checks used the local test system and which proved the hosted
+    service. Do not accept local token tests as proof of hosted identity checks.
 
 **Expected result:** officers can distinguish source development from a usable
 member service. No officer collects profiles or changes a roster during review.
@@ -88,7 +99,8 @@ as verified age, a minor is included, or anyone claims the code is a live servic
 **Success proof:** for now, the recorded synthetic calculation, local account,
 membership, storage, bounded recommendations, privacy-control, request-limit and
 browser-denial tests, plus separate form/client tests and a fake-service browser
-demonstration. Connected browser-to-server checks, persistent privacy-choice
+demonstration, plus actual client-to-local-backend request tests. Connected
+rendered-browser-to-hosted-server checks, persistent privacy-choice
 management, hosted authentication checks and a live pilot remain outstanding.
 A specialist is still needed to arrange a demonstration and every release step;
 backup officers can review the evidence above without a terminal.

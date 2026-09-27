@@ -41,6 +41,9 @@ has a tested form, exact preview, consent, withdrawal, recommendations and
 this-visit privacy undo; its source gate remains literally false. This is
 not a live feature or permission to
 deploy additional Functions through the two-profile-Function release.
+The latest source also adds mandatory actual-client HTTP tests against isolated
+Auth/Firestore/Functions emulators. These do not verify token signatures or a
+hosted browser pilot; local emulator success does not close #689.
 
 ### Labels
 

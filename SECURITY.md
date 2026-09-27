@@ -29,6 +29,14 @@ Approved membership population, retention/account-deletion approval, persistent
 privacy-choice management and protected integration/release proof remain required; see the
 [implementation record](./docs/RUNNER_CONNECTIONS.md).
 
+The runner transport harness uses a fixed demo project, loopback-only client and
+service network guard, disposable CLI settings and ephemeral synthetic Admin
+credentials. It does not import the production Functions index or enable a
+production capability. Local HTTP checks now use the actual browser client
+modules, but the Functions emulator bypasses token-signature verification:
+passing local missing-token/account/membership tests does not prove hosted Auth
+or App Check enforcement, attestation, IAM or browser CORS behavior.
+
 ## 2. Reporting a vulnerability
 
 Do not disclose a suspected vulnerability, secret, customer record, payment reference, or exploit in a public GitHub issue. Until MPRC publishes a dedicated security address:

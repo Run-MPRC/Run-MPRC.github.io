@@ -22,6 +22,13 @@ recommendations, withdrawal and this-visit privacy undo now pass synthetic UI
 tests; the route and account link remain disabled by a literal source gate.
 The browser demo used an in-memory fake client, not Firebase. It proves layout
 and interface transitions, not hosted access or an integrated release.
+The separate real-client HTTP rehearsal now uses the local Auth, Firestore and
+Functions emulators. Engineers run `node scripts/run-runner-transport-tests.cjs`
+with Node 20/Java 21 and the committed root/Functions installs; officers request
+its evidence through the guide. The script supplies an isolated demo project,
+empty CLI configuration and synthetic credentials and cleans up its own fixtures.
+Never use the production Functions entry point for this test. The emulator
+bypasses token signatures, so this does not replace hosted Auth/App Check proof.
 
 The #689 frontend increment expands the lint inventory to 127 files: 12 JS,
 35 JSX, 46 TS and 34 TSX. All seven new TypeScript files are finding-free;

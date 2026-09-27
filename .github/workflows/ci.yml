@@ -174,3 +174,6 @@ jobs:
           --runInBand runnerConnectionProfiles.emulator.test.js
           runnerConnectionService.emulator.test.js
           runnerConnectionRecommendations.emulator.test.js"
+      - name: Run runner client HTTP transport tests
+        timeout-minutes: 5
+        run: node scripts/run-runner-transport-tests.cjs

@@ -242,8 +242,9 @@ stays on the server. Public club information remains available without a profile
    the tested callbacks are not proof that a hosted endpoint exists.
 3. Approve privacy wording, retention/account-deletion handling, and a bounded
    member-facing way to find and manage one's existing hide/block choices.
-4. Rehearse the browser and real callable transport together in isolated staging;
-   backend callback tests and a fake-client browser demo are not end-to-end acceptance.
+4. Rehearse the rendered browser and real callable transport together in isolated
+   staging; local SDK HTTP tests and a fake-client browser demo are not hosted
+   end-to-end acceptance.
 5. Keep the implemented member interface disabled until backend-first deployment,
    persistent privacy-choice management and privacy/release review pass.
 6. Complete full validation, independent review, officer handoff, a synthetic
@@ -253,7 +254,7 @@ stays on the server. Public club information remains available without a profile
 flowchart LR
   Fixture["Synthetic profile and eligibility assertions"] --> Core["Implemented bounded validator and ranker"]
   Core --> Cards["Synthetic card results only"]
-  Commands["Synthetic callable context"] --> Service["Disabled six-handler callable factory"]
+  Commands["Synthetic callable context"] --> Service["Six-handler callable factory: production disabled"]
   Service --> Auth["Local Auth: current account and revocation"]
   Service --> Membership["Local Firestore: bounded canonical membership read"]
   Auth --> Store["Implemented transaction storage primitive"]
@@ -267,13 +268,16 @@ flowchart LR
   UI["Implemented member form, preview and privacy UI: source gate OFF"] -.-> Client["Closed client contract: six scoped callables"]
   Client -.-> Service
   UI --> Demo["Synthetic browser demo: fake in-memory client only"]
+  HTTP["Actual client modules and Web SDK under Node"] --> Emulators["Loopback Functions HTTP emulator: test-only exports"]
+  Emulators --> Service
   Public["Public club run information: no runner profile needed"]
 ```
 
 Text alternative: synthetic callbacks exercise current account/membership checks
 and private profile storage, bounded recommendation windows and fresh privacy
-checks in local emulators; the disabled member UI has separate fake-client browser
-checks, public run information needs no runner profile, and no runner service is live.
+checks in local emulators; a separate Node test drives the actual client through
+local HTTP, while the disabled member UI has fake-client browser checks. Public
+run information needs no runner profile and no runner service is live.
 
 ## Evidence boundary
 
@@ -328,6 +332,67 @@ warnings/errors were empty. No screenshot artifact is retained. This is layout
 and UI-transition evidence, not real persistence, App Check or hosted authorization.
 The temporary browser and local server were closed afterward. TypeScript, exact
 lint-baseline and optimized artifact checks are recorded with the PR's head evidence.
+
+### Real client-to-emulator HTTP transport checkpoint
+
+The separate `tests/runner-transport.test.cjs` loads the actual three client
+TypeScript modules in memory and uses the installed Firebase Web SDK under Node.
+It calls the actual six callable handlers through the Functions HTTP emulator,
+with local Auth and Firestore, not `.run()` or a fake callable client. Eight
+sequential cases cover saving, recovery after deliberately losing a committed
+HTTP reply, exact command replay, missing App Check/signed-out denial, missing
+canonical membership despite an admin claim, invalid requests, stale revisions,
+closed/no-store replies, recommendations, mutual blocking, own undo, candidate
+withdrawal, current account loss and owner withdrawal after membership expiry.
+
+Run it with Node 20, Java 21 and the existing root/Functions lockfile installs:
+
+```sh
+node scripts/run-runner-transport-tests.cjs
+```
+
+The launcher fixes `demo-runner-http-test`, loopback hosts and a separate
+`runner-transport.firebase.json`; no existing production config/index is changed.
+Its nested package uses the SDK versions already declared and locked by
+`functions/`; do not install a separate nested dependency tree. Its test-only
+entry point refuses a different project/host or a non-emulator runtime. The
+launcher passes only an allowlisted environment and a new temporary CLI config.
+A test-only CLI adapter disables actual Google credential discovery/export;
+an empty config alone did not stop ADC discovery. Admin uses an ephemeral
+synthetic certificate kept in memory, never a real credential file. The existing
+Functions network guard allows only configured loopback endpoints for the test
+client and service. The CLI's unused local Eventarc URL is checked exactly and
+removed before that guard; production test-safety rules are not weakened.
+
+Only this run's randomized synthetic accounts and exact associated documents
+are created/deleted. Teardown removes its profiles, memberships, locators,
+windows/receipts, directed exclusions, audit records and limits, and stops the
+emulators. The disposable CLI configuration is removed. No real records,
+membership approvals, live provider settings or retention decisions are created.
+Twenty harness checks cover environment rejection, credential-free startup,
+exact CLI arguments, diagnostic containment, interruption/cleanup and shared
+SDK declarations. CI requires the exact transport launcher as a five-minute
+step in the existing Rules job; skip/omission/command weakening is rejected.
+
+**Important limit:** the installed Firebase CLI enables token-verification
+bypass in its Functions emulator. These cases prove local request transport,
+server account/membership reads and persistence behavior, **not cryptographic
+ID-token or App Check verification**, real attestation, hosted IAM, replay
+protection, browser CORS enforcement, or a connected rendered-browser pilot.
+Synthetic App Check tokens work only in that local decoder. Native App Check
+enforcement in the service source remains enabled; production feature gates and
+deployment exports remain unchanged. Hosted staging proof is still required.
+
+Local Node 20/Java 21 verification passes all eight HTTP cases with zero users
+and root collections after teardown, all 20 harness checks, full Functions with
+Auth/Firestore (7,757 passed; 63 separately opted-in commerce cases skipped),
+135 workflow/release/security checks, Functions lint and whitespace checks.
+Independent read-only transport review found no actionable defect; it did not
+run the emulators. No runtime client/server, Rules, production config, lockfile
+or generated sitemap changed. Fresh production-dependency audits still report
+the existing root five findings (two high) and Functions twelve (one high,
+`sharp`); this test-only SDK manifest reuses the parent installation, not an
+upgrade or a new dependency resolution. Those advisories remain release work.
 
 With Node 20, Java 21 and committed lockfile installs, run the focused storage
 check with:

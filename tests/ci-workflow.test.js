@@ -191,6 +191,11 @@ function expectedFirestoreRulesJob() {
           + 'runnerConnectionService.emulator.test.js '
           + 'runnerConnectionRecommendations.emulator.test.js"',
       },
+      {
+        name: 'Run runner client HTTP transport tests',
+        'timeout-minutes': 5,
+        run: 'node scripts/run-runner-transport-tests.cjs',
+      },
     ],
   };
 }
@@ -831,6 +836,19 @@ test('guard rejects skipped, misdirected or weakened runner-profile emulator exe
     assert.notEqual(mutated, ciWorkflow);
     assert.notDeepEqual(firestoreRulesErrors(mutated), []);
   });
+});
+
+test('guard requires exact runner HTTP transport execution without bypass or omission', () => {
+  const step = '      - name: Run runner client HTTP transport tests\n'
+    + '        timeout-minutes: 5\n'
+    + '        run: node scripts/run-runner-transport-tests.cjs\n';
+  assert.ok(ciWorkflow.includes(step));
+  [
+    ciWorkflow.replace(step, ''),
+    ciWorkflow.replace(step, step.replace('        timeout', `        if: ${NEVER_RUN}\n        timeout`)),
+    ciWorkflow.replace(step, step.replace('        timeout', '        continue-on-error: true\n        timeout')),
+    ciWorkflow.replace('run: node scripts/run-runner-transport-tests.cjs', 'run: echo skipped'),
+  ].forEach((mutated) => assert.notDeepEqual(firestoreRulesErrors(mutated), []));
 });
 
 test('guard rejects omission from either protected-release recheck', () => {

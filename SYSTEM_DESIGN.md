@@ -33,6 +33,9 @@ with no DOB or verified-age claim; current membership remains independently
 server-authoritative. Member-discovery consent is
 separate from officer lookup. Payment processing, demographic matching and live
 release remain separate decisions; no existing member is automatically enrolled.
+The actual client also passes a separate Node/Web SDK-to-local-HTTP rehearsal
+against Auth/Firestore/Functions emulators. It is not a rendered-browser pilot
+or token-signature/App Check proof; hosted staging remains required.
 
 - Publish public club content, events, and merchandise.
 - Support anonymous and signed-in race registration.

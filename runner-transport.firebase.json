@@ -1,0 +1,16 @@
+{
+  "functions": [{ "source": "functions/testSupport/runnerHttp", "codebase": "runner-http-test" }],
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "auth": { "providers": { "emailPassword": true } },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 9919 },
+    "firestore": { "host": "127.0.0.1", "port": 9819, "websocketPort": 9818 },
+    "functions": { "host": "127.0.0.1", "port": 9519 },
+    "hub": { "host": "127.0.0.1", "port": 9419 },
+    "logging": { "host": "127.0.0.1", "port": 9418 },
+    "eventarc": { "host": "127.0.0.1", "port": 9319 },
+    "tasks": { "host": "127.0.0.1", "port": 9219 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
