@@ -70,6 +70,14 @@ browser pilot. The local test system does not verify Google's token signatures;
 the hosted identity and app-protection checks still need separate proof. The
 test does not use an officer's credentials or change billing.
 
+A later September 27 demonstration connected the actual form and client to the
+local backend. A saved made-up card survived a page reload and fresh sign-in.
+Phone checks proved suggestions, blocking, own undo and withdrawal, with no
+horizontal overflow. Withdrawal stayed in effect after a reload; an account
+without a made-up membership could not save. The test accounts and records were
+removed afterward. This uses a special test account selector, not the website's
+normal sign-in route. It still does not prove hosted access or a live pilot.
+
 ## Review steps
 
 1. Ask the platform owner for the issue's current source and test record.
@@ -87,6 +95,8 @@ test does not use an officer's credentials or change billing.
    the feature. A calculation test or green build is not proof of availability.
 10. Ask which checks used the local test system and which proved the hosted
     service. Do not accept local token tests as proof of hosted identity checks.
+11. Ask for the connected local demonstration's cleanup record. It must show
+    zero remaining test users and collections, with the local services stopped.
 
 **Expected result:** officers can distinguish source development from a usable
 member service. No officer collects profiles or changes a roster during review.
@@ -100,7 +110,8 @@ as verified age, a minor is included, or anyone claims the code is a live servic
 membership, storage, bounded recommendations, privacy-control, request-limit and
 browser-denial tests, plus separate form/client tests and a fake-service browser
 demonstration, plus actual client-to-local-backend request tests. Connected
-rendered-browser-to-hosted-server checks, persistent privacy-choice
+rendered-browser-to-local-backend checks also pass. Rendered-browser-to-hosted-server
+checks, the website's normal sign-in integration, persistent privacy-choice
 management, hosted authentication checks and a live pilot remain outstanding.
 A specialist is still needed to arrange a demonstration and every release step;
 backup officers can review the evidence above without a terminal.

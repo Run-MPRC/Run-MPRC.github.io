@@ -14,19 +14,21 @@ const args = [
   'node --test tests/runner-transport.test.cjs',
 ];
 
-function start() {
+function start(extraArgs = []) {
   const child = Object.assign(new EventEmitter(), { kill: jest.fn() });
   const spawn = jest.fn(() => child);
   const rmSync = jest.fn();
   const output = jest.fn();
   const process = Object.assign(new EventEmitter(), {
     execPath: '/synthetic/node20/bin/node',
+    argv: ['node', 'script', ...extraArgs],
     env: {
       PATH: '/usr/bin', JAVA_HOME: '/synthetic/java21', TMPDIR: '/tmp',
       HOME: '/synthetic/user', GOOGLE_APPLICATION_CREDENTIALS: '/synthetic/forbidden',
       FIREBASE_TOKEN: 'synthetic-forbidden', STRIPE_SECRET: 'synthetic-forbidden',
       NODE_OPTIONS: '--require synthetic-forbidden', GCLOUD_PROJECT: 'synthetic-forbidden',
       XDG_CONFIG_HOME: '/synthetic/forbidden',
+      RUNNER_HTTP_BROWSER: '1',
     },
   });
   vm.runInNewContext(starter, {
@@ -67,6 +69,15 @@ test('launcher propagates failure, forwards interruption and hides caught diagno
   expect(run.process.exitCode).toBe(1);
   expect(run.rmSync).toHaveBeenCalledTimes(1);
 });
+test('browser rehearsal is one closed alternative, not an arbitrary emulator command', () => {
+  const run = start(['--browser']);
+  const [, command, options] = run.spawn.mock.calls[0];
+  expect(command.slice(1, -1)).toEqual(args.slice(0, -1));
+  expect(command.at(-1)).toBe('node tests/runner-browser/server.cjs');
+  expect(options.env.RUNNER_HTTP_BROWSER).toBe('1');
+  expect(() => start(['deploy'])).toThrow('only the optional --browser');
+  expect(() => start(['--browser', '--project', 'production'])).toThrow('only the optional --browser');
+});
 function adapt({ extraArgs = args, entries = [], environment = {} } = {}) {
   const credentials = { hasDefaultCredentials: jest.fn(), getCredentialPathAsync: jest.fn() };
   const cli = jest.fn();
@@ -91,6 +102,13 @@ test('CLI adapter removes credential discovery/export before loading the actual 
   expect(cli).toHaveBeenCalledTimes(1);
   await expect(credentials.hasDefaultCredentials()).resolves.toBe(false);
   await expect(credentials.getCredentialPathAsync()).rejects.toThrow('Cloud credentials are forbidden');
+});
+test('CLI adapter binds browser opt-in to the exact local rehearsal command', () => {
+  const browserArgs = [...args.slice(0, -1), 'node tests/runner-browser/server.cjs'];
+  expect(adapt({ extraArgs: browserArgs, environment: { RUNNER_HTTP_BROWSER: '1' } }).cli).toHaveBeenCalledTimes(1);
+  expect(() => adapt({ extraArgs: browserArgs })).toThrow('new disposable configuration');
+  expect(() => adapt({ environment: { RUNNER_HTTP_BROWSER: '1' } })).toThrow('new disposable configuration');
+  expect(() => adapt({ environment: { RUNNER_HTTP_BROWSER: 'true' } })).toThrow('new disposable configuration');
 });
 test.each([
   { extraArgs: ['deploy'] },

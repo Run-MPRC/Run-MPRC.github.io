@@ -36,6 +36,11 @@ production capability. Local HTTP checks now use the actual browser client
 modules, but the Functions emulator bypasses token-signature verification:
 passing local missing-token/account/membership tests does not prove hosted Auth
 or App Check enforcement, attestation, IAM or browser CORS behavior.
+The explicit `--browser` rehearsal additionally exercises real browser-to-loopback
+calls with the actual member workspace/client, not the normal app login route.
+Its fixed local assets use exact Host/Origin checks, restrictive CSP and no-store
+headers; only randomized synthetic fixtures are seeded and removed. This proves
+the exercised local CORS behavior, not hosted CORS or cryptographic enforcement.
 
 ## 2. Reporting a vulnerability
 

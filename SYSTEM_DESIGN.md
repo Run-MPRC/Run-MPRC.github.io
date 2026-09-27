@@ -36,6 +36,10 @@ release remain separate decisions; no existing member is automatically enrolled.
 The actual client also passes a separate Node/Web SDK-to-local-HTTP rehearsal
 against Auth/Firestore/Functions emulators. It is not a rendered-browser pilot
 or token-signature/App Check proof; hosted staging remains required.
+A separate test-only browser entry now joins the actual member workspace and
+client to those local emulators, with in-memory Auth and disposable fixtures.
+Save/reload, suggestions, block/undo, withdrawal/reload and nonmember denial
+worked; the production route and normal whole-app sign-in remain unexercised.
 
 - Publish public club content, events, and merchandise.
 - Support anonymous and signed-in race registration.

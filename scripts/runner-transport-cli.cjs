@@ -6,12 +6,14 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const browser = process.env.RUNNER_HTTP_BROWSER === '1';
 const expectedArgs = [
   'emulators:exec', '--non-interactive', '--project', 'demo-runner-http-test',
   '--config', 'runner-transport.firebase.json', '--only', 'auth,firestore,functions',
-  'node --test tests/runner-transport.test.cjs',
+  browser ? 'node tests/runner-browser/server.cjs' : 'node --test tests/runner-transport.test.cjs',
 ];
 if (process.env.GCLOUD_PROJECT !== 'demo-runner-http-test'
+  || (process.env.RUNNER_HTTP_BROWSER !== undefined && !browser)
   || process.env.REQUIRE_RUNNER_HTTP_EMULATOR !== '1'
   || !process.env.XDG_CONFIG_HOME
   || path.dirname(process.env.XDG_CONFIG_HOME) !== fs.realpathSync(os.tmpdir())

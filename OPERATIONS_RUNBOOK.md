@@ -29,6 +29,12 @@ its evidence through the guide. The script supplies an isolated demo project,
 empty CLI configuration and synthetic credentials and cleans up its own fixtures.
 Never use the production Functions entry point for this test. The emulator
 bypasses token signatures, so this does not replace hosted Auth/App Check proof.
+The explicit `--browser` option now provides a connected local member-workspace
+rehearsal with made-up accounts, not the app's normal sign-in flow. The printed
+loopback URL is the only supported host. Its **End rehearsal and clean up** action
+must report zero users/root collections and stop the services. See the
+implementation record for the fixed scope and tested save/reload, privacy and
+nonmember-denial behavior. Production source gates remain disabled.
 
 The #689 frontend increment expands the lint inventory to 127 files: 12 JS,
 35 JSX, 46 TS and 34 TSX. All seven new TypeScript files are finding-free;

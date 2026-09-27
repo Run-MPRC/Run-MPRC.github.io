@@ -269,6 +269,7 @@ flowchart LR
   Client -.-> Service
   UI --> Demo["Synthetic browser demo: fake in-memory client only"]
   HTTP["Actual client modules and Web SDK under Node"] --> Emulators["Loopback Functions HTTP emulator: test-only exports"]
+  ConnectedBrowser["Actual member UI and client in disposable local browser rehearsal"] --> Emulators
   Emulators --> Service
   Public["Public club run information: no runner profile needed"]
 ```
@@ -276,8 +277,9 @@ flowchart LR
 Text alternative: synthetic callbacks exercise current account/membership checks
 and private profile storage, bounded recommendation windows and fresh privacy
 checks in local emulators; a separate Node test drives the actual client through
-local HTTP, while the disabled member UI has fake-client browser checks. Public
-run information needs no runner profile and no runner service is live.
+local HTTP, while a separate disposable browser rehearsal joins the actual member
+UI and client to those emulators. Public run information needs no runner profile
+and no runner service is live; the production route stays disabled.
 
 ## Evidence boundary
 
@@ -412,3 +414,61 @@ The separate September 27 backend preflight found staging billing disabled and
 zero billing accounts accessible to the authorized club account. The existing
 profile deployment guard passes, but Functions deployment and protected release
 gates remain unresolved. This feature does not bypass them.
+
+### Connected local browser rehearsal — not a hosted pilot
+
+`node scripts/run-runner-transport-tests.cjs --browser` starts one fixed alternate
+test command with the same demo project, isolated CLI environment and loopback
+emulators. The argument-free command remains the mandatory eight-case CI suite;
+an inherited browser-mode variable cannot switch it. No arbitrary command,
+project or port argument is accepted. Use Node 20/Java 21 and existing lockfile
+installs. Do not run two transport modes concurrently.
+
+The test-only server builds `tests/runner-browser/entry.tsx` in memory using the
+existing locked build tools. It imports the actual `RunnerWorkspace` and actual
+callable client without changing the production source gate. Auth persistence
+is in memory. Three randomized accounts at `example.test` are created only in
+the empty emulators. Owner and partner receive declared synthetic membership
+fixtures; the partner starts with a declared fixture card. The outsider has no
+membership. These are not approved records or membership administration tools.
+
+Open the printed literal `http://127.0.0.1:9619` URL. The page is prominently
+marked synthetic. It serves only three fixed assets and a same-origin POST
+cleanup action; exact Host/Origin checks reject alternate hosts and cross-site
+actions. CSP restricts scripts to that origin and connections to the loopback
+Auth/Functions endpoints. Responses are no-store, nosniff and no-referrer; the
+server accepts no arbitrary file, target UID or Admin command. No artifact or
+credential is written to disk. The normal **End rehearsal and clean up** action
+signs out, closes the client, deletes only this run's synthetic IDs, verifies
+zero Auth users/root collections, and ends the emulators. A 30-minute timeout
+and signals also request shutdown; forced interruption is not independently
+proven to drain every emulator process and is not the normal success path.
+
+September 27 actual browser evidence: the new profile started with unchecked
+age/sharing choices; preview/save succeeded; a full reload plus fresh local sign-in
+recovered the saved card; recommendations displayed the synthetic partner.
+At 390×844, blocking withheld the card with an honest empty result and own undo
+restored the same partner. Withdrawal cleared the card and age/sharing choices,
+including after another full reload. Switching to the outsider and submitting a
+valid card was denied by the server and displayed unavailable, not success.
+No horizontal overflow was found at phone width. Captured warning/error logs
+were empty; a phone screenshot was inspected but no screenshot artifact retained.
+Normal cleanup reported zero users and root collections and all emulators stopped.
+
+This proves rendered form/client/local-server integration and the exercised
+browser-to-loopback cross-origin calls. It does **not** prove the production route,
+whole-app sign-in/service-locator integration, hosted CORS/identity/App Check,
+cryptographic token signatures, real eligibility, billing limits or a released
+feature. The harness selects synthetic accounts outside the app's normal login
+route. Hosted staging and all existing membership/privacy/release gates remain.
+
+Local verification for this increment: 36 harness checks; 7,665 ordinary Functions
+tests passed with 171 emulator-only cases explicitly skipped; the eight actual
+HTTP cases reran with zero skips; 98 workflow/release/staging/dependency contract
+checks passed. The test entry's TypeScript check, Functions lint, syntax and
+whitespace checks passed. Independent read-only review of code, lifecycle and
+documentation found no actionable issue and did not run tests. The final lifecycle
+version was separately started, read from the actual browser and normally stopped
+with zero users/root collections verified. Browser interaction remains a manual
+rehearsal, not an automated CI browser test. No application runtime, Rules,
+production config, CI permissions, package/lockfile or generated sitemap changed.

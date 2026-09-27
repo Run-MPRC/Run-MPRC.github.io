@@ -19,8 +19,9 @@ management, integrated staging and live-release work. Explicit 18+ self-attestat
 is selected; no birth date is collected. The existing small profile deployment
 scope is unchanged.
 Actual client-to-local-HTTP transport now has an isolated synthetic rehearsal;
-rendered-browser integration and hosted token/App Check verification remain
-separate required checks because the Functions emulator bypasses signatures.
+the actual member workspace/client also has a connected local browser rehearsal.
+Normal whole-app sign-in, hosted integration and token/App Check verification
+remain separate required checks because the Functions emulator bypasses signatures.
 
 MPRC can open a race or merchandise item for sale only when the platform can:
 
