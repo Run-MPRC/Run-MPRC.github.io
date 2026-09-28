@@ -25,9 +25,10 @@ test('only our unused loopback Eventarc URL is removed before the network guard'
   prepareRunnerEmulators(environment, { runtime: true });
   expect(environment).toEqual(safe());
 });
-test('harness SDK declarations resolve from the existing committed Functions installation', () => {
+test('harness runtime and SDK declarations match the committed Functions installation', () => {
   const harness = require('./package.json');
   const parent = require('../../package.json');
+  expect(harness.engines).toEqual(parent.engines);
   expect(harness.dependencies).toEqual({
     'firebase-admin': parent.dependencies['firebase-admin'],
     'firebase-functions': parent.dependencies['firebase-functions'],

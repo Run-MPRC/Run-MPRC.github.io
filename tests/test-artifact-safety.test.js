@@ -71,19 +71,20 @@ const EXPECTED_RELEASE_JOB_LOOP = [
   '          for required_job in \\',
   '            "Frontend lint + build" \\',
   '            "Cloud Functions lint + test" \\',
+  '            "Node 22 backend compatibility" \\',
   '            "Commerce command journal emulator" \\',
   `            "${JOB_NAME}" \\`,
   '            "Firestore security-rules tests"',
   '          do',
 ].join('\n');
 const EXPECTED_RELEASE_STEP_DIGESTS = Object.freeze({
-  preflight: '3dafc148dd6062bf6d1f6f9f5627f12a7a18b9baf490aff9e46dd716377e7112',
-  postApproval: '93ecd6977236c93d8bb4367dec18349906a36d333587bf0891bfbdfec590fcc5',
+  preflight: '6ce0935c8017751980bc4c090dbe2242d73a76152a7f8737642cb855077d1260',
+  postApproval: '1510e2172dd67d0bc6c624b160d5f286ad6b4af72c1da340854c88ac8101bbfe',
 });
 const EXPECTED_RELEASE_CONTEXT_DIGESTS = Object.freeze({
   header: 'd5242cf76b0e8710346728e6f6f34852f4180e22e7df4ac628bb633d5eafa9fe',
-  preflight: '55e3100f120b37c56813c149c34aeebcb9dc9095cfe9acdd5ac4a08f52e77c8f',
-  postApproval: 'db137fb23dda50944583e068701f0b6049b9b0e96f5c162e4c859f39ba16fd84',
+  preflight: '402f8f059bb066496101954cae88593b134478f91f482ad65ad3ed0bb1b46748',
+  postApproval: '2f6624d64a40222da0122a4d4bd71aacd679c5424467566e3b52f27d1bf06a34',
 });
 
 let scannerModule;

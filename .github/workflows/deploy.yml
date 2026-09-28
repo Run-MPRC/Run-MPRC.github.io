@@ -112,6 +112,7 @@ jobs:
           for required_job in \
             "Frontend lint + build" \
             "Cloud Functions lint + test" \
+            "Node 22 backend compatibility" \
             "Commerce command journal emulator" \
             "Test artifact scrubber" \
             "Firestore security-rules tests"
@@ -290,7 +291,7 @@ jobs:
       - name: Set up locked Node runtime
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -402,6 +403,7 @@ jobs:
           for required_job in \
             "Frontend lint + build" \
             "Cloud Functions lint + test" \
+            "Node 22 backend compatibility" \
             "Commerce command journal emulator" \
             "Test artifact scrubber" \
             "Firestore security-rules tests"

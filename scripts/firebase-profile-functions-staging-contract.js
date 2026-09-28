@@ -123,6 +123,8 @@ function validateSourceContract({
   functionIndex,
   packageJson,
   packageLock,
+  functionsPackageJson,
+  functionsPackageLock,
 }) {
   validateFunctionsConfig(firebaseConfig);
   if (!hasExactKeys(aliases, ['projects'])
@@ -132,6 +134,8 @@ function validateSourceContract({
   }
   validateFunctionExports(functionIndex);
   validatePackageContract(packageJson, packageLock);
+  if (functionsPackageJson?.engines?.node !== '22'
+    || functionsPackageLock?.packages?.['']?.engines?.node !== '22') reject();
 
   return Object.freeze({
     account: CLUB_ACCOUNT,
@@ -183,6 +187,8 @@ function validateRepository(root = path.resolve(__dirname, '..')) {
     functionIndex: fs.readFileSync(path.join(root, 'functions/index.js'), 'utf8'),
     packageJson: readJson(root, 'package.json'),
     packageLock: readJson(root, 'package-lock.json'),
+    functionsPackageJson: readJson(root, 'functions/package.json'),
+    functionsPackageLock: readJson(root, 'functions/package-lock.json'),
   });
 }
 

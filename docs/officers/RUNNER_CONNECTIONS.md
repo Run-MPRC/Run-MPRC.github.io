@@ -78,6 +78,11 @@ without a made-up membership could not save. The test accounts and records were
 removed afterward. This uses a special test account selector, not the website's
 normal sign-in route. It still does not prove hosted access or a live pilot.
 
+The September 28 branch update incorporates the Node 22 backend maintenance
+without enabling runner connections. Both runtime compatibility checks and the
+runner privacy tests remain required. This does not change the pilot prerequisites
+or the two-profile-operation scope of the first backend release.
+
 ## Review steps
 
 1. Ask the platform owner for the issue's current source and test record.

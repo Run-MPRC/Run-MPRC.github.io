@@ -347,7 +347,7 @@ canonical membership despite an admin claim, invalid requests, stale revisions,
 closed/no-store replies, recommendations, mutual blocking, own undo, candidate
 withdrawal, current account loss and owner withdrawal after membership expiry.
 
-Run it with Node 20, Java 21 and the existing root/Functions lockfile installs:
+Run it with Node 22, Java 21 and the existing root/Functions lockfile installs:
 
 ```sh
 node scripts/run-runner-transport-tests.cjs
@@ -355,8 +355,8 @@ node scripts/run-runner-transport-tests.cjs
 
 The launcher fixes `demo-runner-http-test`, loopback hosts and a separate
 `runner-transport.firebase.json`; no existing production config/index is changed.
-Its nested package uses the SDK versions already declared and locked by
-`functions/`; do not install a separate nested dependency tree. Its test-only
+Its nested package matches the Node 22 runtime and SDK versions already declared
+and locked by `functions/`; do not install a separate nested dependency tree. Its test-only
 entry point refuses a different project/host or a non-emulator runtime. The
 launcher passes only an allowlisted environment and a new temporary CLI config.
 A test-only CLI adapter disables actual Google credential discovery/export;
@@ -421,7 +421,7 @@ gates remain unresolved. This feature does not bypass them.
 test command with the same demo project, isolated CLI environment and loopback
 emulators. The argument-free command remains the mandatory eight-case CI suite;
 an inherited browser-mode variable cannot switch it. No arbitrary command,
-project or port argument is accepted. Use Node 20/Java 21 and existing lockfile
+project or port argument is accepted. Use Node 22/Java 21 and existing lockfile
 installs. Do not run two transport modes concurrently.
 
 The test-only server builds `tests/runner-browser/entry.tsx` in memory using the
@@ -472,3 +472,28 @@ version was separately started, read from the actual browser and normally stoppe
 with zero users/root collections verified. Browser interaction remains a manual
 rehearsal, not an automated CI browser test. No application runtime, Rules,
 production config, CI permissions, package/lockfile or generated sitemap changed.
+
+
+### September 28 integration with the Node 22 baseline
+
+The runner branch incorporates the merged #692 runtime prerequisite while
+retaining the runner privacy/security record. The test-only transport manifest
+now matches the parent Node 22 engine; a regression check rejects runtime drift.
+Runner workflow mutation tests target their own job so the added Node 22 job
+cannot receive a mutation intended to test the runner gate. All six baseline
+CI jobs and both protected-release checks remain required.
+
+Local validation of the combined source: Node 20.19.5 and Node 22.23.3 each pass
+7,669 ordinary Functions tests, with 171 emulator-only cases explicitly skipped.
+The isolated Node 22/Java 21 transport run passes all eight HTTP cases with zero
+skips and shuts down its emulators. All 140 workflow/release/staging/dependency
+contract checks, Functions lint, exact frontend lint inventory and whitespace
+checks pass. The transport runtime-parity regression failed before the manifest
+fix; the runner-job mutation test failed before its target was scoped correctly.
+No lint debt or security gate was relaxed.
+
+Use the updated PR head's CI result for hosted test evidence. These local checks
+do not establish a hosted service, normal whole-app sign-in or cryptographic
+Auth/App Check enforcement. The production feature gate remains off and the
+six runner handlers remain outside the deployment index. Membership, persistent
+privacy-choice management, retention and release prerequisites still apply.

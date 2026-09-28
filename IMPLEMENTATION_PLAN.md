@@ -7,6 +7,10 @@
 
 This plan turns the target architecture into a dependency-ordered delivery program. It is deliberately staged: payment correctness and trust boundaries come before features, and a controlled pilot comes before a broad launch.
 
+### Initial profile release runtime prerequisite
+
+RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22 before the two-Function profile release under #136. Keep the five existing Node 20 checks and require a sixth, separate Node 22 backend/profile-emulator job in both protected-release CI checks. Match manifest, lock metadata, deployment builder, and provider runtime readback. Preserve CommonJS, first-generation triggers, create-once behavior, schema, and #683 resource limits; no backfill is needed. A fixed immutable error stack is the only backend logic adaptation. Node 22 source and passing synthetic tests do not resolve billing, #113 estate disposition, #133 authority, hosted behavior, or existing dependency advisories. Do not merge or deploy runner matching as part of this runtime prerequisite.
+
 ## 1. Program outcome
 
 Owner-authorized runner connections are tracked in [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689).

@@ -200,6 +200,75 @@ function expectedFirestoreRulesJob() {
   };
 }
 
+function expectedNode22Job() {
+  return {
+    name: 'Node 22 backend compatibility',
+    'runs-on': 'ubuntu-latest',
+    'timeout-minutes': 10,
+    permissions: { contents: 'read' },
+    steps: [
+      { uses: 'actions/checkout@v6', with: { 'persist-credentials': false } },
+      { uses: 'actions/setup-node@v6', with: { 'node-version': '22', cache: 'npm' } },
+      { uses: 'actions/setup-java@v5', with: { distribution: 'temurin', 'java-version': '21' } },
+      { name: 'Install committed root dependencies', run: 'npm ci --legacy-peer-deps --ignore-scripts' },
+      { name: 'Install committed Functions dependencies', run: 'npm --prefix functions ci --ignore-scripts' },
+      { name: 'Run Node 22 backend tests with profile persistence',
+        env: { REQUIRE_MEMBER_PROFILE_EMULATOR: '1' },
+        run: 'npx --no-install firebase emulators:exec --project demo-functions-test --only firestore,auth '
+          + '"npm --prefix functions run test:run -- --runInBand"' },
+    ],
+  };
+}
+
+test('Node 22 compatibility is exact, credential-free and required on both release reads', () => {
+  assert.deepEqual(exactEmulatorJobErrors(ciWorkflow, 'functions-node22', expectedNode22Job()), []);
+  assert.deepEqual(node22ReleaseErrors(releaseWorkflow), []);
+});
+
+function node22ReleaseErrors(workflow) {
+  const errors = releaseErrors(workflow, 'Node 22 backend compatibility');
+  const backend = parseWorkflow(workflow)?.jobs?.['deploy-backend'];
+  const setup = backend?.steps?.filter((step) => step.uses?.startsWith('actions/setup-node@'));
+  if (setup?.length !== 1 || setup[0].with?.['node-version'] !== '22') {
+    errors.push('backend release must use Node 22');
+  }
+  return errors;
+}
+
+test('Node 22 release guard rejects either missing or duplicate gate and runtime downgrade', () => {
+  for (const id of ['preflight', 'deploy-backend']) {
+    const original = jobBlock(releaseWorkflow, id);
+    const name = '"Node 22 backend compatibility"';
+    for (const changed of [
+      original.replace(name, '"Not the Node 22 check"'),
+      original.replace(name, `${name} ${name}`),
+    ]) {
+      assert.notDeepEqual(node22ReleaseErrors(releaseWorkflow.replace(original, changed)), []);
+    }
+  }
+  const backend = jobBlock(releaseWorkflow, 'deploy-backend');
+  assert.notDeepEqual(node22ReleaseErrors(releaseWorkflow.replace(backend,
+    backend.replace("node-version: '22'", "node-version: '20'"))), []);
+});
+
+test('Node 22 gate rejects omission, skips, privilege growth and incorrect execution', () => {
+  const original = jobBlock(ciWorkflow, 'functions-node22');
+  for (const changed of [
+    '', original.replace("node-version: '22'", "node-version: '20'"),
+    original.replace('    runs-on:', '    if: false\n    runs-on:'),
+    original.replace('    runs-on:', '    continue-on-error: true\n    runs-on:'),
+    original.replace('contents: read', 'contents: write'),
+    original.replace('persist-credentials: false', 'persist-credentials: true'),
+    original.replace("REQUIRE_MEMBER_PROFILE_EMULATOR: '1'", "REQUIRE_MEMBER_PROFILE_EMULATOR: '0'"),
+    original.replace('demo-functions-test', 'production-project'),
+    original.replace('--only firestore,auth', '--only firestore'),
+    original.replace('--runInBand', '--runInBand --testPathIgnorePatterns=memberProfile'),
+  ]) {
+    assert.notDeepEqual(exactEmulatorJobErrors(ciWorkflow.replace(original, changed),
+      'functions-node22', expectedNode22Job()), []);
+  }
+});
+
 function ciErrors(workflow, functionsScripts = functionsPackageJson.scripts) {
   const errors = [];
   const block = jobBlock(workflow, JOB_ID);
@@ -431,9 +500,9 @@ function functionsJobCredentialErrors(workflow) {
   return errors;
 }
 
-function releaseErrors(workflow) {
+function releaseErrors(workflow, jobName = JOB_NAME) {
   const errors = [];
-  const requiredName = `"${JOB_NAME}"`;
+  const requiredName = `"${jobName}"`;
   const preflight = jobBlock(workflow, 'preflight');
   const backend = jobBlock(workflow, 'deploy-backend');
   if ((preflight.match(new RegExp(requiredName, 'g')) ?? []).length !== 1) {
@@ -709,22 +778,25 @@ test('lint baseline rejects parser errors and malformed result or baseline data'
 
 test('guard rejects missing, renamed, broadened, or unsafe CI wiring', () => {
   const commerceBlock = jobBlock(ciWorkflow, JOB_ID);
+  const mutateCommerce = (from, to) => ciWorkflow.replace(
+    commerceBlock, commerceBlock.replace(from, to),
+  );
   const mutations = [
     ciWorkflow.replace(`  ${JOB_ID}:\n`, '  removed-journal-job:\n'),
     ciWorkflow.replace(`name: ${JOB_NAME}`, 'name: Generic emulator'),
     ciWorkflow.replace(`--project ${DEMO_PROJECT}`, '--project demo-other-test'),
     ciWorkflow.replace(`${OPT_IN}: '1'`, `${OPT_IN}: '0'`),
-    ciWorkflow.replace('--only firestore', '--only auth,firestore'),
-    ciWorkflow.replace('npx --no-install firebase', 'npx firebase-tools@latest'),
+    mutateCommerce('--only firestore', '--only auth,firestore'),
+    mutateCommerce('npx --no-install firebase', 'npx firebase-tools@latest'),
     ciWorkflow.replace(TEST_FILE, 'another.test.js'),
-    ciWorkflow.replace('timeout-minutes: 10', `continue-on-error: ${ALWAYS_TRUE}`),
-    ciWorkflow.replace(
+    mutateCommerce('timeout-minutes: 10', `continue-on-error: ${ALWAYS_TRUE}`),
+    mutateCommerce(
       '        run: >-\n          npx --no-install firebase emulators:exec',
       `        if: ${NEVER_RUN}\n`
         + '        run: >-\n          npx --no-install firebase emulators:exec',
     ),
     ciWorkflow.replace(TEST_FILE, `${TEST_FILE} || true`),
-    ciWorkflow.replace(`java-version: '${JAVA_VERSION}'`, "java-version: '17'"),
+    mutateCommerce(`java-version: '${JAVA_VERSION}'`, "java-version: '17'"),
     ciWorkflow.replace(commerceBlock, `${commerceBlock}      - run: npm i -g firebase-tools\n`),
     ciWorkflow.replace(
       commerceBlock,
@@ -820,17 +892,21 @@ test('guard rejects unsafe Firestore Rules runtime or lockfile mutations', () =>
 
 test('guard rejects skipped, misdirected or weakened runner-profile emulator execution', () => {
   const stepName = 'Run runner profile persistence tests against the emulator';
+  const runnerJob = jobBlock(ciWorkflow, FIRESTORE_JOB_ID);
+  const mutateRunner = (from, to) => ciWorkflow.replace(
+    runnerJob, runnerJob.replace(from, to),
+  );
   const mutations = [
-    ciWorkflow.replace("REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '0'"),
-    ciWorkflow.replace("REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '0'"),
-    ciWorkflow.replace("REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '0'"),
-    ciWorkflow.replace('--only firestore,auth', '--only firestore'),
-    ciWorkflow.replace('runnerConnectionService.emulator.test.js', 'runnerConnectionService.test.js'),
-    ciWorkflow.replace('runnerConnectionRecommendations.emulator.test.js', 'runnerConnections.test.js'),
-    ciWorkflow.replace('--project demo-functions-test', '--project synthetic-hosted-project'),
-    ciWorkflow.replace('runnerConnectionProfiles.emulator.test.js', 'runnerConnections.test.js'),
-    ciWorkflow.replace(`      - name: ${stepName}`, `      - name: ${stepName}\n        if: ${NEVER_RUN}`),
-    ciWorkflow.replace(`      - name: ${stepName}`, `      - name: ${stepName}\n        continue-on-error: true`),
+    mutateRunner("REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '0'"),
+    mutateRunner("REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '0'"),
+    mutateRunner("REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '0'"),
+    mutateRunner('--only firestore,auth', '--only firestore'),
+    mutateRunner('runnerConnectionService.emulator.test.js', 'runnerConnectionService.test.js'),
+    mutateRunner('runnerConnectionRecommendations.emulator.test.js', 'runnerConnections.test.js'),
+    mutateRunner('--project demo-functions-test', '--project synthetic-hosted-project'),
+    mutateRunner('runnerConnectionProfiles.emulator.test.js', 'runnerConnections.test.js'),
+    mutateRunner(`      - name: ${stepName}`, `      - name: ${stepName}\n        if: ${NEVER_RUN}`),
+    mutateRunner(`      - name: ${stepName}`, `      - name: ${stepName}\n        continue-on-error: true`),
   ];
   mutations.forEach((mutated) => {
     assert.notEqual(mutated, ciWorkflow);

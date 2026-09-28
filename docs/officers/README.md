@@ -27,6 +27,8 @@ flowchart TD
 
 In words: approve the merge, request one exact release, and approve its protected environment separately; Firebase must finish before the Pages copy; then check every affected service.
 
+**Runtime maintenance, 2026-09-27:** [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22, the program that runs server code. This is source preparation only, not a deployed backend or new billing. The [low-cost guide](./LOW_COST_COMMUNITY.md) explains the required proof and supported-runtime recovery check.
+
 ## Short guides
 
 1. [Request a change](./REQUEST_A_CHANGE.md)

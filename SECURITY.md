@@ -42,6 +42,12 @@ Its fixed local assets use exact Host/Origin checks, restrictive CSP and no-stor
 headers; only randomized synthetic fixtures are seeded and removed. This proves
 the exercised local CORS behavior, not hosted CORS or cryptographic enforcement.
 
+### Runtime prerequisite — source only, 2026-09-27
+
+RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) targets Node.js 22 without changing first-generation triggers, permissions, profile schema, deployment scope, or resource limits. [Google schedules Node 20 decommissioning for October 30, 2026](https://docs.cloud.google.com/functions/docs/runtime-support). Both protected-release CI reads now require the separate Node 22 backend/profile-persistence job, and provider verification rejects either profile Function unless its runtime is exactly `nodejs22`. The original Node 20 baseline checks remain required.
+
+The dual-runtime run exposed a Node 22 error-stack accessor that remained writable despite `Object.freeze`. The unused Checkout observation projector now replaces that accessor with a fixed non-enumerable, non-writable data property before freezing; the regression test also rejects a stack-formatting hook. No raw provider value or stack frame is retained in that diagnostic. Existing malformed-input, proxy/getter, no-output, and redaction tests remain intact. This is runtime compatibility, not payment activation or a dependency-audit fix. #113/#133/#136, existing dependency findings, and hosted verification remain separate release gates.
+
 ## 2. Reporting a vulnerability
 
 Do not disclose a suspected vulnerability, secret, customer record, payment reference, or exploit in a public GitHub issue. Until MPRC publishes a dedicated security address:
