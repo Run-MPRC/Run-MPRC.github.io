@@ -13,6 +13,20 @@ RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) pr
 
 ## 1. Program outcome
 
+Owner-authorized runner connections are tracked in [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689).
+The [implementation record](./docs/RUNNER_CONNECTIONS.md) distinguishes the initial
+synthetic domain/persistence and disabled profile/recommendation-service tests
+(including bounded windows, hide/block and delivery rechecks), and the disabled
+member form/preview/recommendation UI, from outstanding canonical membership
+population, retention/account-deletion approval, persistent privacy-choice
+management, integrated staging and live-release work. Explicit 18+ self-attestation
+is selected; no birth date is collected. The existing small profile deployment
+scope is unchanged.
+Actual client-to-local-HTTP transport now has an isolated synthetic rehearsal;
+the actual member workspace/client also has a connected local browser rehearsal.
+Normal whole-app sign-in, hosted integration and token/App Check verification
+remain separate required checks because the Functions emulator bypasses signatures.
+
 MPRC can open a race or merchandise item for sale only when the platform can:
 
 - Prove one client request creates at most one active Checkout Session and business record.

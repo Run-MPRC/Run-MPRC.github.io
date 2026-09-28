@@ -43,7 +43,7 @@ const CLEAN_COMMANDS = Object.freeze([
   'test -z "$frontend_git_status"',
 ]);
 const LINT_SCRIPT = 'node .github/scripts/check-frontend-lint.cjs';
-const EXPECTED_LINT_FILES = 120;
+const EXPECTED_LINT_FILES = 127;
 const EXPECTED_LINT_ERRORS = 113;
 const EXPECTED_LINT_WARNINGS = 6;
 const YAML_TO_JSON = [
@@ -173,6 +173,29 @@ function expectedFirestoreRulesJob() {
       },
       { run: 'npm ci --legacy-peer-deps --ignore-scripts' },
       { name: FIRESTORE_RULES_STEP_NAME, run: 'npm run test:rules' },
+      {
+        name: 'Install Functions dependencies for runner profile tests',
+        run: 'npm --prefix functions ci --ignore-scripts',
+      },
+      {
+        name: 'Run runner profile persistence tests against the emulator',
+        env: {
+          REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1',
+          REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1',
+          REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '1',
+        },
+        run: 'npx --no-install firebase emulators:exec '
+          + '--project demo-functions-test --only firestore,auth '
+          + '"npm --prefix functions run test:run -- '
+          + '--runInBand runnerConnectionProfiles.emulator.test.js '
+          + 'runnerConnectionService.emulator.test.js '
+          + 'runnerConnectionRecommendations.emulator.test.js"',
+      },
+      {
+        name: 'Run runner client HTTP transport tests',
+        'timeout-minutes': 5,
+        run: 'node scripts/run-runner-transport-tests.cjs',
+      },
     ],
   };
 }
@@ -865,6 +888,43 @@ test('guard rejects unsafe Firestore Rules runtime or lockfile mutations', () =>
   lifecycleMutations.forEach((scripts) => {
     assert.notDeepEqual(firestoreRulesErrors(ciWorkflow, scripts), []);
   });
+});
+
+test('guard rejects skipped, misdirected or weakened runner-profile emulator execution', () => {
+  const stepName = 'Run runner profile persistence tests against the emulator';
+  const runnerJob = jobBlock(ciWorkflow, FIRESTORE_JOB_ID);
+  const mutateRunner = (from, to) => ciWorkflow.replace(
+    runnerJob, runnerJob.replace(from, to),
+  );
+  const mutations = [
+    mutateRunner("REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_PROFILES_EMULATOR: '0'"),
+    mutateRunner("REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_SERVICE_EMULATOR: '0'"),
+    mutateRunner("REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '1'", "REQUIRE_RUNNER_CONNECTION_RECOMMENDATIONS_EMULATOR: '0'"),
+    mutateRunner('--only firestore,auth', '--only firestore'),
+    mutateRunner('runnerConnectionService.emulator.test.js', 'runnerConnectionService.test.js'),
+    mutateRunner('runnerConnectionRecommendations.emulator.test.js', 'runnerConnections.test.js'),
+    mutateRunner('--project demo-functions-test', '--project synthetic-hosted-project'),
+    mutateRunner('runnerConnectionProfiles.emulator.test.js', 'runnerConnections.test.js'),
+    mutateRunner(`      - name: ${stepName}`, `      - name: ${stepName}\n        if: ${NEVER_RUN}`),
+    mutateRunner(`      - name: ${stepName}`, `      - name: ${stepName}\n        continue-on-error: true`),
+  ];
+  mutations.forEach((mutated) => {
+    assert.notEqual(mutated, ciWorkflow);
+    assert.notDeepEqual(firestoreRulesErrors(mutated), []);
+  });
+});
+
+test('guard requires exact runner HTTP transport execution without bypass or omission', () => {
+  const step = '      - name: Run runner client HTTP transport tests\n'
+    + '        timeout-minutes: 5\n'
+    + '        run: node scripts/run-runner-transport-tests.cjs\n';
+  assert.ok(ciWorkflow.includes(step));
+  [
+    ciWorkflow.replace(step, ''),
+    ciWorkflow.replace(step, step.replace('        timeout', `        if: ${NEVER_RUN}\n        timeout`)),
+    ciWorkflow.replace(step, step.replace('        timeout', '        continue-on-error: true\n        timeout')),
+    ciWorkflow.replace('run: node scripts/run-runner-transport-tests.cjs', 'run: echo skipped'),
+  ].forEach((mutated) => assert.notDeepEqual(firestoreRulesErrors(mutated), []));
 });
 
 test('guard rejects omission from either protected-release recheck', () => {

@@ -10,6 +10,38 @@ This is both the repository security policy and the current engineering risk reg
 
 The public informational website can continue operating with normal care. **Live race or merchandise payments should remain disabled until every P0 launch blocker below is closed and verified in a staging dress rehearsal.** The existing payment implementation is a useful prototype, but several correctness defects could mark unpaid transactions paid, lose payment callbacks, oversell race capacity, fail to reconcile late-payment links, or allow overly broad administrative access.
 
+Runner connections [#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689)
+remain source-only and unavailable. Their separate private storage paths deny
+all browser access, including owner/admin access. Transactional saves require
+versioned discovery consent and explicit 18+ self-attestation; withdrawal clears
+both the card and affirmation. This is not age/identity verification and never
+accepts a DOB. The disabled profile-service factory checks current verified
+Auth, revocation and a bounded canonical membership read, with native App Check
+and separate request limits; its callback tests do not prove hosted enforcement.
+Source now bounds daily recommendations to five references, with fresh candidate,
+consent and directed-exclusion checks before delivery; all locator, window and
+exclusion records deny browser access. These point-in-time reads cannot recall
+data already sent. The source-gated browser interface uses closed projections,
+unchecked initial consent/age confirmation, exact previews, account/app-bound
+state and identical-command recovery after uncertain saves. It clears suggestions
+on blur, expiry or failed requests; that is not a substitute for server checks.
+Approved membership population, retention/account-deletion approval, persistent
+privacy-choice management and protected integration/release proof remain required; see the
+[implementation record](./docs/RUNNER_CONNECTIONS.md).
+
+The runner transport harness uses a fixed demo project, loopback-only client and
+service network guard, disposable CLI settings and ephemeral synthetic Admin
+credentials. It does not import the production Functions index or enable a
+production capability. Local HTTP checks now use the actual browser client
+modules, but the Functions emulator bypasses token-signature verification:
+passing local missing-token/account/membership tests does not prove hosted Auth
+or App Check enforcement, attestation, IAM or browser CORS behavior.
+The explicit `--browser` rehearsal additionally exercises real browser-to-loopback
+calls with the actual member workspace/client, not the normal app login route.
+Its fixed local assets use exact Host/Origin checks, restrictive CSP and no-store
+headers; only randomized synthetic fixtures are seeded and removed. This proves
+the exercised local CORS behavior, not hosted CORS or cryptographic enforcement.
+
 ### Runtime prerequisite — source only, 2026-09-27
 
 RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) targets Node.js 22 without changing first-generation triggers, permissions, profile schema, deployment scope, or resource limits. [Google schedules Node 20 decommissioning for October 30, 2026](https://docs.cloud.google.com/functions/docs/runtime-support). Both protected-release CI reads now require the separate Node 22 backend/profile-persistence job, and provider verification rejects either profile Function unless its runtime is exactly `nodejs22`. The original Node 20 baseline checks remain required.

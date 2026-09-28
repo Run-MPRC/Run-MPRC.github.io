@@ -6,6 +6,41 @@
 
 This runbook explains how to operate the website, Firebase services, and Stripe integration safely. Unless a procedure is explicitly marked **available now**, it describes the **target** operating model and must not be represented as implemented or deployed. The implementation source of truth is [GITHUB_ISSUES.md](./GITHUB_ISSUES.md); any procedure whose owning issue is not `done` is unavailable for production use.
 
+Runner connections (#689) are **NOT AVAILABLE YET**. The draft matching/storage
+code is exercised only with synthetic local data and exports no new Cloud
+Function. Do not collect profiles, run backfills or deploy these paths through
+the existing two-profile-Function release. Read the
+[officer review guide](./docs/officers/RUNNER_CONNECTIONS.md) for the selected
+18+ self-attestation, evidence boundary and stop conditions. The disabled profile
+service's current-account/membership checks pass local tests; approved membership
+population, hosted Auth/App Check proof and a protected pilot remain
+outstanding. The disabled recommendation service has local synthetic tests for
+bounded daily windows, hide/block and fresh delivery checks. It adds no usable
+officer tool; retention/account-deletion and privacy-choice recovery still need
+approved procedures before a pilot. The member form, exact-card preview,
+recommendations, withdrawal and this-visit privacy undo now pass synthetic UI
+tests; the route and account link remain disabled by a literal source gate.
+The browser demo used an in-memory fake client, not Firebase. It proves layout
+and interface transitions, not hosted access or an integrated release.
+The separate real-client HTTP rehearsal now uses the local Auth, Firestore and
+Functions emulators. Engineers run `node scripts/run-runner-transport-tests.cjs`
+with Node 20/Java 21 and the committed root/Functions installs; officers request
+its evidence through the guide. The script supplies an isolated demo project,
+empty CLI configuration and synthetic credentials and cleans up its own fixtures.
+Never use the production Functions entry point for this test. The emulator
+bypasses token signatures, so this does not replace hosted Auth/App Check proof.
+The explicit `--browser` option now provides a connected local member-workspace
+rehearsal with made-up accounts, not the app's normal sign-in flow. The printed
+loopback URL is the only supported host. Its **End rehearsal and clean up** action
+must report zero users/root collections and stop the services. See the
+implementation record for the fixed scope and tested save/reload, privacy and
+nonmember-denial behavior. Production source gates remain disabled.
+
+The #689 frontend increment expands the lint inventory to 127 files: 12 JS,
+35 JSX, 46 TS and 34 TSX. All seven new TypeScript files are finding-free;
+the exact existing 113 errors and six warnings are unchanged. Only the inventory
+and fingerprint are updated. This is not a clean-lint claim.
+
 Club officers and backup maintainers should start with [OFFICER_START_HERE.md](./OFFICER_START_HERE.md). It converts this technical runbook into short request, approval, verification, access, and emergency steps without terminal commands.
 
 ### Node 22 profile release prerequisite — hosted behavior NOT AVAILABLE YET

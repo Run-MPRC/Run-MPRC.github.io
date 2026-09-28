@@ -40,6 +40,27 @@ The 2026-09-27 production-dependency audit remains nonzero: root 5 findings (1 l
 
 ## Backlog conventions
 
+September 27 addition: [COMMUNITY-001 / #689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689)
+tracks owner-authorized opt-in runner connections. See [the implementation
+record](./docs/RUNNER_CONNECTIONS.md) for current source and remaining integrated
+acceptance cases. The draft source adds a tested private storage primitive and
+member-confirmed 18+ with no DOB. A disabled callable factory now checks current
+Auth and canonical membership before saves and recommendations, with bounded
+daily windows, directed hide/block and fresh delivery checks. Approved membership
+population, retention/account-deletion handling, persistent privacy-choice
+management and integrated staging remain incomplete. The member interface now
+has a tested form, exact preview, consent, withdrawal, recommendations and
+this-visit privacy undo; its source gate remains literally false. This is
+not a live feature or permission to
+deploy additional Functions through the two-profile-Function release.
+The latest source also adds mandatory actual-client HTTP tests against isolated
+Auth/Firestore/Functions emulators. These do not verify token signatures or a
+hosted browser pilot; local emulator success does not close #689.
+A separate explicit local browser mode now connects the actual workspace/client
+to those emulators and verifies save/reload, suggestions, block/undo, withdrawal
+and nonmember denial with disposable fixtures. Normal app sign-in and hosted
+acceptance remain unproven; production source gates are unchanged.
+
 ### Labels
 
 - Priority: `priority:P0`, `priority:P1`, `priority:P2`

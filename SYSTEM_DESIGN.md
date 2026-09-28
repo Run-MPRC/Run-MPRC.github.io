@@ -20,6 +20,29 @@ RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) pr
 
 ### Goals
 
+The September 27 owner direction adds in-house, opt-in runner connections under
+[#689](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/689). The current
+[implementation record](./docs/RUNNER_CONNECTIONS.md) contains a synthetic-tested
+validator/ranker, private transactional storage and a disabled callable
+factory with current Auth/canonical-membership reads, bounded daily suggestions
+and directed hide/block controls. The member form, exact-card preview and
+recommendation/privacy interface now have synthetic tests, but remain disabled
+behind a literal source gate. No service is deployed. Approved membership
+population remains a release
+dependency; roles and officer-directory consent never replace it.
+The selected 18+ policy is explicit member self-attestation,
+with no DOB or verified-age claim; current membership remains independently
+server-authoritative. Member-discovery consent is
+separate from officer lookup. Payment processing, demographic matching and live
+release remain separate decisions; no existing member is automatically enrolled.
+The actual client also passes a separate Node/Web SDK-to-local-HTTP rehearsal
+against Auth/Firestore/Functions emulators. It is not a rendered-browser pilot
+or token-signature/App Check proof; hosted staging remains required.
+A separate test-only browser entry now joins the actual member workspace and
+client to those local emulators, with in-memory Auth and disposable fixtures.
+Save/reload, suggestions, block/undo, withdrawal/reload and nonmember denial
+worked; the production route and normal whole-app sign-in remain unexercised.
+
 - Publish public club content, events, and merchandise.
 - Support anonymous and signed-in race registration.
 - Apply member pricing only when the server verifies a current member role.
@@ -799,7 +822,7 @@ The CommonJS module creates an account-independent revision-1 snapshot, records 
 
 This contract does not verify a person, payment, plan, evidence item, refund, dispute, or policy decision. It does not choose calendar-year versus anniversary terms, grace, prices, plan eligibility, retention, or legacy disposition. Its identifier grammar is not a semantic privacy classifier; a future trusted server must mint opaque values and establish every referenced fact. The last-command marker prevents only an immediate changed retry; command IDs are not a durable global replay registry. #451 changes only the accepted command ordering within schema version 1: existing link-first snapshots remain valid, and because no snapshot is persisted or runtime-adopted, this correction needs no migration or backfill. Durable cross-record UID uniqueness, full command replay history, append-only audit, Firestore schema/Rules, custom claims, token refresh/revocation, runtime authorization, any future migration, and deployment are later children behind #110, #113, #114, AUTH-003/ADMIN, and the protected release work.
 
-The module is imported by no runtime or Functions index. It reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and cannot make #81, annual renewal, discounts, roster export, or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
+The module itself reads no clock or environment, calls no Firebase/Stripe/provider service, stores nothing, logs nothing, changes no current profile/role/claim, and is absent from the Functions index. The disabled runner-profile service factory in #689 now composes it after a bounded transactional read of `memberships/{membershipId}`; local synthetic emulator tests prove only that consumer. Approved membership population, unique association and officer operations remain unavailable under #81/#114/#115. This does not make annual renewal, discounts, roster export or officer membership tools available. Source tests and a merge are not Firebase deployment or live behavior proof.
 
 ### 8.0b Officer manual off-platform dues-evidence command — SOURCE ONLY, UNUSED
 
