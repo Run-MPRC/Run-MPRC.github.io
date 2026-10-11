@@ -20,6 +20,8 @@ RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) pr
 
 ### Goals
 
+**Owner scope clarification, 2026-10-11:** membership, events, officer management, and MPRC-organized race registrations/cancellations/bib transfers/payments/refunds are the focused core. Custom outbound email may be deferred; this is not permission to remove account verification/recovery or invent refund/transfer policy. Firebase remains the club-record authority; hosted Checkout keeps card entry outside the club application. These follow-on workflows remain unavailable until their own reviewed source, provider, and failure/retry evidence is complete. COST-002 [#693](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/693) now supplies only trial-linked staging billing and a verified warning budget, superseding the earlier staging billing-disabled checkpoints; it does not widen the first two-profile-Function release. See the [current officer cost handoff](./docs/officers/LOW_COST_COMMUNITY.md).
+
 - Publish public club content, events, and merchandise.
 - Support anonymous and signed-in race registration.
 - Apply member pricing only when the server verifies a current member role.

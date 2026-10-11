@@ -2,6 +2,20 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Engineering staging billing — checked 2026-10-11
+
+```mermaid
+flowchart LR
+    Trial["Club Free Trial account\nexpires January 10, 2027"] --> Staging["run-mprc-staging\ntrial billing linked; no Functions deployed"]
+    Staging --> Budget["Monthly USD10 gross-usage warnings\ncredits excluded; not a cap"]
+    Budget --> Owners["Existing billing notification recipients\nconfiguration verified; delivery untested"]
+    Production["Production Firebase project\nbilling remains unlinked"]
+```
+
+Text alternative: the club trial funds engineering staging, its gross-usage warning budget notifies existing billing recipients, and production billing remains unlinked.
+
+The [#693 officer cost review](./LOW_COST_COMMUNITY.md#trial-billing-and-cost-warnings--verified-for-engineering-staging-only) records the exact scope and proof. No paid-account upgrade, Function deployment, payment operation, or whole-project spending cap is represented by this map.
+
 ## Public page map
 
 ```mermaid

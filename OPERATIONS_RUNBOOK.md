@@ -16,6 +16,8 @@ Before any approved #136 release, the platform maintainer must obtain exact-main
 
 Read-only check on 2026-09-27: `runmprc@gmail.com` could access zero billing accounts; staging billing remained disabled, and Functions, Cloud Build, and Artifact Registry APIs remained disabled. No billing, IAM, API, hosted runtime, website, or production behavior was changed by #691.
 
+**Superseding staging cost checkpoint, 2026-10-11:** COST-002 [#693](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/693) verified the club Free Trial ($300 unused; January 10, 2027 expiry), enabled only `billingbudgets.googleapis.com`, linked only `run-mprc-staging` to that existing account, and read back one staging-only monthly USD10 alerts-only budget excluding credits, with actual-spend thresholds 50%/90%/100% and default IAM recipients enabled. No paid-account upgrade, runtime API enablement, IAM change, deployment, data write, or Stripe change occurred. Production remains unlinked. Historical billing-disabled staging checkpoints elsewhere in this document describe their original date, not current billing. #113/#133/#136 and all deployment gates remain open. The [officer cost guide](./docs/officers/LOW_COST_COMMUNITY.md#trial-billing-and-cost-warnings--verified-for-engineering-staging-only) is the current billing handoff; neither warnings nor instance limits guarantee a hard whole-project ceiling.
+
 ## 1. Ownership roster
 
 Complete this table in the private operations system before live payments. Do not put personal phone numbers or recovery codes in this public repository.

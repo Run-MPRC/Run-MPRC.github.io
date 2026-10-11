@@ -28,6 +28,8 @@ Before creating or claiming anything from this catalog, search GitHub, confirm t
 
 ## Current runtime prerequisite
 
+**Current staging cost prerequisite:** COST-002 [#693](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/693) records the October 11 club Free Trial readback, staging-only billing link, and monthly USD10 gross-usage warning budget with 50%/90%/100% actual-spend thresholds. Only the Budget API was enabled; production billing, runtime APIs, deployment and member/payment data remain unchanged. This supersedes historical staging billing-disabled checkpoints, not #113/#133/#136 release gates. GitHub holds the provider acceptance and documentation status; the [officer cost guide](./docs/officers/LOW_COST_COMMUNITY.md) is the no-terminal handoff.
+
 RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares the initial profile backend for Node 22. Scope: Functions engine and lock metadata; exact staging guard/provider readback; a required sixth CI job; backend builder runtime; a fixed immutable redacted error stack; and officer handoff. Existing Node 20 checks, first-generation triggers, schema, auth, create-once semantics, two-Function scope, and #683 limits stay unchanged. No dependency versions or migrations change. #113/#133/#136, billing, hosted checks, and existing security advisories remain open; this is not a release or runner-matching activation. GitHub holds exact review/merge/CI evidence.
 
 Officer impact: no website or account behavior changes until a separately approved deployment.

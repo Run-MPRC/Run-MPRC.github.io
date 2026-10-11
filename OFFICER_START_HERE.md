@@ -12,6 +12,8 @@ Attach the exact wording, public link, or approved photo when you have it. The A
 
 **Backend maintenance, 2026-09-27:** [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares a supported server runtime, Node 22, in source. It does not publish a website, deploy Functions, or add billing. The first backend release is still on hold. Follow the [low-cost review](./docs/officers/LOW_COST_COMMUNITY.md) and ask a maintainer for separate hosted proof; no officer terminal work is needed.
 
+**Staging cost setup, 2026-10-11:** [#693](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/693) verified the club's $300 Free Trial, expiring January 10, 2027, and linked engineering staging with a monthly $10 usage-warning budget. Alerts at $5/$9/$10 ignore credits so underlying usage remains visible; they do not stop spending. No paid upgrade or production billing link occurred. Functions and member/payment workflows are still **NOT AVAILABLE YET**. The [trial review](./docs/officers/LOW_COST_COMMUNITY.md#check-the-trial-and-warnings-without-a-terminal) explains what an officer can check privately without handling payment details or using a terminal. Earlier billing-disabled staging checkpoints below are historical.
+
 ## Choose the closest task
 
 | What you need | Open this short guide |
