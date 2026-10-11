@@ -10,12 +10,12 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 120,
+  "scannedFileCount": 124,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 43,
-    ".tsx": 30
+    ".ts": 45,
+    ".tsx": 32
   },
   "errorCount": 113,
   "warningCount": 6,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:b62532df877e1a1599273d0bdbf9876e75dae8be6e60ecadce601f854c283b6a",
+  "fingerprint": "sha256:314fc7ec13b35e59b8dfddedb5c8f7b4a82d02c368c81e991e7de0aa50d3245a",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -79,6 +79,8 @@
     "src/pages/admin/shop/AdminOrders.tsx",
     "src/pages/admin/shop/AdminProductEditor.tsx",
     "src/pages/admin/shop/AdminProducts.tsx",
+    "src/pages/community/Community.test.tsx",
+    "src/pages/community/Community.tsx",
     "src/pages/contact/Contact.jsx",
     "src/pages/events/EventCalendar.tsx",
     "src/pages/events/EventDetail.tsx",
@@ -122,6 +124,8 @@
     "src/services/accountEmail/accountEmailSender.ts",
     "src/services/analytics/analytics.test.ts",
     "src/services/analytics/analytics.ts",
+    "src/services/community/communityService.test.ts",
+    "src/services/community/communityService.ts",
     "src/services/events/adminService.ts",
     "src/services/events/eventsService.ts",
     "src/services/firebase/FirebaseResources.test.ts",

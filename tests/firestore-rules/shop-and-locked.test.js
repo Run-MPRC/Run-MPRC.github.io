@@ -362,6 +362,18 @@ describe('orders collection', () => {
 });
 
 describe('server-only operational collections', () => {
+  test.each([
+    'communityMemberships/runner-a', 'communityEvents/test',
+    'communityEvents/test/registrations/runner-a', 'communityConfig/events',
+    'communityCommands/runner-a/requests/test', 'communityLimits/runner-a',
+  ])('community path %s remains denied even for a browser admin', async (path) => {
+    await seed(path, { schemaVersion: 1 });
+    for (const auth of [undefined, { uid: 'runner-a', role: 'member', emailVerified: true }, { uid: 'admin-a', role: 'admin', emailVerified: true }]) {
+      const client = await db(auth);
+      await assertFails(client.doc(path).get());
+      await assertFails(client.doc(path).set({ schemaVersion: 1 }));
+    }
+  });
   describe('systemConfig/commerce', () => {
     const existingPath = 'systemConfig/commerce';
     const newPath = 'systemConfig/commerce-probe';

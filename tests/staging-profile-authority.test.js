@@ -1,5 +1,7 @@
 'use strict';
 
+require('./staging-community-release.test.js');
+
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const { spawnSync } = require('node:child_process');

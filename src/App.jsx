@@ -29,6 +29,8 @@ import AnnouncementBanner from './components/AnnouncementBanner';
 import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 import Terms from './pages/legal/Terms';
 import Privacy from './pages/legal/Privacy';
+import Community from './pages/community/Community';
+import { COMMUNITY_ENABLED } from './services/community/communityService';
 
 // Admin pages are lazy-loaded so public visitors don't download the admin JS bundle.
 const Admin = lazy(() => import('./pages/admin/AdminHome'));
@@ -85,6 +87,7 @@ function App() {
                 <Route path="shop/purchase/success" element={<PurchaseSuccess />} />
                 <Route path="shop/:slug" element={<ProductDetail />} />
                 <Route path="account" element={<Account />} />
+                {COMMUNITY_ENABLED && <Route path="community" element={<Community />} />}
                 <Route path="account/strava/callback" element={<StravaCallback />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="suggestions" element={<Suggestions />} />

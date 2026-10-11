@@ -33,6 +33,8 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 ## Short guides
 
+For the isolated membership/free-event staging test, use [Staging community actions](./STAGING_COMMUNITY.md). Its status distinguishes source preparation from hosted proof; it is not a production procedure.
+
 **Staging profiles verified, #701:** two scoped Node 22 Functions passed protected deployment, genuine browser App Check/Auth, signup, recovery, negative requests, retries and concurrency. Only made-up accounts/profiles were used and then removed. Administrator bypass is disabled for production/backend-staging; Dave/main and normal self-approval remain. Read [the dated proof and procedure](./LOW_COST_COMMUNITY.md#engineering-staging-profiles--701). Existing read-only reviewers gain no deployment access; production data/payments and website publication are unchanged. Membership and registrations remain unavailable.
 
 1. [Request a change](./REQUEST_A_CHANGE.md)

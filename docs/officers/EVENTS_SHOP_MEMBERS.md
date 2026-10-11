@@ -12,6 +12,8 @@ There is currently no proven no-code switch that safely stops all new Stripe pay
 
 ## Membership cancellation — POLICY APPROVED, NOT AVAILABLE YET
 
+[#707](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/707) prepares the separate [staging-only request and free-event review](./STAGING_COMMUNITY.md). This does not launch production membership, grant a paid term, or repair paid race cancellation. Hosted evidence is still required.
+
 Dave approved this rule on October 11, 2026: cancelling membership keeps access through the already-paid annual term. Cancellation does not issue a refund. It does not extend the term or restore suspended access. Refunds and race cancellation remain separate.
 
 There is no new member cancellation button or officer procedure from [#705](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/705). Its versioned rule and local tests do not prove a hosted workflow. Do not edit membership dates, mark a term ended, issue a refund, or use an admin race action as a workaround. Ask Dave, the sole release owner, for the separately reviewed request workflow and disposable staging proof before using it. A specialist is still needed to build and release that workflow; an officer needs no terminal, source edit, secret or member record to review this decision.

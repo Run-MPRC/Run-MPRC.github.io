@@ -828,6 +828,8 @@ The current protected release plan names only the profile-recovery Functions. It
 
 ## 9. Staging dress rehearsal
 
+For #707, only the club owner may use the fixed `scripts/staging-community-release.js` after reviewed exact-main source/six successful jobs. It deploys one isolated Function through the existing explicit builder, with a separate four-permission runtime and native archive/resource readback. This is a separately approved staging owner route, not a widening of the protected profile workflow or a reusable production release. The profile path may inspect the one known community service but still deploys only its original pair. The specialist supplies/removes UID-only synthetic fixtures, tests actual Auth/App Check plus retry/ownership/capacity/term-boundary behavior, then records staged Hosting and cleanup evidence. Officers use [the no-terminal staging review](./docs/officers/STAGING_COMMUNITY.md). Never run against production or a payment provider; future release cleanup/rollback uses a separate reviewed owner action, not direct member edits.
+
 For future membership cancellation acceptance, use a disposable account and a synthetic approved term. Prove access remains just before the original term end and is denied at/after it; the term and payment evidence must not change. Also prove ownership denials, repeated/lost-response recovery, and that suspension is not undone. #705 currently supplies only the approved policy and existing-authority unit regressions, not the cancellation request or hosted proof. Do not test with production members or real payments.
 
 Before every major payment release:

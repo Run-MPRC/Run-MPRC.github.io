@@ -15,6 +15,8 @@ RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) pr
 
 ## 1. Program outcome
 
+**#707 staging slice:** implement and test pending membership signup/withdrawal, paid-term cancellation intent and free-event signup/cancellation using one isolated service. No payment/privileged membership activation is prerequisite for these nonfinancial requests; those workflows remain separate. Fixed owner-approved staging release must verify exact merged source and all six main CI jobs, native source archive, explicit runtime/build identities and resource limits before staging Hosting. No production release is authorized.
+
 **Membership cancellation policy, 2026-10-11 — #705:** Dave approved retaining access until the already-paid annual term ends, without an automatic refund. Versioned backend source configuration and boundary regressions are a small dependency-clearing slice only. A member-owned durable cancellation request, retries/audit, UI and disposable hosted staging proof remain separate implementation work; do not route this request through legacy admin race cancellation or mark the membership ended early.
 
 MPRC can open a race or merchandise item for sale only when the platform can:
