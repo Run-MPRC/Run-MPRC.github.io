@@ -47,7 +47,7 @@ function parseRequest(input) {
     if (status) return value;
     check(ACTIONS.has(value.action) && COMMAND.test(value.requestId)
       && integer(value.expectedRevision, 1_000_000), 'invalid-argument');
-    if (event) check(ID.test(value.eventId), 'invalid-argument');
+    if (event) check(typeof value.eventId === 'string' && ID.test(value.eventId), 'invalid-argument');
     if (value.action === 'event_join') check(typeof value.waiverVersion === 'string'
       && value.waiverVersion.length <= 80 && value.waiverAccepted === true, 'invalid-argument');
     return value;

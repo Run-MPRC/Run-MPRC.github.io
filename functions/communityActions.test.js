@@ -49,6 +49,9 @@ describe('staging-only community boundary', () => {
     expect(() => parseRequest(Object.defineProperty({}, 'action', { get: getter, enumerable: true }))).toThrow();
     expect(getter).not.toHaveBeenCalled();
   });
+  test.each([null, 123, true])('rejects coerced non-string event identifiers %#', (eventId) => {
+    expect(() => parseRequest({ ...joining(), eventId })).toThrow('Request is invalid.');
+  });
 });
 
 describe('transactional membership and free-event lifecycle', () => {
