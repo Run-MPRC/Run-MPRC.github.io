@@ -29,6 +29,8 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 **Runtime maintenance, 2026-09-27:** [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22, the program that runs server code. This is source preparation only, not a deployed backend or new billing. The [low-cost guide](./LOW_COST_COMMUNITY.md) explains the required proof and supported-runtime recovery check.
 
+**Current staging cost checkpoint, 2026-10-11:** [#693](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/693) linked only engineering staging to the verified club Free Trial and configured a monthly $10 gross-usage warning budget. No paid upgrade, production billing, runtime API, deployment, or payment changed. The [trial review](./LOW_COST_COMMUNITY.md#check-the-trial-and-warnings-without-a-terminal) and [billing map](./SYSTEM_MAPS.md#engineering-staging-billing--checked-2026-10-11) supersede older billing-disabled staging checkpoints; a usable member backend remains **NOT AVAILABLE YET**.
+
 ## Short guides
 
 1. [Request a change](./REQUEST_A_CHANGE.md)

@@ -4,7 +4,7 @@
 
 **Approver:** Dave Liu for the current simplification request. Any release still uses the named platform/security reviewers. Regular club expenditure needs the club's finance approval; willingness to supply a personal card is not an unlimited club budget.
 
-**Checked:** 2026-09-27. This is a scope and source-review guide, not proof that the new settings are live.
+**Checked:** 2026-10-11. Trial billing and warning-budget settings below were checked directly. Profile Functions and the member/payment workflows are still **NOT AVAILABLE YET**.
 
 ## What we are prioritizing
 
@@ -16,7 +16,45 @@
 
 Prefer static pages and published public content: visitors can receive files from the host without running a server operation for each page view. Where events need database content, use bounded reads and avoid unnecessary polling. This is the implementation direction, not a claim that the Events service has been repaired. Production Events/Calendar still have the recorded unavailable state pending their own reviewed release.
 
-The first profile backend remains exactly two server operations: create a missing account profile and recover it safely. Keep custom checkout, refunds, inventory, automatic email, photo uploads, directory search, and Strava synchronization out of that deployment. Their existing code and future requirements remain preserved. Connecting any of them needs its own useful community outcome, cost review, tests, and approval. Do not remove a current external membership/payment service or change club policies through this guide.
+The first profile backend remains exactly two server operations: create a missing account profile and recover it safely. Keep checkout, refunds, inventory, automatic email, photo uploads, directory search, and Strava synchronization out of that particular deployment. Their existing code and safety requirements remain preserved.
+
+Dave clarified the core scope on 2026-10-11: club membership, events, member signup/cancellation, officer event management, and payments/refunds/bib transfers for **MPRC-organized races**. These money workflows are priority follow-on releases, not optional features to abandon. Keep Firebase for club records and use hosted card checkout. Custom outbound email can wait; account status and officer recovery must not depend on it. This does not waive Authentication verification/recovery requirements. Do not add automatic membership subscriptions, choose club refund/transfer policies, remove an existing service, or claim any of these workflows are live through this guide.
+
+## Trial billing and cost warnings — VERIFIED for engineering staging only
+
+[COST-002 #693](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/693) linked only `run-mprc-staging` to the existing club Free Trial billing account. The club Console showed $300 unused, expiring **January 10, 2027**. Linking the project enables Firebase's Blaze plan during the trial; it does not upgrade the billing account to paid. No paid upgrade was performed. Without an explicit paid-account upgrade, Firebase says linked projects downgrade to Spark when the trial ends; plan ongoing hosting before that date rather than treating credits as permanent funding.
+
+The warning budget is named **MPRC staging gross usage alerts**. It covers only staging, all services, and each calendar month. Its amount is **$10 USD**, with actual-usage alerts at **$5, $9, and $10**. Credits are excluded from the calculation so trial credits cannot hide underlying usage. Default billing-account notification recipients remain enabled; no new recipient, access grant, Pub/Sub automation, or shutdown rule was added. Configuration was read back; email delivery was not tested.
+
+This is an **alerts-only budget**, not a bill ceiling or approval to spend club money. The only API enabled by this step was the Cloud Billing Budget API. Functions, Cloud Build, and Artifact Registry APIs remain disabled. Production billing remains disabled/unlinked. No Function, website, DNS, Stripe configuration, member record, or payment was changed. See the [staging billing map](./SYSTEM_MAPS.md#engineering-staging-billing--checked-2026-10-11).
+
+### Check the trial and warnings without a terminal
+
+**Purpose:** verify the engineering trial and detect underlying costs before approving ongoing hosting.
+
+**Approver:** Dave Liu for this trial setup; treasurer/club finance approver for regular club expenditure. Platform/security approval is still required for a backend release.
+
+**Prerequisites:** the club Google account, the private billing-owner record, and the platform maintainer's dated #693 provider readback. Do not paste account identifiers or payment details into AI, GitHub, email, or screenshots.
+
+1. Ask the platform maintainer to show the club account's Google Cloud trial status privately.
+2. Confirm the account says **Free Trial**, not a paid account.
+3. Confirm the remaining credit and expiry date; the October 11 checkpoint was $300 and January 10, 2027.
+4. Ask the maintainer to show that only the intended staging project was linked in #693.
+5. Open the budget named **MPRC staging gross usage alerts** in the private billing Console.
+6. Confirm staging-only scope, a monthly $10 amount, and exclusion of credits.
+7. Confirm actual-usage alerts at 50%, 90%, and 100%, with default billing recipients enabled.
+8. Compare gross usage with expected engineering activity before approving any ongoing paid hosting.
+9. Ask for separate deployment and made-up-account evidence before treating a member feature as usable.
+
+**Expected result:** the officer can distinguish trial credit, underlying usage, configured warnings, and a usable backend. No officer needs to edit source, run commands, or handle a secret.
+
+**Stop conditions:** wrong account/project, a paid upgrade, missing or changed budget settings, unexplained usage, an approaching trial expiry without a hosting decision, or a claim that the budget stops spending. Do not click **Upgrade**, switch off billing, or disable services as an improvised response.
+
+**Success proof:** dated private Console review plus separate API readback of the billing link and every budget setting. An alert configuration is not proof an email was received, a cap was enforced, or a Function was deployed.
+
+**Undo:** pause new staging release work and ask the platform maintainer to check dependent resources before proposing a reviewed unlink or API change. Do not shut down a payment backend to save costs; callbacks and refunds need their own continuity plan.
+
+**Escalation:** platform maintainer for account/configuration or service failures; treasurer/finance approver for spending; cardholder for a paid-account decision. Provider setup and deployment still require a specialist.
 
 ## Cost controls in source — NOT AVAILABLE YET in hosted Functions
 
@@ -31,7 +69,7 @@ The first profile backend remains exactly two server operations: create a missin
 
 These are resource settings, **not a maximum monthly bill**. Google can briefly exceed the instance limit during traffic surges. A busy HTTP operation can queue requests and return a temporary busy response. Persistent storage, deployment files, database use, and other services can still cost money. The profile remains create-once so retrying an uncertain result does not overwrite existing information or grant membership.
 
-No budget, spending cap, artifact-cleanup policy, billing account, Function, or new host is configured by this source change. Billing was separately checked as disabled/unlinked on 2026-09-27; the club account could access zero billing accounts. A personal card has been offered as fallback; card details belong only in Google's secure payment form.
+The #683 source change configured no budget, spending cap, artifact-cleanup policy, billing account, Function, or new host. Its 2026-09-27 billing-disabled/zero-accessible-accounts checkpoint is historical and superseded only for staging billing and the warning budget by the October 11 #693 readback above. Hosted Function limits remain unverified. Card details belong only in Google's secure payment form.
 
 [Issue #691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22, the program that runs the server code. Google schedules the old Node 20 runtime to be taken out of service on October 30, 2026. The update keeps the same two operations and resource limits. It adds automated compatibility and made-up profile checks, but does not deploy anything or fix every dependency warning. Hosted Node 22 behavior is **NOT AVAILABLE YET**.
 
@@ -80,3 +118,5 @@ Text alternative: confirm the small scope, review source, verify provider contro
 - [Google's zero-value response format](https://protobuf.dev/programming-guides/json/#presence-and-default-values)
 - [Spending-cap coverage and overages](https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps)
 - [Firebase Hosting usage](https://firebase.google.com/docs/hosting/usage-quotas-pricing)
+- [Firebase free-trial billing and expiry](https://firebase.google.com/support/faq/#pricing)
+- [Budget scope and notification settings](https://docs.cloud.google.com/billing/docs/how-to/budgets)
