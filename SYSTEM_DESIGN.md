@@ -10,6 +10,8 @@ The repository already contains a substantial prototype: a public React site, Fi
 
 ## 1. Goals and non-goals
 
+**Engineering staging checkpoint, 2026-10-11 — #701:** only signup-profile creation and profile recovery are hosted and verified on Node 22. A profile-only entrypoint, explicit runtime/build accounts, scoped IAM and protected keyless deployment exclude commerce/mail/directory/Strava and website publication. Actual source archives/resource limits, genuine App Check/Auth, synthetic signup/recovery/denials/retries/concurrency and owned cleanup passed. Auth count returned to zero; no migration or production data/payment change. This supersedes source-only runtime/profile wording below only for isolated staging, not production or the target commerce platform. See the [dated officer map](./docs/officers/SYSTEM_MAPS.md#scoped-engineering-profile-release--701) and [acceptance proof](./docs/officers/LOW_COST_COMMUNITY.md#engineering-staging-profiles--701).
+
 ### Community-first cost direction — 2026-09-11
 
 The owner requests a simpler, low-cost community experience and is willing to supply a personal card as fallback. Prioritize public run/event/join/contact information and optional secure accounts; prefer static delivery and bounded data reads. The first profile release remains only `createMemberOnSignUp` plus `ensureMemberProfile`, not the prototype's commerce, mail, photo-directory, or synchronization services. Preserve their source and security requirements for separately approved later work; this is not permission to weaken trust boundaries or remove existing club services.

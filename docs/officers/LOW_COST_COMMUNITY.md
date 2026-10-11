@@ -4,7 +4,7 @@
 
 **Approver:** Dave Liu for the current simplification request. Any release still uses the named platform/security reviewers. Regular club expenditure needs the club's finance approval; willingness to supply a personal card is not an unlimited club budget.
 
-**Checked:** 2026-10-11. Trial billing and warning-budget settings below were checked directly. Profile Functions and the member/payment workflows are still **NOT AVAILABLE YET**.
+**Checked:** 2026-10-11. Two profile Functions are deployed and tested in engineering staging. Production profile deployment, paid membership, event registration and payment workflows remain **NOT AVAILABLE YET**. Trial/warnings below are the earlier #693 checkpoint, not a current invoice or remaining-credit measurement.
 
 ## What we are prioritizing
 
@@ -56,7 +56,7 @@ This is an **alerts-only budget**, not a bill ceiling or approval to spend club 
 
 **Escalation:** platform maintainer for account/configuration or service failures; treasurer/finance approver for spending; cardholder for a paid-account decision. Provider setup and deployment still require a specialist.
 
-## Cost controls in source — NOT AVAILABLE YET in hosted Functions
+## Profile cost controls — VERIFIED in engineering staging, not production
 
 [Issue #683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) sets the same resource options on both profile operations:
 
@@ -69,11 +69,15 @@ This is an **alerts-only budget**, not a bill ceiling or approval to spend club 
 
 These are resource settings, **not a maximum monthly bill**. Google can briefly exceed the instance limit during traffic surges. A busy HTTP operation can queue requests and return a temporary busy response. Persistent storage, deployment files, database use, and other services can still cost money. The profile remains create-once so retrying an uncertain result does not overwrite existing information or grant membership.
 
-The #683 source change configured no budget, spending cap, artifact-cleanup policy, billing account, Function, or new host. Its 2026-09-27 billing-disabled/zero-accessible-accounts checkpoint is historical and superseded only for staging billing and the warning budget by the October 11 #693 readback above. Hosted Function limits remain unverified. Card details belong only in Google's secure payment form.
+The #683 source change alone configured no provider service. Its older billing-disabled checkpoint was superseded for staging by #693. #701 now verifies all four limits on both hosted staging Functions, with separate runtime/build identities and image cleanup. No paid-account upgrade or production billing change occurred. Card details belong only in Google's secure payment form; configured limits and alerts do not prove zero charges.
 
-[Issue #691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22, the program that runs the server code. Google schedules the old Node 20 runtime to be taken out of service on October 30, 2026. The update keeps the same two operations and resource limits. It adds automated compatibility and made-up profile checks, but does not deploy anything or fix every dependency warning. Hosted Node 22 behavior is **NOT AVAILABLE YET**.
+[Issue #691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepared Node 22, the program that runs server code, without fixing every dependency warning. #701 now proves that runtime on both staging profiles. Google schedules the old Node 20 runtime to be taken out of service on October 30, 2026. Production deployment is still unavailable; recovery must preserve the supported runtime and resource bounds.
 
-## Profile recovery app attestation — SOURCE ONLY; NOT AVAILABLE YET
+<a id="profile-recovery-app-attestation--source-only-not-available-yet"></a>
+
+## Profile recovery app attestation — VERIFIED in engineering staging only
+
+#701 tested genuine browser reCAPTCHA Enterprise App Check and Firebase sign-in. Missing/invalid app attestation and missing/invalid sign-in returned 401. Role/user-ID injection and an array payload returned 400. Valid requests returned ready; self profile reads succeeded and another made-up user's profile read was denied. Auth and Firestore provider enforcement remain ENFORCED. This does not prove production behavior or activate other services.
 
 **Purpose:** make sure profile recovery accepts only a verified request from the club app, even if an environment setting is missing. App Check is Firebase's app-attestation check; it does not establish membership or officer permission.
 
@@ -97,11 +101,13 @@ The #683 source change configured no budget, spending cap, artifact-cleanup poli
 
 ## Engineering staging profiles — #701
 
-The first protected attempt built and activated signup, but the hosted signup test exposed missing explicit SDK project context. #703 repairs that exact partial release and the provider's empty no-retry representation. Partial deployment is not proof of a working profile service. Completed proof still requires both Functions and the hosted checks below; no permission widening or production fallback is allowed.
+The first protected attempt was partial and failed its hosted signup check. #703 corrected the provider's empty no-retry representation and supplied explicit staging SDK project context, without widening permissions. The subsequent protected roll-forward and both hosted operations passed. Source and resource metadata alone were not counted as working request proof.
 
 **Purpose:** prove only profile creation and recovery using made-up staging accounts. This is not membership approval, event management, a payment release or a public website launch.
 **Approver:** Dave Liu, sole release/recovery owner. Administrator bypass is disabled; normal self-approval remains permitted.
-**Availability:** **NOT AVAILABLE YET** until #701 records exact merged source, protected deployment, actual settings and hosted checks. #113/#133/#136 remain unresolved for production; this isolated engineering proof does not waive them.
+**Availability:** **VERIFIED for engineering staging only**, October 11. [Protected run 38176811598](https://github.com/Run-MPRC/Run-MPRC.github.io/actions/runs/38176811598) deployed exactly two Functions from `2843388bb063a0ab31a439c898fcd9242b98ca4c`, after six exact-main checks and normal daliu approval delegated by Dave. Both ACTIVE Functions' downloaded source archives match the reviewed 76,628-byte bundle digest `5dd349869630b3ff8af9ef3c26a116275d0cd0132f039a82675261187247685c`. #113/#133/#136 stay open; no production/website/payment release is implied.
+
+**Hosted results:** fresh signup created a pending profile without recovery and preserved claims; a failed initial signup was repaired by the normal Account page. Twelve direct callable checks passed, including seven denials and a three-request existing-profile burst. All existing profile fields and both claim maps stayed unchanged. Three simultaneous missing-profile requests returned ready and created one pending profile. An actual background replay preserved fields and document update time. Fresh signup became visible in about 6.5 seconds; measured callable bursts finished within 2.9 seconds. These are small checkpoint samples, not a performance guarantee. Only two owned made-up accounts/profiles were deleted afterward; aggregate Auth count returned to zero and collection metadata was empty. No email, payment or real-data test occurred.
 **Prerequisites:** #693 trial/warnings, #699 keyless authority, #683/#691/#695 reviewed profile source, #676 staging isolation, and all six exact-main checks. Use only **Deploy two staging profile Functions**, environment **backend-staging**. No real member, email or payment tests.
 
 1. Open the maintainer's run link.

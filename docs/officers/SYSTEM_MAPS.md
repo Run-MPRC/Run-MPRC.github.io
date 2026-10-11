@@ -230,11 +230,11 @@ flowchart LR
     Deploy --> Build["Build identity: source, images, logs only"]
     Build --> Two["Signup profile and profile recovery only"]
     Two --> Runtime["Runtime: Auth read; database get/create"]
-    Runtime --> Stage["Isolated staging; made-up profiles"]
+    Runtime --> Stage["VERIFIED staging; made-up profiles cleaned up"]
     Two -. "no release or access" .-> Excluded["Production, payments, email, website publication"]
 ```
 
-Text alternative: exact green main and Dave's normal approval permit one bounded staging release; separate build/runtime identities support only two profiles and synthetic staging records, excluding production, payments, email and website publication. Hosted availability needs separate #701 proof.
+Text alternative: exact green main and Dave's normal approval permitted the verified two-profile staging release; separate build/runtime identities passed synthetic checks and cleanup, excluding production, payments, email and website publication. #701 records the separate hosted proof; this does not complete the broader platform.
 
 ## Emergency decision
 
