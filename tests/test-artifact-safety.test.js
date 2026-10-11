@@ -26,7 +26,7 @@ const temporaryDirectories = [];
 const JOB_ID = 'test-artifact-scrubber';
 const JOB_NAME = 'Test artifact scrubber';
 const TEST_COMMAND = 'node --test tests/test-artifact-safety.test.js';
-const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/firebase-hosting-foundation.test.js tests/firebase-auth-staging-contract.test.js tests/firebase-profile-functions-staging-contract.test.js tests/staging-authority-workflow.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
+const FRONTEND_TEST_COMMAND = 'node --test tests/ci-workflow.test.js tests/release-workflow.test.js tests/firebase-release-verification.test.js tests/firebase-hosting-foundation.test.js tests/firebase-auth-staging-contract.test.js tests/firebase-profile-functions-staging-contract.test.js tests/staging-authority-workflow.test.js tests/staging-profile-authority.test.js tests/test-artifact-safety.test.js tests/root-dependency-security.test.js';
 const NEVER_RUN = ['$', '{{ false }}'].join('');
 const ALWAYS_TRUE = ['$', '{{ true }}'].join('');
 const BRACKET_SECRET = ['$', "{{ secrets['SYNTHETIC_CANARY'] }}"].join('');
@@ -64,6 +64,7 @@ const EXPECTED_FRONTEND_VALIDATION_STEP = [
   '        run: |',
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/verify-staging-authority.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
+  '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/verify-staging-profile-authority.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/ci.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   `          ${FRONTEND_TEST_COMMAND}`,
 ].join('\n');
@@ -1331,6 +1332,20 @@ test('frontend independently runs the exact workflow safety suite without a skip
   );
   assert.notEqual(missingProfileFunctionsTest, ciWorkflow);
   assert.notDeepEqual(frontendValidationErrors(missingProfileFunctionsTest), []);
+
+  const missingScopedAuthorityTest = ciWorkflow.replace(
+    ' tests/staging-profile-authority.test.js',
+    '',
+  );
+  assert.notEqual(missingScopedAuthorityTest, ciWorkflow);
+  assert.notDeepEqual(frontendValidationErrors(missingScopedAuthorityTest), []);
+
+  const missingScopedWorkflowParse = ciWorkflow.replace(
+    EXPECTED_FRONTEND_VALIDATION_STEP.split('\n').find((line) => line.includes('verify-staging-profile-authority.yml')),
+    '',
+  );
+  assert.notEqual(missingScopedWorkflowParse, ciWorkflow);
+  assert.notDeepEqual(frontendValidationErrors(missingScopedWorkflowParse), []);
 
   const swallowedValidation = ciWorkflow.replace(
     FRONTEND_TEST_COMMAND,
