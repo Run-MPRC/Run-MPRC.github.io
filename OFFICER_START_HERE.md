@@ -16,6 +16,8 @@ Attach the exact wording, public link, or approved photo when you have it. The A
 
 ## Choose the closest task
 
+**Backend ownership, 2026-10-11:** Dave approved continuing without a backup owner under [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697). Dave remains the sole backend release/recovery approver; backup coverage is absent, not complete. This removes only the backup-appointment gate. Protected deployment, staging proof, rollback and all data/payment approvals remain required. See [the sole-owner procedure](./docs/officers/ACCESS_CONTINUITY.md#sole-owner-backend-exception--approved-october-11-2026); no officer handles keys or runs commands.
+
 | What you need | Open this short guide |
 | --- | --- |
 | Ask for any website change | [Request a change](./docs/officers/REQUEST_A_CHANGE.md) |

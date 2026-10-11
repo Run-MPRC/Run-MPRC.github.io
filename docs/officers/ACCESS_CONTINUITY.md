@@ -4,6 +4,41 @@
 **Status:** setup is **INCOMPLETE** until the entry document is in a board-owned Drive and two backup officers complete a sign-in drill.
 **Approver:** club president plus the officer responsible for the service.
 
+## Sole-owner backend exception — approved October 11, 2026
+
+**Purpose:** allow backend setup and protected releases without appointing a backup.
+**Approver:** Dave Liu (`daliu`), the sole backend release/recovery owner.
+**Status:** owner decision approved under [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697). Backup coverage remains **INCOMPLETE**. The general backend release remains **NOT AVAILABLE YET** until #113/#133/#136 supply their other proof.
+
+This dated exception supersedes this guide's two-owner appointment and approval requirements only for Firebase/backend estate review, release authority and recovery. It does not appoint Jeff or broaden his staging read-only role. It does not remove finance, legal, data-disposition, MFA, least-privilege, staging or rollback safeguards. If Dave is unavailable, stop new releases; no substitute approver is implied.
+
+**Prerequisites:** a maintainer supplies a reviewed exact commit, successful required checks, one fixed project/resource set, private redacted evidence and a recovery plan. Protected release authority must be configured and verified first.
+
+**GitHub configuration readback, October 11:** the `production` environment now requires `daliu`, admits only branch `main`, and disables administrator bypass. Self-approval remains allowed so the sole owner can approve their own request. The existing `staging` read-only environment is unchanged. This verifies approval settings only, not a release run, cloud deploy authority or account recovery.
+
+```mermaid
+flowchart LR
+    Request["Reviewed exact backend request"] --> Dave{"Dave approves fixed release?"}
+    Dave -- "No or unavailable" --> Stop["Stop; no substitute owner"]
+    Dave -- "Yes" --> Gate["Protected keyless identity and target checks"]
+    Gate --> Proof["Synthetic staging and rollback proof"]
+    Proof --> Release["Separate approved target release"]
+```
+
+Text alternative: Dave alone may approve the fixed backend request; a protected keyless identity and staging/recovery proof must still pass, and Dave's absence stops rather than appoints a replacement.
+
+1. Open the maintainer's reviewed release request.
+2. Confirm its exact commit, fixed project and named resources.
+3. Confirm required checks and the staged recovery evidence passed.
+4. Approve the protected request as Dave only when those facts match.
+5. Ask the maintainer for separate backend and website verification.
+
+**Expected result:** a named protected approval without a downloaded cloud key or an invented backup owner.
+**Success proof:** record Dave's approval, exact commit, environment, run link and fixed verification result; never copy credentials or member records.
+**Stop conditions:** missing/mismatched evidence, unfamiliar target, broad Functions deployment, real-data testing, unavailable Dave or a failed recovery check. Missing backup appointment alone is not a stop condition.
+**Undo:** Dave may reject an unstarted release or ask the maintainer to revoke the dedicated identity or restore the reviewed backend set. Restoring the two-owner model requires a named appointment and verified access; do not silently grant it.
+**Escalation:** Dave for backend/release decisions; club president for provider-assisted recovery if Dave cannot be reached. No emergency cloud access is presumed.
+
 ## Entry document and private locator
 
 A private Google Doc titled **MPRC Website — Officer Start Here** has been created and connector-readback verified. Its private link is intentionally absent from this public repository. Metadata currently reports owner-only access, so backup-officer sharing is not complete. It contains no passwords or member/payment data.
@@ -228,7 +263,7 @@ For each system, record only:
 
 ## Stop conditions
 
-Stop if a service has only one owner, uses Dave's personal recovery channel, has no tested rollback, or asks for a password/code in a shared document. Also stop if a merge can publish unexpectedly, a server credential reaches a website job, a project/scope can be typed freely, a green backend skip is possible, or a website can publish before backend verification. Do not remove an account, token, integration, fork, or billing method until two owners complete a dependency check.
+Outside the approved sole-owner backend exception, stop if a service has only one owner. Always stop if recovery access is unverified, there is no tested rollback, or anyone asks for a password/code in a shared document. Also stop if a merge can publish unexpectedly, a server credential reaches a website job, a project/scope can be typed freely, a green backend skip is possible, or a website can publish before backend verification. Do not remove an account, token, integration, fork, or billing method until its authorized owner completes a dependency check; use two owners outside the scoped exception.
 
 Also stop if a role-bearing Firebase account can see member/admin website controls, open private member/admin data, call an admin Function, receive member checkout treatment, or export registrations before its email is verified. Do not work around that result by editing a profile, changing a role, or using Firebase Console. Record only the fixed test result and exact tested revision, then escalate to the platform/security owner.
 

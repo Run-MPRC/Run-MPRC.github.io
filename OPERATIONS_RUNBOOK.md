@@ -20,6 +20,8 @@ Read-only check on 2026-09-27: `runmprc@gmail.com` could access zero billing acc
 
 ## 1. Ownership roster
 
+**Backend owner exception, 2026-10-11:** Dave Liu (`daliu`) explicitly accepts operating Firebase/backend releases with no backup owner under [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697). The backup entries below are the desired continuity model, not an appointment gate for #113/#133/#136. Dave is the sole backend release/recovery approver; backup recovery coverage is absent. Keep protected approval, least-privilege short-lived identity, exact source/target checks, synthetic staging and rollback. This changes no finance, policy, data-disposition or payment-launch approval. Jeff's existing staging read-only role is unchanged. See the [sole-owner procedure](./docs/officers/ACCESS_CONTINUITY.md#sole-owner-backend-exception--approved-october-11-2026).
+
 Complete this table in the private operations system before live payments. Do not put personal phone numbers or recovery codes in this public repository.
 
 | Area | Primary role | Backup role | Required access |
@@ -39,6 +41,8 @@ Complete this table in the private operations system before live payments. Do no
 Review access quarterly, when an officer changes, and after every incident. Remove departed users immediately.
 
 ## 2. Emergency controls
+
+**#697 provider readback, 2026-10-11:** GitHub `production` now has one required reviewer (`daliu`), a branch-only `main` policy, self-approval allowed, and administrator bypass disabled. The existing read-only `staging` settings are unchanged. No cloud IAM/API/billing, Firebase or website deployment occurred; a protected no-op/release run and deployment identity remain separate #133 proof.
 
 ### Commerce pause — B1 source only, operator control NOT AVAILABLE YET
 
