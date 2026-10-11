@@ -4,8 +4,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const { verifyCurrentSource } = require('./staging-profile-authority');
-const { functionSpec, validateHostedFunction } = require('./staging-community-release');
-const { jsonRequest } = require('./staging-profile-release');
+const { functionSpec, validateHostedFunction, jsonRequest } = require('./staging-community-release');
 const { verifyExecutableArtifact } = require('./firebase-hosting-contract');
 const PROJECT = 'run-mprc-staging';
 const ACCOUNT = 'runmprc@gmail.com';
@@ -23,8 +22,10 @@ async function publish() {
   const configResponse = await fetch(`https://${PROJECT}.web.app/__/firebase/init.json`, { redirect: 'error', signal: AbortSignal.timeout(15000) });
   check(configResponse.ok); const config = await configResponse.json();
   check(config.projectId === PROJECT && typeof config.appId === 'string');
-  const appCheckResponse = await fetch(`https://firebaseappcheck.googleapis.com/v1/projects/${PROJECT}/apps/${encodeURIComponent(config.appId)}/recaptchaEnterpriseConfig`, {
-    headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(15000),
+  const projectNumber = config.appId.match(/^1:([0-9]+):web:/)?.[1];
+  check(projectNumber && projectNumber === config.messagingSenderId);
+  const appCheckResponse = await fetch(`https://firebaseappcheck.googleapis.com/v1/projects/${projectNumber}/apps/${encodeURIComponent(config.appId)}/recaptchaEnterpriseConfig`, {
+    headers: { Authorization: `Bearer ${token}`, 'x-goog-user-project': PROJECT }, redirect: 'error', signal: AbortSignal.timeout(15000),
   });
   check(appCheckResponse.ok); const appCheck = await appCheckResponse.json();
   check(typeof appCheck.siteKey === 'string' && /^[A-Za-z0-9_-]{30,128}$/.test(appCheck.siteKey));

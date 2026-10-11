@@ -3,6 +3,21 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { FILES, createBundle, functionSpec, validateHostedFunction } = require('../scripts/staging-community-release');
 
+test('owner provider calls name only the staging quota project and retain the host boundary', async () => {
+  const { jsonRequest } = require('../scripts/staging-community-release');
+  let calls = 0;
+  const transport = async (url, options) => {
+    calls += 1;
+    assert.equal(options.headers['x-goog-user-project'], 'run-mprc-staging');
+    assert.equal(options.headers.Authorization, 'Bearer synthetic-only');
+    assert.equal(options.redirect, 'error');
+    return { ok: true, json: async () => ({ verified: true }) };
+  };
+  assert.deepEqual(await jsonRequest('https://cloudfunctions.googleapis.com/v1/projects/run-mprc-staging/locations/-/functions', 'synthetic-only', 'GET', undefined, transport), { verified: true });
+  await assert.rejects(jsonRequest('https://foreign.invalid/', 'synthetic-only', 'GET', undefined, transport));
+  assert.equal(calls, 1);
+});
+
 test('bundle is deterministic, bounded and excludes all prototype commerce/PII services', () => {
   const root = path.resolve(__dirname, '..');
   const a = createBundle(root); const b = createBundle(root);

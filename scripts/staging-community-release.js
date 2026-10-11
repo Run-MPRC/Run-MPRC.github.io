@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { jsonRequest, waitForOperation } = require('./staging-profile-release');
+const { jsonRequest: providerRequest, waitForOperation } = require('./staging-profile-release');
 const { verifyCurrentSource } = require('./staging-profile-authority');
 const PROJECT = 'run-mprc-staging';
 const TARGET = 'communityActions';
@@ -17,6 +17,14 @@ const ACCOUNT = 'runmprc@gmail.com';
 const RUNTIME = `mprc-community-runtime@${PROJECT}.iam.gserviceaccount.com`;
 const FILES = ['communityOnly.js', 'communityActions.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json'];
 const check = (value) => { if (!value) throw new Error('staging_community_release_failed'); };
+
+// Owner tokens do not inherit the CLI's --project as their API quota project.
+// Keep every authenticated provider request billed/routed to staging explicitly.
+function jsonRequest(url, token, method = 'GET', body, fetchImpl = fetch) {
+  return providerRequest(url, token, method, body, (resource, options) => fetchImpl(resource, {
+    ...options, headers: { ...options.headers, 'x-goog-user-project': PROJECT },
+  }));
+}
 
 function createBundle(root) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mprc-community-owned-'));
@@ -88,7 +96,7 @@ async function release(root) {
   await verifyCurrentSource(source);
   const exists = inventory.functions.some((fn) => fn.name === expected.name);
   const operation = await jsonRequest(exists ? `${BASE}/functions/${TARGET}?updateMask=${Object.keys(expected).filter((key) => key !== 'name').join(',')}` : `${BASE}/functions`, token, exists ? 'PATCH' : 'POST', expected);
-  await waitForOperation(operation, token);
+  await waitForOperation(operation, token, jsonRequest);
   validateHostedFunction(await jsonRequest(`${BASE}/functions/${TARGET}`, token), expected);
   const prior = await jsonRequest(`${BASE}/functions/${TARGET}:getIamPolicy`, token);
   check((prior.bindings || []).every((binding) => binding.role === 'roles/cloudfunctions.invoker' && binding.members?.length === 1 && binding.members[0] === 'allUsers'));
@@ -108,4 +116,4 @@ async function release(root) {
   process.stdout.write(JSON.stringify({ status: 'staging_community_deployed_verified', sha, digest, bytes: bundle.zip.length }) + '\n');
 }
 if (require.main === module) release(path.resolve(__dirname, '..')).catch(() => { process.stderr.write('staging_community_release_failed\n'); process.exitCode = 1; });
-module.exports = { FILES, createBundle, functionSpec, validateHostedFunction };
+module.exports = { FILES, createBundle, functionSpec, validateHostedFunction, jsonRequest };
