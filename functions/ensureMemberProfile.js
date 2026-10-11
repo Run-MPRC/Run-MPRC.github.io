@@ -14,7 +14,10 @@ function isEmptyRequest(data) {
     && Object.keys(data).length === 0;
 }
 
-exports.ensureMemberProfile = functions.runWith(profileRuntime).https.onCall(async (data, context) => {
+exports.ensureMemberProfile = functions.runWith({
+  ...profileRuntime,
+  enforceAppCheck: true,
+}).https.onCall(async (data, context) => {
   requireAppCheck(context);
 
   if (!context.auth) {
