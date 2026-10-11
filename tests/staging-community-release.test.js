@@ -47,3 +47,10 @@ test('profile release can inspect only the known isolated service, never deploy 
   assert.throws(() => validateKnownCommunity({ ...known, serviceAccountEmail: 'default' }));
   assert.throws(() => profileSpec('communityActions', 'a'.repeat(40), 'b'.repeat(64), 'https://storage.googleapis.com/synthetic'));
 });
+test('Hosting requires the identical deployed Function bundle, not merely a label or newer commit', () => {
+  const { validateBundle } = require('../scripts/staging-community-hosting');
+  const native = { ...functionSpec('a'.repeat(40), 'b'.repeat(64), 'https://storage.googleapis.com/synthetic'), status: 'ACTIVE' };
+  assert.doesNotThrow(() => validateBundle(native, 'b'.repeat(64)));
+  assert.throws(() => validateBundle(native, 'c'.repeat(64)));
+  assert.throws(() => validateBundle({ ...native, maxInstances: 5 }, 'b'.repeat(64)));
+});
