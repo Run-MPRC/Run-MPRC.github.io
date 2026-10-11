@@ -1,0 +1,53 @@
+name: Verify staging profile authority
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: verify-staging-profile-authority
+  cancel-in-progress: false
+
+jobs:
+  verify-authority:
+    name: Verify scoped staging profile identity without deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: backend-staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      TARGET_ENVIRONMENT: backend-staging
+      TARGET_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out exact workflow source without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Set up reviewed Node runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22'
+      - name: Validate exact current-main context and all six CI jobs before authentication
+        run: node scripts/staging-profile-authority.js context
+      - id: auth
+        name: Obtain one five-minute staging identity with no credential file
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          token_format: access_token
+          access_token_lifetime: 300s
+          create_credentials_file: false
+          export_environment_variables: false
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Recheck exact source and verify project permissions without deploying
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: node scripts/staging-profile-authority.js cloud
