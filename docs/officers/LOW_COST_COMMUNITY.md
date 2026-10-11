@@ -97,6 +97,8 @@ The #683 source change configured no budget, spending cap, artifact-cleanup poli
 
 ## Engineering staging profiles — #701
 
+The first protected attempt built and activated signup, but the hosted signup test exposed missing explicit SDK project context. #703 repairs that exact partial release and the provider's empty no-retry representation. Partial deployment is not proof of a working profile service. Completed proof still requires both Functions and the hosted checks below; no permission widening or production fallback is allowed.
+
 **Purpose:** prove only profile creation and recovery using made-up staging accounts. This is not membership approval, event management, a payment release or a public website launch.
 **Approver:** Dave Liu, sole release/recovery owner. Administrator bypass is disabled; normal self-approval remains permitted.
 **Availability:** **NOT AVAILABLE YET** until #701 records exact merged source, protected deployment, actual settings and hosted checks. #113/#133/#136 remain unresolved for production; this isolated engineering proof does not waive them.

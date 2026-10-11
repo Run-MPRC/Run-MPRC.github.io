@@ -78,14 +78,14 @@ function functionSpec(target, sourceSha, bundleDigest, uploadUrl) {
     sourceUploadUrl: uploadUrl, availableMemoryMb: 256, timeout: '30s', minInstances: 0, maxInstances: 2,
     ingressSettings: 'ALLOW_ALL',
     labels: { 'managed-by': 'mprc-profile-stage', 'source-sha': sourceSha, 'bundle-a': bundleDigest.slice(0, 32), 'bundle-b': bundleDigest.slice(32) },
-    environmentVariables: { FIREBASE_CONFIG: JSON.stringify({ projectId: PROJECT }), ENFORCE_APP_CHECK: 'true', COMMERCE_ENABLED: 'false' },
+    environmentVariables: { FIREBASE_CONFIG: JSON.stringify({ projectId: PROJECT }), GCLOUD_PROJECT: PROJECT, ENFORCE_APP_CHECK: 'true', COMMERCE_ENABLED: 'false' },
     ...(target === 'ensureMemberProfile'
       ? { httpsTrigger: { securityLevel: 'SECURE_ALWAYS' } }
       : { eventTrigger: { eventType: 'providers/firebase.auth/eventTypes/user.create', resource: `projects/${PROJECT}`, service: 'firebaseauth.googleapis.com' } }),
   };
 }
 
-function validateHostedFunction(actual, expected, { ready = true } = {}) {
+function validateHostedFunction(actual, expected, { ready = true, previousInitialRelease = false } = {}) {
   check(actual && actual.name === expected.name);
   for (const field of ['entryPoint', 'runtime', 'serviceAccountEmail', 'buildServiceAccount', 'dockerRepository', 'availableMemoryMb', 'timeout', 'maxInstances', 'ingressSettings']) check(actual[field] === expected[field]);
   // Protobuf omits a configured numeric zero, but not other required settings.
@@ -95,9 +95,18 @@ function validateHostedFunction(actual, expected, { ready = true } = {}) {
     check(actual.status === 'ACTIVE');
     for (const [key, value] of Object.entries(expected.labels)) check(actual.labels[key] === value);
   }
-  check(JSON.stringify(actual.environmentVariables) === JSON.stringify(expected.environmentVariables)
-    || Object.keys(actual.environmentVariables || {}).length === Object.keys(expected.environmentVariables).length
-      && Object.entries(expected.environmentVariables).every(([key, value]) => actual.environmentVariables[key] === value));
+  // Only the exact partial #702 signup release may lack the SDK project
+  // context. Admit it for same-bundle repair, never as completed proof.
+  const acceptedEnvironment = !ready && previousInitialRelease
+    && actual.name.endsWith('/createMemberOnSignUp')
+    && actual.labels?.['source-sha'] === '3edffdf51ccef248d83e2c5c8600c3628d2e0ae1'
+    && actual.labels?.['bundle-a'] === expected.labels['bundle-a']
+    && actual.labels?.['bundle-b'] === expected.labels['bundle-b']
+    && actual.environmentVariables?.GCLOUD_PROJECT === undefined
+    ? Object.fromEntries(Object.entries(expected.environmentVariables).filter(([key]) => key !== 'GCLOUD_PROJECT'))
+    : expected.environmentVariables;
+  check(Object.keys(actual.environmentVariables || {}).length === Object.keys(acceptedEnvironment).length
+    && Object.entries(acceptedEnvironment).every(([key, value]) => actual.environmentVariables[key] === value));
   check(!actual.secretEnvironmentVariables?.length && !actual.secretVolumes?.length && !actual.vpcConnector);
   if (expected.httpsTrigger) {
     check(actual.httpsTrigger?.securityLevel === 'SECURE_ALWAYS' && !actual.eventTrigger);
@@ -149,7 +158,7 @@ async function release(env) {
   check(Array.isArray(existing) && existing.length <= 2);
   for (const fn of existing) {
     const target = fn.name?.split('/').at(-1);
-    validateHostedFunction(fn, functionSpec(target, env.GITHUB_SHA, bundle.digest, 'https://storage.googleapis.com/synthetic'), { ready: false });
+    validateHostedFunction(fn, functionSpec(target, env.GITHUB_SHA, bundle.digest, 'https://storage.googleapis.com/synthetic'), { ready: false, previousInitialRelease: true });
   }
   for (const target of TARGETS) {
     await verifyCurrentSource(env); // Recheck immediately before each write.

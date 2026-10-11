@@ -215,6 +215,8 @@ test('two first-generation specs use explicit identities, limits and no secrets/
     assert.match(spec.serviceAccountEmail, /^mprc-profile-runtime@run-mprc-staging\./);
     assert.match(spec.buildServiceAccount, /^projects\/run-mprc-staging\/serviceAccounts\/mprc-profile-build@/);
     assert.equal(spec.environmentVariables.COMMERCE_ENABLED, 'false');
+    assert.equal(spec.environmentVariables.GCLOUD_PROJECT, 'run-mprc-staging');
+    assert.equal(JSON.parse(spec.environmentVariables.FIREBASE_CONFIG).projectId, 'run-mprc-staging');
     assert.ok(!spec.secretEnvironmentVariables && !spec.secretVolumes);
     if (target === 'ensureMemberProfile') assert.equal(spec.httpsTrigger.securityLevel, 'SECURE_ALWAYS');
     else assert.equal(spec.eventTrigger.resource, 'projects/run-mprc-staging');
@@ -251,6 +253,20 @@ test('runtime/build actAs is checked on exact accounts without accepting key cre
   assert.ok(calls.every(({ url }) => url.startsWith('https://iam.googleapis.com/v1/projects/run-mprc-staging/serviceAccounts/mprc-profile-')));
   await assert.rejects(release.validateActAs('synthetic-token', mockFetch([{ permissions: [] }])));
   await assert.rejects(release.validateActAs('synthetic-token', mockFetch([{ permissions: ['iam.serviceAccounts.actAs', 'iam.serviceAccountKeys.create'] }])));
+});
+
+test('repair admission is limited to exact initial signup source and bundle, never hosted success', () => {
+  const expected = expectedFunction('createMemberOnSignUp');
+  const actual = { ...expected, status: 'ACTIVE', labels: { ...expected.labels, 'source-sha': '3edffdf51ccef248d83e2c5c8600c3628d2e0ae1' }, environmentVariables: { ...expected.environmentVariables }, eventTrigger: { ...expected.eventTrigger, failurePolicy: {} } };
+  delete actual.environmentVariables.GCLOUD_PROJECT;
+  release.validateHostedFunction(actual, expected, { ready: false, previousInitialRelease: true });
+  assert.throws(() => release.validateHostedFunction(actual, expected));
+  assert.throws(() => release.validateHostedFunction(actual, expected, { ready: false }));
+  for (const [key, value] of Object.entries({ 'source-sha': 'c'.repeat(40), 'bundle-a': 'c'.repeat(32), 'bundle-b': 'c'.repeat(32) })) {
+    assert.throws(() => release.validateHostedFunction({ ...actual, labels: { ...actual.labels, [key]: value } }, expected, { ready: false, previousInitialRelease: true }));
+  }
+  assert.throws(() => release.validateHostedFunction({ ...actual, environmentVariables: { ...actual.environmentVariables, GCLOUD_PROJECT: 'production' } }, expected, { ready: false, previousInitialRelease: true }));
+  assert.throws(() => release.validateHostedFunction({ ...actual, environmentVariables: { ...actual.environmentVariables, STRIPE_SECRET_KEY: 'synthetic' } }, expected, { ready: false, previousInitialRelease: true }));
 });
 
 test('operation polling is bounded, and failed or malformed operations never count as success', async () => {
