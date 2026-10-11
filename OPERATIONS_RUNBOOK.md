@@ -828,6 +828,8 @@ The current protected release plan names only the profile-recovery Functions. It
 
 ## 9. Staging dress rehearsal
 
+For future membership cancellation acceptance, use a disposable account and a synthetic approved term. Prove access remains just before the original term end and is denied at/after it; the term and payment evidence must not change. Also prove ownership denials, repeated/lost-response recovery, and that suspension is not undone. #705 currently supplies only the approved policy and existing-authority unit regressions, not the cancellation request or hosted proof. Do not test with production members or real payments.
+
 Before every major payment release:
 
 1. Create a capped test race and a product with one unit in a staging Firebase project.

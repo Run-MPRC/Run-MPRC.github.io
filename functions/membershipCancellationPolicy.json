@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "mprc-membership-cancellation-2026-10-11-v1",
+  "accessEndsAt": "paid_term_end",
+  "automaticRefund": false
+}

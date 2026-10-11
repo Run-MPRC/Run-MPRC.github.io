@@ -15,6 +15,8 @@ RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) pr
 
 ## 1. Program outcome
 
+**Membership cancellation policy, 2026-10-11 — #705:** Dave approved retaining access until the already-paid annual term ends, without an automatic refund. Versioned backend source configuration and boundary regressions are a small dependency-clearing slice only. A member-owned durable cancellation request, retries/audit, UI and disposable hosted staging proof remain separate implementation work; do not route this request through legacy admin race cancellation or mark the membership ended early.
+
 MPRC can open a race or merchandise item for sale only when the platform can:
 
 - Prove one client request creates at most one active Checkout Session and business record.
