@@ -76,6 +76,8 @@ Remote readback on 2026-09-14 found the old #473/#623/#659 hot source refs still
 
 ## The release gate
 
+**Sole-owner backend decision, 2026-10-11:** under [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697), Dave Liu (`daliu`) is the sole backend release/recovery approver. Do not wait for backup appointment or imply backup coverage. The [scoped procedure](./ACCESS_CONTINUITY.md#sole-owner-backend-exception--approved-october-11-2026) keeps protected approval, exact source/project/resource checks, keyless least-privilege identity, synthetic staging and reviewed recovery. It grants no broader authority to the existing staging read-only reviewers. The general release remains **NOT AVAILABLE YET** until its other gates are verified.
+
 ```mermaid
 flowchart TD
     Review["Preview and checks"] --> Merge{"Approve merge?"}
@@ -87,7 +89,7 @@ flowchart TD
     Preflight -- "Yes" --> Prepare["Prepare credential-free website artifact"]
     Prepare --> WebConfig{"Explicit web environment and artifact identity valid?"}
     WebConfig -- "No" --> Stop
-    WebConfig -- "Yes" --> Release{"Approve protected environment?"}
+    WebConfig -- "Yes" --> Release{"Dave approves protected backend release?"}
     Release -- "No" --> Stop
     Release -- "Yes" --> Gate{"Project, scope, and authority valid?"}
     Gate -- "No" --> Stop

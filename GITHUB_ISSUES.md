@@ -154,6 +154,8 @@ Do not redesign routing or hosting in this issue; WEB-001 owns that. WEB-001A1 [
 
 ## CI-001 — Repair test gates and secure the deployment pipeline
 
+**CI-001C2 owner decision, 2026-10-11:** [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697) applies Dave's direct approval to continue Firebase backend setup without a backup owner. Dave (`daliu`) is the sole release/recovery owner. Backup appointment and two-person ownership are no longer backend prerequisites; absence of backup remains documented risk. #113/#133/#136 retain their other inventory, authority, exact-source, staging, policy and rollback requirements. Jeff's #667 read-only staging role does not expand. This decision is not Firebase deployment or live payment approval.
+
 **COST-001 source child:** [#683](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/683) binds only the two profile Functions to zero reserved instances, max two each, 256 MB and 30 seconds, with actual SDK metadata tests and matching fail-closed provider readback validation. It records the community-first minimal-service direction and officer review procedure without changing schema, privileges, deployment scope, billing, providers, or public pages. This is source preparation, not reduced-bill or hosted quality evidence; #113/#133/#136 retain release prerequisites, synthetic cold-start/burst/recovery proof and compatible rollback.
 
 **Labels:** `priority:P0`, `type:security`, `type:testing`, `area:ci`, `size:L`, `needs-external-config`
