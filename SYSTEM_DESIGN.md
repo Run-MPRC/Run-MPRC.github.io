@@ -782,6 +782,8 @@ WEB-002C [#623](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/623) publi
 
 ### 8.0a Provider-neutral membership authority and entitlement — SOURCE ONLY, UNUSED
 
+**Approved cancellation rule, 2026-10-11 — #705:** `functions/membershipCancellationPolicy.json` records schema 1 / policy `mprc-membership-cancellation-2026-10-11-v1`. Dave selected access through the already-paid annual term, with no automatic refund. A future voluntary cancellation command must record its request separately, not shorten/extend the approved term, set it `ended` early, change payment evidence, or grant claims. Access still ends at the existing exclusive `endsAtMs`; unlinked, wrong-account, suspended and ended records remain denied. This does not override security suspension, authorize refunds, prevent a later separately approved renewal, or create an automatically recurring subscription. The file is not runtime-imported; regression tests pin the existing authority boundary, not a cancellation command. Persistence, UI and hosted staging acceptance remain **NOT AVAILABLE YET**.
+
 MEMBERS-IDENTITY-001A [#208](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/208), with its command-order correction in MEMBERS-IDENTITY-001H [#451](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/451), defines one unused pure contract that keeps a stable MPRC membership separate from the Firebase account used to sign in. A membership record can exist and receive monotonic term decisions without a UID. Such a record grants no website entitlement. Google, WhatsApp, Strava, email equality, a profile role, and any browser field remain projections or inputs to future reviewed workflows; none is membership authority.
 
 ```mermaid

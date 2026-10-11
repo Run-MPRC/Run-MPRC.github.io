@@ -1219,6 +1219,8 @@ The #161 classifier uses only synthetic fixtures. It can split known legacy mean
 
 ### Cancellation
 
+Membership cancellation is separate from race/Checkout cancellation. Under owner-approved #705, voluntary membership cancellation retains access through the already-paid annual term and issues no automatic refund. The versioned source policy is `functions/membershipCancellationPolicy.json`; it does not run a refund, expire a Session, disable an existing refund handler, or establish a deployed cancellation workflow. The first annual dues design remains a one-time payment, not a subscription. Race cancellation rules below are unchanged.
+
 - Cancelling an unpaid record expires the active Stripe Session before or as part of the saga, then releases the hold.
 - If Session expiry fails transiently, keep a cancellation-pending state and retry; do not merely mark local cancelled while payment remains possible.
 - Cancelling a paid record requires an explicit refund/no-refund policy and permission. It cannot be the same operation as unpaid cancellation.
