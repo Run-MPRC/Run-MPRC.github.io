@@ -730,6 +730,8 @@ CI/staging must eventually include:
 
 For expand-and-contract changes:
 
+**Isolated staging profiles (#701):** a separate manual `deploy-staging-profiles.yml` requires exact green main, normal backend-staging approval and thirty-minute keyless credentials. The v1 Functions API selects explicit runtime/build accounts, avoiding Firebase CLI default-account checks and unavailable custom v1 build-account selection. A deterministic ten-file bundle changes only the package entrypoint to `profileOnly.js`, keeping the reviewed dependencies/lockfile and profile logic. No prototype index or payment/mail endpoint is shipped. Runtime permissions: Auth user get, Firestore document get/create and begin/rollback transaction. These are staging project IAM, not collection rules. Build access: source-object read, one image repository write and logs. ActAs is granted only on the two exact staging accounts. Google auto-created a default App Engine Editor grant during API activation; #701 removes that new grant and never selects the account. Initial baseline is no Functions; reviewed roll-forward is preferred, and exact-owned two-Function removal requires Dave/specialist recovery authority, not the deploy principal. No schema migration or production changes. Source/CI/provider/hosted proof remain separate; #113/#133/#136 stay open. See the [officer procedure](./docs/officers/LOW_COST_COMMUNITY.md#engineering-staging-profiles--701).
+
 1. Backup/export or snapshot the affected operational data according to the approved method.
 2. Deploy additive indexes/rules/backend functions compatible with the current client.
 3. Run migrations/backfills in dry-run mode; review counts and anomalies.
