@@ -65,6 +65,7 @@ const EXPECTED_FRONTEND_VALIDATION_STEP = [
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/verify-staging-authority.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/verify-staging-profile-authority.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
+  '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/deploy-staging-profiles.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   '          ruby -e \'require "yaml"; YAML.safe_load(File.read(".github/workflows/ci.yml"), permitted_classes: [], permitted_symbols: [], aliases: true)\'',
   `          ${FRONTEND_TEST_COMMAND}`,
 ].join('\n');

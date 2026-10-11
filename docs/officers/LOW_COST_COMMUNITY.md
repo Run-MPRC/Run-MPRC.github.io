@@ -26,7 +26,7 @@ Dave clarified the core scope on 2026-10-11: club membership, events, member sig
 
 The warning budget is named **MPRC staging gross usage alerts**. It covers only staging, all services, and each calendar month. Its amount is **$10 USD**, with actual-usage alerts at **$5, $9, and $10**. Credits are excluded from the calculation so trial credits cannot hide underlying usage. Default billing-account notification recipients remain enabled; no new recipient, access grant, Pub/Sub automation, or shutdown rule was added. Configuration was read back; email delivery was not tested.
 
-This is an **alerts-only budget**, not a bill ceiling or approval to spend club money. The only API enabled by this step was the Cloud Billing Budget API. Functions, Cloud Build, and Artifact Registry APIs remain disabled. Production billing remains disabled/unlinked. No Function, website, DNS, Stripe configuration, member record, or payment was changed. See the [staging billing map](./SYSTEM_MAPS.md#engineering-staging-billing--checked-2026-10-11).
+This is an **alerts-only budget**, not a bill ceiling or approval to spend club money. #693 enabled only the Cloud Billing Budget API. #701 subsequently enabled Functions, Cloud Build and Artifact Registry in staging for two profiles. Production billing remains disabled/unlinked. #693 changed no Function, website, DNS, Stripe configuration, member record or payment. See the [staging billing map](./SYSTEM_MAPS.md#engineering-staging-billing--checked-2026-10-11).
 
 ### Check the trial and warnings without a terminal
 
@@ -94,6 +94,28 @@ The #683 source change configured no budget, spending cap, artifact-cleanup poli
 **Undo:** hold an unverified release. Ask the maintainer for a compatible protected roll-forward or rollback that preserves native enforcement; do not disable App Check or edit a member record.
 
 **Escalation:** platform/security maintainer. A specialist remains necessary for provider setup, tests and deployment.
+
+## Engineering staging profiles — #701
+
+**Purpose:** prove only profile creation and recovery using made-up staging accounts. This is not membership approval, event management, a payment release or a public website launch.
+**Approver:** Dave Liu, sole release/recovery owner. Administrator bypass is disabled; normal self-approval remains permitted.
+**Availability:** **NOT AVAILABLE YET** until #701 records exact merged source, protected deployment, actual settings and hosted checks. #113/#133/#136 remain unresolved for production; this isolated engineering proof does not waive them.
+**Prerequisites:** #693 trial/warnings, #699 keyless authority, #683/#691/#695 reviewed profile source, #676 staging isolation, and all six exact-main checks. Use only **Deploy two staging profile Functions**, environment **backend-staging**. No real member, email or payment tests.
+
+1. Open the maintainer's run link.
+2. Confirm main, backend-staging, the two-profile workflow and six passing source checks.
+3. Approve the normal release request.
+4. Wait for a separate verified result for each Function.
+5. Ask for private readback of explicit runtime/build identities and all four resource limits above.
+6. Observe made-up signup, recovery, repeated/concurrent recovery and denied invalid attestation, sign-in and injected fields.
+7. Confirm existing profiles/roles stayed unchanged and made-up records were removed.
+8. Record source, merge, staging deployment, hosted tests, website and production separately.
+
+**Expected result:** two Node 22 staging Functions; no idle instances, maximum two instances each, 256 MB memory, 30-second timeout. Runtime can read Auth users and read/create database documents, not update/delete or change claims. Server IAM does not restrict individual collections; staging isolation and UID-bound code remain essential. Build access covers source objects, the profile image repository and build logs only. No Owner/Editor, secret or payment grant.
+**Success proof:** fixed deployment markers, exact source/bundle digest, provider readback and hosted synthetic results on #701. Metadata/source tests alone do not prove working requests. Images keep the newest two versions per package; older images are eligible for deletion after seven days. Cleanup is asynchronous, not a cost ceiling. Native Function source recovery copies are separate.
+**Stop conditions:** third handler, broad/default identity, paid upgrade, missing proof, unexpected allow, real data or unexplained bill. A failed build does not authorize wider access or disabling App Check.
+**Undo:** ask Dave to hold further release work and use a reviewed same-source retry/roll-forward. Initial baseline is no staging Functions, not an older deployed runtime. If removal is needed, a specialist must verify #701 ownership and remove only these two Functions. Never delete the project, database or unrelated artifacts. The deploy identity has no Function-delete permission. No schema migration or production rollback is involved.
+**Escalation:** Dave/platform specialist for release, access and recovery; club finance approver/cardholder for recurring spending. Officers do not use terminals, edit records or handle tokens. No backup owner is appointed.
 
 ## Review before a low-cost release
 

@@ -221,6 +221,21 @@ In words: the source page removes the private code, waits for the member to choo
 
 Issue [#194](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/194) owns only the verification path. Firebase's single custom handler also receives password-reset and email-recovery links, so [#119](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/119) must keep the default handler or wait for safe coverage of every mode before enabling this route. Website, provider, and live behavior remain separate proof.
 
+## Scoped engineering profile release — #701
+
+```mermaid
+flowchart LR
+    Main["Exact main; six green checks"] --> Gate["Dave normal approval; no bypass"]
+    Gate --> Deploy["Thirty-minute keyless staging release"]
+    Deploy --> Build["Build identity: source, images, logs only"]
+    Build --> Two["Signup profile and profile recovery only"]
+    Two --> Runtime["Runtime: Auth read; database get/create"]
+    Runtime --> Stage["Isolated staging; made-up profiles"]
+    Two -. "no release or access" .-> Excluded["Production, payments, email, website publication"]
+```
+
+Text alternative: exact green main and Dave's normal approval permit one bounded staging release; separate build/runtime identities support only two profiles and synthetic staging records, excluding production, payments, email and website publication. Hosted availability needs separate #701 proof.
+
 ## Emergency decision
 
 ```mermaid

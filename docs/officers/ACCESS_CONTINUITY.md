@@ -134,33 +134,33 @@ Text alternative: the platform maintainer requests the exact verifier from `main
 ### Scoped staging profile authority — #699
 
 **Purpose:** check the separate profile-release identity without deploying a backend or reading member data.
-**Approver:** Dave Liu. Administrator bypass is allowed; record any use as an override rather than claiming Dave reviewed the run.
+**Approver:** Dave Liu. #701 disabled administrator bypass for production and backend-staging. Dave can approve his own release through the normal gate. Original read-only staging is unchanged.
 **Availability:** check [#699](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/699) first. Until exact merged source, provider activation and protected run proof are recorded there, this procedure is **NOT AVAILABLE YET**. Member/profile deployment and payments remain **NOT AVAILABLE YET** regardless of this check.
-**Prerequisites:** the maintainer confirms the dedicated staging federation is enabled, the exact current main commit passed all six checks, and no runtime/build impersonation or direct member/secret permission has been added. Use only workflow **Verify staging profile authority** and environment **backend-staging**. The old **staging** environment remains read-only and separate.
+**Prerequisites:** the dedicated staging federation is enabled and exact current main passed all six checks. #701 adds use of only the named staging runtime/build accounts; the deployment identity still cannot read member records or secrets directly. Use only **Verify staging profile authority** and **backend-staging**. The old **staging** environment remains read-only and separate.
 
 ```mermaid
 flowchart LR
-    Main["Exact main; all six checks passed"] --> Approval{"Dave approval or recorded admin override"}
+    Main["Exact main; all six checks passed"] --> Approval{"Dave normal approval; no bypass"}
     Approval --> Context["Fixed staging identity and workflow checks"]
     Context --> Token["Five-minute keyless token; no credential file"]
     Token --> Read["Project metadata and access check only"]
     Read --> Proof["Fixed result; no backend deployed"]
 ```
 
-Text alternative: exact green main and approval or a recorded override permit one fixed staging identity check; a five-minute token can read project/access metadata, and no backend or website is deployed.
+Text alternative: exact green main and Dave's normal approval permit one fixed staging identity check; bypass is disabled, a five-minute token reads project/access metadata, and no backend or website is deployed.
 
 1. Open the maintainer's run link and confirm the workflow name above.
 2. Confirm branch main and environment backend-staging.
 3. Confirm the request says identity check only, not backend or website deployment.
 4. Confirm the exact source and all six successful checks.
-5. Approve the matching request, or record the administrator override and its reason.
+5. Approve the matching request through the normal gate; administrator bypass is disabled.
 6. Wait for the fixed `staging_profile_authority_cloud_verified` result.
 7. Ask the maintainer to record dated permission/key/trust readback on #699 privately, without provider locators or policy dumps.
 
 **Expected result:** the check succeeds without creating a credential file, deploying anything or reading an account/document.
 **Stop conditions:** stop on a wrong/stale source, changed workflow/environment, new write step, missing/failed check, unexpected permission or request for a key/member record. A failed check does not authorize a broader role.
-**Success proof:** run link, exact source, named approval or recorded override, fixed result and private readback of zero user-managed keys. The role permits staging Function/Rules configuration, not direct records or project administration. IAM creation is project-scoped; the workflow, not IAM Function-name filtering, limits this step to reads.
-**Undo:** ask the platform maintainer to disable only the dedicated profile federation pool or remove only its workload-identity binding, using the native service record. Existing five-minute tokens can survive until expiry. Leave the old read-only identity, project, records and unrelated roles alone. Re-enabling requires source/permission review and this check again.
+**Success proof:** run link, exact source, normal named approval, fixed result and private readback of zero user-managed keys. The identity permits staging Function/Rules configuration and use of two exact staging accounts, not direct records or project administration. IAM creation is project-scoped; the workflow, not IAM Function-name filtering, limits this verifier to reads. #701 separately limits deployment to two profiles.
+**Undo:** ask the maintainer to disable only the dedicated profile federation pool or remove only its workload-identity binding. Existing tokens can survive until expiry: five minutes for this verifier, up to thirty minutes for #701 deployment. Leave the old read-only identity, project, records and unrelated roles alone. Re-enabling requires source/permission review and this check again.
 **Escalation:** Dave as platform owner; security specialist for an unexpected permission, exposure or identity mismatch. Actual identity revocation and later backend deployment still require a maintainer, not an officer terminal.
 
 ## Private service record

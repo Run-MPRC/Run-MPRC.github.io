@@ -173,3 +173,102 @@ test('CLI rejects invalid context and extra arguments without printing any synth
     assert.equal(result.stderr, 'staging_profile_authority_failed\n');
   }
 });
+
+const release = require('../scripts/staging-profile-release');
+const releaseWorkflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy-staging-profiles.yml'), 'utf8');
+const releaseContext = { ...context, GITHUB_WORKFLOW_REF: 'Run-MPRC/Run-MPRC.github.io/.github/workflows/deploy-staging-profiles.yml@refs/heads/main' };
+const expectedFunction = (target = 'ensureMemberProfile') => release.functionSpec(target, sha, 'b'.repeat(64), 'https://storage.googleapis.com/synthetic');
+
+test('release context retains all immutable checks and cannot use the verifier workflow', () => {
+  release.validateReleaseContext(releaseContext, fingerprint);
+  assert.throws(() => release.validateReleaseContext(context, fingerprint));
+  for (const [name, value] of Object.entries({ GITHUB_SHA: 'invalid', GITHUB_REF: 'refs/heads/other', GITHUB_WORKFLOW_SHA: 'b'.repeat(40), GITHUB_EVENT_NAME: 'push', TARGET_PROJECT_ID: 'production', TARGET_ENVIRONMENT: 'staging', DEPLOY_SERVICE_ACCOUNT: 'changed', GITHUB_REPOSITORY_ID: '1' })) {
+    assert.throws(() => release.validateReleaseContext({ ...releaseContext, [name]: value }, fingerprint));
+  }
+});
+
+test('deterministic deployment bundle ships no prototype handler, dependencies or private input', () => {
+  const entries = release.bundleFiles(ROOT);
+  assert.deepEqual(entries.map(([name]) => name), release.FILES);
+  assert.ok(!release.FILES.includes('index.js'));
+  const before = JSON.parse(fs.readFileSync(path.join(ROOT, 'functions/package.json')));
+  const after = JSON.parse(entries.find(([name]) => name === 'package.json')[1]);
+  assert.deepEqual(after, { ...before, main: 'profileOnly.js' });
+  const source = entries.find(([name]) => name === 'profileOnly.js')[1].toString();
+  assert.deepEqual([...source.matchAll(/^exports\.([A-Za-z]+)\s*=/gm)].map((m) => m[1]), release.TARGETS);
+  assert.doesNotMatch(source, /require\('\.\/index'\)|stripeWebhook|Checkout|setMemberRole|sendConfirmation/);
+  const first = release.createBundle(ROOT);
+  const second = release.createBundle(ROOT);
+  assert.equal(first.digest, second.digest);
+  assert.deepEqual(first.zip, second.zip);
+});
+
+test('two first-generation specs use explicit identities, limits and no secrets/commerce', () => {
+  assert.throws(() => expectedFunction('stripeWebhook'));
+  for (const target of release.TARGETS) {
+    const spec = expectedFunction(target);
+    assert.equal(spec.runtime, 'nodejs22');
+    assert.equal(spec.minInstances, 0);
+    assert.equal(spec.maxInstances, 2);
+    assert.equal(spec.availableMemoryMb, 256);
+    assert.equal(spec.timeout, '30s');
+    assert.match(spec.serviceAccountEmail, /^mprc-profile-runtime@run-mprc-staging\./);
+    assert.match(spec.buildServiceAccount, /^projects\/run-mprc-staging\/serviceAccounts\/mprc-profile-build@/);
+    assert.equal(spec.environmentVariables.COMMERCE_ENABLED, 'false');
+    assert.ok(!spec.secretEnvironmentVariables && !spec.secretVolumes);
+    if (target === 'ensureMemberProfile') assert.equal(spec.httpsTrigger.securityLevel, 'SECURE_ALWAYS');
+    else assert.equal(spec.eventTrigger.resource, 'projects/run-mprc-staging');
+  }
+  for (const url of ['http://storage.googleapis.com/synthetic', 'https://other.test/synthetic', 'https://user:password@storage.googleapis.com/synthetic', 'https://storage.googleapis.com:444/synthetic']) {
+    assert.throws(() => release.functionSpec('ensureMemberProfile', sha, 'b'.repeat(64), url));
+  }
+});
+
+test('hosted resource readback rejects broad identities, foreign config, missing limits and stale provenance', () => {
+  for (const target of release.TARGETS) {
+    const expected = expectedFunction(target);
+    const actual = { ...expected, status: 'ACTIVE' };
+    release.validateHostedFunction(actual, expected);
+    const omittedZero = { ...actual }; delete omittedZero.minInstances;
+    release.validateHostedFunction(omittedZero, expected);
+    for (const [field, value] of Object.entries({ runtime: 'nodejs20', serviceAccountEmail: 'default', buildServiceAccount: 'default', minInstances: 1, maxInstances: undefined, availableMemoryMb: 512, timeout: '540s', status: 'DEPLOY_IN_PROGRESS', secretEnvironmentVariables: [{}], vpcConnector: 'foreign', labels: {}, environmentVariables: { ...expected.environmentVariables, COMMERCE_ENABLED: 'true' } })) {
+      assert.throws(() => release.validateHostedFunction({ ...actual, [field]: value }, expected));
+    }
+    if (target === 'createMemberOnSignUp') assert.throws(() => release.validateHostedFunction({ ...actual, eventTrigger: { ...expected.eventTrigger, resource: 'projects/production' } }, expected));
+  }
+});
+
+test('runtime/build actAs is checked on exact accounts without accepting key creation', async () => {
+  const calls = [];
+  await release.validateActAs('synthetic-token', mockFetch([{ permissions: ['iam.serviceAccounts.actAs'] }, { permissions: ['iam.serviceAccounts.actAs'] }], calls));
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(({ url }) => url.startsWith('https://iam.googleapis.com/v1/projects/run-mprc-staging/serviceAccounts/mprc-profile-')));
+  await assert.rejects(release.validateActAs('synthetic-token', mockFetch([{ permissions: [] }])));
+  await assert.rejects(release.validateActAs('synthetic-token', mockFetch([{ permissions: ['iam.serviceAccounts.actAs', 'iam.serviceAccountKeys.create'] }])));
+});
+
+test('operation polling is bounded, and failed or malformed operations never count as success', async () => {
+  let requests = 0;
+  await release.waitForOperation({ name: 'operations/synthetic' }, 'synthetic-token', async () => ({ done: ++requests === 2 }), async () => {});
+  assert.equal(requests, 2);
+  await assert.rejects(release.waitForOperation({ name: 'operations/synthetic' }, 'synthetic-token', async () => ({ done: true, error: { message: 'private provider error' } }), async () => {}));
+  await assert.rejects(release.waitForOperation({ name: 'https://other.test' }, 'synthetic-token', async () => ({ done: true }), async () => {}));
+  requests = 0;
+  await assert.rejects(release.waitForOperation({ name: 'operations/synthetic' }, 'synthetic-token', async () => { requests += 1; return {}; }, async () => {}));
+  assert.equal(requests, 90);
+});
+
+test('protected release is fixed manual staging-only, pinned and has no credential file or data/payment access', () => {
+  assert.match(releaseWorkflow, /\bon:\n  workflow_dispatch:\n/);
+  assert.doesNotMatch(releaseWorkflow, /\n  (push|pull_request|schedule):|inputs:|upload-artifact|firebase deploy|gcloud|credentials_json|FIREBASE_TOKEN/);
+  assert.match(releaseWorkflow, /environment:\n      name: backend-staging/);
+  assert.match(releaseWorkflow, /access_token_lifetime: 1800s/);
+  assert.match(releaseWorkflow, /create_credentials_file: false/);
+  assert.match(releaseWorkflow, /export_environment_variables: false/);
+  assert.ok(releaseWorkflow.indexOf('staging-profile-release.js context') < releaseWorkflow.indexOf('google-github-actions/auth@'));
+  for (const action of releaseWorkflow.matchAll(/^\s*uses:\s*([^\s#]+)/gm)) assert.match(action[1], /@[0-9a-f]{40}$/);
+  const invalid = spawnSync(process.execPath, ['scripts/staging-profile-release.js', 'release'], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...context } });
+  assert.equal(invalid.status, 1);
+  assert.equal(invalid.stdout, '');
+  assert.equal(invalid.stderr, 'staging_profile_release_failed\n');
+});

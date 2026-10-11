@@ -1,5 +1,7 @@
 # GitHub Issue Backlog: Secure Commerce Program
 
+**CI-001C4 / #701 (2026-10-11):** scoped staging runtime/build permissions and protected deployment/hosted proof of `createMemberOnSignUp` and `ensureMemberProfile`. Production data, payments, website publication and parent #113/#133/#136 remain outside this slice. Initial baseline has no Functions. No schema/claims migration; create-once profiles remain unchanged. Source preparation is not hosted completion. Officer impact: staged profile readiness with normal approval and administrator bypass disabled. Officer documentation: ACCESS_CONTINUITY, LOW_COST_COMMUNITY, SYSTEM_MAPS and entrypoints. Deployment evidence: pending exact source, provider readback and made-up hosted checks on the native issue.
+
 **Prepared:** 2026-07-12
 **Status:** Dated design/assessment catalog; GitHub is canonical for execution
 **Execution model:** One focused issue per branch/pull request
