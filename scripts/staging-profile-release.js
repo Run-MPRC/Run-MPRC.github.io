@@ -23,6 +23,14 @@ const repository = `projects/${PROJECT}/locations/${REGION}/repositories/mprc-pr
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 const check = (value) => { if (!value) throw new Error('staging_profile_release_failed'); };
 
+function validateKnownCommunity(actual) {
+  // #707 adds one separately released staging-only service. This profile path
+  // may inspect it, never update it or load it into the profile bundle.
+  const { functionSpec: communitySpec, validateHostedFunction: validateCommunity } = require('./staging-community-release');
+  validateCommunity(actual, communitySpec(actual.labels?.['source-sha'],
+    `${actual.labels?.['bundle-a']}${actual.labels?.['bundle-b']}`, 'https://storage.googleapis.com/synthetic'));
+}
+
 function validateReleaseContext(env, fingerprint) {
   check(env.GITHUB_WORKFLOW_REF === `Run-MPRC/Run-MPRC.github.io/.github/workflows/${WORKFLOW}@refs/heads/main`);
   // Reuse the immutable repo/main/environment/authority and exact-source checks;
@@ -155,8 +163,11 @@ async function release(env) {
   const inventory = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, env.GCP_ACCESS_TOKEN);
   check(!inventory.nextPageToken && !inventory.unreachable?.length);
   const existing = inventory.functions || [];
-  check(Array.isArray(existing) && existing.length <= 2);
-  for (const fn of existing) {
+  check(Array.isArray(existing) && existing.length <= 3);
+  const community = existing.filter((fn) => fn.entryPoint === 'communityActions');
+  check(community.length <= 1);
+  community.forEach(validateKnownCommunity);
+  for (const fn of existing.filter((item) => item.entryPoint !== 'communityActions')) {
     const target = fn.name?.split('/').at(-1);
     validateHostedFunction(fn, functionSpec(target, env.GITHUB_SHA, bundle.digest, 'https://storage.googleapis.com/synthetic'), { ready: false, previousInitialRelease: true });
   }
@@ -181,7 +192,12 @@ async function release(env) {
     process.stdout.write(`staging_profile_${target}_deployed_verified\n`);
   }
   const final = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, env.GCP_ACCESS_TOKEN);
-  check(final.functions?.length === 2 && !final.nextPageToken && !final.unreachable?.length);
+  check(final.functions?.length === 2 + community.length && !final.nextPageToken && !final.unreachable?.length);
+  if (community.length) {
+    const unchanged = final.functions.find((fn) => fn.name === community[0].name);
+    validateKnownCommunity(unchanged);
+    check(unchanged.versionId === community[0].versionId);
+  }
   for (const target of TARGETS) validateHostedFunction(final.functions.find((fn) => fn.name.endsWith(`/${target}`)), functionSpec(target, env.GITHUB_SHA, bundle.digest, 'https://storage.googleapis.com/synthetic'));
   process.stdout.write(`staging_profile_bundle_sha256=${bundle.digest}\n`);
 }
@@ -204,4 +220,4 @@ async function main() {
 }
 
 if (require.main === module) void main();
-module.exports = { TARGETS, FILES, validateReleaseContext, bundleFiles, createBundle, functionSpec, validateHostedFunction, jsonRequest, validateActAs, waitForOperation };
+module.exports = { TARGETS, FILES, validateReleaseContext, bundleFiles, createBundle, functionSpec, validateHostedFunction, validateKnownCommunity, jsonRequest, validateActAs, waitForOperation };

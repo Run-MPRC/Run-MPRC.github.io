@@ -2,6 +2,22 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Staging community lifecycle — #707, source prepared
+
+```mermaid
+flowchart LR
+    Account["Staging My Account"] --> Page["/community; production disabled"]
+    Page --> Identity["Native Auth + App Check; own account only"]
+    Identity --> Service["One communityActions Function; min0/max2"]
+    Service --> Requests["Pending membership / cancellation request; no paid grant"]
+    Service --> Seats["Free event + own registration; atomic seat count"]
+    Service --> Commands["Saved command results; old retry cannot change later state"]
+    Requests --> Term["Approved synthetic term unchanged; original expiry applies"]
+    Browser["Browser member/admin"] -. "Denied direct access" .-> Requests
+```
+
+Text alternative: a staging-only account link opens one authenticated service that stores member requests, transactionally manages free-event seats and saves retry results, while preserving the original term and denying direct browser writes. Hosting/provider proof is not yet recorded; no production, payment, mail or role-grant path is added.
+
 ## Engineering staging billing — checked 2026-10-11
 
 ```mermaid

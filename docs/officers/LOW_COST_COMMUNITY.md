@@ -8,6 +8,8 @@
 
 ## What we are prioritizing
 
+[#707](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/707) adds one staging-only nonfinancial service, with the same min0/max2/256MB/30s limits and no polling, mail worker, subscription or scheduled job. Existing profile IAM stays unchanged; the new runtime has four Firestore permissions at staging-project scope. See the [staging scope, proof and recovery guide](./STAGING_COMMUNITY.md). This source preparation is not deployment proof or a cost guarantee.
+
 - Clear information about regular runs, meeting places, joining, and contacts.
 - A useful events/calendar experience on phones as well as computers.
 - Public information without requiring an account.

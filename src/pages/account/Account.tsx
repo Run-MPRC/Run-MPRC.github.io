@@ -24,6 +24,7 @@ import MemberDirectoryProfile from './MemberDirectoryProfile';
 import { getLocationReturnPath } from '../login/loginReturnPath';
 import { getSpamGuidance } from '../../services/accountEmail/accountEmailSender';
 import './Account.css';
+import { COMMUNITY_ENABLED } from '../../services/community/communityService';
 
 function tsToDate(ts: Timestamp | null | undefined) {
   if (!ts) return '';
@@ -40,6 +41,11 @@ export function AccountPageShell({ children }: { children: React.ReactNode }) {
       <Header title="My Account" image={HeaderImage}>
         Manage your MPRC profile, registrations, and connected services.
       </Header>
+      {COMMUNITY_ENABLED && (
+        <p className="container p-6">
+          <Link to="/community">Membership and free-event signup (staging)</Link>
+        </p>
+      )}
       {children}
     </>
   );
