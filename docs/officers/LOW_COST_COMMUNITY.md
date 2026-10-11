@@ -73,6 +73,28 @@ The #683 source change configured no budget, spending cap, artifact-cleanup poli
 
 [Issue #691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22, the program that runs the server code. Google schedules the old Node 20 runtime to be taken out of service on October 30, 2026. The update keeps the same two operations and resource limits. It adds automated compatibility and made-up profile checks, but does not deploy anything or fix every dependency warning. Hosted Node 22 behavior is **NOT AVAILABLE YET**.
 
+## Profile recovery app attestation — SOURCE ONLY; NOT AVAILABLE YET
+
+**Purpose:** make sure profile recovery accepts only a verified request from the club app, even if an environment setting is missing. App Check is Firebase's app-attestation check; it does not establish membership or officer permission.
+
+**Approver:** the named platform/security release approver. **Prerequisites:** reviewed [#695](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/695) source, existing release dependencies, exact deployed-source proof, and isolated staging with made-up identities only. The source change does not deploy a Function or change billing.
+
+1. Ask the maintainer for the exact source and passing request-boundary tests.
+2. Confirm only profile recovery gained native enforcement; signup, role policy and other services were not widened.
+3. Observe the maintainer's private staging check that a request without app attestation cannot read or create a profile.
+4. Observe the corresponding invalid-attestation rejection.
+5. Observe a made-up signed-in member with valid app attestation recover one pending profile.
+6. Confirm anonymous/invalid-auth and injected-field requests fail, and retries preserve profiles and roles.
+7. Record source, tests, merge, staging/provider and production states separately.
+
+**Expected result / success proof:** exact reviewed source plus staged denial and valid recovery evidence. Source tests use synthetic token verifiers, not real Google token verification; resource-setting readback alone is not request proof. Officers do not run commands, handle tokens, enter real member data or edit cloud settings.
+
+**Stop conditions:** an unverified request succeeds, valid app attestation stops requiring sign-in, a flag can disable the boundary, or hosted evidence is missing. A local request without attestation is expected to fail; do not fall back to production to get a successful test.
+
+**Undo:** hold an unverified release. Ask the maintainer for a compatible protected roll-forward or rollback that preserves native enforcement; do not disable App Check or edit a member record.
+
+**Escalation:** platform/security maintainer. A specialist remains necessary for provider setup, tests and deployment.
+
 ## Review before a low-cost release
 
 **Prerequisites:** issues #683 and #691 and their reviewed pull requests; the exact release source and test results; a named release approver; a private billing/payment-owner decision; and a platform maintainer. The existing release dependencies still apply. Never put payment details, passwords, or member records in an issue.
@@ -80,14 +102,15 @@ The #683 source change configured no budget, spending cap, artifact-cleanup poli
 ```mermaid
 flowchart LR
     Scope["Confirm useful community scope"] --> Source["Review paired limits and tests"]
-    Source --> Provider["Maintainer verifies actual settings and cost controls"]
+    Source --> App["Review native profile app-attestation boundary"]
+    App --> Provider["Maintainer verifies actual settings and cost controls"]
     Provider --> Quality["Check made-up accounts, cold start, burst and recovery"]
     Quality --> Decision{"All proofs and approvals present?"}
     Decision -- Yes --> Release["Use approved backend-first release"]
     Decision -- No --> Hold["Keep release on hold"]
 ```
 
-Text alternative: confirm the small scope, review source, verify provider controls, test quality with made-up accounts, and release only when every proof and approval is present.
+Text alternative: confirm the small scope, review source and native profile app attestation, verify provider controls, test quality with made-up accounts, and release only when every proof and approval is present.
 
 1. Confirm the public pages to keep and the two profile operations to deploy.
 2. Confirm the release adds no payment, email, photo, or synchronization service.
@@ -120,3 +143,4 @@ Text alternative: confirm the small scope, review source, verify provider contro
 - [Firebase Hosting usage](https://firebase.google.com/docs/hosting/usage-quotas-pricing)
 - [Firebase free-trial billing and expiry](https://firebase.google.com/support/faq/#pricing)
 - [Budget scope and notification settings](https://docs.cloud.google.com/billing/docs/how-to/budgets)
+- [Firebase native callable App Check enforcement](https://firebase.google.com/docs/app-check/cloud-functions)

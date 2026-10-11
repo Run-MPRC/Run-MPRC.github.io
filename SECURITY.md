@@ -18,6 +18,8 @@ The dual-runtime run exposed a Node 22 error-stack accessor that remained writab
 
 ## 2. Reporting a vulnerability
 
+**Profile callable source boundary, 2026-10-11:** ABUSE-001A2A [#695](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/695) builds only `ensureMemberProfile` with native `enforceAppCheck: true`, independent of `ENFORCE_APP_CHECK`. Real installed-SDK request-wrapper tests use synthetic token verifiers and mocked profile stores; missing/invalid app tokens are rejected before business work with the flag absent, false or true. Valid app requests still require valid Auth and an empty payload. No shared helper, Auth-created trigger, resource limit, dependency, callback-dependent callable, provider setting or deployed service changes. This is source evidence, not cryptographic token verification, an emulator browser flow, or hosted enforcement. Other sensitive callables and #113/#133/#136 deployment/authorization/provider proof remain open.
+
 Do not disclose a suspected vulnerability, secret, customer record, payment reference, or exploit in a public GitHub issue. Until MPRC publishes a dedicated security address:
 
 1. Use the private contact channel listed on the live MPRC contact page.
