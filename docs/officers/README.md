@@ -33,6 +33,8 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 ## Short guides
 
+**Focused backend authority, #699:** Dave approved releases and restoring administrator bypass. Production retains Dave/main; a separate `backend-staging` identity check cannot deploy the backend. Follow [the scoped procedure](./ACCESS_CONTINUITY.md#scoped-staging-profile-authority--699) only after #699 has recorded exact merged source and protected proof; until then it is **NOT AVAILABLE YET**. This creates no member/payment service or broader authority for the existing read-only staging reviewers.
+
 1. [Request a change](./REQUEST_A_CHANGE.md)
 2. [Update public content](./UPDATE_PUBLIC_CONTENT.md)
 3. [Events, shop, members, and money](./EVENTS_SHOP_MEMBERS.md)

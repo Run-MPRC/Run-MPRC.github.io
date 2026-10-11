@@ -16,6 +16,8 @@ Attach the exact wording, public link, or approved photo when you have it. The A
 
 ## Choose the closest task
 
+**Focused authority step, 2026-10-11:** [#699](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/699) keeps backend preparation limited to staging profile setup. Production still names Dave and main, but administrator bypass is allowed again by Dave's instruction. A separate `backend-staging` identity check reads only project/access metadata and deploys nothing. See [the short authority procedure](./docs/officers/ACCESS_CONTINUITY.md#scoped-staging-profile-authority--699). It is **NOT AVAILABLE YET** until #699 records its merged source and protected proof. Member/payment operation remains unavailable; no officer handles a key or member record.
+
 **Backend ownership, 2026-10-11:** Dave approved continuing without a backup owner under [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697). Dave remains the sole backend release/recovery approver; backup coverage is absent, not complete. This removes only the backup-appointment gate. Protected deployment, staging proof, rollback and all data/payment approvals remain required. See [the sole-owner procedure](./docs/officers/ACCESS_CONTINUITY.md#sole-owner-backend-exception--approved-october-11-2026); no officer handles keys or runs commands.
 
 | What you need | Open this short guide |

@@ -14,18 +14,18 @@ This dated exception supersedes this guide's two-owner appointment and approval 
 
 **Prerequisites:** a maintainer supplies a reviewed exact commit, successful required checks, one fixed project/resource set, private redacted evidence and a recovery plan. Protected release authority must be configured and verified first.
 
-**GitHub configuration readback, October 11:** the `production` environment now requires `daliu`, admits only branch `main`, and disables administrator bypass. Self-approval remains allowed so the sole owner can approve their own request. The existing `staging` read-only environment is unchanged. This verifies approval settings only, not a release run, cloud deploy authority or account recovery.
+**Superseding GitHub readback, October 11 — #699:** the `production` environment retains `daliu`, branch `main` only and self-approval, but administrator bypass is allowed again at Dave's request. The earlier #697 bypass-disabled state is historical. Record a bypass as an administrator override, not a reviewer approval; it does not change the cloud/source/target checks or appoint a substitute owner. Existing `staging` read-only settings and Jeff's authority are unchanged. This is approval configuration, not a deployed backend or account-recovery proof.
 
 ```mermaid
 flowchart LR
     Request["Reviewed exact backend request"] --> Dave{"Dave approves fixed release?"}
     Dave -- "No or unavailable" --> Stop["Stop; no substitute owner"]
-    Dave -- "Yes" --> Gate["Protected keyless identity and target checks"]
+    Dave -- "Yes or recorded administrator override" --> Gate["Protected keyless identity and target checks"]
     Gate --> Proof["Synthetic staging and rollback proof"]
     Proof --> Release["Separate approved target release"]
 ```
 
-Text alternative: Dave alone may approve the fixed backend request; a protected keyless identity and staging/recovery proof must still pass, and Dave's absence stops rather than appoints a replacement.
+Text alternative: Dave remains the named owner; an administrator override is possible and must be recorded separately, while keyless identity, exact target and staging/recovery proof still apply and no replacement owner is implied.
 
 1. Open the maintainer's reviewed release request.
 2. Confirm its exact commit, fixed project and named resources.
@@ -130,6 +130,38 @@ Text alternative: the platform maintainer requests the exact verifier from `main
 **Undo:** open a reviewed security issue asking the platform owner to remove the two environment locator secrets and disable the staging federation provider or its service-account binding. Do not delete the Firebase project, service account, or unrelated IAM bindings as an improvised response. A later re-enable must repeat source review and the protected proof.
 
 **Escalation:** platform owner first; security owner second. If a token, private locator, or unexpected cloud response appears, stop and use the private incident path.
+
+### Scoped staging profile authority — #699
+
+**Purpose:** check the separate profile-release identity without deploying a backend or reading member data.
+**Approver:** Dave Liu. Administrator bypass is allowed; record any use as an override rather than claiming Dave reviewed the run.
+**Availability:** check [#699](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/699) first. Until exact merged source, provider activation and protected run proof are recorded there, this procedure is **NOT AVAILABLE YET**. Member/profile deployment and payments remain **NOT AVAILABLE YET** regardless of this check.
+**Prerequisites:** the maintainer confirms the dedicated staging federation is enabled, the exact current main commit passed all six checks, and no runtime/build impersonation or direct member/secret permission has been added. Use only workflow **Verify staging profile authority** and environment **backend-staging**. The old **staging** environment remains read-only and separate.
+
+```mermaid
+flowchart LR
+    Main["Exact main; all six checks passed"] --> Approval{"Dave approval or recorded admin override"}
+    Approval --> Context["Fixed staging identity and workflow checks"]
+    Context --> Token["Five-minute keyless token; no credential file"]
+    Token --> Read["Project metadata and access check only"]
+    Read --> Proof["Fixed result; no backend deployed"]
+```
+
+Text alternative: exact green main and approval or a recorded override permit one fixed staging identity check; a five-minute token can read project/access metadata, and no backend or website is deployed.
+
+1. Open the maintainer's run link and confirm the workflow name above.
+2. Confirm branch main and environment backend-staging.
+3. Confirm the request says identity check only, not backend or website deployment.
+4. Confirm the exact source and all six successful checks.
+5. Approve the matching request, or record the administrator override and its reason.
+6. Wait for the fixed `staging_profile_authority_cloud_verified` result.
+7. Ask the maintainer to record dated permission/key/trust readback on #699 privately, without provider locators or policy dumps.
+
+**Expected result:** the check succeeds without creating a credential file, deploying anything or reading an account/document.
+**Stop conditions:** stop on a wrong/stale source, changed workflow/environment, new write step, missing/failed check, unexpected permission or request for a key/member record. A failed check does not authorize a broader role.
+**Success proof:** run link, exact source, named approval or recorded override, fixed result and private readback of zero user-managed keys. The role permits staging Function/Rules configuration, not direct records or project administration. IAM creation is project-scoped; the workflow, not IAM Function-name filtering, limits this step to reads.
+**Undo:** ask the platform maintainer to disable only the dedicated profile federation pool or remove only its workload-identity binding, using the native service record. Existing five-minute tokens can survive until expiry. Leave the old read-only identity, project, records and unrelated roles alone. Re-enabling requires source/permission review and this check again.
+**Escalation:** Dave as platform owner; security specialist for an unexpected permission, exposure or identity mismatch. Actual identity revocation and later backend deployment still require a maintainer, not an officer terminal.
 
 ## Private service record
 
