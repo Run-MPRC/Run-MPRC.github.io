@@ -33,7 +33,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 ## Short guides
 
-**Focused backend authority, #699/#701:** #699 completed its protected identity proof. #701 separately prepares two staging profile Functions and synthetic hosted tests. Administrator bypass is disabled for production/backend-staging; Dave/main and normal self-approval remain. [The staging procedure](./LOW_COST_COMMUNITY.md#engineering-staging-profiles--701) is **NOT AVAILABLE YET** until hosted proof is recorded. Existing read-only reviewers gain no deployment access; production/payments remain untouched.
+**Staging profiles verified, #701:** two scoped Node 22 Functions passed protected deployment, genuine browser App Check/Auth, signup, recovery, negative requests, retries and concurrency. Only made-up accounts/profiles were used and then removed. Administrator bypass is disabled for production/backend-staging; Dave/main and normal self-approval remain. Read [the dated proof and procedure](./LOW_COST_COMMUNITY.md#engineering-staging-profiles--701). Existing read-only reviewers gain no deployment access; production data/payments and website publication are unchanged. Membership and registrations remain unavailable.
 
 1. [Request a change](./REQUEST_A_CHANGE.md)
 2. [Update public content](./UPDATE_PUBLIC_CONTENT.md)

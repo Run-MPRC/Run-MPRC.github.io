@@ -9,6 +9,8 @@ This plan turns the target architecture into a dependency-ordered delivery progr
 
 ### Initial profile release runtime prerequisite
 
+**Isolated engineering proof completed, 2026-10-11 — #701:** two Node 22 staging profiles were protected-deployed from `2843388`, then tested with actual browser attestation, disposable accounts, denied requests, repeats/concurrency and background replay. Owned data was removed; no schema migration or production/website/payment release. This closes only the scoped runtime/profile proof, not #113/#133/#136 or the commerce sequence. Existing dependency advisories, legal/payment policy, production disposition/authority and full lifecycle acceptance remain separate work.
+
 RUNTIME-001 [#691](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/691) prepares Node 22 before the two-Function profile release under #136. Keep the five existing Node 20 checks and require a sixth, separate Node 22 backend/profile-emulator job in both protected-release CI checks. Match manifest, lock metadata, deployment builder, and provider runtime readback. Preserve CommonJS, first-generation triggers, create-once behavior, schema, and #683 resource limits; no backfill is needed. A fixed immutable error stack is the only backend logic adaptation. Node 22 source and passing synthetic tests do not resolve billing, #113 estate disposition, #133 authority, hosted behavior, or existing dependency advisories. Do not merge or deploy runner matching as part of this runtime prerequisite.
 
 ## 1. Program outcome
