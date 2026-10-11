@@ -103,7 +103,12 @@ function validateHostedFunction(actual, expected, { ready = true } = {}) {
     check(actual.httpsTrigger?.securityLevel === 'SECURE_ALWAYS' && !actual.eventTrigger);
   } else {
     check(actual.eventTrigger?.eventType === expected.eventTrigger.eventType && actual.eventTrigger?.resource === expected.eventTrigger.resource && !actual.httpsTrigger);
-    check(!actual.eventTrigger.failurePolicy); // Same non-retrying background source behavior.
+    // The v1 service also returns an empty FailurePolicy message for no retry.
+    // A present retry message, including retry: {}, means retry is enabled.
+    const failurePolicy = actual.eventTrigger.failurePolicy;
+    check(failurePolicy === undefined || (failurePolicy !== null
+      && typeof failurePolicy === 'object' && !Array.isArray(failurePolicy)
+      && Object.keys(failurePolicy).length === 0));
   }
 }
 

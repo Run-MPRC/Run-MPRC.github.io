@@ -234,7 +234,13 @@ test('hosted resource readback rejects broad identities, foreign config, missing
     for (const [field, value] of Object.entries({ runtime: 'nodejs20', serviceAccountEmail: 'default', buildServiceAccount: 'default', minInstances: 1, maxInstances: undefined, availableMemoryMb: 512, timeout: '540s', status: 'DEPLOY_IN_PROGRESS', secretEnvironmentVariables: [{}], vpcConnector: 'foreign', labels: {}, environmentVariables: { ...expected.environmentVariables, COMMERCE_ENABLED: 'true' } })) {
       assert.throws(() => release.validateHostedFunction({ ...actual, [field]: value }, expected));
     }
-    if (target === 'createMemberOnSignUp') assert.throws(() => release.validateHostedFunction({ ...actual, eventTrigger: { ...expected.eventTrigger, resource: 'projects/production' } }, expected));
+    if (target === 'createMemberOnSignUp') {
+      release.validateHostedFunction({ ...actual, eventTrigger: { ...expected.eventTrigger, failurePolicy: {} } }, expected);
+      for (const failurePolicy of [{ retry: {} }, { unexpected: true }, [], null]) {
+        assert.throws(() => release.validateHostedFunction({ ...actual, eventTrigger: { ...expected.eventTrigger, failurePolicy } }, expected));
+      }
+      assert.throws(() => release.validateHostedFunction({ ...actual, eventTrigger: { ...expected.eventTrigger, resource: 'projects/production' } }, expected));
+    }
   }
 });
 
