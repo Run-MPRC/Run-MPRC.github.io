@@ -6,6 +6,8 @@
 
 ## Sole-owner backend exception — approved October 11, 2026
 
+**Fictional dues permission — #716 source prepared, NOT AVAILABLE YET:** only Dave/platform specialist supplies an explicitly disposable staging officer and separate expiring dues-recording permission for the [supervised test](./STAGING_COMMUNITY.md#fictional-external-dues--716). Existing approval/event permissions do not gain this access. No ordinary officer, shared Gmail password or browser admin role can grant it. Test configuration/enrollment, revocation, exact cleanup and rollback remain specialist-only. Stop and contact Dave privately if access is absent or survives revocation; do not edit records or share passwords/codes. This changes no backup appointment, real officer authority or production permission.
+
 **Purpose:** allow backend setup and protected releases without appointing a backup.
 **Approver:** Dave Liu (`daliu`), the sole backend release/recovery owner.
 **Status:** owner decision approved under [#697](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/697). Backup coverage remains **INCOMPLETE**. The general backend release remains **NOT AVAILABLE YET** until #113/#133/#136 supply their other proof.

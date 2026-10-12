@@ -2,6 +2,8 @@
 
 | Word | Plain meaning |
 | --- | --- |
+| Fictional confirmation ID (UUID) | A long random test code supplied by the specialist. Reusing it cannot record the same made-up payment twice. It is not a bank reference or evidence of real money. |
+| Unlinked test membership | A made-up term and receipt not connected to any account. It grants no account access or role. |
 | AI assistant | A tool that can read instructions and help prepare a change. It still needs review and approval. |
 | GitHub | The service that stores the website's source and change history. |
 | Repository | The MPRC website project stored in GitHub. |

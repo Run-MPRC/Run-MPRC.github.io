@@ -1,13 +1,14 @@
 'use strict';
 
-// Source-only, unused contract (MEMBERS-ADMIN-001A). Given one officer-attested
+// Pure contract (MEMBERS-ADMIN-001A). Given one officer-attested
 // off-platform dues-evidence command, it validates an exact officer-audit
 // envelope and projects two paired, frozen values: the exact
 // `record_term_decision` input the shipped membership authority reducer accepts,
 // and an immutable audit record stamped with a manual, off-platform provenance.
 // It invents no policy (every owner-meaningful value is carried through as an
 // opaque token), reads no stored record, contacts no provider, and fabricates
-// no external charge state. No runtime imports it.
+// no external charge state. Only the isolated staging recorder consumes it,
+// for explicitly fictional, unlinked terms. Production does not import it.
 
 const { types: { isProxy } } = require('node:util');
 

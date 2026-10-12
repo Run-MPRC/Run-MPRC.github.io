@@ -51,6 +51,33 @@ The specialist's Hosting release uses Dave's existing club login for a short-liv
 
 ## Cost and scope
 
+## Fictional external dues — #716
+
+**Status:** SOURCE PREPARED — **NOT AVAILABLE YET** until #716 records native staging deployment, website and disposable-test acceptance. Real club rules remain unset. Recording does not associate an account, grant access/roles or move money.
+
+**Purpose:** rehearse one fictional externally confirmed dues receipt and safe retry. **Approver:** Dave, sole staging owner. **Prerequisites:** the specialist supplies the reviewed staging link, disposable MFA officer, separate expiring dues permission, fictional confirmation ID and made-up amount/method/short term. No real details or bank references.
+
+1. Open the supplied staging `/community/admin` link and confirm **Staging test only**.
+2. Sign in privately with the disposable account and its authenticator code.
+3. Find **Record fictional external dues**. If absent, stop and ask the specialist; do not change a role.
+4. Check the server-displayed test amount and term against the specialist's fictional example.
+5. Enter only the supplied **Fictional confirmation ID (UUID)**. This random test code is not a bank reference.
+6. Select the checkbox confirming this is a fictional test, not real money.
+7. Select **Record fictional dues**.
+8. Confirm one test membership appears with **Unlinked; no account access granted**.
+9. If the result is uncertain, select **Retry saved action**. Do not prepare a new confirmation to work around an uncertain result.
+10. Use **Refresh officer status** to read the current result. Use **Next dues receipts** / **First dues receipts** for bounded review.
+11. If the ten-minute sign-in expires, follow **Recover an expired officer session** below. A revoked/expired permission cannot be restored by signing in again.
+12. Sign out and ask the specialist to remove the owned fixtures.
+
+**Expected result:** one immutable fictional external confirmation for an unlinked test term. Same-command retries return the original result; another command using that confirmation is rejected. No account, profile, role, entitlement, real payment, email or Stripe state changes.
+
+**Stop:** production address, real data/money/reference, missing authenticator/dues permission, changed server amount/term, duplicate confirmation, unexplained result, or any request for secrets/record edits. Stop new actions and tell Dave/platform specialist privately.
+
+**Success proof:** #716 separately records exact source/tests/CI/merge, native Function archive/limits/security and staging Hosting, genuine Auth/App Check/TOTP denials, immutable retry/cross-officer duplicate safety, actual UI/offline/phone checks, and exact owned cleanup. Green checks alone are not live proof. **Undo:** sign out and stop; Dave/specialist disables the staged capability first, verifies saved requests denied, then uses the reviewed staging rollback if needed. Recorded receipts have no edit/refund/correction button; do not alter one yourself. **Escalation:** Dave/platform specialist. Test enrollment/configuration/permission supply and cleanup remain specialist-only; no officer uses a terminal or handles a bank credential.
+
+**Cost and compatibility:** same one on-demand service, six runtime permissions, min0/max2/256MB/30s, no new service/dependency/polling/scheduler. Existing six-field v1 officer permissions continue working but never gain dues recording. New exact seven-field v2 includes the separate dues permission. New server-only receipt collection is additive; no migration. These limits and warning budgets are not a bill ceiling.
+
 <a id="officer-review--711-source-prepared-not-available-yet"></a>
 
 <a id="officer-review--711-staging-verified-recovery-and-handoff-open"></a>

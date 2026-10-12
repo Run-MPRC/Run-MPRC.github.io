@@ -10,6 +10,10 @@ The repository contains screens for these jobs. Their presence does not prove th
 
 There is currently no proven no-code switch that safely stops all new Stripe payments. Hiding a button, closing an event, or marking a product sold out may leave an already-created Stripe Checkout page payable.
 
+## Fictional external dues — #716, NOT AVAILABLE YET
+
+Dave approved fictional amounts/methods/short terms for this staging-only recording test, not real dues rules. Use the [short supervised guide](./STAGING_COMMUNITY.md#fictional-external-dues--716) only after its separate hosted acceptance. It records an unlinked test term, moves no money and grants no account access or role. Real club prices/terms/methods/confirmers, deliberate account association, renewal, corrections and refunds need separate approved work. The specialist handles fixtures/permissions/provider proof/cleanup; an officer does not change a role, record or payment directly.
+
 ## Membership cancellation — POLICY APPROVED, NOT AVAILABLE YET
 
 [#707](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/707) verified the separate [staging-only request and free-event review](./STAGING_COMMUNITY.md) on 2026-10-11. Fresh disposable fixtures still require the specialist. This does not launch production membership, grant a paid term, or repair paid race cancellation.

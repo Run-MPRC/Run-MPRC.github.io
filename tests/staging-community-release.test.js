@@ -28,7 +28,7 @@ test('bundle is deterministic, bounded and excludes all prototype commerce/PII s
   const root = path.resolve(__dirname, '..');
   const a = createBundle(root); const b = createBundle(root);
   assert.equal(a.digest, b.digest); assert.ok(a.zip.length < 1_000_000);
-  assert.deepEqual(FILES, ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json']);
+  assert.deepEqual(FILES, ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'communityDues.js', 'membershipManualEvidence.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json']);
   assert.ok(!FILES.includes('index.js') && !FILES.includes('stripeHelpers.js'));
 });
 test('fixed staging specification and provider readback reject drift', () => {

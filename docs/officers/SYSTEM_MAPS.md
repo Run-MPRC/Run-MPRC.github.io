@@ -2,6 +2,21 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Fictional external dues — #716, source prepared; NOT AVAILABLE YET
+
+```mermaid
+flowchart LR
+    Officer["Disposable staging officer; recent TOTP + native App Check"] --> Permission["Separate live expiring dues permission"]
+    Permission --> Service["Same bounded communityActions service"]
+    Policy["Server-owned fictional amount/method/short term"] --> Service
+    Service --> Receipt["One global confirmation key; immutable unlinked test term/receipt"]
+    Receipt --> View["Twenty minimal receipts per page; no profiles"]
+    Service --> Audit["Actor/permission/reason/result; saved retry"]
+    Browser["Browser including admin"] -. "Direct writes denied" .-> Receipt
+```
+
+Text alternative: a recent authenticated officer with a separate expiring dues permission uses the existing service and server-owned fictional policy to record one globally unique, immutable unlinked test receipt and audit, with bounded review and no direct browser write, account access or money movement. Native deployment/UI/cleanup proof is still required.
+
 ## Staging community lifecycle — #707, first hosted release verified 2026-10-11
 
 Core hosted staging checks for the #711 officer extension below passed on 2026-10-11. Function version 2 and Hosting source `57261ae` are recorded in the [staging guide](./STAGING_COMMUNITY.md#officer-review--711-staging-verified). Expired-session recovery and the no-terminal handoff passed on 2026-10-12; ordinary officer access, lost-authenticator recovery and production are **NOT AVAILABLE YET**.
