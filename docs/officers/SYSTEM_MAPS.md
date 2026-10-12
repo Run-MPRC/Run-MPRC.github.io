@@ -4,11 +4,11 @@ These diagrams show where pages, information, and deployments go. Each diagram i
 
 ## Staging community lifecycle — #707, first hosted release verified 2026-10-11
 
-The #711 officer extension below is source prepared, **NOT AVAILABLE YET** until its issue records staging deployment/acceptance.
+Core hosted staging checks for the #711 officer extension below passed on 2026-10-11. Function version 2 and Hosting source `57261ae` are recorded in the [staging guide](./STAGING_COMMUNITY.md#officer-review--711-staging-verified-recovery-and-handoff-open). Fresh sign-in recovery after expiry and final handoff remain unverified; ordinary officer access and production are **NOT AVAILABLE YET**.
 
 ```mermaid
 flowchart LR
-    Officer["/community/admin; staging only"] --> MFA["Verified recent authenticator sign-in + native App Check"]
+    Officer["/community/admin; core staging verified; recovery open"] --> MFA["Verified recent authenticator sign-in + native App Check"]
     MFA --> Cap["Live expiring approval / free-event permission"]
     Cap --> One["Same communityActions service; no new reserved instance"]
     One --> Review["20 pending UID/revision requests per page; no profiles"]
@@ -19,7 +19,7 @@ flowchart LR
     Browser["Browser including broad admin"] -. "Denied direct access and capability writes" .-> Cap
 ```
 
-Text alternative: staged officer tools require recent authenticator sign-in and current action permission, then use the same bounded service for synthetic approval, booking-safe free-event edits and immutable receipts; the browser cannot grant access or write records, and real dues/production remain unavailable.
+Text alternative: core staged officer checks passed using recent authenticator sign-in and current action permission with the same bounded service for synthetic approval, booking-safe free-event edits and immutable receipts; the browser cannot grant access or write records, and fresh sign-in recovery, ordinary officer access and real dues/production remain unavailable.
 
 ```mermaid
 flowchart LR
