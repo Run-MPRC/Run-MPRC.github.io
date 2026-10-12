@@ -30,7 +30,7 @@ function parseAdminRequest(input) {
     const extra = ['admin_event_create', 'admin_event_edit'].includes(value.action) ? ['event'] : value.action === 'admin_event_capacity' ? ['capacity'] : [];
     parseStrictObject(value, { requiredKeys: ['action', 'accountUid', 'requestId', 'expectedRevision', 'reason', target, ...extra], optionalKeys: [] });
     check(typeof value.requestId === 'string' && UUID.test(value.requestId) && integer(value.expectedRevision) && identifier(value[target]) && value.reason === 'synthetic_staging_review', 'invalid-argument');
-    if (value.event) {
+    if (extra.includes('event')) {
       parseStrictObject(value.event, { requiredKeys: ['title', 'location', 'startAtMs', 'opensAtMs', 'closesAtMs', 'capacity'], optionalKeys: [] });
       check(text(value.event.title) && text(value.event.location)
         && [value.event.startAtMs, value.event.opensAtMs, value.event.closesAtMs].every((time) => integer(time, 8_640_000_000_000_000))

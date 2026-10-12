@@ -35,6 +35,11 @@ test.each([
   { ...request('admin_event_create', { eventId: 'event', event: draft }), event: { ...draft, title: '\u202eInjected' } },
   { ...request('admin_event_capacity', { eventId: 'event', capacity: 1 }), capacity: 1.5 },
 ])('strict request rejects forged/financial/coerced/unsafe fields %#', (value) => { expect(() => parseAdminRequest(value)).toThrow(); });
+test.each([null, false, 0, 'event', []])('create/edit requires a typed event object %#', (event) => {
+  for (const action of ['admin_event_create', 'admin_event_edit']) {
+    expect(() => parseAdminRequest({ action, accountUid: 'officer', requestId: randomUUID(), expectedRevision: 0, reason: 'synthetic_staging_review', eventId: 'event', event })).toThrow();
+  }
+});
 test('synthetic approval is atomic/repeat-safe, supplies no payment or Auth claims', async () => {
   const command = approve(); await execute(command); await execute(command);
   expect((await members.status('runner')).membership).toMatchObject({ revision: 2, applicationStatus: 'approved', entitlement: 'current_member', accessThroughMs: term.endsAtMs });
