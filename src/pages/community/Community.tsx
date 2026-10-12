@@ -130,6 +130,7 @@ export default function Community() {
             && (
             <p>
               Access continues through the paid term ending
+              {' '}
               {new Date(status.membership.accessThroughMs).toLocaleString()}
               .
             </p>
