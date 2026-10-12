@@ -109,6 +109,8 @@ Parallel work is safe only across branches that do not share schemas or security
 
 ## 4. Phases and exit gates
 
+**Bounded next community slice — #711:** source prepares synthetic membership approval and free-event management within the one existing staging callable. Dependencies #707/#701 are hosted-proven. Stage-only action capabilities, recent TOTP, authoritative target read, immutable/retry-safe audit, bounded cursor review and capacity/revision races precede release. Real off-platform dues confirmation is Dave's selected later direction, not implemented or enabled here. Term/plan/method/approver decisions, renewal/import, production AUTH-003/ADMIN-001 and live #114/#115 remain separate. Officer impact: disposable admin review only. Officer documentation: STAGING_COMMUNITY, entrypoints and maps. Deployment evidence: #711 must separately record source, CI, merge, native archive/spec/IAM/MFA, Hosting, real browser tests and cleanup.
+
 ### Phase 0 — Stop accidental harm and establish a trustworthy baseline
 
 **Issues:** SAFETY-001, CONFIG-001, SUPPLY-001, first part of CI-001, LEGAL-001 discovery

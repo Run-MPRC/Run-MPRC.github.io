@@ -4,6 +4,23 @@ These diagrams show where pages, information, and deployments go. Each diagram i
 
 ## Staging community lifecycle — #707, first hosted release verified 2026-10-11
 
+The #711 officer extension below is source prepared, **NOT AVAILABLE YET** until its issue records staging deployment/acceptance.
+
+```mermaid
+flowchart LR
+    Officer["/community/admin; staging only"] --> MFA["Verified recent authenticator sign-in + native App Check"]
+    MFA --> Cap["Live expiring approval / free-event permission"]
+    Cap --> One["Same communityActions service; no new reserved instance"]
+    One --> Review["20 pending UID/revision requests per page; no profiles"]
+    Review --> Approval["Verified target + configured synthetic term; no paid/role grant"]
+    One --> Manage["Create closed; edit unbooked; capacity >= bookings; open/close/cancel"]
+    Manage --> Seats["Same transactional free-event seat count"]
+    One --> Audit["Immutable actor/reason/before/after/result receipt"]
+    Browser["Browser including broad admin"] -. "Denied direct access and capability writes" .-> Cap
+```
+
+Text alternative: staged officer tools require recent authenticator sign-in and current action permission, then use the same bounded service for synthetic approval, booking-safe free-event edits and immutable receipts; the browser cannot grant access or write records, and real dues/production remain unavailable.
+
 ```mermaid
 flowchart LR
     Account["Staging My Account"] --> Page["/community; production disabled"]

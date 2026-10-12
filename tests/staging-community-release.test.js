@@ -2,6 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { FILES, createBundle, functionSpec, validateHostedFunction } = require('../scripts/staging-community-release');
+test('staging authenticator policy requires existing Identity Platform and no SMS provider', () => {
+  const { validateStagingMfa } = require('../scripts/staging-community-release');
+  const config = { subtype: 'IDENTITY_PLATFORM', signIn: { email: { enabled: true } }, mfa: { state: 'ENABLED', providerConfigs: [{ state: 'ENABLED', totpProviderConfig: { adjacentIntervals: 1 } }] } };
+  assert.doesNotThrow(() => validateStagingMfa(config));
+  for (const invalid of [{ ...config, subtype: 'FIREBASE_AUTH' }, { ...config, mfa: { ...config.mfa, enabledProviders: ['PHONE_SMS'] } }, { ...config, mfa: { state: 'DISABLED' } }]) assert.throws(() => validateStagingMfa(invalid));
+});
 
 test('owner provider calls name only the staging quota project and retain the host boundary', async () => {
   const { jsonRequest } = require('../scripts/staging-community-release');
@@ -22,7 +28,7 @@ test('bundle is deterministic, bounded and excludes all prototype commerce/PII s
   const root = path.resolve(__dirname, '..');
   const a = createBundle(root); const b = createBundle(root);
   assert.equal(a.digest, b.digest); assert.ok(a.zip.length < 1_000_000);
-  assert.deepEqual(FILES, ['communityOnly.js', 'communityActions.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json']);
+  assert.deepEqual(FILES, ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json']);
   assert.ok(!FILES.includes('index.js') && !FILES.includes('stripeHelpers.js'));
 });
 test('fixed staging specification and provider readback reject drift', () => {

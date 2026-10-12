@@ -58,4 +58,8 @@ describe('native authenticated boundary and context binding', () => {
     })).status).toBe(403);
     expect(admin.firestore).not.toHaveBeenCalled();
   });
+  test('native verified single-factor token cannot enter officer business work', async () => {
+    expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, { action: 'admin_status', accountUid: 'synthetic-uid' })).status).toBe(403);
+    expect(admin.firestore).not.toHaveBeenCalled();
+  });
 });

@@ -33,6 +33,8 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 ## Short guides
 
+Staging officer approval/free-event management is prepared under [#711](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711), not hosted-proven yet. Follow the [staging officer checklist](./STAGING_COMMUNITY.md#officer-review--711-source-prepared-not-available-yet) after its acceptance; no real dues or production procedure is included.
+
 For the isolated membership/free-event staging test, use [Staging community actions](./STAGING_COMMUNITY.md). Its status distinguishes source preparation from hosted proof; it is not a production procedure.
 
 **Staging profiles verified, #701:** two scoped Node 22 Functions passed protected deployment, genuine browser App Check/Auth, signup, recovery, negative requests, retries and concurrency. Only made-up accounts/profiles were used and then removed. Administrator bypass is disabled for production/backend-staging; Dave/main and normal self-approval remain. Read [the dated proof and procedure](./LOW_COST_COMMUNITY.md#engineering-staging-profiles--701). Existing read-only reviewers gain no deployment access; production data/payments and website publication are unchanged. Membership and registrations remain unavailable.

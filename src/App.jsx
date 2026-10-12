@@ -30,6 +30,7 @@ import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 import Terms from './pages/legal/Terms';
 import Privacy from './pages/legal/Privacy';
 import Community from './pages/community/Community';
+import CommunityAdmin from './pages/community/CommunityAdmin';
 import { COMMUNITY_ENABLED } from './services/community/communityService';
 
 // Admin pages are lazy-loaded so public visitors don't download the admin JS bundle.
@@ -88,6 +89,7 @@ function App() {
                 <Route path="shop/:slug" element={<ProductDetail />} />
                 <Route path="account" element={<Account />} />
                 {COMMUNITY_ENABLED && <Route path="community" element={<Community />} />}
+                {COMMUNITY_ENABLED && <Route path="community/admin" element={<CommunityAdmin />} />}
                 <Route path="account/strava/callback" element={<StravaCallback />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="suggestions" element={<Suggestions />} />

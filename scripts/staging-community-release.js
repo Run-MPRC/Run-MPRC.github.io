@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
+const { isDeepStrictEqual } = require('node:util');
 const { jsonRequest: providerRequest, waitForOperation } = require('./staging-profile-release');
 const { verifyCurrentSource } = require('./staging-profile-authority');
 const PROJECT = 'run-mprc-staging';
@@ -15,12 +16,22 @@ const REGION = 'us-central1';
 const BASE = `https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/${REGION}`;
 const ACCOUNT = 'runmprc@gmail.com';
 const RUNTIME = `mprc-community-runtime@${PROJECT}.iam.gserviceaccount.com`;
-const FILES = ['communityOnly.js', 'communityActions.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json'];
+const FILES = ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json'];
 const check = (value) => { if (!value) throw new Error('staging_community_release_failed'); };
 
 // Owner tokens do not inherit the CLI's --project as their API quota project.
 // Keep every authenticated provider request billed/routed to staging explicitly.
 function jsonRequest(url, token, method = 'GET', body, fetchImpl = fetch) {
+  const authUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config`;
+  if (url === authUrl || url === `${authUrl}?updateMask=mfa`) {
+    check((url === authUrl && method === 'GET' && body === undefined)
+      || (method === 'PATCH' && url === `${authUrl}?updateMask=mfa`
+        && JSON.stringify(body) === JSON.stringify({ mfa: STAGING_MFA })));
+    return fetchImpl(url, { method, redirect: 'error', signal: AbortSignal.timeout(15000),
+      headers: { Authorization: `Bearer ${token}`, 'x-goog-user-project': PROJECT, 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }).then((response) => { check(response.ok); return response.json(); });
+  }
   return providerRequest(url, token, method, body, (resource, options) => fetchImpl(resource, {
     ...options, headers: { ...options.headers, 'x-goog-user-project': PROJECT },
   }));
@@ -68,6 +79,15 @@ function validateHostedFunction(actual, expected) {
     && actual.httpsTrigger?.securityLevel === 'SECURE_ALWAYS' && !actual.secretEnvironmentVariables?.length && !actual.secretVolumes?.length && !actual.vpcConnector);
   for (const key of ['labels', 'environmentVariables']) check(Object.keys(actual[key] || {}).length === Object.keys(expected[key]).length && Object.entries(expected[key]).every(([name, value]) => actual[key][name] === value));
 }
+const STAGING_MFA = { state: 'ENABLED', providerConfigs: [{ state: 'ENABLED', totpProviderConfig: { adjacentIntervals: 1 } }] };
+function validateStagingMfa(config) {
+  check(config.subtype === 'IDENTITY_PLATFORM' && config.signIn?.email?.enabled === true
+    && config.mfa?.state === STAGING_MFA.state && config.mfa.providerConfigs?.length === 1);
+  const provider = config.mfa.providerConfigs[0];
+  check(provider.state === 'ENABLED' && provider.totpProviderConfig?.adjacentIntervals === 1
+    && Object.keys(provider).length === 2 && Object.keys(provider.totpProviderConfig).length === 1
+    && !config.mfa.enabledProviders?.length);
+}
 async function release(root) {
   const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8' }).trim();
   const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
@@ -76,7 +96,7 @@ async function release(root) {
   await verifyCurrentSource(source);
   const gcloud = (...args) => execFileSync('/opt/homebrew/bin/gcloud', [...args, `--account=${ACCOUNT}`, `--project=${PROJECT}`], { encoding: 'utf8' }).trim();
   const role = JSON.parse(gcloud('iam', 'roles', 'describe', 'mprcCommunityRuntime', '--format=json'));
-  const permissions = ['datastore.databases.get', 'datastore.entities.get', 'datastore.entities.create', 'datastore.entities.update'];
+  const permissions = ['datastore.databases.get', 'datastore.entities.get', 'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.list', 'firebaseauth.users.get'];
   check(!role.deleted && role.includedPermissions?.length === permissions.length && permissions.every((permission) => role.includedPermissions.includes(permission)));
   const iam = JSON.parse(gcloud('projects', 'get-iam-policy', PROJECT, '--format=json'));
   const runtimeRoles = iam.bindings.filter((binding) => binding.members?.includes(`serviceAccount:${RUNTIME}`));
@@ -84,6 +104,18 @@ async function release(root) {
   const keys = JSON.parse(gcloud('iam', 'service-accounts', 'keys', 'list', `--iam-account=${RUNTIME}`, '--managed-by=user', '--format=json'));
   check(keys.length === 0);
   const token = gcloud('auth', 'print-access-token'); // Memory only, never logged.
+  const authUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config`;
+  const beforeAuth = await jsonRequest(authUrl, token);
+  check(beforeAuth.subtype === 'IDENTITY_PLATFORM' && beforeAuth.signIn?.email?.enabled === true);
+  if (beforeAuth.mfa?.state === 'DISABLED') {
+    check(!beforeAuth.mfa.providerConfigs?.length && !beforeAuth.mfa.enabledProviders?.length);
+    await verifyCurrentSource(source);
+    await jsonRequest(`${authUrl}?updateMask=mfa`, token, 'PATCH', { mfa: STAGING_MFA });
+  }
+  const afterAuth = await jsonRequest(authUrl, token);
+  validateStagingMfa(afterAuth);
+  check(isDeepStrictEqual(beforeAuth.signIn, afterAuth.signIn)
+    && isDeepStrictEqual(beforeAuth.authorizedDomains, afterAuth.authorizedDomains));
   const inventory = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, token);
   check(!inventory.nextPageToken && !inventory.unreachable?.length && inventory.functions?.length >= 2 && inventory.functions.length <= 3);
   check(inventory.functions.every((fn) => ['createMemberOnSignUp', 'ensureMemberProfile', TARGET].includes(fn.entryPoint) && fn.name.startsWith(`${BASE.replace('https://cloudfunctions.googleapis.com/v1/', '')}/functions/`)));
@@ -118,4 +150,4 @@ async function release(root) {
   process.stdout.write(JSON.stringify({ status: 'staging_community_deployed_verified', sha, digest, bytes: bundle.zip.length }) + '\n');
 }
 if (require.main === module) release(path.resolve(__dirname, '..')).catch(() => { process.stderr.write('staging_community_release_failed\n'); process.exitCode = 1; });
-module.exports = { FILES, createBundle, functionSpec, validateHostedFunction, jsonRequest };
+module.exports = { FILES, createBundle, functionSpec, validateHostedFunction, jsonRequest, validateStagingMfa };

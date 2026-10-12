@@ -250,6 +250,8 @@ This is source-only attack-surface reduction. The component had no runtime route
 
 ### Authorization
 
+**#711 synthetic staging boundary (source prepared, not hosted proof):** no generic admin-role shortcut. Every officer request requires native App Check, verified recent (ten-minute) TOTP Auth and a current enabled, expiring action capability read transactionally before receipt replay. Owner-only capability provisioning/revocation is outside the callable; no route grants roles or changes accounts. Approval verifies target UID/verified/enabled Auth state read-only, permits only a null-authority pending request and supplies a server-owned explicitly synthetic test term. Immutable receipts record actor, capability/revision, action, target, fixed test reason, before/after state, result and time without profiles or payment data. The runtime's two additional permissions are `datastore.entities.list` for <=21-record cursor queries and `firebaseauth.users.get` for one selected target, at staging-project scope. No delete, Auth mutation, secret or provider/payment permission. Production AUTH-003/MFA/admin-policy and #114/#115 are not completed by this test.
+
 - Server code and Firestore rules check signed token capabilities; the UI is never the enforcement point.
 - Separate catalog/content editing from financial state, identity administration, exports, and secrets.
 - No client—including browser admins—can write webhook inbox, payment state, refund IDs, Stripe IDs, audit events, rate limits, or OAuth secrets.
