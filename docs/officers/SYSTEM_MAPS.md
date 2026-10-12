@@ -4,12 +4,15 @@ These diagrams show where pages, information, and deployments go. Each diagram i
 
 ## Staging community lifecycle — #707, first hosted release verified 2026-10-11
 
-Core hosted staging checks for the #711 officer extension below passed on 2026-10-11. Function version 2 and Hosting source `57261ae` are recorded in the [staging guide](./STAGING_COMMUNITY.md#officer-review--711-staging-verified-recovery-and-handoff-open). Fresh sign-in recovery after expiry and final handoff remain unverified; ordinary officer access and production are **NOT AVAILABLE YET**.
+Core hosted staging checks for the #711 officer extension below passed on 2026-10-11. Function version 2 and Hosting source `57261ae` are recorded in the [staging guide](./STAGING_COMMUNITY.md#officer-review--711-staging-verified). Expired-session recovery and the no-terminal handoff passed on 2026-10-12; ordinary officer access, lost-authenticator recovery and production are **NOT AVAILABLE YET**.
 
 ```mermaid
 flowchart LR
-    Officer["/community/admin; core staging verified; recovery open"] --> MFA["Verified recent authenticator sign-in + native App Check"]
+    Officer["/community/admin; supervised staging recovery verified"] --> MFA["Verified recent authenticator sign-in + native App Check"]
     MFA --> Cap["Live expiring approval / free-event permission"]
+    MFA --> Expired["After ten minutes: request denied; protected sections hidden"]
+    Expired --> Reauth["Sign out; sign in with a fresh authenticator code"]
+    Reauth --> MFA
     Cap --> One["Same communityActions service; no new reserved instance"]
     One --> Review["20 pending UID/revision requests per page; no profiles"]
     Review --> Approval["Verified target + configured synthetic term; no paid/role grant"]
@@ -19,7 +22,7 @@ flowchart LR
     Browser["Browser including broad admin"] -. "Denied direct access and capability writes" .-> Cap
 ```
 
-Text alternative: core staged officer checks passed using recent authenticator sign-in and current action permission with the same bounded service for synthetic approval, booking-safe free-event edits and immutable receipts; the browser cannot grant access or write records, and fresh sign-in recovery, ordinary officer access and real dues/production remain unavailable.
+Text alternative: core staged officer checks passed using recent authenticator sign-in and current action permission with the same bounded service for synthetic approval, booking-safe free-event edits and immutable receipts; the browser cannot grant access or write records, expired-session recovery requires a new authenticator sign-in, while ordinary officer access, lost-authenticator recovery and real dues/production remain unavailable.
 
 ```mermaid
 flowchart LR

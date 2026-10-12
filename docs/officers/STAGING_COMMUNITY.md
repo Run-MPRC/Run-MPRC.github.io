@@ -53,15 +53,17 @@ The specialist's Hosting release uses Dave's existing club login for a short-liv
 
 <a id="officer-review--711-source-prepared-not-available-yet"></a>
 
-## Officer review — #711 staging verified; recovery and handoff open
+<a id="officer-review--711-staging-verified-recovery-and-handoff-open"></a>
 
-**Status checked 2026-10-11:** core hosted staging checks passed. [#711's dated acceptance receipt](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711#issuecomment-6117987215) records native authenticator sign-in, approval/event actions, denied requests, retries, booking races, phone/offline behavior and natural ten-minute sign-in expiry. Fresh sign-in recovery after that expiry and the final no-terminal handoff remain **NOT AVAILABLE YET / unverified**. #711 stays open. Production and real dues are not available.
+## Officer review — #711 staging verified
+
+**Status checked 2026-10-12:** core hosted staging checks, expired-session recovery and the no-terminal handoff passed. [#711's original acceptance receipt](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711#issuecomment-6117987215) records native authenticator sign-in, approval/event actions, denied requests, retries, booking races, phone/offline behavior and natural ten-minute sign-in expiry. The [October 12 recovery and cleanup receipt](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711#issuecomment-6129376616) records the unchanged officer session naturally expiring, a denied refresh hiding both protected sections, and sign-out/fresh authenticator sign-in restoring them. A newly requested genuine browser App Check token also passed the native server check with fresh TOTP Auth. This is not recovery without an authenticator. Production and real dues are not available.
 
 **Release proof:** the Function and staging website were verified from `57261aed111976718ba8c04515e38394e4e0d2c8`. The community Function is version 2. Its 85,371-byte downloaded archive matched SHA-256 `d71690088e6ca8f5ac29cf9a0179ec17fe2d39b2e126a7776b657ffe5b699ab2`. The release command reported an unexplained failure despite completed provider deployment; independent archive/resource checks, Hosting's source gate and later read-only postchecks passed. Do not treat that command as a successful release or redeploy unchanged code to hide the error. All owned test accounts and records were removed, temporary local access was turned off and the test receiver was closed. New fixtures are needed for another review. These dated proofs do not publish `runmprc.com` or verify production behavior.
 
 **Purpose:** review synthetic membership approval and free-event management. These controls are not a real dues procedure. Dave selected externally confirmed dues for later work; no real payment method, annual plan, term or confirmation authority has been chosen here.
 
-**Approver:** Dave, sole staging/recovery owner. **Prerequisites for a supervised staging review:** the specialist supplies an explicitly disposable verified officer account, authenticator setup, expiring approval/event permission and a short server-configured synthetic term. It is not an ordinary browser admin role. No officer changes permissions, source or records directly. A Google Cloud or Gmail login is not a website test account; do not enter your Gmail password here. Do not rely on the unfinished recovery procedure for ordinary officer access.
+**Approver:** Dave, sole staging/recovery owner. **Prerequisites for a supervised staging review:** the specialist supplies an explicitly disposable verified officer account, authenticator setup, expiring approval/event permission and a short server-configured synthetic term. It is not an ordinary browser admin role. No officer changes permissions, source or records directly. A Google Cloud or Gmail login is not a website test account; do not enter your Gmail password here. Ordinary officer access and recovery without the authenticator remain **NOT AVAILABLE YET**.
 
 1. Open the supplied staging `/community/admin` link.
 2. Confirm **Staging test only** and the staging address.
@@ -83,14 +85,26 @@ The specialist's Hosting release uses Dave's existing club login for a short-liv
 18. Confirm the booked member can still cancel their own signup and release the place.
 19. Use **Retry saved action** for an uncertain result; do not repeatedly create new requests.
 20. Use **Refresh officer status** to read current state. A successful refresh clears the saved request before a new action.
-21. Stop if ten minutes pass or access is denied, and ask the specialist to end the review. Fresh sign-in recovery still needs its own verified test.
+21. If access is denied after ten minutes, follow **Recover an expired officer session** below. Do not repeatedly submit saved actions.
 22. Sign out at the end and ask the specialist to remove all owned fixtures.
 
 **Expected result:** one nonfinancial test approval and coherent free-event changes/counts. Editing booked event content is blocked. A cancelled event cannot reopen. At most twenty configured events are supported; old event archival is not included. Pending review shows twenty opaque test account IDs per page, no profiles/emails or export.
 
 **Stop:** production address, real data/dues, payment, absent authenticator gate, permission unexpectedly surviving revocation, lost bookings, stale result, or a request to edit records/share secrets. Tell Dave privately.
 
-**Proof:** #711 records exact source/CI/merge, native archive/resource/runtime checks, optional authenticator setup and unchanged sign-in/domain settings. Auth and Firestore App Check remain enforced. Hosted evidence covers both permission types, denied target verification, approval/withdrawal and capacity/closure races, immutable retries, expiry/revocation, actual phone/offline screens and exact disposable cleanup. Remaining acceptance is fresh sign-in recovery with new native attestation, followed by review of these steps without a terminal. Test enrollment, permission setup and cleanup remain specialist-only; they are not officer self-service.
+**Proof:** #711 records exact source/CI/merge, native archive/resource/runtime checks, optional authenticator setup and unchanged sign-in/domain settings. Auth and Firestore App Check remain enforced. Hosted evidence covers both permission types, denied target verification, approval/withdrawal and capacity/closure races, immutable retries, expiry/revocation, actual phone/offline screens and exact disposable cleanup. October 12 additionally verified real-clock expiry, denied/cleared privileged UI, fresh native TOTP sign-in, renewed genuine browser attestation, restored officer sections and the no-terminal handoff. Test enrollment, permission setup and cleanup remain specialist-only; they are not officer self-service.
+
+### Recover an expired officer session
+
+**Purpose:** renew a supervised staging officer sign-in after its ten-minute limit. **Approver:** Dave. **Prerequisites:** the same disposable account, its working authenticator and a still-enabled, unexpired specialist-supplied permission.
+
+1. Select **Sign out**.
+2. Sign in again on the staging officer page with the same disposable account.
+3. Enter a fresh authenticator code.
+4. Confirm the permitted membership/event sections return.
+5. If access is still denied or your authenticator is unavailable, stop and contact Dave/platform specialist privately. Do not change permissions or share passwords, codes or tokens.
+
+**Expected result / success proof:** the page restores only the sections permitted by the current capability. The specialist records genuine fresh sign-in and native attestation acceptance; a browser message alone is not proof. **Undo:** sign out and stop the review. **Escalation:** Dave/platform specialist. This does not reset a lost authenticator or grant access after permission expiry/revocation.
 
 **Undo:** stop testing. Ask Dave/specialist to disable the staged capability first and verify old requests are denied, then use the reviewed staged rollback if needed. Do not try to reopen a cancelled event or change membership/payment evidence yourself. **Escalation:** Dave/platform specialist for access, deployment, uncertain results or recovery.
 
