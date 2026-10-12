@@ -1,6 +1,6 @@
 # MPRC Website: Officer Start Here
 
-**Fictional account linking — #719, SOURCE PREPARED / NOT AVAILABLE YET:** a separate staging-only permission will link one fictional receipt to a specialist-marked disposable pending account. Its test access lasts only through the receipt's unchanged term, including after cancellation; no Auth role or money changes. Follow the [screen-only guide](./docs/officers/STAGING_COMMUNITY.md#link-a-fictional-receipt--719) only after native acceptance and fresh private test fixtures. Production and real membership rules remain unavailable.
+**Fictional account linking — #719, STAGING VERIFIED 2026-10-12:** a separate staging permission links one fictional receipt to a specialist-marked disposable pending account. Test access ends at the original receipt term, including after cancellation; no Auth role or money changes. Use the [screen-only guide](./docs/officers/STAGING_COMMUNITY.md#link-a-fictional-receipt--719) only with fresh specialist-supplied private fixtures. Native Function/Hosting, actual screens/offline/retry/race/cancel/expiry/revocation and exact cleanup passed. Old accounts/records are removed; production and real club rules remain unavailable.
 
 **Use this page if Dave or the usual code owner is unavailable.** You do not need to know how to code.
 

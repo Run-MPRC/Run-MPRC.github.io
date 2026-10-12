@@ -2,7 +2,7 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
-## Fictional account linking — #719, source prepared only
+## Fictional account linking — #719, staging verified 2026-10-12
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ flowchart LR
     Atomic -. "Never" .-> Real["Auth roles, real money or production"]
 ```
 
-Text alternative: separately authorized recent-MFA staging officers may atomically connect one immutable fictional current term to one owner-marked verified disposable pending account, with no roles/payments/production change; native release acceptance remains required.
+Text alternative: separately authorized recent-MFA staging officers may atomically connect one immutable fictional current term to one owner-marked verified disposable pending account, with no roles/payments/production change; native release, real screens and exact cleanup passed on October 12, and fresh specialist-supplied fixtures are required for another review.
 
 ## Fictional external dues — #716, staging verified 2026-10-12
 
