@@ -2,23 +2,44 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const { verifyCurrentSource } = require('./staging-profile-authority');
-const { functionSpec, validateHostedFunction, jsonRequest } = require('./staging-community-release');
+const { createBundle, functionSpec, validateHostedFunction, jsonRequest } = require('./staging-community-release');
 const { verifyExecutableArtifact } = require('./firebase-hosting-contract');
 const PROJECT = 'run-mprc-staging';
 const ACCOUNT = 'runmprc@gmail.com';
 const check = (value) => { if (!value) throw new Error('staging_community_hosting_failed'); };
+function validateBundle(native, digest) {
+  check(`${native.labels?.['bundle-a']}${native.labels?.['bundle-b']}` === digest);
+  validateHostedFunction(native, functionSpec(native.labels?.['source-sha'], digest, 'https://storage.googleapis.com/synthetic'));
+}
+async function ownerToken() {
+  const token = execFileSync('/opt/homebrew/bin/gcloud', ['auth', 'print-access-token', `--account=${ACCOUNT}`, `--project=${PROJECT}`], { encoding: 'utf8' }).trim();
+  const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(15000),
+  });
+  check(response.ok && (await response.json()).email === ACCOUNT);
+  return token; // No ADC fallback, persistent login, credential file or printed token.
+}
 async function publish() {
   const root = path.resolve(__dirname, '..');
   check(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim() === '');
   const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   const source = { GITHUB_SHA: sha, GH_TOKEN: execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim() };
   await verifyCurrentSource(source);
-  const token = execFileSync('/opt/homebrew/bin/gcloud', ['auth', 'print-access-token', `--account=${ACCOUNT}`, `--project=${PROJECT}`], { encoding: 'utf8' }).trim();
+  const token = await ownerToken();
   const native = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/us-central1/functions/communityActions`, token);
-  const digest = `${native.labels?.['bundle-a']}${native.labels?.['bundle-b']}`;
-  validateHostedFunction(native, functionSpec(sha, digest, 'https://storage.googleapis.com/synthetic'));
+  const digest = createBundle(root).digest;
+  validateBundle(native, digest);
+  // Script/docs-only commits do not require another paid Function build. Require
+  // ancestor provenance AND native source bytes identical to the green main bundle.
+  execFileSync('git', ['merge-base', '--is-ancestor', native.labels['source-sha'], sha], { cwd: root });
+  const download = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/${native.name}:generateDownloadUrl`, token, 'POST', {});
+  const archiveUrl = new URL(download.downloadUrl);
+  check(archiveUrl.protocol === 'https:' && archiveUrl.hostname === 'storage.googleapis.com');
+  const archive = await fetch(download.downloadUrl, { redirect: 'error', signal: AbortSignal.timeout(30000) });
+  check(archive.ok && createHash('sha256').update(Buffer.from(await archive.arrayBuffer())).digest('hex') === digest);
   const configResponse = await fetch(`https://${PROJECT}.web.app/__/firebase/init.json`, { redirect: 'error', signal: AbortSignal.timeout(15000) });
   check(configResponse.ok); const config = await configResponse.json();
   check(config.projectId === PROJECT && typeof config.appId === 'string');
@@ -47,7 +68,8 @@ async function publish() {
     fs.writeFileSync(filename, JSON.stringify({ hosting: { site: PROJECT, public: path.join(root, 'build'), ignore: ['firebase.json', '**/.*', '**/node_modules/**'], rewrites: [{ source: '**', destination: '/index.html' }] } }));
     await verifyCurrentSource(source);
     check(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim() === '');
-    execFileSync(path.join(root, 'node_modules/.bin/firebase'), ['deploy', '--only', 'hosting', '--config', filename, '--project', PROJECT, '--account', ACCOUNT, '--non-interactive'], { cwd: root, env, stdio: 'pipe', timeout: 180000, maxBuffer: 2_000_000 });
+    const deployEnv = { ...env, FIREBASE_TOKEN: await ownerToken(), GOOGLE_CLOUD_QUOTA_PROJECT: PROJECT };
+    execFileSync(path.join(root, 'node_modules/.bin/firebase'), ['deploy', '--only', 'hosting', '--config', filename, '--project', PROJECT, '--non-interactive'], { cwd: root, env: deployEnv, stdio: 'pipe', timeout: 180000, maxBuffer: 2_000_000 });
     const response = await fetch(`https://${PROJECT}.web.app/community-release.json`, { cache: 'no-store', redirect: 'error' });
     check(response.ok); const marker = await response.json();
     check(marker.sourceSha === sha && marker.project === PROJECT && marker.functionBundle === digest);
@@ -55,3 +77,4 @@ async function publish() {
   } finally { fs.rmSync(directory, { recursive: true }); }
 }
 if (require.main === module) publish().catch(() => { process.stderr.write('staging_community_hosting_failed\n'); process.exitCode = 1; });
+module.exports = { validateBundle };

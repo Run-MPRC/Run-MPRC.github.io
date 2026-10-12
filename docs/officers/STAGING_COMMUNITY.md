@@ -43,6 +43,8 @@ Officer review after the specialist confirms deployment:
 
 **Undo:** stop the staging review. Ask Dave and the platform specialist to use the reviewed staging rollback or remove the one staged community service. Do not edit a member record, role, payment or production setting yourself.
 
+The specialist's Hosting release uses Dave's existing club login for a short-lived credential kept in memory. It does not require a new saved Firebase CLI login or key file. A later documentation or release-script fix may reuse the Function only after its downloaded source exactly matches the reviewed bundle; it does not silently deploy more backend code.
+
 **Escalation:** Dave/platform specialist for deployment, access, uncertain results or recovery. Future officer dues confirmation, event editing, paid registration/refunds, and production release require separate work. The specialist still provisions and removes test fixtures; officers do not use a terminal or change source.
 
 ## Cost and scope

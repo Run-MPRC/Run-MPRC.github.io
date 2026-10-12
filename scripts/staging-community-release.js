@@ -111,7 +111,9 @@ async function release(root) {
   check(final.functions.length === 3 && !final.nextPageToken && !final.unreachable?.length);
   for (const original of inventory.functions.filter((fn) => fn.entryPoint !== TARGET)) {
     const unchanged = final.functions.find((fn) => fn.name === original.name);
-    check(unchanged?.versionId === original.versionId && JSON.stringify(unchanged.labels) === JSON.stringify(original.labels));
+    check(unchanged?.versionId === original.versionId
+      && Object.keys(unchanged.labels || {}).length === Object.keys(original.labels || {}).length
+      && Object.entries(original.labels || {}).every(([key, value]) => unchanged.labels[key] === value));
   }
   process.stdout.write(JSON.stringify({ status: 'staging_community_deployed_verified', sha, digest, bytes: bundle.zip.length }) + '\n');
 }
