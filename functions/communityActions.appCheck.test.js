@@ -70,4 +70,13 @@ describe('native authenticated boundary and context binding', () => {
     expect((await request({ ...app, authorization: 'Bearer synthetic-unverified-auth' }, dues)).status).toBe(403);
     expect(admin.firestore).not.toHaveBeenCalled();
   });
+  test('linking native boundary cannot be authorized by fields, another UID or single-factor/unverified Auth', async () => {
+    const link = { action: 'admin_dues_link', accountUid: 'synthetic-uid', requestId: '123e4567-e89b-42d3-a456-426614174000', expectedRevision: 1, reason: 'synthetic_staging_review', membershipId: `stage_dues_${'a'.repeat(64)}`, targetUid: 'disposable-target', associationConfirmed: true };
+    expect((await request({ authorization: 'Bearer synthetic-auth' }, link)).status).toBe(401);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, { ...link, accountUid: 'other' })).status).toBe(403);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, link)).status).toBe(403);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-unverified-auth' }, link)).status).toBe(403);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, { ...link, role: 'admin' })).status).toBe(400);
+    expect(admin.firestore).not.toHaveBeenCalled();
+  });
 });

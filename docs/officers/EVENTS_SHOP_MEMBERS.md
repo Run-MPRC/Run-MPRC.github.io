@@ -1,5 +1,7 @@
 # Events, Shop, Members, and Money
 
+**#719 fictional linking — SOURCE PREPARED / NOT AVAILABLE YET:** the [supervised staging procedure](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) will deliberately connect an immutable fictional receipt to a specialist-marked disposable pending account. Test access uses only the receipt's original term; cancellation preserves it until expiry. No real dues policy/payment/claim/renewal/refund/production launch is supplied. Stop on an uncertain ID/revision or changed term and contact Dave privately.
+
 **Current status:** live commerce is **NOT AVAILABLE YET**.
 **Use this guide when:** a request touches registrations, members-only access, products, payments, refunds, waivers, or private data.
 

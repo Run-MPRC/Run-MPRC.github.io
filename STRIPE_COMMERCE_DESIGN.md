@@ -1,5 +1,7 @@
 # Stripe, Race Registration, and Merchandise Design
 
+**#719 fictional activation — SOURCE PREPARED, NOT AVAILABLE YET:** a separately authorized disposable staging account may receive the unchanged test term from a fictional external-dues receipt. This does not verify a payment, reconcile Stripe, grant an Auth role, renew a term, issue a refund or approve real club policy. Receipt evidence stays immutable; association is a separate server-only record. Production and real payments remain untouched and unavailable.
+
 **Status:** Required production design; current code is a test-mode prototype
 **Last reviewed:** 2026-07-13
 **Related:** [SYSTEM_DESIGN.md](./SYSTEM_DESIGN.md), [SECURITY.md](./SECURITY.md), [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md)

@@ -10,6 +10,39 @@
 
 ## What the actions mean
 
+## Link a fictional receipt — #719
+
+**Status:** SOURCE PREPARED / **NOT AVAILABLE YET** until #719 records native staging deployment and hosted acceptance. This supplements #716 recording; it does not change its immutable receipt or approve real club policy.
+
+**Purpose:** deliberately connect one fictional receipt to one disposable pending account and verify its unchanged test term. **Approver:** Dave Liu. **Prerequisites:** the specialist supplies a verified disposable account, exact account ID and pending revision, a current unlinked fictional receipt, short test term, expiring association permission and disposable-target marker. Officer setup is separate from member sign-in. No backup owner is appointed.
+
+1. Open the supplied staging `/community/admin` link.
+2. Confirm **Staging test only** and the supplied disposable officer email.
+3. Sign in and complete the authenticator prompt.
+4. Find **Link fictional dues to a disposable account**. If absent, stop.
+5. Select the supplied unlinked **Fictional receipt to link**.
+6. Enter only the specialist-supplied **Disposable account ID**.
+7. Enter the supplied **Pending membership revision**.
+8. Check that both identifiers match the private test instructions.
+9. Select the fictional-account confirmation checkbox.
+10. Select **Link and activate test membership** once.
+11. Confirm the current receipt review reports **Linked test term**.
+12. If uncertain, use **Retry saved action**, not a new link.
+13. Sign out of the officer account.
+14. Sign in as the supplied disposable member on `/community`.
+15. Select **Refresh status** and confirm **Test membership active** and the original term end.
+16. Select **Cancel membership** and confirm cancellation requested while test access continues through that same end.
+17. After the short term ends, select **Refresh status** and confirm test membership is not active.
+18. Sign out and ask the specialist to confirm exact test cleanup.
+
+**Expected result:** one separate immutable link and one approved disposable test membership; the original receipt and term are unchanged. The test grants no Auth claim/role or real paid membership and moves no money. Recording permission alone cannot link. A linked row is not proof of current member access after expiry; use the member page.
+
+**Stop conditions:** real account/reference/member data; production URL; uncertain or wrong account/revision/receipt; missing permission/marker; unverified/disabled account; nonpending application; future/expired term; changed dates; conflicting duplicate; uncertain result that remains unresolved. Stop and contact Dave privately; do not edit records, guess another ID, renew or reassign a receipt.
+
+**Success proof:** #719 must separately record exact source/tests/merge, Function archive/resource/security/identity, Hosting marker, native attestation/MFA, actual officer/member screens, failed/duplicate/racing/retried requests, cancellation/original expiry and exact cleanup. **Undo:** sign out; the specialist disables the capability first and verifies old retries denied, then follows the reviewed staging rollback or owned-fixture cleanup. No unlink/refund/correction button is provided. **Escalation:** Dave/platform specialist. Enrollment, configuration, marker/permission supply, release and cleanup remain specialist-only; the backup-officer review needs no terminal, shared password or database editing.
+
+## Existing membership and free-event actions
+
 - Request membership: records a pending request. It does not prove dues or grant membership.
 - Withdraw membership request: withdraws a pending application.
 - Cancel membership: records a cancellation request for an already-approved synthetic membership. Access lasts through its original paid term. No refund occurs.

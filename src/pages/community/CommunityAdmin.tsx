@@ -169,7 +169,7 @@ closesAtMs: Date.parse(String(values.get('closes'))),
       <p role="note">
         Staging test only. Made-up members, free events and fictional dues receipts only.
         Approval simulates a test term. Dues recording moves no money,
-        links no account and grants no Auth role.
+        links no account and grants no Auth role. Linking is a separate fictional test action.
       </p>
       <Link to="/community">Member signup and events</Link>
       {isLoading && <p>Loading account…</p>}
@@ -190,7 +190,8 @@ closesAtMs: Date.parse(String(values.get('closes'))),
         <section>
           <h2>Record fictional external dues</h2>
           <p>
-            Test only. No money moves. Receipts remain unlinked and grant no account access.
+            Test only. No money moves. Recording alone leaves receipts unlinked
+            and grants no account access.
             Do not enter real payment references or member details.
           </p>
           {status.duesPolicy ? (
@@ -260,6 +261,69 @@ policyRevision: status.duesPolicy.revision
               )}
             </>
           ) : <p>No test dues configuration. Ask the staging specialist.</p>}
+        </section>
+      )}
+      {status?.capabilities.membershipAssociation && (
+        <section>
+          <h2>Link fictional dues to a disposable account</h2>
+          <p>
+            Test only. Use the exact disposable account ID and pending revision
+            supplied by the specialist. The server checks the account and preserves
+            the receipt term. No Auth role or money changes.
+          </p>
+          <form onSubmit={(event) => {
+            event.preventDefault();
+            const values = new FormData(event.currentTarget);
+            if (values.get('associationConfirmed') !== 'on') return;
+            perform({
+              action: 'admin_dues_link',
+membershipId: String(values.get('membershipId')),
+              targetUid: String(values.get('targetUid')),
+expectedRevision: Number(values.get('revision')),
+              associationConfirmed: true,
+            });
+          }}
+          >
+            <label htmlFor="dues-membership">
+              Fictional receipt to link
+              <select id="dues-membership" name="membershipId" defaultValue="" required disabled={blocked}>
+                <option value="" disabled>Select an unlinked fictional receipt</option>
+                {(status.dues || []).filter((receipt) => !receipt.linked).map((receipt) => (
+                  <option key={receipt.membershipId} value={receipt.membershipId}>
+                    {receipt.membershipId}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label htmlFor="dues-target">
+              Disposable account ID
+              <input id="dues-target" name="targetUid" pattern="[A-Za-z0-9_-]{1,80}" maxLength={80} autoComplete="off" required disabled={blocked} />
+            </label>
+            <label htmlFor="dues-target-revision">
+              Pending membership revision
+              <input id="dues-target-revision" name="revision" type="number" min={1} max={999999} step={1} defaultValue={1} required disabled={blocked} />
+            </label>
+            <label htmlFor="dues-association-confirmed">
+              <input id="dues-association-confirmed" name="associationConfirmed" type="checkbox" required disabled={blocked} />
+              I confirm this fictional receipt belongs to this disposable test account.
+            </label>
+            <button
+              type="submit"
+              disabled={blocked || !(status.dues || []).some((receipt) => !receipt.linked)}
+            >
+              Link and activate test membership
+            </button>
+          </form>
+          <p>
+            Refresh the member page afterward to verify test access.
+            Do not relink or change the term.
+          </p>
+        </section>
+      )}
+      {status
+        && (status.capabilities.duesRecording || status.capabilities.membershipAssociation) && (
+        <section>
+          <h2>Review fictional dues receipts</h2>
           {(status.dues || []).length === 0 && <p>No fictional dues receipts.</p>}
           {(status.dues || []).map((receipt) => (
             <article key={receipt.membershipId}>
@@ -276,7 +340,10 @@ policyRevision: status.duesPolicy.revision
                 {' '}
                 {receipt.termId}
                 {' '}
-                · Unlinked; no account access granted.
+                {' '}
+                ·
+                {' '}
+                {receipt.linked ? 'Linked test term; verify current access on the member page.' : 'Unlinked; no account access granted.'}
               </p>
             </article>
           ))}

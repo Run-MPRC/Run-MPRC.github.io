@@ -101,6 +101,32 @@ test('unverified accounts cannot start a mutation', async () => {
   await screen.findByRole('button', { name: 'Request membership' });
   expect(screen.getByRole('button', { name: 'Request membership' })).toBeDisabled();
 });
+test('linked test access is visible, cancellation preserves the term and refreshed expiry removes active state', async () => {
+  const termEnd = 1800000060000;
+  const active = {
+ membership: {
+ applicationStatus: 'approved', revision: 2, entitlement: 'current_member', accessThroughMs: termEnd
+},
+events: []
+};
+  call.mockResolvedValue(active); render(show()); await screen.findByText('Test membership active.');
+  expect(screen.getByRole('button', { name: 'Request membership' })).toBeDisabled();
+  call.mockResolvedValueOnce({ membership: { revision: 3, applicationStatus: 'cancellation_requested' } });
+  call.mockResolvedValueOnce({ ...active, membership: { ...active.membership, revision: 3, applicationStatus: 'cancellation_requested' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel membership' }));
+  await screen.findByText('Request status: cancellation requested.');
+  expect(screen.getByText('Test membership active.')).toBeInTheDocument();
+  expect(call.mock.calls[1][1]).toMatchObject({ action: 'membership_cancel', expectedRevision: 2, accountUid: 'runner-a' });
+  call.mockResolvedValueOnce({
+ ...active,
+membership: {
+ ...active.membership, revision: 3, applicationStatus: 'cancellation_requested', entitlement: 'not_entitled', accessThroughMs: null
+}
+});
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  await screen.findByText('Test membership is not active.');
+  expect(screen.queryByText(/Access continues through/)).not.toBeInTheDocument();
+});
 test('an obsolete account status completion is ignored', async () => {
   let finish!: (value: unknown) => void;
   call.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

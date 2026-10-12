@@ -7,7 +7,7 @@ const { freeEvent, approvedMember } = require('./testSupport/communityFixtures')
 const describeLocal = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 describeLocal('community lifecycle real Firestore transactions (emulator only)', () => {
   let app; let db; let service; let now;
-  const roots = ['communityEvents', 'communityMemberships', 'communityConfig', 'communityCommands', 'communityLimits', 'communityOfficers', 'communityOfficerCommands', 'communityOfficerLimits', 'communityDues'];
+  const roots = ['communityEvents', 'communityMemberships', 'communityConfig', 'communityCommands', 'communityLimits', 'communityOfficers', 'communityOfficerCommands', 'communityOfficerLimits', 'communityDues', 'communityDuesLinks', 'communityAssociationTargets'];
   const command = (action, expectedRevision = 0, extra = {}) => parseRequest({ action, accountUid: 'fixture-member', expectedRevision, requestId: randomUUID(), ...extra });
   const join = (revision = 0) => command('event_join', revision, { eventId: 'fixture-event', waiverAccepted: true, waiverVersion: 'synthetic-only-v1' });
   beforeAll(() => {
@@ -99,5 +99,44 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     expect(auth.getUser).not.toHaveBeenCalled();
     await db.doc(`communityOfficers/${uid}`).update({ enabled: false, revision: 2 });
     await expect(officer.execute(uid, token, request)).rejects.toHaveProperty('code', 'permission-denied');
+  }, 45000);
+  test('two officers linking one receipt and two receipts linking one UID have one winner; term/cancel/expiry remain canonical', async () => {
+    const { createDuesReceipt } = require('./communityDues');
+    const policy = { schemaVersion: 1, syntheticOnly: true, policyVersion: 'fictional-external-dues-v1', revision: 1, amountCents: 100, currency: 'USD', method: 'fictional_external', termId: 'fictional-link-term', startsAtMs: now - 1000, endsAtMs: now + 60000 };
+    const token = { email_verified: true, auth_time: Math.floor(now / 1000), firebase: { sign_in_second_factor: 'totp' } };
+    const caps = { schemaVersion: 3, enabled: true, revision: 1, expiresAtMs: now + 3600000, membershipApproval: false, freeEventManagement: false, duesRecording: false, membershipAssociation: true };
+    const freshReceipt = async () => {
+      const value = createDuesReceipt('link-officer-0', caps, token, { requestId: randomUUID(), confirmationId: randomUUID(), policyRevision: 1 }, policy, now);
+      await db.doc(`communityDues/${value.membershipId}`).create(value); return value;
+    };
+    const officer = createAdministrationService(db, { getUser: async uid => ({ uid, emailVerified: true, disabled: false }) }, { memberView, eventView }, () => now);
+    const commands = [];
+    const receipt = await freshReceipt();
+    for (let n = 0; n < 4; n++) {
+      const uid = `link-officer-${n}`; const member = `link-member-${n}`;
+      await db.doc(`communityOfficers/${uid}`).create(caps);
+      await service.mutate(member, command('membership_join'));
+      await db.doc(`communityAssociationTargets/${member}`).create({ schemaVersion: 1, syntheticOnly: true, enabled: true, uid: member, revision: 1, expiresAtMs: now + 3600000 });
+      commands.push(parseAdminRequest({ action: 'admin_dues_link', accountUid: uid, targetUid: member, expectedRevision: 1, requestId: randomUUID(), membershipId: receipt.membershipId, associationConfirmed: true, reason: 'synthetic_staging_review' }));
+    }
+    const raced = await Promise.allSettled(commands.map(request => officer.execute(request.accountUid, token, request)));
+    const winners = raced.flatMap((value, n) => value.status === 'fulfilled' ? [n] : []); expect(winners).toHaveLength(1);
+    const winner = commands[winners[0]];
+    expect((await db.collection('communityDuesLinks').get()).size).toBe(1);
+    expect((await db.doc(`communityDues/${receipt.membershipId}`).get()).data()).toEqual(receipt);
+    const authority = (await db.doc(`communityMemberships/${winner.targetUid}`).get()).data().authority;
+    expect(authority.term).toEqual(receipt.authority.term);
+    await officer.execute(winner.accountUid, token, winner);
+    await service.mutate(winner.targetUid, command('membership_cancel', 2));
+    expect((await service.status(winner.targetUid)).membership.entitlement).toBe('current_member');
+    expect((await db.doc(`communityMemberships/${winner.targetUid}`).get()).data().authority).toEqual(authority);
+    const loser = commands[(winners[0] + 1) % 4]; const a = await freshReceipt(); const b = await freshReceipt();
+    const both = await Promise.allSettled([a, b].map(value => officer.execute(loser.accountUid, token, { ...loser, requestId: randomUUID(), membershipId: value.membershipId })));
+    expect(both.filter(value => value.status === 'fulfilled')).toHaveLength(1);
+    expect((await db.collection('communityDuesLinks').get()).size).toBe(2);
+    await db.doc(`communityOfficers/${winner.accountUid}`).update({ enabled: false, revision: 2 });
+    await expect(officer.execute(winner.accountUid, token, winner)).rejects.toHaveProperty('code', 'permission-denied');
+    now = policy.endsAtMs;
+    expect((await service.status(winner.targetUid)).membership.entitlement).toBe('not_entitled');
   }, 45000);
 });

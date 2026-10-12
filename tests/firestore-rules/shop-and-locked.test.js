@@ -369,6 +369,8 @@ describe('server-only operational collections', () => {
     'communityOfficers/runner-a', 'communityOfficerCommands/runner-a/requests/test',
     'communityOfficerLimits/runner-a',
     'communityDues/stage-dues', 'communityDues/stage-dues/private/test', 'communityConfig/duesTestTerm',
+    'communityDuesLinks/stage-dues', 'communityDuesLinks/stage-dues/private/test',
+    'communityAssociationTargets/runner-a', 'communityAssociationTargets/runner-a/private/test',
   ])('community path %s remains denied even for a browser admin', async (path) => {
     await seed(path, { schemaVersion: 1 });
     for (const auth of [undefined, { uid: 'runner-a', role: 'member', emailVerified: true }, { uid: 'admin-a', role: 'admin', emailVerified: true }]) {

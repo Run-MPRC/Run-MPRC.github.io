@@ -2,6 +2,22 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Fictional account linking — #719, source prepared only
+
+```mermaid
+flowchart LR
+    Officer["Recent native TOTP + App Check"] --> Permission["Separate expiring v3 association permission"]
+    Permission --> Service["Same staging communityActions service"]
+    Receipt["Immutable fictional receipt and original current test term"] --> Service
+    Target["Owner-marked disposable UID; verified/enabled Auth; pending revision"] --> Service
+    Service --> Atomic["Atomic separate link + associated test authority; one receipt/account"]
+    Atomic --> Member["Member page: current clock; cancellation keeps original expiry"]
+    Browser["Browser including admin"] -. "Direct writes denied" .-> Atomic
+    Atomic -. "Never" .-> Real["Auth roles, real money or production"]
+```
+
+Text alternative: separately authorized recent-MFA staging officers may atomically connect one immutable fictional current term to one owner-marked verified disposable pending account, with no roles/payments/production change; native release acceptance remains required.
+
 ## Fictional external dues — #716, staging verified 2026-10-12
 
 ```mermaid

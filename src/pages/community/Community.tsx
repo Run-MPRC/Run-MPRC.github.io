@@ -128,6 +128,7 @@ export default function Community() {
           <p>
             Signup requests await officer confirmation of dues. They do not grant paid membership.
           </p>
+          <p>{status.membership.entitlement === 'current_member' ? 'Test membership active.' : 'Test membership is not active.'}</p>
           {status.membership.entitlement === 'current_member' && status.membership.accessThroughMs
             && (
             <p>

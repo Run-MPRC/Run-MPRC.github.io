@@ -1,5 +1,7 @@
 # MPRC Platform Operations Runbook
 
+**#719 fictional linking — SOURCE PREPARED, NOT AVAILABLE YET:** reuse the same service, six-permission runtime and min0/max2/256MB/30s limits. Dave/specialist supplies only disposable verified Auth accounts, pending requests/revisions, expiring exact v3 association capabilities and six-field `communityAssociationTargets/{uid}` markers. Follow the [screen-only procedure](./docs/officers/STAGING_COMMUNITY.md#link-a-fictional-receipt--719) after native acceptance. Disable capabilities first; exact owned cleanup uses identity/update-time fences. No ordinary officer grants a role, edits records, deploys or runs a terminal. No migration/scheduler/provider/payment/production change. The existing release command's post-deploy reporting failure remains unresolved; inspect native state/archive before any retry, never blindly redeploy.
+
 **Status:** Target operating procedure; several controls are not implemented yet
 **Last reviewed:** 2026-07-12
 **Audience:** Engineers, race directors, merchandise/fulfillment leads, membership admins, treasurer/finance admins, and incident responders
