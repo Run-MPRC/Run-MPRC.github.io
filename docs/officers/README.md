@@ -33,7 +33,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 ## Short guides
 
-Staging officer approval/free-event management is prepared under [#711](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711), not hosted-proven yet. Follow the [staging officer checklist](./STAGING_COMMUNITY.md#officer-review--711-source-prepared-not-available-yet) after its acceptance; no real dues or production procedure is included.
+Core staging officer approval/free-event management checks passed on 2026-10-11 under [#711](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711). Fresh sign-in recovery after expiry and final handoff remain unverified. Follow the [supervised staging checklist](./STAGING_COMMUNITY.md#officer-review--711-staging-verified-recovery-and-handoff-open) only with new specialist-supplied disposable fixtures; ordinary officer access, real dues and production remain **NOT AVAILABLE YET**.
 
 For the isolated membership/free-event staging test, use [Staging community actions](./STAGING_COMMUNITY.md). Its status distinguishes source preparation from hosted proof; it is not a production procedure.
 
