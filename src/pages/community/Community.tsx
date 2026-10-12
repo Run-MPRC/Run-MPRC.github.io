@@ -6,6 +6,7 @@ import {
  callCommunity, COMMUNITY_ENABLED, CommunityRequest, CommunityStatus
 } from '../../services/community/communityService';
 import SEO from '../../components/SEO';
+import './Community.css';
 
 export default function Community() {
   const { services } = useServiceLocator();
@@ -74,22 +75,24 @@ export default function Community() {
   }
 
   if (!enabled) { return (
-    <div className="container p-6">
+    <div className="community-staging">
       <h1>Community signup is not available here</h1>
       <Link to="/account">My Account</Link>
     </div>
   ); }
-  if (isLoading) return <p>Loading account…</p>;
+  if (isLoading) return <div className="community-staging"><p>Loading account…</p></div>;
   if (!uid) { return (
-    <div className="container p-6">
+    <div className="community-staging">
+      <SEO title="Membership and Free Events — Staging" noindex />
       <h1>Membership and free events</h1>
-      <Link to="/login?returnTo=%2Fcommunity">Sign in to continue</Link>
+      <p role="note">Staging test only. Use made-up accounts. No real membership, race entry or payment is created.</p>
+      <Link to="/login" state={{ from: '/community' }}>Sign in to continue</Link>
     </div>
   ); }
   const verified = services?.firebaseResources.auth.currentUser?.emailVerified === true;
   const blocked = busy || pending.current !== null || !verified;
   return (
-    <div className="container p-6" style={{ maxWidth: 800, margin: '0 auto', overflowWrap: 'anywhere' }}>
+    <div className="community-staging">
       <SEO title="Membership and Free Events — Staging" noindex />
       <h1>Membership and free events</h1>
       <p role="note">
@@ -127,6 +130,7 @@ export default function Community() {
             && (
             <p>
               Access continues through the paid term ending
+              {' '}
               {new Date(status.membership.accessThroughMs).toLocaleString()}
               .
             </p>

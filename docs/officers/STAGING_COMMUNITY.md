@@ -1,6 +1,6 @@
 # Membership and free events — staging only
 
-**Status:** SOURCE PREPARED; hosted deployment and acceptance are not verified yet under [#707](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/707). Production is **NOT AVAILABLE YET**.
+**Status:** STAGING ONLY — the Function and first website release were verified on 2026-10-11 under [#707](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/707). Pending membership requests/withdrawal, synthetic paid-term cancellation, free-event signup/cancellation, native Auth/App Check denials, retries and capacity passed hosted checks. Production is **NOT AVAILABLE YET**. The issue records the latest website source, visual review and disposable-data cleanup separately.
 
 **Purpose:** test membership requests and free-event signup/cancellation without real members or payments.
 
@@ -16,7 +16,7 @@
 - Free-event signup: confirms one place and records acceptance of the displayed test waiver.
 - Cancel event signup: releases that place once. Old retries cannot cancel a later signup.
 
-Officer review after the specialist confirms deployment:
+Officer review after the specialist supplies fresh disposable fixtures:
 
 1. Open the specialist-supplied staging `/community` link.
 2. Confirm the page says **Staging test only**.
@@ -40,6 +40,8 @@ Officer review after the specialist confirms deployment:
 **Stop conditions:** a production address, real data, payment form, unexplained count, early loss/extension of paid access, restored suspended access, or request for secrets or direct database edits. Tell Dave privately; do not paste private details into an issue or AI tool.
 
 **Success proof:** the specialist records exact source/CI, native Function archive and resource/IAM readback, staging Hosting release, genuine Auth/App Check denials, capacity/retry/ownership tests, and disposable-data cleanup separately. Local tests or a merge alone are not hosted proof. The term-end check uses synthetic evidence, not a real payment.
+
+The first verified backend is version 1 from `7e3dc451368c70e4b63805927b12d413e8739b56`. Its native archive is 81,228 bytes with SHA-256 `1b78f38d8b5563e9e88482f68d5f57c3249c49c43c69b49eed3efbcd5fa7e148`. The first verified website is `60435c8fe0846625f22067b0d9b2e76171317d2b`. Thirty-eight genuine hosted boundary/lifecycle checks passed, followed by all four page actions. Twenty distinct emulator accounts and two disposable hosted accounts separately proved final-seat safety. Cancellation preserved the synthetic term evidence and access; the real server clock then ended access. No custom role claims, charges, refunds or emails were created. These are dated staging proofs, not production availability or actual payment proof.
 
 **Undo:** stop the staging review. Ask Dave and the platform specialist to use the reviewed staging rollback or remove the one staged community service. Do not edit a member record, role, payment or production setting yourself.
 
