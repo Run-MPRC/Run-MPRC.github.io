@@ -237,7 +237,9 @@ closesAtMs: Date.parse(String(values.get('closes'))),
               <button type="button" disabled={blocked || event.status === 'cancelled'} onClick={() => perform({ action: 'admin_event_cancel', eventId: event.id, expectedRevision: event.revision })}>
                 {`Cancel event ${event.title}`}
               </button>
-              <form key={`${event.id}-${event.revision}`} onSubmit={(e) => { e.preventDefault(); perform({
+              <form
+                key={`${event.id}-${event.revision}`}
+                onSubmit={(e) => { e.preventDefault(); perform({
  action: 'admin_event_capacity', eventId: event.id, expectedRevision: event.revision, capacity: Number(new FormData(e.currentTarget).get('capacity'))
 }); }}
               >
