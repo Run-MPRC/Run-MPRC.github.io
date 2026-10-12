@@ -7,7 +7,7 @@ const { freeEvent, approvedMember } = require('./testSupport/communityFixtures')
 const describeLocal = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 describeLocal('community lifecycle real Firestore transactions (emulator only)', () => {
   let app; let db; let service; let now;
-  const roots = ['communityEvents', 'communityMemberships', 'communityConfig', 'communityCommands', 'communityLimits', 'communityOfficers', 'communityOfficerCommands', 'communityOfficerLimits'];
+  const roots = ['communityEvents', 'communityMemberships', 'communityConfig', 'communityCommands', 'communityLimits', 'communityOfficers', 'communityOfficerCommands', 'communityOfficerLimits', 'communityDues'];
   const command = (action, expectedRevision = 0, extra = {}) => parseRequest({ action, accountUid: 'fixture-member', expectedRevision, requestId: randomUUID(), ...extra });
   const join = (revision = 0) => command('event_join', revision, { eventId: 'fixture-event', waiverAccepted: true, waiverVersion: 'synthetic-only-v1' });
   beforeAll(() => {
@@ -74,5 +74,30 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     await officer.execute(uid, token, close);
     await db.doc(`communityOfficers/${uid}`).update({ enabled: false, revision: 2 });
     await expect(officer.execute(uid, token, close)).rejects.toHaveProperty('code', 'permission-denied');
+  }, 45000);
+  test('cross-officer dues uniqueness, immutable retry and revocation use real Firestore transactions', async () => {
+    const policy = { schemaVersion: 1, syntheticOnly: true, policyVersion: 'fictional-external-dues-v1', revision: 1, amountCents: 100, currency: 'USD', method: 'fictional_external', termId: 'fictional-term', startsAtMs: now - 1000, endsAtMs: now + 3600000 };
+    await db.doc('communityConfig/duesTestTerm').create(policy);
+    const auth = { getUser: jest.fn() };
+    const officer = createAdministrationService(db, auth, { memberView, eventView }, () => now);
+    const token = { email_verified: true, auth_time: Math.floor(now / 1000), firebase: { sign_in_second_factor: 'totp' } };
+    const confirmationId = randomUUID(); const requests = [];
+    for (let n = 0; n < 6; n++) {
+      const uid = `dues-officer-${n}`;
+      await db.doc(`communityOfficers/${uid}`).create({ schemaVersion: 2, enabled: true, revision: 1, expiresAtMs: now + 3600000, membershipApproval: false, freeEventManagement: false, duesRecording: true });
+      requests.push(parseAdminRequest({ action: 'admin_dues_record', accountUid: uid, requestId: randomUUID(), expectedRevision: 0, reason: 'synthetic_staging_review', confirmationId, externalConfirmed: true, policyRevision: 1 }));
+    }
+    const result = await Promise.allSettled(requests.map((request) => officer.execute(request.accountUid, token, request)));
+    const winners = result.flatMap((value, index) => value.status === 'fulfilled' ? [index] : []);
+    expect(winners).toHaveLength(1);
+    const request = requests[winners[0]]; const uid = request.accountUid;
+    const first = result[winners[0]].value;
+    expect(await officer.execute(uid, token, request)).toEqual(first);
+    const receipts = await db.collection('communityDues').get(); expect(receipts.size).toBe(1);
+    expect(receipts.docs[0].data().authority.association).toEqual({ state: 'unlinked', uid: null, revision: 0 });
+    expect((await db.collection('communityMemberships').get()).empty).toBe(true);
+    expect(auth.getUser).not.toHaveBeenCalled();
+    await db.doc(`communityOfficers/${uid}`).update({ enabled: false, revision: 2 });
+    await expect(officer.execute(uid, token, request)).rejects.toHaveProperty('code', 'permission-denied');
   }, 45000);
 });

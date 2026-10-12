@@ -76,6 +76,52 @@ test('permissions control minimum views without relying on browser admin role', 
   })); render(show());
   await screen.findByText('Manage free test events'); expect(screen.queryByText('Pending membership requests')).not.toBeInTheDocument();
 });
+const duesState = (extra = {}) => state({
+ capabilities: { membershipApproval: false, freeEventManagement: false, duesRecording: true },
+pending: [],
+  dues: [],
+duesPolicy: {
+ revision: 3, amountCents: 100, currency: 'USD', method: 'fictional_external', termId: 'fictional-term', startsAtMs: 1800000000000, endsAtMs: 1800000060000
+},
+duesRecordingOpen: true,
+nextDuesCursor: null,
+...extra
+});
+test('dues recording sends only confirmation and server policy revision, not price, term or UID association', async () => {
+  call.mockResolvedValue(duesState()); render(show());
+  const confirmation = await screen.findByLabelText('Fictional confirmation ID (UUID)');
+  fireEvent.change(confirmation, { target: { value: '123e4567-e89b-42d3-a456-426614174001' } });
+  fireEvent.click(screen.getByLabelText(/I confirm this is a fictional test/));
+  fireEvent.click(screen.getByRole('button', { name: 'Record fictional dues' }));
+  await screen.findByText('Action confirmed. Current server status is shown.');
+  expect(call.mock.calls[1][1]).toEqual({
+ action: 'admin_dues_record', accountUid: 'officer', requestId: '123e4567-e89b-42d3-a456-426614174000', expectedRevision: 0, confirmationId: '123e4567-e89b-42d3-a456-426614174001', externalConfirmed: true, policyRevision: 3, reason: 'synthetic_staging_review'
+});
+});
+test('uncertain dues hides records and retry reuses exact confirmation command', async () => {
+  call.mockResolvedValue(duesState()); render(show());
+  fireEvent.change(await screen.findByLabelText('Fictional confirmation ID (UUID)'), { target: { value: '123e4567-e89b-42d3-a456-426614174001' } });
+  fireEvent.click(screen.getByLabelText(/I confirm this is a fictional test/));
+  call.mockRejectedValueOnce(new Error('synthetic offline'));
+  fireEvent.click(screen.getByRole('button', { name: 'Record fictional dues' }));
+  const retry = await screen.findByRole('button', { name: 'Retry saved action' });
+  await screen.findByText(/Action could not be confirmed/);
+  expect(screen.queryByText('Record fictional external dues')).not.toBeInTheDocument();
+  const request = call.mock.calls[1][1]; fireEvent.click(retry);
+  await screen.findByText('Action confirmed. Current server status is shown.');
+  expect(call.mock.calls[2][1]).toEqual(request);
+});
+test('dues projection requires its permission and closed policy disables submission', async () => {
+  call.mockResolvedValue(duesState({ duesRecordingOpen: false })); render(show());
+  expect(await screen.findByRole('button', { name: 'Record fictional dues' })).toBeDisabled();
+  expect(screen.queryByText('Pending membership requests')).not.toBeInTheDocument();
+});
+test('dues pagination sends only the dues cursor', async () => {
+  call.mockResolvedValue(duesState({ nextDuesCursor: 'stage_dues_fixture' })); render(show());
+  fireEvent.click(await screen.findByRole('button', { name: 'Next dues receipts' }));
+  await screen.findByText('Status refreshed.');
+  expect(call.mock.calls[1][1]).toEqual({ action: 'admin_status', accountUid: 'officer', duesCursor: 'stage_dues_fixture' });
+});
 test('authenticator challenge clears passwords and resolves only TOTP', async () => {
   mockUser = null;
   const resolveSignIn = jest.fn().mockResolvedValue({});

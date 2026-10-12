@@ -8,6 +8,8 @@ This document defines how MPRC should configure Stripe and how race-registration
 
 ## 1. Launch status
 
+**#716 is fictional external-dues recording, not payment processing:** server-approved synthetic amount/method/short term and an officer's test attestation produce an unlinked test receipt. No Stripe identifiers/state, charge, refund, bank credential, real dues policy, payment-provider reconciliation or account activation. Real plan/term/method/confirming-officer policy stays unset. Production and real payment blockers remain unchanged; staged source availability does not imply hosted or financial proof.
+
 **#711 remains nonfinancial staging only:** officer approval simulates a configured synthetic test term, never a paid or manually confirmed real dues receipt. Dave chose externally confirmed dues for a later separately approved command; accepted methods, term, plan and confirmers are unresolved. Free-event management never calls Stripe, claims a payment, issues refunds or changes real records. No existing commerce blocker is closed by this slice.
 
 **#707 exception is nonfinancial staging only:** pending membership requests and zero-price free-event registrations use a separate service/collections, never `createCheckoutSession`, legacy admin cancellation, Stripe, mail or payment state. Free registrations store `paymentStatus=not_required`, never paid/comp money evidence. Approved membership cancellation does not trigger a refund or alter a term. All live-payment blockers below remain unchanged.

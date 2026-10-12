@@ -62,4 +62,12 @@ describe('native authenticated boundary and context binding', () => {
     expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, { action: 'admin_status', accountUid: 'synthetic-uid' })).status).toBe(403);
     expect(admin.firestore).not.toHaveBeenCalled();
   });
+  const dues = { action: 'admin_dues_record', accountUid: 'synthetic-uid', requestId: '123e4567-e89b-42d3-a456-426614174000', expectedRevision: 0, reason: 'synthetic_staging_review', confirmationId: '123e4567-e89b-42d3-a456-426614174001', externalConfirmed: true, policyRevision: 1 };
+  test('dues native boundary requires App Check, bound UID and recent MFA before business work', async () => {
+    expect((await request({ authorization: 'Bearer synthetic-auth' }, dues)).status).toBe(401);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, { ...dues, accountUid: 'other' })).status).toBe(403);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, dues)).status).toBe(403);
+    expect((await request({ ...app, authorization: 'Bearer synthetic-unverified-auth' }, dues)).status).toBe(403);
+    expect(admin.firestore).not.toHaveBeenCalled();
+  });
 });

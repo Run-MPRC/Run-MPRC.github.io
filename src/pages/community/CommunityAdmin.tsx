@@ -99,9 +99,11 @@ export default function CommunityAdmin() {
   const inFlight = useRef(false);
   const pending = useRef<AdministrationRequest | null>(null);
   const cursor = useRef<string | undefined>(undefined);
+  const duesCursor = useRef<string | undefined>(undefined);
   useEffect(() => {
     generation.current += 1; const {current} = generation;
     inFlight.current = false; pending.current = null; cursor.current = undefined;
+    duesCursor.current = undefined;
     setSnapshot(null); setBusy(false); setMessage(''); setEditing(null);
     if (enabled && uid && functions) {
       callAdministration(functions, { action: 'admin_status', accountUid: uid }).then((value) => {
@@ -111,12 +113,12 @@ export default function CommunityAdmin() {
     return () => { generation.current += 1; };
   }, [enabled, uid, functions]);
 
-  async function perform(request?: Omit<AdministrationRequest, 'accountUid' | 'requestId' | 'reason'>, refresh = false, nextCursor?: string) {
+  async function perform(request?: Omit<AdministrationRequest, 'accountUid' | 'requestId' | 'reason'>, refresh = false, nextCursor?: string, nextDuesCursor?: string) {
     if (!enabled || !uid || !functions || inFlight.current) return;
     if (request && typeof globalThis.crypto?.randomUUID !== 'function') { setMessage('Use an up-to-date browser to prepare a safe request.'); return; }
     generation.current += 1; const {current} = generation;
     inFlight.current = true; setBusy(true); setMessage(''); setEditing(null);
-    if (refresh) cursor.current = nextCursor;
+    if (refresh) { cursor.current = nextCursor; duesCursor.current = nextDuesCursor; }
     let command = refresh ? null : pending.current;
     if (request) { command = {
  ...request, accountUid: uid, requestId: crypto.randomUUID(), reason: 'synthetic_staging_review'
@@ -125,7 +127,12 @@ export default function CommunityAdmin() {
     try {
       if (command) await callAdministration(functions, command);
       if (generation.current !== current) return;
-      const value = await callAdministration(functions, { action: 'admin_status', accountUid: uid, ...(cursor.current ? { cursor: cursor.current } : {}) });
+      const value = await callAdministration(functions, {
+ action: 'admin_status',
+accountUid: uid,
+        ...(cursor.current ? { cursor: cursor.current } : {}),
+...(duesCursor.current ? { duesCursor: duesCursor.current } : {})
+});
       if (generation.current === current) { setSnapshot({ uid, functions, value }); pending.current = null; setMessage(command ? 'Action confirmed. Current server status is shown.' : 'Status refreshed.'); }
     } catch {
       if (generation.current === current) {
@@ -159,7 +166,11 @@ closesAtMs: Date.parse(String(values.get('closes'))),
     <div className="community-staging">
       <SEO title="Officer Community Tools — Staging" noindex />
       <h1>Officer community tools</h1>
-      <p role="note">Staging test only. Made-up members and free events only. Approval simulates a test term, not dues, payment or an Auth role.</p>
+      <p role="note">
+        Staging test only. Made-up members, free events and fictional dues receipts only.
+        Approval simulates a test term. Dues recording moves no money,
+        links no account and grants no Auth role.
+      </p>
       <Link to="/community">Member signup and events</Link>
       {isLoading && <p>Loading account…</p>}
       {!isLoading && !uid && <OfficerSignIn />}
@@ -175,6 +186,104 @@ closesAtMs: Date.parse(String(values.get('closes'))),
         </>
       )}
       {message && <p role="status" aria-live="polite">{message}</p>}
+      {status?.capabilities.duesRecording && (
+        <section>
+          <h2>Record fictional external dues</h2>
+          <p>
+            Test only. No money moves. Receipts remain unlinked and grant no account access.
+            Do not enter real payment references or member details.
+          </p>
+          {status.duesPolicy ? (
+            <>
+              <p>
+                Server test amount:
+                {' '}
+                {status.duesPolicy.currency}
+                {' '}
+                {(status.duesPolicy.amountCents / 100).toFixed(2)}
+                .
+                {' '}
+                Fictional external method. Test term:
+                {' '}
+                {status.duesPolicy.termId}
+                ;
+                {' '}
+                {new Date(status.duesPolicy.startsAtMs).toLocaleString()}
+                {' '}
+                to
+                {' '}
+                {new Date(status.duesPolicy.endsAtMs).toLocaleString()}
+                .
+              </p>
+              <form onSubmit={(event) => {
+                event.preventDefault();
+                const values = new FormData(event.currentTarget);
+                if (values.get('externalConfirmed') !== 'on' || !status.duesPolicy) return;
+                perform({
+ action: 'admin_dues_record',
+expectedRevision: 0,
+                  confirmationId: String(values.get('confirmationId')),
+externalConfirmed: true,
+policyRevision: status.duesPolicy.revision
+});
+              }}
+              >
+                <label htmlFor="dues-confirmation">
+                  Fictional confirmation ID (UUID)
+                  <input
+                    id="dues-confirmation"
+                    name="confirmationId"
+                    pattern="[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+                    maxLength={36}
+                    required
+                    disabled={blocked || !status.duesRecordingOpen}
+                  />
+                </label>
+                <label htmlFor="dues-confirmed">
+                  <input
+                    id="dues-confirmed"
+                    name="externalConfirmed"
+                    type="checkbox"
+                    required
+                    disabled={blocked || !status.duesRecordingOpen}
+                  />
+                  I confirm this is a fictional test of an externally received payment,
+                  not real money.
+                </label>
+                <button type="submit" disabled={blocked || !status.duesRecordingOpen}>Record fictional dues</button>
+              </form>
+              {!status.duesRecordingOpen && (
+                <p>
+                  The test term is not open.
+                  Ask the staging specialist for a new test configuration.
+                </p>
+              )}
+            </>
+          ) : <p>No test dues configuration. Ask the staging specialist.</p>}
+          {(status.dues || []).length === 0 && <p>No fictional dues receipts.</p>}
+          {(status.dues || []).map((receipt) => (
+            <article key={receipt.membershipId}>
+              <h3>
+                Test membership:
+                {receipt.membershipId}
+              </h3>
+              <p>
+                {receipt.currency}
+                {' '}
+                {(receipt.amountCents / 100).toFixed(2)}
+                {' '}
+                ·
+                {' '}
+                {receipt.termId}
+                {' '}
+                · Unlinked; no account access granted.
+              </p>
+            </article>
+          ))}
+          {status.nextDuesCursor && <button type="button" disabled={blocked} onClick={() => perform(undefined, true, undefined, status.nextDuesCursor || undefined)}>Next dues receipts</button>}
+          <button type="button" disabled={blocked} onClick={() => perform(undefined, true)}>First dues receipts</button>
+        </section>
+      )}
       {status?.capabilities.membershipApproval && (
         <section>
           <h2>Pending membership requests</h2>

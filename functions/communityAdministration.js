@@ -6,6 +6,7 @@ const functions = require('firebase-functions');
 const { createHash } = require('node:crypto');
 const { parseStrictObject } = require('./requestValidation');
 const { createMembershipAuthority, applyMembershipAuthorityCommand } = require('./membershipAuthority');
+const { readDuesPolicy, createDuesReceipt, duesView, duesId } = require('./communityDues');
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const EVENTS = new Set(['admin_event_create', 'admin_event_edit', 'admin_event_capacity', 'admin_event_open', 'admin_event_close', 'admin_event_cancel']);
@@ -18,18 +19,21 @@ const text = (value) => typeof value === 'string' && value.trim() === value && v
 
 function parseAdminRequest(input) {
   try {
-    const value = parseStrictObject(input, { requiredKeys: ['action', 'accountUid'], optionalKeys: ['requestId', 'expectedRevision', 'targetUid', 'eventId', 'event', 'capacity', 'reason', 'cursor'] });
+    const value = parseStrictObject(input, { requiredKeys: ['action', 'accountUid'], optionalKeys: ['requestId', 'expectedRevision', 'targetUid', 'eventId', 'event', 'capacity', 'reason', 'cursor', 'duesCursor', 'confirmationId', 'externalConfirmed', 'policyRevision'] });
     check(identifier(value.accountUid), 'invalid-argument');
     if (value.action === 'admin_status') {
-      parseStrictObject(value, { requiredKeys: ['action', 'accountUid'], optionalKeys: ['cursor'] });
-      check(value.cursor === undefined || identifier(value.cursor), 'invalid-argument');
+      parseStrictObject(value, { requiredKeys: ['action', 'accountUid'], optionalKeys: ['cursor', 'duesCursor'] });
+      check((value.cursor === undefined || identifier(value.cursor)) && (value.duesCursor === undefined || identifier(value.duesCursor)), 'invalid-argument');
       return value;
     }
-    check(value.action === 'admin_membership_approve' || EVENTS.has(value.action), 'invalid-argument');
-    const target = value.action === 'admin_membership_approve' ? 'targetUid' : 'eventId';
-    const extra = ['admin_event_create', 'admin_event_edit'].includes(value.action) ? ['event'] : value.action === 'admin_event_capacity' ? ['capacity'] : [];
+    const dues = value.action === 'admin_dues_record';
+    check(dues || value.action === 'admin_membership_approve' || EVENTS.has(value.action), 'invalid-argument');
+    const target = dues ? 'confirmationId' : value.action === 'admin_membership_approve' ? 'targetUid' : 'eventId';
+    const extra = dues ? ['externalConfirmed', 'policyRevision'] : ['admin_event_create', 'admin_event_edit'].includes(value.action) ? ['event'] : value.action === 'admin_event_capacity' ? ['capacity'] : [];
     parseStrictObject(value, { requiredKeys: ['action', 'accountUid', 'requestId', 'expectedRevision', 'reason', target, ...extra], optionalKeys: [] });
     check(typeof value.requestId === 'string' && UUID.test(value.requestId) && integer(value.expectedRevision) && identifier(value[target]) && value.reason === 'synthetic_staging_review', 'invalid-argument');
+    if (dues) check(UUID.test(value.confirmationId) && value.externalConfirmed === true
+      && value.expectedRevision === 0 && integer(value.policyRevision) && value.policyRevision > 0, 'invalid-argument');
     if (extra.includes('event')) {
       parseStrictObject(value.event, { requiredKeys: ['title', 'location', 'startAtMs', 'opensAtMs', 'closesAtMs', 'capacity'], optionalKeys: [] });
       check(text(value.event.title) && text(value.event.location)
@@ -48,11 +52,14 @@ function assertOfficerToken(token, now) {
     && token.auth_time * 1000 <= now + 30000 && now - token.auth_time * 1000 <= 600000, 'permission-denied');
 }
 function readCapabilities(record, now) {
-  check(record?.schemaVersion === 1 && record.enabled === true && integer(record.revision)
+  const v2 = record?.schemaVersion === 2;
+  check((record?.schemaVersion === 1 || v2) && record.enabled === true && integer(record.revision)
     && integer(record.expiresAtMs, 8_640_000_000_000_000) && record.expiresAtMs > now
     && typeof record.membershipApproval === 'boolean' && typeof record.freeEventManagement === 'boolean'
-    && Object.keys(record).length === 6, 'permission-denied');
-  return { membershipApproval: record.membershipApproval, freeEventManagement: record.freeEventManagement };
+    && Object.keys(record).length === (v2 ? 7 : 6)
+    && (!v2 || typeof record.duesRecording === 'boolean'), 'permission-denied');
+  return { membershipApproval: record.membershipApproval, freeEventManagement: record.freeEventManagement,
+    ...(v2 ? { duesRecording: record.duesRecording } : {}) };
 }
 function manifestIds(record) {
   const ids = record ? record.eventIds : [];
@@ -99,9 +106,20 @@ function createAdministrationService(db, auth, views, clock = Date.now) {
           const records = ids.length ? await tx.getAll(...ids.map((id) => db.doc(`communityEvents/${id}`))) : [];
           events = records.map((snapshot, n) => ({ ...views.eventView(snapshot.data(), ids[n]), revision: snapshot.data().revision ?? 0 }));
         }
+        if (caps.duesRecording) {
+          const policy = await tx.get(db.doc('communityConfig/duesTestTerm'));
+          let query = db.collection('communityDues').orderBy('__name__').limit(21);
+          if (request.duesCursor) query = query.startAfter(request.duesCursor);
+          const records = await tx.get(query);
+          const dues = records.docs.slice(0, 20).map((snapshot) => duesView(snapshot.data(), snapshot.id));
+          const duesPolicy = policy.exists ? readDuesPolicy(policy.data()) : null;
+          return { capabilities: caps, pending, nextCursor, events, dues, duesPolicy,
+            duesRecordingOpen: !!duesPolicy && duesPolicy.startsAtMs <= now && duesPolicy.endsAtMs > now,
+            nextDuesCursor: records.docs.length > 20 ? dues[dues.length - 1].membershipId : null };
+        }
         return { capabilities: caps, pending, nextCursor, events };
       }
-      const required = request.action === 'admin_membership_approve' ? 'membershipApproval' : 'freeEventManagement';
+      const required = request.action === 'admin_dues_record' ? 'duesRecording' : request.action === 'admin_membership_approve' ? 'membershipApproval' : 'freeEventManagement';
       check(caps[required], 'permission-denied');
       const fingerprint = createHash('sha256').update(JSON.stringify(request, Object.keys(request).sort().concat(['title', 'location', 'startAtMs', 'opensAtMs', 'closesAtMs', 'capacity']))).digest('hex');
       const commandRef = db.doc(`communityOfficerCommands/${uid}/requests/${request.requestId}`);
@@ -113,7 +131,15 @@ function createAdministrationService(db, auth, views, clock = Date.now) {
       check(integer(previous.window, Number.MAX_SAFE_INTEGER) && integer(previous.count, 12));
       const count = previous.window === window ? previous.count : 0; check(count < 12, 'resource-exhausted');
       let result; let before; let after; const writes = [];
-      if (required === 'membershipApproval') {
+      if (required === 'duesRecording') {
+        const ref = db.doc(`communityDues/${duesId(request.confirmationId)}`);
+        const [snapshot, policy] = await tx.getAll(ref, db.doc('communityConfig/duesTestTerm'));
+        check(!snapshot.exists); // Global confirmation uniqueness, including other officers.
+        const receipt = createDuesReceipt(uid, capability.data(), token, request, policy.data(), now);
+        const dues = duesView(receipt, ref.id);
+        before = { recorded: false }; after = { recorded: true, membershipId: receipt.membershipId, linked: false };
+        writes.push([ref, receipt, false]); result = { dues, syntheticOnly: true };
+      } else if (required === 'membershipApproval') {
         const ref = db.doc(`communityMemberships/${request.targetUid}`);
         const [snapshot, policy] = await tx.getAll(ref, db.doc('communityConfig/approvalTestTerm'));
         const member = snapshot.data(); const view = views.memberView(member, request.targetUid, now);
@@ -159,9 +185,13 @@ function createAdministrationService(db, auth, views, clock = Date.now) {
         writes.push([ref, event, snapshot.exists]); result = { event: { id: request.eventId, ...after } };
       }
       assertOfficerToken(token, clock()); readCapabilities(capability.data(), clock());
+      if (required === 'duesRecording') {
+        const policy = writes[0][1].policy;
+        check(policy.startsAtMs <= clock() && policy.endsAtMs > clock());
+      }
       for (const [ref, value, exists] of writes) { if (exists) tx.set(ref, value); else tx.create(ref, value); }
       tx.set(rateRef, { window, count: count + 1 });
-      tx.create(commandRef, { schemaVersion: 1, fingerprint, actorUid: uid, capability: required, capabilityRevision: capability.data().revision, action: request.action, targetId: request.targetUid || request.eventId, reason: request.reason, before, after, result, createdAtMs: now });
+      tx.create(commandRef, { schemaVersion: 1, fingerprint, actorUid: uid, capability: required, capabilityRevision: capability.data().revision, action: request.action, targetId: request.action === 'admin_dues_record' ? after.membershipId : request.targetUid || request.eventId, reason: request.reason, before, after, result, createdAtMs: now });
       return result;
     });
   }
