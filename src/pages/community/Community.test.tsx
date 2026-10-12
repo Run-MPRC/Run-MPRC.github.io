@@ -48,12 +48,14 @@ test('signed-out staging notice stays visible and sign-in returns to community',
     const location = useLocation();
     return <output data-testid="return-path">{`${location.pathname}:${location.state?.from || ''}`}</output>;
   }
-  render(<HelmetProvider>
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Community />
-      <LocationProbe />
-    </MemoryRouter>
-  </HelmetProvider>);
+  render(
+    <HelmetProvider>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Community />
+        <LocationProbe />
+      </MemoryRouter>
+    </HelmetProvider>,
+  );
   expect(screen.getByRole('note')).toHaveTextContent('Staging test only');
   fireEvent.click(screen.getByRole('link', { name: 'Sign in to continue' }));
   expect(screen.getByTestId('return-path')).toHaveTextContent('/login:/community');
