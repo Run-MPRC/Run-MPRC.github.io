@@ -1,5 +1,7 @@
 # Officer Website Handbook
 
+[#719 fictional account linking](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) is SOURCE PREPARED / NOT AVAILABLE YET. A separate permission and specialist-marked disposable account are required; do not use real members or receipts. Native deployment, screen review and exact cleanup remain required. This does not release real memberships/payments or production.
+
 **Audience:** MPRC officers and backup maintainers with little or no coding experience
 **Last checked:** 2026-07-30
 **Start page:** [OFFICER_START_HERE.md](../../OFFICER_START_HERE.md)

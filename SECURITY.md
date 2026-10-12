@@ -1,5 +1,7 @@
 # MPRC Security, Privacy, and Risk Plan
 
+**#719 staging linking — SOURCE PREPARED, NOT AVAILABLE YET:** live expiring v3 association permission is separate from recording/approval/event access. Require recent native verified TOTP/App Check, exact caller binding, explicit test confirmation, an owner-marked disposable UID, authoritative verified/enabled Auth lookup and a pending null-authority application/revision. One receipt and one pending account can be linked only once transactionally; saved retries recheck permission before replay. Receipt/term, profiles and Auth claims stay unchanged. Receipt review exposes no target/contact data. Both new collections stay default-denied to browser admins. The six-permission project-scoped runtime gains no rights. Source/tests do not qualify native deployment or production security.
+
 **Status:** Pre-production security assessment
 **Assessment date:** 2026-07-12
 **Scope:** This repository's React application, Firebase configuration/functions/rules, Stripe integration, Strava integration, CI/CD, operational data, and documented deployment model

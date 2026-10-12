@@ -1,5 +1,7 @@
 # MPRC Website: Officer Start Here
 
+**Fictional account linking — #719, SOURCE PREPARED / NOT AVAILABLE YET:** a separate staging-only permission will link one fictional receipt to a specialist-marked disposable pending account. Its test access lasts only through the receipt's unchanged term, including after cancellation; no Auth role or money changes. Follow the [screen-only guide](./docs/officers/STAGING_COMMUNITY.md#link-a-fictional-receipt--719) only after native acceptance and fresh private test fixtures. Production and real membership rules remain unavailable.
+
 **Use this page if Dave or the usual code owner is unavailable.** You do not need to know how to code.
 
 **Google Doc entry card:** a private native Google Doc titled **MPRC Website — Officer Start Here** has been connector-readback verified with the safe request and warnings. Its private edit link is intentionally not published here. It is currently owner-only; continuity is incomplete until the board moves it to the board-owned Drive and shares it with at least two backup officers.

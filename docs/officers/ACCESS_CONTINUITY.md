@@ -1,5 +1,7 @@
 # Access Continuity
 
+**#719 linking permission — SOURCE PREPARED / NOT AVAILABLE YET:** only Dave/platform specialist supplies an expiring association permission and exact disposable-target marker for the [supervised screen review](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719). Existing recording/approval/event access grants no linking authority. Do not change a role, email-match an account or share passwords/codes. Stop if the supplied account/revision is uncertain or access survives revocation. Enrollment, fixture supply, cleanup and rollback remain specialist-only; no backup appointment or production permission changes.
+
 **Purpose:** ensure at least two named officers can reach every important service if the usual owner is unavailable.
 **Status:** setup is **INCOMPLETE** until the entry document is in a board-owned Drive and two backup officers complete a sign-in drill.
 **Approver:** club president plus the officer responsible for the service.

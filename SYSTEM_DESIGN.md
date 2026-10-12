@@ -1,5 +1,7 @@
 # MPRC Platform System Design
 
+**#719 fictional account linking — SOURCE PREPARED, NOT AVAILABLE YET:** the isolated staging service adds `admin_dues_link`. A separate exact v3 `membershipAssociation` capability, recent native TOTP/App Check, authoritative verified/enabled Auth account, pending null-authority application with matching revision, and owner-supplied exact six-field disposable-target marker expiring within 24 hours are all required. One immutable fictional receipt supplies the unchanged approved current test term; an atomic transaction creates `communityDuesLinks/{membershipId}` and attaches its derived authority to `communityMemberships/{uid}`. Receipt and member uniqueness fences prevent double activation, reassignment and renewal. Saved retries recheck officer permission before replay. Recording remains unlinked; the bounded receipt view adds only a linked boolean, not a target UID. Cancellation preserves the original term; live clock expiry removes current-member status. No Auth claims/roles, real policy/data/payments, new dependency/service/schedule, IAM expansion, migration or production change. Existing default-deny browser Rules cover both new collections. Staging deployment and native acceptance remain required under #719.
+
 **Status:** Target architecture and current-state assessment
 **Last reviewed:** 2026-07-13
 **Owners:** MPRC product, engineering, operations, and finance leads

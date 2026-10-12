@@ -2,6 +2,8 @@
 
 | Word | Plain meaning |
 | --- | --- |
+| Disposable target marker | A short-lived server record the specialist uses to identify a made-up account permitted for one staging linking test. It is not an officer role or real membership. |
+| Linked test membership | A fictional receipt deliberately connected to one disposable account. Test access depends on its original current term; cancellation does not extend it and no Auth role changes. |
 | Fictional confirmation ID (UUID) | A long random test code supplied by the specialist. Reusing it cannot record the same made-up payment twice. It is not a bank reference or evidence of real money. |
 | Unlinked test membership | A made-up term and receipt not connected to any account. It grants no account access or role. |
 | AI assistant | A tool that can read instructions and help prepare a change. It still needs review and approval. |

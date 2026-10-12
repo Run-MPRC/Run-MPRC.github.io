@@ -87,6 +87,79 @@ duesRecordingOpen: true,
 nextDuesCursor: null,
 ...extra
 });
+const linkId = `stage_dues_${'a'.repeat(64)}`;
+const linkReceipt = {
+ membershipId: linkId, amountCents: 100, currency: 'USD', method: 'fictional_external', termId: 'fictional-term', startsAtMs: 1800000000000, endsAtMs: 1800000060000, linked: false
+};
+const linkState = (extra = {}) => duesState({
+  capabilities: {
+ membershipApproval: false,
+ freeEventManagement: false,
+ duesRecording: false,
+ membershipAssociation: true,
+},
+  dues: [linkReceipt],
+duesPolicy: null,
+duesRecordingOpen: false,
+...extra,
+});
+async function fillLink() {
+  fireEvent.change(await screen.findByLabelText('Fictional receipt to link'), { target: { value: linkId } });
+  fireEvent.change(screen.getByLabelText('Disposable account ID'), { target: { value: 'disposable-member' } });
+  fireEvent.change(screen.getByLabelText('Pending membership revision'), { target: { value: '3' } });
+  fireEvent.click(screen.getByLabelText('I confirm this fictional receipt belongs to this disposable test account.'));
+}
+test('separate linking permission sends only explicit IDs, pending revision and test confirmation then rereads', async () => {
+  call.mockResolvedValue(linkState()); render(show()); await fillLink();
+  expect(screen.queryByText('Record fictional external dues')).not.toBeInTheDocument();
+  call.mockResolvedValue(linkState({ dues: [{ ...linkReceipt, linked: true }] }));
+  fireEvent.click(screen.getByRole('button', { name: 'Link and activate test membership' }));
+  await screen.findByText('Action confirmed. Current server status is shown.');
+  expect(call.mock.calls[1][1]).toEqual({
+ action: 'admin_dues_link', accountUid: 'officer', requestId: '123e4567-e89b-42d3-a456-426614174000', membershipId: linkId, targetUid: 'disposable-member', expectedRevision: 3, associationConfirmed: true, reason: 'synthetic_staging_review'
+});
+  expect(call.mock.calls[2][1]).toEqual({ action: 'admin_status', accountUid: 'officer' });
+  expect(screen.getByRole('button', { name: 'Link and activate test membership' })).toBeDisabled();
+  expect(screen.getByText('Linked test term; verify current access on the member page.', { exact: false })).toBeInTheDocument();
+});
+test('dues recording or approval does not grant linking or show target controls', async () => {
+  call.mockResolvedValue(duesState()); render(show()); await screen.findByText('Record fictional external dues');
+  expect(screen.queryByLabelText('Disposable account ID')).not.toBeInTheDocument();
+});
+test('offline link uncertainty hides the target/receipt controls; exact saved retry is reused', async () => {
+  call.mockResolvedValue(linkState()); render(show()); await fillLink();
+  call.mockRejectedValueOnce(new Error('synthetic offline'));
+  fireEvent.click(screen.getByRole('button', { name: 'Link and activate test membership' }));
+  await screen.findByText(/Action could not be confirmed/);
+  expect(screen.queryByLabelText('Disposable account ID')).not.toBeInTheDocument();
+  const request = call.mock.calls[1][1]; fireEvent.click(screen.getByRole('button', { name: 'Retry saved action' }));
+  await screen.findByText('Action confirmed. Current server status is shown.');
+  expect(call.mock.calls[2][1]).toEqual(request);
+});
+test('revoked status clears linked receipt and target controls', async () => {
+  call.mockResolvedValue(linkState({ dues: [{ ...linkReceipt, linked: true }] })); render(show());
+  await screen.findByText(/Linked test term; verify current access/);
+  call.mockRejectedValueOnce(new Error('synthetic revoked'));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh officer status' }));
+  await screen.findByText(/Officer access is unavailable/);
+  expect(screen.queryByText(/Linked test term; verify current access/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Disposable account ID')).not.toBeInTheDocument();
+});
+test('account switch while linking discards obsolete status and saved command without leaking target', async () => {
+  call.mockResolvedValue(linkState()); const rendered = render(show()); await fillLink();
+  let resolve: (value: any) => void = () => undefined;
+  call.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+  fireEvent.click(screen.getByRole('button', { name: 'Link and activate test membership' }));
+  mockUser = { uid: 'other' };
+  call.mockResolvedValue(state({
+    capabilities: { membershipApproval: false, freeEventManagement: false }, pending: [],
+  }));
+  rendered.rerender(show());
+  await act(async () => resolve(linkState({ dues: [{ ...linkReceipt, linked: true }] })));
+  expect(screen.queryByLabelText('Disposable account ID')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Retry saved action' })).not.toBeInTheDocument();
+  expect(call.mock.calls.filter(([, request]) => request.action === 'admin_dues_link')).toHaveLength(1);
+});
 test('dues recording sends only confirmation and server policy revision, not price, term or UID association', async () => {
   call.mockResolvedValue(duesState()); render(show());
   const confirmation = await screen.findByLabelText('Fictional confirmation ID (UUID)');
