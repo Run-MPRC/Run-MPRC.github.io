@@ -16,7 +16,7 @@ Attach the exact wording, public link, or approved photo when you have it. The A
 
 ## Choose the closest task
 
-**Staging membership/free events — #707:** one isolated service and screen are being prepared for pending membership signup/withdrawal, paid-term cancellation requests and free-event signup/cancellation. No paid membership activation or real payment is included. Hosted acceptance is not verified yet. Follow the [staging-only review](./docs/officers/STAGING_COMMUNITY.md); production remains **NOT AVAILABLE YET**.
+**Staging membership/free events — #707:** one isolated service and screen passed hosted pending membership signup/withdrawal, synthetic paid-term cancellation and free-event signup/cancellation checks on 2026-10-11. No paid membership activation or real payment is included. Follow the [staging-only review](./docs/officers/STAGING_COMMUNITY.md); ask the specialist for disposable fixtures. The issue records the current website, visual review and cleanup; production remains **NOT AVAILABLE YET**.
 
 **Membership cancellation decision, 2026-10-11:** Dave approved keeping access through the already-paid annual term, without an automatic refund. [#705](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/705) records the rule and checks the existing term-end logic only. A member cancellation control is **NOT AVAILABLE YET**; do not edit a member record or use race cancellation as a workaround. See [the membership policy handoff](./docs/officers/EVENTS_SHOP_MEMBERS.md#membership-cancellation--policy-approved-not-available-yet).
 
