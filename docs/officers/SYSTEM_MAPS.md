@@ -2,7 +2,7 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
-## Fictional external dues — #716, source prepared; NOT AVAILABLE YET
+## Fictional external dues — #716, staging verified 2026-10-12
 
 ```mermaid
 flowchart LR
@@ -15,7 +15,7 @@ flowchart LR
     Browser["Browser including admin"] -. "Direct writes denied" .-> Receipt
 ```
 
-Text alternative: a recent authenticated officer with a separate expiring dues permission uses the existing service and server-owned fictional policy to record one globally unique, immutable unlinked test receipt and audit, with bounded review and no direct browser write, account access or money movement. Native deployment/UI/cleanup proof is still required.
+Text alternative: a recent authenticated officer with a separate expiring dues permission uses the existing service and server-owned fictional policy to record one globally unique, immutable unlinked test receipt and audit, with bounded review and no direct browser write, account access or money movement. Native Function version 3 and Hosting `d212fab` passed hosted UI/security/cleanup checks; fresh specialist-supplied fixtures are required, and real dues/production remain unavailable.
 
 ## Staging community lifecycle — #707, first hosted release verified 2026-10-11
 

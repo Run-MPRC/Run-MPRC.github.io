@@ -33,7 +33,7 @@ In words: approve the merge, request one exact release, and approve its protecte
 
 ## Short guides
 
-[#716 fictional external-dues recording](./STAGING_COMMUNITY.md#fictional-external-dues--716) is source prepared, **NOT AVAILABLE YET**. It keeps test receipts unlinked and moves no money. A separate permission and specialist-provided fake configuration are required; source/green checks do not prove deployment or availability.
+[#716 fictional external-dues recording](./STAGING_COMMUNITY.md#fictional-external-dues--716) passed native staging deployment, hosted UI/security/retry/race and exact cleanup on 2026-10-12. It keeps test receipts unlinked and moves no money. A separate permission and fresh specialist-provided fake configuration/account are required; the test fixtures were removed. Production and real dues remain unavailable.
 
 Core staging officer approval/free-event management checks passed on 2026-10-11 under [#711](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/711). Expired-session recovery and the no-terminal handoff passed on 2026-10-12: sign out, sign in again and enter a fresh authenticator code. Follow the [supervised staging checklist](./STAGING_COMMUNITY.md#officer-review--711-staging-verified) only with new specialist-supplied disposable fixtures; ordinary officer access, real dues and production remain **NOT AVAILABLE YET**.
 
