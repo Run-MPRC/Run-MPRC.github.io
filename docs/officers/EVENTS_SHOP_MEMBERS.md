@@ -10,9 +10,9 @@ The repository contains screens for these jobs. Their presence does not prove th
 
 There is currently no proven no-code switch that safely stops all new Stripe payments. Hiding a button, closing an event, or marking a product sold out may leave an already-created Stripe Checkout page payable.
 
-## Fictional external dues — #716, NOT AVAILABLE YET
+## Fictional external dues — #716, staging verified 2026-10-12
 
-Dave approved fictional amounts/methods/short terms for this staging-only recording test, not real dues rules. Use the [short supervised guide](./STAGING_COMMUNITY.md#fictional-external-dues--716) only after its separate hosted acceptance. It records an unlinked test term, moves no money and grants no account access or role. Real club prices/terms/methods/confirmers, deliberate account association, renewal, corrections and refunds need separate approved work. The specialist handles fixtures/permissions/provider proof/cleanup; an officer does not change a role, record or payment directly.
+Dave approved fictional amounts/methods/short terms for this staging-only recording test, not real dues rules. Hosted acceptance passed on October 12; use the [short supervised guide](./STAGING_COMMUNITY.md#fictional-external-dues--716) only with fresh specialist-supplied disposable fixtures. It records an unlinked test term, moves no money and grants no account access or role. Real club prices/terms/methods/confirmers, deliberate account association, renewal, corrections and refunds need separate approved work. The specialist handles fixtures/permissions/provider proof/cleanup; an officer does not change a role, record or payment directly.
 
 ## Membership cancellation — POLICY APPROVED, NOT AVAILABLE YET
 
