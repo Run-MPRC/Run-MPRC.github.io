@@ -1,6 +1,6 @@
 # Officer Website Handbook
 
-[#719 fictional account linking](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) is SOURCE PREPARED / NOT AVAILABLE YET. A separate permission and specialist-marked disposable account are required; do not use real members or receipts. Native deployment, screen review and exact cleanup remain required. This does not release real memberships/payments or production.
+[#719 fictional account linking](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) passed native staging release, actual officer/member screens, offline retry, races, cancellation/original expiry and exact cleanup on 2026-10-12. A separate permission and fresh specialist-marked disposable pending account are required; all old fixtures were removed. No real membership, payment or production release is available.
 
 **Audience:** MPRC officers and backup maintainers with little or no coding experience
 **Last checked:** 2026-07-30
