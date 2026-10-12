@@ -51,6 +51,45 @@ The specialist's Hosting release uses Dave's existing club login for a short-liv
 
 ## Cost and scope
 
+## Officer review — #711 source prepared, NOT AVAILABLE YET
+
+**Purpose:** review synthetic membership approval and free-event management. These controls are not a real dues procedure. Dave selected externally confirmed dues for later work; no real payment method, annual plan, term or confirmation authority has been chosen here.
+
+**Approver:** Dave, sole staging/recovery owner. **Prerequisites:** #711 must record hosted acceptance. The specialist supplies an explicitly disposable verified officer account, authenticator setup, expiring approval/event permission and a short server-configured synthetic term. It is not an ordinary browser admin role. No officer changes permissions, source or records directly.
+
+1. Open the supplied staging `/community/admin` link.
+2. Confirm **Staging test only** and the staging address.
+3. Enter the disposable account's sign-in details privately on this page.
+4. Enter its authenticator code.
+5. Check the pending test account ID against the specialist's made-up example.
+6. Select **Approve test membership** for that account.
+7. Confirm the request leaves the pending queue.
+8. Ask the specialist to verify the member screen shows the original synthetic expiry and no payment or role grant.
+9. Enter a made-up title, location, local event/signup times and capacity in **Create free test event**.
+10. Select **Create closed test event**.
+11. Confirm it is closed with zero bookings.
+12. Select **Edit** before anyone has booked if a correction is needed.
+13. Select **Open signup** when ready for the disposable member test.
+14. Confirm the displayed booking count after the member signs up.
+15. Use **Save capacity** only at or above the booking count.
+16. Select **Close signup** to stop new entries without cancelling existing entries.
+17. Select **Cancel event** only for the made-up cancellation test; this is final and sends no messages or refunds.
+18. Confirm the booked member can still cancel their own signup and release the place.
+19. Use **Retry saved action** for an uncertain result; do not repeatedly create new requests.
+20. Use **Refresh officer status** to read current state. A successful refresh clears the saved request before a new action.
+21. Sign out and sign in with the authenticator again after ten minutes, or if access is denied.
+22. Sign out at the end and ask the specialist to remove all owned fixtures.
+
+**Expected result:** one nonfinancial test approval and coherent free-event changes/counts. Editing booked event content is blocked. A cancelled event cannot reopen. At most twenty configured events are supported; old event archival is not included. Pending review shows twenty opaque test account IDs per page, no profiles/emails or export.
+
+**Stop:** production address, real data/dues, payment, absent authenticator gate, permission unexpectedly surviving revocation, lost bookings, stale result, or a request to edit records/share secrets. Tell Dave privately.
+
+**Proof:** exact source/CI/merge, native archive/spec/runtime plus optional TOTP and unchanged sign-in/domain/App Check settings, two capability denial matrix, membership/withdrawal and capacity/closure races, replay/expiry/revocation, actual screen/mobile/offline checks and exact disposable cleanup. Before closing #711, review these steps without a terminal; test enrollment/permission setup and cleanup remain specialist-only.
+
+**Undo:** stop testing. Ask Dave/specialist to disable the staged capability first and verify old requests are denied, then use the reviewed staged rollback if needed. Do not try to reopen a cancelled event or change membership/payment evidence yourself. **Escalation:** Dave/platform specialist for access, deployment, uncertain results or recovery.
+
+**Cost/security:** reuse the one min0/max2/256MB/30s community Function; no new scheduled service, dependency or polling. The runtime adds only Firestore list and read-only Auth target lookup, not user changes, claims, deletes or secrets. Permissions expire and are read on every command, including saved retries. Optional authenticator support is staging-only and uses no SMS; ordinary disposable members still use email/password. These controls and warning budgets are not a bill ceiling.
+
 One new staging Function has zero reserved instances, at most two instances, 256 MB memory and a 30-second limit. The page reads at most 20 configured events and does not poll. Successful new commands are limited to 12 per account per minute; native Auth/App Check and request bounds are also required. These controls and the existing $10 warning budget are not a bill ceiling.
 
 The separate runtime account has only Firestore transaction/get/create/update permissions, at project scope—not per collection. It has no Auth-user administration, deletes, secret access, key, payment or mail permission. Browser access to all new collections remains denied, including for admins. Existing profile Functions, runtime permissions, production and payment integrations are unchanged.

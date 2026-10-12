@@ -1,12 +1,13 @@
 const admin = require('firebase-admin');
 const { randomUUID } = require('node:crypto');
-const { createCommunityService, assertCommunityEnvironment, parseRequest } = require('./communityActions');
+const { createCommunityService, assertCommunityEnvironment, parseRequest, memberView, eventView } = require('./communityActions');
+const { createAdministrationService, parseAdminRequest } = require('./communityAdministration');
 const { freeEvent, approvedMember } = require('./testSupport/communityFixtures');
 
 const describeLocal = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 describeLocal('community lifecycle real Firestore transactions (emulator only)', () => {
   let app; let db; let service; let now;
-  const roots = ['communityEvents', 'communityMemberships', 'communityConfig', 'communityCommands', 'communityLimits'];
+  const roots = ['communityEvents', 'communityMemberships', 'communityConfig', 'communityCommands', 'communityLimits', 'communityOfficers', 'communityOfficerCommands', 'communityOfficerLimits'];
   const command = (action, expectedRevision = 0, extra = {}) => parseRequest({ action, accountUid: 'fixture-member', expectedRevision, requestId: randomUUID(), ...extra });
   const join = (revision = 0) => command('event_join', revision, { eventId: 'fixture-event', waiverAccepted: true, waiverVersion: 'synthetic-only-v1' });
   beforeAll(() => {
@@ -51,4 +52,27 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     now = paid.authority.term.endsAtMs;
     expect((await service.status(uid)).membership.entitlement).toBe('not_entitled');
   });
+  test('officer approval/withdrawal, capacity/closure concurrency and live revocation use real transactions', async () => {
+    const uid = 'fixture-officer'; const runner = 'fixture-member';
+    const caps = { schemaVersion: 1, enabled: true, revision: 1, expiresAtMs: now + 3600000, membershipApproval: true, freeEventManagement: true };
+    await db.doc(`communityOfficers/${uid}`).create(caps);
+    await db.doc('communityConfig/approvalTestTerm').create({ schemaVersion: 1, syntheticOnly: true, policyVersion: 'synthetic-only-not-payment-evidence', termId: 'stage-test', startsAtMs: now - 1000, endsAtMs: now + 60000 });
+    const officer = createAdministrationService(db, { getUser: async (targetUid) => ({ uid: targetUid, emailVerified: true, disabled: false }) }, { memberView, eventView }, () => now);
+    const token = { email_verified: true, auth_time: Math.floor(now / 1000), firebase: { sign_in_second_factor: 'totp' } };
+    const adminCommand = (action, revision, extra) => parseAdminRequest({ action, accountUid: uid, requestId: randomUUID(), expectedRevision: revision, reason: 'synthetic_staging_review', ...extra });
+    await service.mutate(runner, command('membership_join'));
+    const review = await officer.execute(uid, token, parseAdminRequest({ action: 'admin_status', accountUid: uid }));
+    expect(review.pending.map((member) => member.uid)).toEqual([runner]);
+    const approval = adminCommand('admin_membership_approve', 1, { targetUid: runner });
+    const result = await Promise.allSettled([officer.execute(uid, token, approval), service.mutate(runner, command('membership_cancel', 1))]);
+    expect(result.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+    const close = adminCommand('admin_event_close', 0, { eventId: 'fixture-event' });
+    await Promise.allSettled([officer.execute(uid, token, close), service.mutate(runner, join())]);
+    const event = (await db.doc('communityEvents/fixture-event').get()).data();
+    expect(event.status).toBe('closed'); expect([0, 1]).toContain(event.confirmedCount);
+    await expect(service.mutate('other', join())).rejects.toBeDefined();
+    await officer.execute(uid, token, close);
+    await db.doc(`communityOfficers/${uid}`).update({ enabled: false, revision: 2 });
+    await expect(officer.execute(uid, token, close)).rejects.toHaveProperty('code', 'permission-denied');
+  }, 45000);
 });

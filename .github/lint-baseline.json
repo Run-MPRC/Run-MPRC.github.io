@@ -10,12 +10,12 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 124,
+  "scannedFileCount": 126,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
     ".ts": 45,
-    ".tsx": 32
+    ".tsx": 34
   },
   "errorCount": 113,
   "warningCount": 6,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:314fc7ec13b35e59b8dfddedb5c8f7b4a82d02c368c81e991e7de0aa50d3245a",
+  "fingerprint": "sha256:4edc2ab0b2f1376f47775011308236333cdd8e676b4cc325a1f55691fe000be6",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -81,6 +81,8 @@
     "src/pages/admin/shop/AdminProducts.tsx",
     "src/pages/community/Community.test.tsx",
     "src/pages/community/Community.tsx",
+    "src/pages/community/CommunityAdmin.test.tsx",
+    "src/pages/community/CommunityAdmin.tsx",
     "src/pages/contact/Contact.jsx",
     "src/pages/events/EventCalendar.tsx",
     "src/pages/events/EventDetail.tsx",

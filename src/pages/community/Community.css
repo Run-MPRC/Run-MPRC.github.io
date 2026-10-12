@@ -11,6 +11,9 @@
 .community-staging h2 { margin-bottom: 0.75rem; }
 .community-staging p { margin-block: 0.75rem; }
 .community-staging a { text-decoration: underline; }
+.community-staging form { margin-block: 1.5rem; }
+.community-staging form label { display: block; margin-block: 0.75rem; }
+.community-staging form input { display: block; box-sizing: border-box; width: 100%; max-width: 420px; min-height: 44px; padding: 0.5rem; color: #17241d; background: #fff; border: 1px solid #53675b; }
 
 .community-staging [role="note"] {
   padding: 1rem;

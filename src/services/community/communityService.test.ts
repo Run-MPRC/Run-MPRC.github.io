@@ -16,9 +16,10 @@ test.each([['production', 'true'], ['staging', 'false'], ['staging', undefined]]
   if (flag === undefined) delete process.env.REACT_APP_COMMUNITY_STAGING;
   else process.env.REACT_APP_COMMUNITY_STAGING = flag;
   jest.resetModules();
-  const { COMMUNITY_ENABLED, callCommunity } = await import('./communityService');
+  const { COMMUNITY_ENABLED, callCommunity, callAdministration } = await import('./communityService');
   expect(COMMUNITY_ENABLED).toBe(false);
   await expect(callCommunity({ app: { options: { projectId: 'run-mprc-staging' } } } as any, { action: 'status', accountUid: 'synthetic' })).rejects.toThrow();
+  await expect(callAdministration({ app: { options: { projectId: 'run-mprc-staging' } } } as any, { action: 'admin_status', accountUid: 'synthetic' })).rejects.toThrow();
 },);
 test('a staging flag cannot admit a production Firebase project', async () => {
   process.env.REACT_APP_FIREBASE_ENVIRONMENT = 'staging'; process.env.REACT_APP_COMMUNITY_STAGING = 'true';

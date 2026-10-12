@@ -7,6 +7,7 @@ const { parseStrictObject } = require('./requestValidation');
 const { deriveMembershipEntitlement } = require('./membershipAuthority');
 const policy = require('./membershipCancellationPolicy.json');
 const limits = require('./profileRuntime');
+const { parseAdminRequest, assertOfficerToken, createAdministrationService } = require('./communityAdministration');
 
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const COMMAND = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -71,7 +72,10 @@ function memberView(record, uid, now) {
 
 function eventView(value, id) {
   const keys = ['schemaVersion', 'title', 'location', 'startAtMs', 'opensAtMs', 'closesAtMs', 'status', 'amountCents', 'capacity', 'confirmedCount', 'waiverVersion', 'waiverText', 'waiverHash'];
-  check(value && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key)));
+  check(value && [keys.length, keys.length + 1].includes(Object.keys(value).length)
+    && keys.every((key) => Object.hasOwn(value, key))
+    && Object.keys(value).every((key) => keys.includes(key) || key === 'revision')
+    && (!Object.hasOwn(value, 'revision') || integer(value.revision, 1_000_000)));
   check(value.schemaVersion === 1 && value.amountCents === 0
     && ['open', 'closed', 'cancelled'].includes(value.status)
     && integer(value.capacity, 10000) && value.capacity > 0
@@ -187,10 +191,16 @@ exports.communityActions = functions.runWith({ ...limits, enforceAppCheck: true 
   assertCommunityEnvironment();
   check(context.app, 'permission-denied');
   check(context.auth?.uid && typeof context.auth.uid === 'string' && ID.test(context.auth.uid), 'unauthenticated');
-  const request = parseRequest(data);
+  const administrative = typeof data?.action === 'string' && data.action.startsWith('admin_');
+  const request = administrative ? parseAdminRequest(data) : parseRequest(data);
   check(request.accountUid === context.auth.uid, 'permission-denied');
   if (request.action !== 'status') check(context.auth.token.email_verified === true, 'permission-denied');
+  if (administrative) assertOfficerToken(context.auth.token, Date.now());
   try {
+    if (administrative) {
+      const service = createAdministrationService(admin.firestore(), admin.auth(), { memberView, eventView });
+      return await service.execute(context.auth.uid, context.auth.token, request);
+    }
     const service = createCommunityService(admin.firestore());
     return await (request.action === 'status' ? service.status(context.auth.uid) : service.mutate(context.auth.uid, request));
   } catch (failure) {
@@ -201,3 +211,5 @@ exports.communityActions = functions.runWith({ ...limits, enforceAppCheck: true 
 exports.createCommunityService = createCommunityService;
 exports.assertCommunityEnvironment = assertCommunityEnvironment;
 exports.parseRequest = parseRequest;
+exports.memberView = memberView;
+exports.eventView = eventView;
