@@ -27,6 +27,37 @@
 
 ## What the actions mean
 
+## Fictional race member screen — #731 source prepared
+
+**Status:** SOURCE PREPARED, **NOT AVAILABLE YET**. The staging-only `/community/races` screen has signup, simulated credit return, private bib offers, acceptance and revocation in source. Local screen tests use service doubles, not genuine hosted identities or attestation. The #732 section describes the earlier backend milestone. No race release or hosted cleanup proof is claimed here.
+
+**Purpose:** review the intended test flow without mistaking fictional credit for money. **Approver/escalation:** Dave, sole staging owner; no backup is appointed. **Prerequisites:** Dave/platform specialist must first supply dated native security, exact backend-first Function/Hosting release, disposable screen and fenced cleanup evidence. Fresh verified disposable accounts, expiring permissions and private test IDs are separate prerequisites. Until then, do not try these steps on a website.
+
+Planned supervised screen review — **NOT AVAILABLE YET**:
+
+1. Open only the supplied staging `/community/races` link.
+2. Confirm **Staging test only** and fictional credit, not money.
+3. Sign in as the supplied verified disposable account.
+4. Accept the synthetic test waiver and select **Join fictional race** once.
+5. Confirm your enrollment and private test entry ID.
+6. For cancellation, select **Cancel and simulate full credit return**.
+7. Confirm a cancelled entry and fictional credit return, not a bank refund.
+8. For a separate transfer test, enter the supplied **Private disposable recipient ID**.
+9. Select **Offer fictional bib transfer**.
+10. Supply the exact test entry ID privately to the test recipient.
+11. Sign out, then sign in as that disposable recipient.
+12. Enter the **Private incoming test entry ID** and select **Check named offer**.
+13. Accept the recipient's synthetic waiver and select **Accept fictional bib transfer** once.
+14. Confirm your own entry appears and the incoming offer disappears.
+15. For a separate withdrawal test, the original runner selects **Revoke fictional offer** before cancellation.
+16. If uncertain, use **Retry saved action** or refresh; do not start another action.
+17. If a named offer is unavailable, select **Show only my entries**, not another guessed ID.
+18. Sign out and ask for the exact disposable cleanup receipt.
+
+**Expected result:** only your own entry or an exactly named offer to you is shown. Transfer preserves the bib and original credit owner; it creates no second place. One enrollment ever and one transfer are test limits, not club policy. Old controls disappear after a failed read or known deadline. An exact saved action may be retried only within the same account/session; fresh successful status restores controls. No polling, email, directory, card or provider payment is added.
+
+**Stop:** production, real person/payment information, missing permission, uncertain private ID, stale controls, real-money claims, or requests for secrets/record edits. **Success proof:** #731 must separately record source/full checks, merge, native Auth/App Check/security/archive/resource/unchanged profiles, Hosting marker, actual failure/retry/expiry/privacy/mobile screens, and fenced cleanup. This source review was read as an officer without a terminal; hosted steps are not qualified yet. **Undo:** sign out; Dave/specialist handles reviewed staging rollback or fixture cleanup. Setup, provider verification, permission revocation, cleanup and rollback remain specialist-only. Never post passwords, tokens, codes or member records to an issue or AI tool.
+
 ## Fictional race boundary — #732 source only
 
 **Status:** SOURCE / DEMO ONLY, not deployed. #732 separates the backend review from #731's future screen and hosted acceptance. The source now routes exact fictional race actions through the existing authenticated service and prepares its complete release archive. A new private status read lists only configured fake races, the caller's own entry and an incoming offer named by its exact privately supplied test ID. It reveals no other account ID, contact detail, waiver, runner list, count, capacity or money total. It changes no record. Historical #727/#729 nonintegration statements below describe their earlier source milestones.

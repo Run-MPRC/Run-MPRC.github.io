@@ -10,12 +10,12 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 126,
+  "scannedFileCount": 131,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 45,
-    ".tsx": 34
+    ".ts": 48,
+    ".tsx": 36
   },
   "errorCount": 113,
   "warningCount": 6,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:4edc2ab0b2f1376f47775011308236333cdd8e676b4cc325a1f55691fe000be6",
+  "fingerprint": "sha256:5ba90c83db63c37a2a3cf738e5d923ba77d172937d79153896e5a2eea3133878",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -83,6 +83,8 @@
     "src/pages/community/Community.tsx",
     "src/pages/community/CommunityAdmin.test.tsx",
     "src/pages/community/CommunityAdmin.tsx",
+    "src/pages/community/FictionalRaces.test.tsx",
+    "src/pages/community/FictionalRaces.tsx",
     "src/pages/contact/Contact.jsx",
     "src/pages/events/EventCalendar.tsx",
     "src/pages/events/EventDetail.tsx",
@@ -128,6 +130,9 @@
     "src/services/analytics/analytics.ts",
     "src/services/community/communityService.test.ts",
     "src/services/community/communityService.ts",
+    "src/services/community/fictionalRaceService.test.ts",
+    "src/services/community/fictionalRaceService.ts",
+    "src/services/community/testSupport/fictionalRaceFixtures.ts",
     "src/services/events/adminService.ts",
     "src/services/events/eventsService.ts",
     "src/services/firebase/FirebaseResources.test.ts",

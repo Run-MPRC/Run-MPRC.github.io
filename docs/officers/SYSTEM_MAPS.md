@@ -2,6 +2,22 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Fictional race member screen — #731 source prepared, not deployed
+
+```mermaid
+flowchart LR
+    Account["Same verified disposable staging session"] --> Screen["Private race screen; no runner directory"]
+    Screen --> Read["Strict bounded status or exact saved command"]
+    Read --> Server["Existing native Auth/App Check and server authority"]
+    Server --> Fresh["Fresh own status; acceptance consumes incoming offer"]
+    Fresh --> Screen
+    Change["Account/session change, failed read or known deadline"] --> Hide["Clear old controls; never reuse another context's action"]
+    Hide --> Screen
+    Gate["Exact native release, hosted UI/security and cleanup still required"] -.-> Screen
+```
+
+Text alternative: the source-only staging screen submits bounded private reads and exact saved commands through the existing server boundary, rereads own status after acceptance, and clears old controls on uncertainty or context changes; native release, hosted behavior and cleanup remain unverified.
+
 ## Fictional race boundary — #732 source and demo only
 
 ```mermaid
