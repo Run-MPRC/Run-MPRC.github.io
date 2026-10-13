@@ -71,6 +71,22 @@ describe('fictional race transactional service (test double, not native concurre
     await run(owner, next('revoke_transfer', entryId, 2)); await run(owner, next('simulate_refund', entryId, 3));
     expect(docs.get(`communityRaceEvents/${f.eventId}`).confirmedCount).toBe(0);
   });
+  test('recipient losing access cannot block read-only offer acknowledgement or owner withdrawal', async () => {
+    const { entryId } = await joined();
+    const offer = next('offer_transfer', entryId, 1, { recipientUid: recipient });
+    const result = await run(owner, offer); const before = snapshot();
+    docs.delete(`communityRaceTargets/${recipient}`);
+    auth.getUser.mockImplementation(async uid => {
+      if (uid === recipient) throw Error('synthetic recipient removed');
+      return { uid, emailVerified: true, disabled: false };
+    });
+    const qualified = snapshot();
+    expect(await run(owner, offer)).toEqual(result); expect(snapshot()).toBe(qualified);
+    await run(owner, next('revoke_transfer', entryId, 2));
+    await run(owner, next('simulate_refund', entryId, 3));
+    expect(docs.get(`communityRaceEvents/${f.eventId}`).confirmedCount).toBe(0);
+    expect(before).not.toBe(qualified);
+  });
   test.each(['communityRacePermissions', 'communityRaceTargets'])('revocation or expiry denies saved replay: %s', async root => {
     const { request } = await joined();
     const path = `${root}/${owner}`; const previous = docs.get(path);

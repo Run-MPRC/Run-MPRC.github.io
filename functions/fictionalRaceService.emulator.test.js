@@ -160,4 +160,17 @@ describeDemo('fictional race native Auth metadata and Firestore transactions —
     expect((await db.collection('communityRaceEntries').get()).size).toBe(1);
     expect((await db.collection('communityRaceAudit').get()).size).toBe(1);
   }, 45000);
+  test('recipient revocation cannot lock an original owner into an offer or block old acknowledgement', async () => {
+    const uid = await member(); const recipient = await member(); const { entryId } = await joined(uid);
+    const offer = change(uid, entryId, 'offer_transfer', 1, { recipientUid: recipient });
+    const result = await run(uid, offer);
+    await auth.updateUser(recipient, { disabled: true });
+    await db.doc(`communityRaceTargets/${recipient}`).update({ enabled: false });
+    const before = await snapshots(); expect(await run(uid, offer)).toEqual(result); expect(await snapshots()).toEqual(before);
+    await expect(run(recipient, change(recipient, entryId, 'accept_transfer', 2))).rejects.toHaveProperty('code', 'permission-denied');
+    await run(uid, change(uid, entryId, 'revoke_transfer', 2));
+    await run(uid, change(uid, entryId, 'simulate_refund', 3));
+    expect((await db.doc(`communityRaceEvents/${f.eventId}`).get()).data().confirmedCount).toBe(0);
+    expect((await db.doc(`communityRaceEntries/${entryId}`).get()).data().fictionalReturnedCents).toBe(1000);
+  }, 45000);
 });

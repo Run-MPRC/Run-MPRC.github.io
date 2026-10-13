@@ -124,16 +124,19 @@ function createFictionalRaceService(app, clock = Date.now, env = process.env) {
         check(joining || before !== null);
         check(!commandDoc.exists || before !== null); // Never acknowledge an orphaned successful receipt.
         if (before) check([before.entry.runnerUid, before.entry.creditOwnerUid, before.entry.offer?.recipientUid].includes(uid), 'permission-denied');
-        // Mark each involved UID before a bounded native Auth lookup; no email matching or roster query.
-        const targets = [...new Set([uid, before?.entry.runnerUid, before?.entry.creditOwnerUid,
-          before?.entry.offer?.recipientUid, request.recipientUid].filter(Boolean))];
-        check(targets.length <= 3);
+        // Read-only confirmation needs current caller authority, never renewed
+        // recipient access. Withdrawing one's own offer must also survive a lost
+        // recipient account. Current entry/index state is still checked below.
+        const targets = commandDoc.exists ? [uid] : [...new Set([uid, before?.entry.runnerUid, before?.entry.creditOwnerUid,
+          ...(request.action === 'revoke_transfer' ? [] : [before?.entry.offer?.recipientUid]), request.recipientUid].filter(Boolean))];
+        const indexUids = [...new Set([uid, before?.entry.runnerUid, before?.entry.creditOwnerUid, request.recipientUid].filter(Boolean))];
+        check(targets.length <= 3 && indexUids.length <= 3);
         const markers = await tx.getAll(...targets.map(target => db.doc(`communityRaceTargets/${target}`)));
         markers.forEach((doc, n) => grant(doc.data(), targets[n], began));
         const users = await Promise.all(targets.map(target => auth.getUser(target)));
         users.forEach((user, n) => check(user.uid === targets[n] && user.emailVerified === true && user.disabled === false, 'permission-denied'));
-        const indexDocs = await tx.getAll(...targets.map(target => indexRef(request.eventId, target)));
-        const indexByUid = new Map(targets.map((target, n) => [target, indexDocs[n]]));
+        const indexDocs = await tx.getAll(...indexUids.map(target => indexRef(request.eventId, target)));
+        const indexByUid = new Map(indexUids.map((target, n) => [target, indexDocs[n]]));
         if (before) {
           const entry = before.entry;
           enrollment(indexByUid.get(entry.runnerUid).data(), request.eventId, entry.runnerUid, entry.entryId, entry.status);

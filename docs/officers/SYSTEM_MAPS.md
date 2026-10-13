@@ -8,7 +8,7 @@ These diagrams show where pages, information, and deployments go. Each diagram i
 flowchart LR
     Test["Synthetic caller context; no live screen"] --> Service["Exact demo SDK / closed staging source guard"]
     Service --> Grant["Current permission, disposable markers and indexes"]
-    Grant --> Auth["Up to 3 read-only Auth metadata checks"]
+    Grant --> Auth["Caller plus relevant targets; up to 3 Auth reads"]
     Auth --> Tx["Fresh time; transaction decides signup/refund/transfer"]
     Tx --> State["Entry, unique enrollment and changed count"]
     Tx --> Receipt["Immutable command, audit and rate"]
@@ -16,7 +16,7 @@ flowchart LR
     Future["Native caller/App Check + staging screen NOT AVAILABLE YET"] -.-> Service
 ```
 
-Text alternative: source/demo tests check current disposable authority and bounded Auth metadata before atomically changing fictional entry/enrollment/count and receipt/audit/rate state, while saved retries recheck authority without writes and actual native caller/App Check, staging screen, deployment and cleanup remain future gates; Auth metadata is not locked by the Firestore transaction.
+Text alternative: source/demo tests check current disposable authority and relevant bounded Auth metadata before atomically changing fictional entry/enrollment/count and receipt/audit/rate state, while read-only saved acknowledgements recheck current caller authority/state without requiring recipient access, owner withdrawal survives recipient revocation, and actual native caller/App Check, staging screen, deployment and cleanup remain future gates; Auth metadata is not locked by the Firestore transaction.
 
 ## Member status freshness — #724 staging verified
 
