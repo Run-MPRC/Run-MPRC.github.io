@@ -363,6 +363,25 @@ describe('orders collection', () => {
 
 describe('server-only operational collections', () => {
   test.each([
+    'communityRaceEvents/stage-race', 'communityRacePolicies/stage-race', 'communityRaceEntries/stage-entry',
+    'communityRaceEnrollment/stage-enrollment', 'communityRaceTargets/runner-a', 'communityRacePermissions/runner-a',
+    'communityRaceCommands/runner-a/requests/test', 'communityRaceAudit/stage-audit', 'communityRaceLimits/runner-a',
+  ])('fictional race path %s and children deny every browser operation, including admin', async path => {
+    await seed(path, { schemaVersion: 1, simulationOnly: true });
+    await seed(`${path}/private/test`, { schemaVersion: 1 });
+    for (const auth of [undefined, { uid: 'runner-a', role: 'member', emailVerified: true }, { uid: 'admin-a', role: 'admin', emailVerified: true }]) {
+      const client = await db(auth);
+      await assertFails(client.doc(path).get());
+      await assertFails(client.doc(path).parent.get());
+      await assertFails(client.doc(path).set({ schemaVersion: 1 }));
+      await assertFails(client.doc(`${path}-new`).set({ schemaVersion: 1 }));
+      await assertFails(client.doc(path).update({ simulationOnly: false }));
+      await assertFails(client.doc(path).delete());
+      await assertFails(client.doc(`${path}/private/test`).get());
+      await assertFails(client.doc(`${path}/private/test`).set({ schemaVersion: 1 }));
+    }
+  });
+  test.each([
     'communityMemberships/runner-a', 'communityEvents/test',
     'communityEvents/test/registrations/runner-a', 'communityConfig/events',
     'communityCommands/runner-a/requests/test', 'communityLimits/runner-a',
