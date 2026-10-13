@@ -2,7 +2,7 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
-## Member status freshness — #724 source only
+## Member status freshness — #724 staging verified
 
 ```mermaid
 flowchart LR
@@ -14,7 +14,7 @@ flowchart LR
     Display --> Mutation["Existing transactional join/cancel checks decide again"]
 ```
 
-Text alternative: the staging member page displays server-derived availability separately from stored signup history, hides old status on uncertainty and restores it only after a fresh read, while existing transactions—not the display—continue deciding joins and cancellations; hosted proof remains pending #724.
+Text alternative: the staging member page displays server-derived availability separately from stored signup history, hides old status on uncertainty and restores it only after a fresh read, while existing transactions—not the display—continue deciding joins and cancellations; native deployment, actual screens, failed reads, exact retry, natural term expiry and owned cleanup passed on 2026-10-13 under #724, not in production.
 
 ## Uncertain staging release review — #722
 
