@@ -18,6 +18,26 @@ const ACCOUNT = 'runmprc@gmail.com';
 const RUNTIME = `mprc-community-runtime@${PROJECT}.iam.gserviceaccount.com`;
 const FILES = ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'communityDues.js', 'communityDuesAssociation.js', 'membershipManualEvidence.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json'];
 const check = (value) => { if (!value) throw new Error('staging_community_release_failed'); };
+const PHASES = new Set(['arguments', 'source', 'runtime_authority', 'owner_identity', 'mfa', 'inventory', 'bundle', 'source_upload', 'function_update', 'operation_poll', 'function_readback', 'source_provenance', 'invoker_policy', 'source_archive', 'final_inventory', 'report']);
+const failures = new WeakMap();
+function phaseFailure(phase, error) {
+  if (failures.has(error)) return error;
+  const safe = new Error('staging_community_release_failed');
+  failures.set(safe, PHASES.has(phase) ? phase : 'unknown');
+  return safe; // Never retain the caught error, its cause, message or response.
+}
+function failureMessage(error) {
+  return `staging_community_release_failed phase=${failures.get(error) || 'unknown'}`;
+}
+function validateInventory(inventory) {
+  check(Array.isArray(inventory?.functions) && inventory.functions.length >= 2 && inventory.functions.length <= 3
+    && !inventory.nextPageToken && !inventory.unreachable?.length);
+  const names = inventory.functions.map((fn) => fn.entryPoint);
+  check(new Set(names).size === names.length && names.includes('createMemberOnSignUp') && names.includes('ensureMemberProfile'));
+  check(inventory.functions.every((fn) => ['createMemberOnSignUp', 'ensureMemberProfile', TARGET].includes(fn.entryPoint)
+    && fn.name === `projects/${PROJECT}/locations/${REGION}/functions/${fn.entryPoint}`
+    && typeof fn.versionId === 'string' && /^[1-9][0-9]*$/.test(fn.versionId)));
+}
 
 // Owner tokens do not inherit the CLI's --project as their API quota project.
 // Keep every authenticated provider request billed/routed to staging explicitly.
@@ -35,6 +55,18 @@ function jsonRequest(url, token, method = 'GET', body, fetchImpl = fetch) {
   return providerRequest(url, token, method, body, (resource, options) => fetchImpl(resource, {
     ...options, headers: { ...options.headers, 'x-goog-user-project': PROJECT },
   }));
+}
+
+function verificationRequest(url, token, method = 'GET', body, fetchImpl = fetch) {
+  const reads = [
+    `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config`,
+    `https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`,
+    `${BASE}/functions/${TARGET}`, `${BASE}/functions/${TARGET}:getIamPolicy`,
+  ];
+  check((reads.includes(url) && method === 'GET' && body === undefined)
+    || (url === `${BASE}/functions/${TARGET}:generateDownloadUrl` && method === 'POST'
+      && body !== null && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 0));
+  return jsonRequest(url, token, method, body, fetchImpl);
 }
 
 function createBundle(root) {
@@ -88,12 +120,68 @@ function validateStagingMfa(config) {
     && Object.keys(provider).length === 2 && Object.keys(provider.totpProviderConfig).length === 1
     && !config.mfa.enabledProviders?.length);
 }
-async function release(root) {
+// Resource/identity/archive verification only. The sole POST requests a signed
+// read URL; it never updates a Function, IAM, Auth, Hosting or member data.
+async function verifyDeployment({ token, digest, sourceSha, inventory, verifyProvenance, request = verificationRequest, fetchImpl = fetch }) {
+  let phase = 'inventory';
+  try {
+    validateInventory(inventory);
+    phase = 'function_readback';
+    const native = await request(`${BASE}/functions/${TARGET}`, token);
+    const expected = functionSpec(native.labels?.['source-sha'], digest, 'https://storage.googleapis.com/synthetic');
+    validateHostedFunction(native, expected);
+    check(typeof native.versionId === 'string' && /^[1-9][0-9]*$/.test(native.versionId));
+    phase = 'source_provenance';
+    check(/^[a-f0-9]{40}$/.test(sourceSha));
+    check(native.labels['source-sha'] === sourceSha
+      || (typeof verifyProvenance === 'function' && await verifyProvenance(native.labels['source-sha']) === true));
+    phase = 'invoker_policy';
+    const policy = await request(`${BASE}/functions/${TARGET}:getIamPolicy`, token);
+    check(policy.bindings?.length === 1 && policy.bindings[0].role === 'roles/cloudfunctions.invoker'
+      && policy.bindings[0].members?.length === 1 && policy.bindings[0].members[0] === 'allUsers' && !policy.bindings[0].condition);
+    phase = 'source_archive';
+    const download = await request(`${BASE}/functions/${TARGET}:generateDownloadUrl`, token, 'POST', {});
+    const url = new URL(download.downloadUrl);
+    check(url.protocol === 'https:' && url.hostname === 'storage.googleapis.com' && !url.username && !url.password && !url.port);
+    const archive = await fetchImpl(download.downloadUrl, { redirect: 'error', signal: AbortSignal.timeout(30000) });
+    check(archive.ok && archive.body);
+    const reader = archive.body.getReader();
+    const hash = createHash('sha256'); let bytes = 0; let complete = false;
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) { complete = true; break; }
+        bytes += chunk.value.byteLength;
+        check(bytes <= 1_000_000);
+        hash.update(chunk.value);
+      }
+    } finally {
+      try { if (!complete) await reader.cancel(); } finally { reader.releaseLock(); }
+    }
+    check(bytes > 0 && hash.digest('hex') === digest);
+    phase = 'final_inventory';
+    const final = await request(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, token);
+    validateInventory(final); check(final.functions.length === 3);
+    const finalNative = final.functions.find((fn) => fn.entryPoint === TARGET);
+    validateHostedFunction(finalNative, expected);
+    check(finalNative.versionId === native.versionId);
+    for (const original of inventory.functions.filter((fn) => fn.entryPoint !== TARGET)) {
+      const unchanged = final.functions.find((fn) => fn.name === original.name);
+      check(unchanged.versionId === original.versionId && isDeepStrictEqual(unchanged.labels, original.labels));
+    }
+    return { sourceSha: native.labels['source-sha'], digest, bytes, version: native.versionId };
+  } catch (error) { throw phaseFailure(phase, error); }
+}
+
+async function performRelease(root, { verifyOnly }, phase) {
+  const request = verifyOnly ? verificationRequest : jsonRequest;
+  phase('source');
   const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8' }).trim();
   const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   check(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim() === '');
   const source = { GITHUB_SHA: sha, GH_TOKEN: gh('auth', 'token') };
   await verifyCurrentSource(source);
+  phase('runtime_authority');
   const gcloud = (...args) => execFileSync('/opt/homebrew/bin/gcloud', [...args, `--account=${ACCOUNT}`, `--project=${PROJECT}`], { encoding: 'utf8' }).trim();
   const role = JSON.parse(gcloud('iam', 'roles', 'describe', 'mprcCommunityRuntime', '--format=json'));
   const permissions = ['datastore.databases.get', 'datastore.entities.get', 'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.list', 'firebaseauth.users.get'];
@@ -103,51 +191,80 @@ async function release(root) {
   check(runtimeRoles.length === 1 && runtimeRoles[0].role === `projects/${PROJECT}/roles/mprcCommunityRuntime` && !runtimeRoles[0].condition);
   const keys = JSON.parse(gcloud('iam', 'service-accounts', 'keys', 'list', `--iam-account=${RUNTIME}`, '--managed-by=user', '--format=json'));
   check(keys.length === 0);
+  phase('owner_identity');
   const token = gcloud('auth', 'print-access-token'); // Memory only, never logged.
+  const owner = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(15000),
+  });
+  check(owner.ok && (await owner.json()).email === ACCOUNT);
+  phase('mfa');
   const authUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config`;
-  const beforeAuth = await jsonRequest(authUrl, token);
+  const beforeAuth = await request(authUrl, token);
   check(beforeAuth.subtype === 'IDENTITY_PLATFORM' && beforeAuth.signIn?.email?.enabled === true);
-  if (beforeAuth.mfa?.state === 'DISABLED') {
+  if (!verifyOnly && beforeAuth.mfa?.state === 'DISABLED') {
     check(!beforeAuth.mfa.providerConfigs?.length && !beforeAuth.mfa.enabledProviders?.length);
     await verifyCurrentSource(source);
-    await jsonRequest(`${authUrl}?updateMask=mfa`, token, 'PATCH', { mfa: STAGING_MFA });
+    await request(`${authUrl}?updateMask=mfa`, token, 'PATCH', { mfa: STAGING_MFA });
   }
-  const afterAuth = await jsonRequest(authUrl, token);
+  const afterAuth = await request(authUrl, token);
   validateStagingMfa(afterAuth);
   check(isDeepStrictEqual(beforeAuth.signIn, afterAuth.signIn)
     && isDeepStrictEqual(beforeAuth.authorizedDomains, afterAuth.authorizedDomains));
-  const inventory = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, token);
-  check(!inventory.nextPageToken && !inventory.unreachable?.length && inventory.functions?.length >= 2 && inventory.functions.length <= 3);
-  check(inventory.functions.every((fn) => ['createMemberOnSignUp', 'ensureMemberProfile', TARGET].includes(fn.entryPoint) && fn.name.startsWith(`${BASE.replace('https://cloudfunctions.googleapis.com/v1/', '')}/functions/`)));
+  phase('inventory');
+  const inventory = await request(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, token);
+  validateInventory(inventory);
+  phase('bundle');
   const bundle = createBundle(root);
+  if (verifyOnly) {
+    const result = await verifyDeployment({ token, digest: bundle.digest, sourceSha: sha, inventory, request,
+      verifyProvenance: async (nativeSha) => {
+        execFileSync('git', ['merge-base', '--is-ancestor', nativeSha, sha], { cwd: root });
+        return true;
+      },
+    });
+    phase('source'); await verifyCurrentSource(source);
+    phase('report');
+    process.stdout.write(JSON.stringify({ status: 'staging_community_verified_without_deploy', reviewedSha: sha, ...result }) + '\n');
+    return;
+  }
+  phase('source');
   await verifyCurrentSource(source);
+  phase('source_upload');
   const uploaded = await jsonRequest(`${BASE}/functions:generateUploadUrl`, token, 'POST', {});
   const expected = functionSpec(sha, bundle.digest, uploaded.uploadUrl);
   const response = await fetch(uploaded.uploadUrl, { method: 'PUT', redirect: 'error', signal: AbortSignal.timeout(30000), headers: { 'Content-Type': 'application/zip', 'x-goog-content-length-range': '0,104857600' }, body: bundle.zip });
   check(response.ok);
+  phase('source');
   await verifyCurrentSource(source);
   const exists = inventory.functions.some((fn) => fn.name === expected.name);
+  phase('function_update');
   const operation = await jsonRequest(exists ? `${BASE}/functions/${TARGET}?updateMask=${Object.keys(expected).filter((key) => key !== 'name').join(',')}` : `${BASE}/functions`, token, exists ? 'PATCH' : 'POST', expected);
+  phase('operation_poll');
   await waitForOperation(operation, token, jsonRequest);
+  phase('function_readback');
   validateHostedFunction(await jsonRequest(`${BASE}/functions/${TARGET}`, token), expected);
+  phase('invoker_policy');
   const prior = await jsonRequest(`${BASE}/functions/${TARGET}:getIamPolicy`, token);
-  check((prior.bindings || []).every((binding) => binding.role === 'roles/cloudfunctions.invoker' && binding.members?.length === 1 && binding.members[0] === 'allUsers'));
+  check((prior.bindings || []).every((binding) => binding.role === 'roles/cloudfunctions.invoker' && binding.members?.length === 1 && binding.members[0] === 'allUsers' && !binding.condition));
   await jsonRequest(`${BASE}/functions/${TARGET}:setIamPolicy`, token, 'POST', { policy: { version: 1, ...(prior.etag ? { etag: prior.etag } : {}), bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allUsers'] }] } });
-  // Native source readback, not labels alone, must match the submitted bytes.
-  const download = await jsonRequest(`${BASE}/functions/${TARGET}:generateDownloadUrl`, token, 'POST', {});
-  const archiveUrl = new URL(download.downloadUrl);
-  check(archiveUrl.protocol === 'https:' && archiveUrl.hostname === 'storage.googleapis.com');
-  const archive = await fetch(download.downloadUrl, { redirect: 'error', signal: AbortSignal.timeout(30000) });
-  check(archive.ok && createHash('sha256').update(Buffer.from(await archive.arrayBuffer())).digest('hex') === bundle.digest);
-  const final = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, token);
-  check(final.functions.length === 3 && !final.nextPageToken && !final.unreachable?.length);
-  for (const original of inventory.functions.filter((fn) => fn.entryPoint !== TARGET)) {
-    const unchanged = final.functions.find((fn) => fn.name === original.name);
-    check(unchanged?.versionId === original.versionId
-      && Object.keys(unchanged.labels || {}).length === Object.keys(original.labels || {}).length
-      && Object.entries(original.labels || {}).every(([key, value]) => unchanged.labels[key] === value));
-  }
-  process.stdout.write(JSON.stringify({ status: 'staging_community_deployed_verified', sha, digest, bytes: bundle.zip.length }) + '\n');
+  await verifyDeployment({ token, digest: bundle.digest, sourceSha: sha, inventory });
+  phase('source'); await verifyCurrentSource(source);
+  phase('report');
+  process.stdout.write(JSON.stringify(releaseResult(sha, bundle)) + '\n');
 }
-if (require.main === module) release(path.resolve(__dirname, '..')).catch(() => { process.stderr.write('staging_community_release_failed\n'); process.exitCode = 1; });
-module.exports = { FILES, createBundle, functionSpec, validateHostedFunction, jsonRequest, validateStagingMfa };
+function releaseResult(sha, bundle) {
+  check(/^[a-f0-9]{40}$/.test(sha) && /^[a-f0-9]{64}$/.test(bundle.digest)
+    && Buffer.isBuffer(bundle.zip) && bundle.zip.length > 0 && bundle.zip.length < 1_000_000);
+  return { status: 'staging_community_deployed_verified', sha, digest: bundle.digest, bytes: bundle.zip.length };
+}
+async function release(root, options) {
+  let phase = 'source';
+  try { return await performRelease(root, options, (value) => { phase = value; }); }
+  catch (error) { throw phaseFailure(phase, error); }
+}
+async function run(args, root, driver = release) {
+  if (!(args.length === 0 || (args.length === 1 && args[0] === 'verify'))) throw phaseFailure('arguments');
+  return driver(root, { verifyOnly: args.length === 1 });
+}
+if (require.main === module) run(process.argv.slice(2), path.resolve(__dirname, '..')).catch((error) => { process.stderr.write(`${failureMessage(error)}\n`); process.exitCode = 1; });
+module.exports = { FILES, createBundle, functionSpec, validateHostedFunction, jsonRequest, verificationRequest, validateStagingMfa, verifyDeployment, failureMessage, releaseResult, run };

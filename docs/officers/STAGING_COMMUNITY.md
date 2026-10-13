@@ -8,6 +8,23 @@
 
 **Prerequisites:** the platform specialist supplies the exact reviewed release, a disposable verified account and a visibly made-up free event. Use only the staging website. Do not use real runner details or payment information.
 
+## Check an uncertain staging release — #722
+
+**Purpose:** establish what is deployed without starting another build. **Approver and escalation:** Dave Liu, sole staging owner; no backup is appointed. **Prerequisites:** the specialist uses the merged, reviewed #722 source and its six green current-main checks. No member account, authenticator code or test fixture is needed. Production verification or release is **NOT AVAILABLE YET** through this check.
+
+1. Ask Dave/platform specialist to check the existing staging community release without deploying.
+2. State that production, real records and payments must stay untouched.
+3. Request the #722 evidence link, not a provider screenshot or credential.
+4. Check that the result separately names the reviewed source and deployed source, archive match, resource settings, unchanged two profiles and unchanged staging website marker.
+5. If any check fails, stop and ask the specialist to investigate the named safe failure phase.
+6. Do not request another deployment merely to clear an uncertain result.
+
+**Expected result and success proof:** the specialist's read-only verifier checks existing staging runtime permissions/zero keys, club account identity, MFA configuration, exact Function settings/source ancestry, downloaded source bytes, callable access and unchanged profile versions/labels. It performs no deployment, Auth/IAM update, member-data action or Hosting publication. The specialist separately reads the public staging website marker; the verifier does not claim fresh UI/lifecycle or complete backend acceptance. Record current native command evidence in #722 before calling this procedure verified. Green CI and labels alone are insufficient.
+
+**Stop conditions:** failed source/authority/config/resource/provenance/access/archive/inventory check; production target; new service/billing/permission request; real data; uncertain deployment. A failure reports only a fixed phase name, not private provider details. **Undo:** no provider state was changed, so stop the read-only check; any repair or reviewed staging rollback is separate. **Specialist-only work:** source/CI/provider verification and any later approved repair. Officers never run a terminal, sign in to test accounts, handle secrets or edit records for this review.
+
+**Reporting correction:** #722 identifies and reproduces the old final success statement's undefined `digest` variable. It now uses the actual bundle digest. That deterministic reporting bug could throw after all provider checks passed; it does not retroactively prove the exception from every historical run. Historical #711/#716/#719 deployment receipts and independent hosted proofs remain dated evidence. The new read-only mode avoids paying for another build to inspect an already-deployed result.
+
 ## What the actions mean
 
 ## Link a fictional receipt — #719
