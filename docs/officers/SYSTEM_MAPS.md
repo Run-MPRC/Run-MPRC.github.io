@@ -2,7 +2,9 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
-## Fictional race member screen — #731 source prepared, not deployed
+## Fictional race member screen — #731 staging deployed, acceptance pending
+
+**2026-10-13 checkpoint:** native v6/archive/resources/unchanged profiles and dependent Hosting/public assets `669e2fb` are verified. Anonymous screen/phone-width proof only; signed-in security/lifecycle and cleanup remain open. Older source-only/not-deployed maps below are historical milestones.
 
 ```mermaid
 flowchart LR
@@ -13,10 +15,10 @@ flowchart LR
     Fresh --> Screen
     Change["Account/session change, failed read or known deadline"] --> Hide["Clear old controls; never reuse another context's action"]
     Hide --> Screen
-    Gate["Exact native release, hosted UI/security and cleanup still required"] -.-> Screen
+    Gate["Signed-in hosted UI/security and cleanup still required"] -.-> Screen
 ```
 
-Text alternative: the source-only staging screen submits bounded private reads and exact saved commands through the existing server boundary, rereads own status after acceptance, and clears old controls on uncertainty or context changes; native release, hosted behavior and cleanup remain unverified.
+Text alternative: deployed staging source submits bounded private reads and exact saved commands through the existing server boundary, rereads own status after acceptance, and clears old controls on uncertainty or context changes; deployment is verified, while signed-in hosted behavior and cleanup remain unqualified.
 
 ## Fictional race boundary — #732 source and demo only
 

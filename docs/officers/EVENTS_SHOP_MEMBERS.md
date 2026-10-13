@@ -1,5 +1,7 @@
 # Events, Shop, Members, and Money
 
+**#731 latest checkpoint — STAGING DEPLOYED 2026-10-13:** only deployment/archive/public assets and the signed-out page are verified. Signed-in race actions/security/cleanup and qualified officer use remain pending. [Current handoff](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared). Older source-only/not-deployed notes are historical; do not use legacy refund/substitute controls or real details.
+
 **#731 member screen — SOURCE PREPARED, NOT AVAILABLE YET:** the [planned screen review](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) covers fictional signup, credit return and privately named bib offers/acceptance/revocation. Native staging release/security/screens/cleanup still require the specialist; local service doubles do not prove hosted behavior. No real refund, payment, club policy or production change is available.
 
 **#732 race boundary — SOURCE / DEMO ONLY:** [read the short handoff](./STAGING_COMMUNITY.md#fictional-race-boundary--732-source-only) before any review. Backend source now includes exact fictional race actions and own-entry status, but no new deployed screen or genuine hosted proof. #731 must finish that release and cleanup. No real refund, payment, policy, runner directory or record-edit procedure is available. Earlier #727/#729 paragraphs are historical milestone limits.

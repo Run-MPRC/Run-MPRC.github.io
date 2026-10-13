@@ -1,5 +1,7 @@
 # Officer Website Handbook
 
+**#731 latest checkpoint — 2026-10-13:** deployment/archive/public assets are verified in staging, but signed-in race security/screens and disposable cleanup remain open. Use the [current handoff](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared); its planned procedure is NOT AVAILABLE YET. Older source-only/not-deployed notes are historical. Production and real payments stay untouched.
+
 [#731's fictional race screen](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) is source prepared, **NOT AVAILABLE YET**. A separate dated native release/security/screen/cleanup receipt is required before the planned review. No real payment, policy or production change is supplied.
 
 [#732's fictional race backend review](./STAGING_COMMUNITY.md#fictional-race-boundary--732-source-only) is SOURCE / DEMO ONLY. No new race screen or cloud release is supplied by that child. #731 retains genuine staging security, screen, release and cleanup requirements; only the specialist supplies fixtures/provider proof. Production and real payments remain unavailable.
