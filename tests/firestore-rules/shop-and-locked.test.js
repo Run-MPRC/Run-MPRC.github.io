@@ -366,6 +366,7 @@ describe('server-only operational collections', () => {
     'communityRaceEvents/stage-race', 'communityRacePolicies/stage-race', 'communityRaceEntries/stage-entry',
     'communityRaceEnrollment/stage-enrollment', 'communityRaceTargets/runner-a', 'communityRacePermissions/runner-a',
     'communityRaceCommands/runner-a/requests/test', 'communityRaceAudit/stage-audit', 'communityRaceLimits/runner-a',
+    'communityConfig/fictionalRaces',
   ])('fictional race path %s and children deny every browser operation, including admin', async path => {
     await seed(path, { schemaVersion: 1, simulationOnly: true });
     await seed(`${path}/private/test`, { schemaVersion: 1 });

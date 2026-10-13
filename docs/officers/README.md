@@ -1,5 +1,7 @@
 # Officer Website Handbook
 
+[#732's fictional race backend review](./STAGING_COMMUNITY.md#fictional-race-boundary--732-source-only) is SOURCE / DEMO ONLY. No new race screen or cloud release is supplied by that child. #731 retains genuine staging security, screen, release and cleanup requirements; only the specialist supplies fixtures/provider proof. Production and real payments remain unavailable.
+
 [#724 member status](./STAGING_COMMUNITY.md#current-member-status--724-staging-verified) passed native staging release, actual availability/cancellation/failure/retry screens, natural test-term expiry and exact owned cleanup on 2026-10-13. Fresh specialist-supplied fictional fixtures are required. No production or real payment behavior is included.
 
 [#719 fictional account linking](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) passed native staging release, actual officer/member screens, offline retry, races, cancellation/original expiry and exact cleanup on 2026-10-12. A separate permission and fresh specialist-marked disposable pending account are required; all old fixtures were removed. No real membership, payment or production release is available.

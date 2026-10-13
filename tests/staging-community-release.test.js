@@ -28,8 +28,31 @@ test('bundle is deterministic, bounded and excludes all prototype commerce/PII s
   const root = path.resolve(__dirname, '..');
   const a = createBundle(root); const b = createBundle(root);
   assert.equal(a.digest, b.digest); assert.ok(a.zip.length < 1_000_000);
-  assert.deepEqual(FILES, ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'communityDues.js', 'communityDuesAssociation.js', 'membershipManualEvidence.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json']);
+  assert.deepEqual(FILES, ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'communityDues.js', 'communityDuesAssociation.js', 'fictionalRaceService.js', 'fictionalRaceTransitions.js', 'membershipManualEvidence.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json']);
   assert.ok(!FILES.includes('index.js') && !FILES.includes('stripeHelpers.js'));
+});
+test('isolated entrypoint selects the explicit project and exports only the existing community callable', () => {
+  const fs = require('node:fs'); const vm = require('node:vm'); const selected = [];
+  const callable = {}; const exports = {};
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../functions/communityOnly.js'), 'utf8'), {
+    process: { env: { GCLOUD_PROJECT: 'run-mprc-staging' } }, exports,
+    require: name => {
+      if (name === 'firebase-admin') return { initializeApp: options => selected.push(JSON.parse(JSON.stringify(options))) };
+      assert.equal(name, './communityActions'); return { assertCommunityEnvironment: () => selected.push('guard'), communityActions: callable };
+    },
+  });
+  assert.deepEqual(selected, ['guard', { projectId: 'run-mprc-staging' }]); assert.deepEqual(exports, { communityActions: callable });
+});
+test('deterministic archive contains every relative runtime import including race helpers, never tests', () => {
+  const fs = require('node:fs');
+  for (const name of FILES.filter(file => file.endsWith('.js'))) {
+    const source = fs.readFileSync(path.resolve(__dirname, '../functions', name), 'utf8');
+    for (const match of source.matchAll(/require\(['"]\.\/([^'"]+)['"]\)/g)) {
+      const dependency = path.extname(match[1]) ? match[1] : match[1] + '.js';
+      assert.ok(FILES.includes(dependency), `${name} omitted ${dependency}`);
+    }
+  }
+  assert.ok(FILES.every(name => !name.includes('test') && !name.includes('index.js')));
 });
 test('fixed staging specification and provider readback reject drift', () => {
   const spec = functionSpec('a'.repeat(40), 'b'.repeat(64), 'https://storage.googleapis.com/synthetic');

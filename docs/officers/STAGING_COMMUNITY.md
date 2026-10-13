@@ -27,6 +27,20 @@
 
 ## What the actions mean
 
+## Fictional race boundary — #732 source only
+
+**Status:** SOURCE / DEMO ONLY, not deployed. #732 separates the backend review from #731's future screen and hosted acceptance. The source now routes exact fictional race actions through the existing authenticated service and prepares its complete release archive. A new private status read lists only configured fake races, the caller's own entry and an incoming offer named by its exact privately supplied test ID. It reveals no other account ID, contact detail, waiver, runner list, count, capacity or money total. It changes no record. Historical #727/#729 nonintegration statements below describe their earlier source milestones.
+
+**Purpose:** review source proof without mistaking it for a usable race feature. **Approver/escalation:** Dave, sole staging owner; no backup is appointed. **Prerequisites:** the specialist supplies #732's exact reviewed source/check evidence and the open #731 follow-on. A test account or payment detail is not needed for this source review.
+
+1. Ask Dave/platform specialist for the exact #732 source and test evidence.
+2. Check that source/double tests, native-wrapper tests with mocked verifiers and real local demo tests are named separately.
+3. Confirm that no new Function, website or production release is claimed from this child.
+4. Ask for #731's dated native security, backend-first release, real screen and cleanup proof before trying any race control.
+5. Until that proof exists, treat fictional race screens as **NOT AVAILABLE YET**.
+
+**Expected result/success proof:** exact source routing, private bounded read-only status, current disposable permission/identity checks, safe retries and real demo transaction/metadata behavior are checked. Missing/unrelated incoming IDs deny alike; revoked callers cannot read status. An owner can still withdraw an offer if the recipient loses access. Local tests do not prove native hosted token/App Check verification. **Stop:** production/real account/payment; claim that source or green CI alone means a screen is live; request for secrets or record edits; unexpected broader account access. **Undo:** stop the review; Dave/specialist requests a reviewed source revert if needed. No cloud state changed from this child. **Specialist-only work remaining:** exact native deployment/readback, disposable setup/permissions, genuine hosted tests, screen review, fenced cleanup and rollback. Officers use the evidence links, not a terminal or database editor.
+
 ## Fictional race refunds and bib transfers — #727 source foundation, NOT AVAILABLE YET
 
 **#729 update — SOURCE / DEMO ONLY:** saved actions, fictional signup, refund and transfer now have a transactional source implementation. Real local emulator tests prove final-seat, duplicate cancellation, competing transfer/revoke/refund and lost-acknowledgement recovery; browser-admin data access is denied by the unchanged Rules. This does not supply a usable screen, deployed service or native token/App Check proof. The specialist must next connect the reviewed platform boundary and staging screen and verify actual deployment, disposable sign-in, failures/retries and cleanup. No officer terminal or record edit is needed for that review. Auth metadata can change outside the database transaction, so these tests do not promise instant cross-service revocation.
