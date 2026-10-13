@@ -1,11 +1,12 @@
 'use strict';
 
-// Server-only source; no callable/client/runtime-bundle integration yet.
+// Server-only fictional credits; never financial/provider evidence.
 // Only read-only Auth metadata is external to the Firestore transaction.
 const functions = require('firebase-functions');
 const { createHash } = require('node:crypto');
 const { parseStrictObject } = require('./requestValidation');
-const { POLICY, WAIVER, reduceFictionalRace, readFictionalRaceRecords, raceEnrollmentId, createFictionalEntry } = require('./fictionalRaceTransitions');
+const { POLICY, WAIVER, reduceFictionalRace, readFictionalRaceRecords, readFictionalEvent,
+  readFictionalPolicy, raceEnrollmentId, createFictionalEntry } = require('./fictionalRaceTransitions');
 const MESSAGE = 'Fictional race action unavailable. Refresh or sign in again.';
 const ID = /^stage_race_[A-Za-z0-9_-]{1,64}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -54,6 +55,21 @@ function actor(token, now) {
   check(token?.email_verified === true && token.firebase?.sign_in_provider === 'password' && token.firebase.tenant === undefined
     && integer(token.auth_time, Number.MAX_SAFE_INTEGER) && token.auth_time * 1000 <= now + 30000
     && now - token.auth_time * 1000 <= 3600000, 'permission-denied');
+}
+function parseRaceStatus(input, uid) {
+  try {
+    const request = strict(input, ['action', 'accountUid', 'incomingEntryId']);
+    check(identifier(uid) && request.accountUid === uid, 'permission-denied');
+    check(request.action === 'race_status' && (request.incomingEntryId === null || identifier(request.incomingEntryId)), 'invalid-argument');
+    return request;
+  } catch (error) { if (safeErrors.has(error)) throw error; fail('invalid-argument'); }
+}
+function manifest(input) {
+  const value = strict(input, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventIds']);
+  check(value.schemaVersion === 1 && value.simulationOnly === true && value.policyVersion === POLICY
+    && Array.isArray(value.eventIds) && value.eventIds.length <= 20
+    && value.eventIds.every(identifier) && new Set(value.eventIds).size === value.eventIds.length);
+  return value.eventIds;
 }
 function grant(input, uid, now, permission = false) {
   try {
@@ -104,6 +120,96 @@ function createFictionalRaceService(app, clock = Date.now, env = process.env) {
     db = app.firestore(); auth = app.auth();
   } catch (error) { if (safeErrors.has(error)) throw error; fail(); }
   const indexRef = (eventId, uid) => db.doc(`communityRaceEnrollment/${raceEnrollmentId(eventId, uid)}`);
+  async function status(uid, token, input) {
+    try {
+      raceEnvironment(env); const request = parseRaceStatus(input, uid);
+      return await db.runTransaction(async tx => {
+        const began = clock(); check(integer(began)); actor(token, began);
+        const [permissionDoc, markerDoc, manifestDoc] = await tx.getAll(db.doc(`communityRacePermissions/${uid}`),
+          db.doc(`communityRaceTargets/${uid}`), db.doc('communityConfig/fictionalRaces'));
+        const permission = grant(permissionDoc.data(), uid, began, true);
+        const marker = grant(markerDoc.data(), uid, began);
+        const ids = manifest(manifestDoc.data());
+        const user = await auth.getUser(uid);
+        check(user.uid === uid && user.emailVerified === true && user.disabled === false, 'permission-denied');
+        // Exact configured IDs and caller indexes only; never enumerate entries,
+        // users, offers, profiles or command history, even for a browser admin.
+        const rows = ids.length ? await tx.getAll(...ids.flatMap(eventId => [db.doc(`communityRaceEvents/${eventId}`),
+          db.doc(`communityRacePolicies/${eventId}`), indexRef(eventId, uid)])) : [];
+        const indexes = ids.map((eventId, n) => {
+          const doc = rows[n * 3 + 2]; if (!doc.exists) return null;
+          const value = doc.data();
+          check(identifier(value?.entryId) && ['confirmed', 'cancelled', 'transferred'].includes(value?.status));
+          return enrollment(value, eventId, uid, value.entryId, value.status);
+        });
+        const entryIds = [...new Set([...indexes.filter(Boolean).map(index => index.entryId), request.incomingEntryId].filter(Boolean))];
+        const entryDocs = entryIds.length ? await tx.getAll(...entryIds.map(entryId => db.doc(`communityRaceEntries/${entryId}`))) : [];
+        const entries = new Map(entryIds.map((entryId, n) => [entryId, entryDocs[n].data()]));
+        if (request.incomingEntryId !== null) {
+          const incoming = entries.get(request.incomingEntryId);
+          // Missing and existing-but-unrelated IDs have the same denial. Do not
+          // read another entry's enrollment indexes to discover incoming offers.
+          check(incoming?.entryId === request.incomingEntryId && ids.includes(incoming?.eventId)
+            && incoming?.offer?.recipientUid === uid, 'permission-denied');
+        }
+        const indexKeys = [...new Set(entryIds.flatMap(entryId => {
+          const entry = entries.get(entryId); check(entry?.entryId === entryId && ids.includes(entry?.eventId));
+          check(identifier(entry.runnerUid) && identifier(entry.creditOwnerUid));
+          return [entry.runnerUid, entry.creditOwnerUid].map(target => raceEnrollmentId(entry.eventId, target));
+        }))];
+        const relatedDocs = indexKeys.length ? await tx.getAll(...indexKeys.map(key => db.doc(`communityRaceEnrollment/${key}`))) : [];
+        const related = new Map(indexKeys.map((key, n) => [key, relatedDocs[n].data()]));
+        const now = clock(); check(integer(now)); actor(token, now);
+        grant(permission, uid, now, true); grant(marker, uid, now);
+        const configured = ids.map((eventId, n) => {
+          const event = readFictionalEvent(rows[n * 3].data()); check(event.eventId === eventId);
+          return { event, policy: readFictionalPolicy(rows[n * 3 + 1].data(), event) };
+        });
+        function entryView(entryId, event) {
+          const entry = readFictionalRaceRecords(event, entries.get(entryId), now).entry;
+          check(entry.entryId === entryId && entry.entryId === raceEnrollmentId(event.eventId, entry.creditOwnerUid));
+          enrollment(related.get(raceEnrollmentId(event.eventId, entry.runnerUid)), event.eventId, entry.runnerUid, entryId, entry.status);
+          if (entry.transferCount === 1) enrollment(related.get(raceEnrollmentId(event.eventId, entry.creditOwnerUid)), event.eventId, entry.creditOwnerUid, entryId, 'transferred');
+          return entry;
+        }
+        function project(entry, event) {
+          const own = entry.runnerUid === uid;
+          return { entryId: entry.entryId, revision: entry.revision, bibId: entry.bibId, status: entry.status,
+            fictionalAmountCents: entry.fictionalAmountCents, fictionalReturnedCents: entry.fictionalReturnedCents,
+            isCurrentRunner: own, isOriginalCreditOwner: entry.creditOwnerUid === uid, transferCount: entry.transferCount,
+            offerExpiresAtMs: entry.offer?.expiresAtMs ?? null,
+            canCancel: own && entry.status === 'confirmed' && entry.offer === null && now < event.startAtMs,
+            canOffer: own && entry.status === 'confirmed' && entry.offer === null && entry.transferCount === 0 && event.status === 'open' && now < event.startAtMs,
+            canRevoke: own && entry.offer !== null && now < event.startAtMs };
+        }
+        const events = configured.map(({ event, policy }, n) => {
+          const index = indexes[n]; const entry = index ? entryView(index.entryId, event) : null;
+          if (entry) check((index.status === 'transferred' ? entry.creditOwnerUid : entry.runnerUid) === uid);
+          const availability = event.status === 'cancelled' ? 'cancelled' : now >= policy.closesAtMs ? 'ended'
+            : now < policy.opensAtMs ? 'not_open_yet' : event.confirmedCount >= event.capacity ? 'full' : 'open';
+          return { eventId: event.eventId, revision: event.revision, startAtMs: event.startAtMs,
+            opensAtMs: policy.opensAtMs, closesAtMs: policy.closesAtMs, signupStatus: availability,
+            fictionalAmountCents: policy.fictionalAmountCents, currency: policy.currency, waiverVersion: policy.waiverVersion,
+            joinEntryId: index === null ? raceEnrollmentId(event.eventId, uid) : null,
+            canJoin: index === null && availability === 'open',
+            enrollment: index ? { status: index.status, revision: index.revision } : null,
+            entry: entry ? project(entry, event) : null };
+        });
+        let incoming = null;
+        if (request.incomingEntryId !== null) {
+          const entry = entries.get(request.incomingEntryId);
+          const { event } = configured.find(value => value.event.eventId === entry.eventId);
+          const checked = entryView(request.incomingEntryId, event);
+          check(checked.offer?.recipientUid === uid && checked.status === 'confirmed' && checked.transferCount === 0
+            && event.status === 'open' && now < event.startAtMs && now < checked.offer.expiresAtMs
+            && indexes[ids.indexOf(event.eventId)] === null, 'permission-denied');
+          incoming = { eventId: event.eventId, eventRevision: event.revision, ...project(checked, event), canAccept: true };
+        }
+        return { schemaVersion: 1, simulationOnly: true, policyVersion: POLICY, observedAtMs: now,
+          accessExpiresAtMs: Math.min(permission.expiresAtMs, marker.expiresAtMs, token.auth_time * 1000 + 3600000), events, incoming };
+      }, { readOnly: true });
+    } catch (error) { if (safeErrors.has(error)) throw error; fail('unavailable'); }
+  }
   async function execute(uid, token, input) {
     try {
       raceEnvironment(env); const request = parseRaceCommand(input, uid);
@@ -204,7 +310,7 @@ function createFictionalRaceService(app, clock = Date.now, env = process.env) {
       });
     } catch (error) { if (safeErrors.has(error)) throw error; fail('unavailable'); }
   }
-  return { execute };
+  return { execute, status };
 }
 
-module.exports = { createFictionalRaceService, raceEnvironment, parseRaceCommand };
+module.exports = { createFictionalRaceService, raceEnvironment, parseRaceCommand, parseRaceStatus, assertRaceActor: actor };

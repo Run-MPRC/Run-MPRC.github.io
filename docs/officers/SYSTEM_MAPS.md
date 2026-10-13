@@ -2,6 +2,21 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Fictional race boundary — #732 source and demo only
+
+```mermaid
+flowchart LR
+    Wrapper["Existing native Auth/App Check wrapper; source connected"] --> Scope["Exact race routes and selected staging/demo app"]
+    Scope --> Caller["Current disposable caller permission, marker and Auth metadata"]
+    Caller --> Read["Read-only transaction; up to 20 configured races"]
+    Read --> Own["Own entry/history or exact named incoming offer; no other UID/count/roster"]
+    Read --> Time["Fresh time fences access, signup and offers"]
+    Scope --> Mutate["Existing atomic fictional transitions and immutable saved retries"]
+    Future["#731: actual staging security, screen, release and cleanup NOT AVAILABLE YET"] -.-> Wrapper
+```
+
+Text alternative: connected source uses the existing platform wrapper and current disposable caller authority to read only bounded own or exactly named offer status with fresh time, while atomic fictional mutations stay server-controlled and genuine hosted security, screen, deployment and cleanup remain #731's separate gates; no production or real payment changes.
+
 ## Fictional race transactions — #729 source and demo only
 
 ```mermaid

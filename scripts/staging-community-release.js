@@ -16,7 +16,7 @@ const REGION = 'us-central1';
 const BASE = `https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/${REGION}`;
 const ACCOUNT = 'runmprc@gmail.com';
 const RUNTIME = `mprc-community-runtime@${PROJECT}.iam.gserviceaccount.com`;
-const FILES = ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'communityDues.js', 'communityDuesAssociation.js', 'membershipManualEvidence.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json'];
+const FILES = ['communityOnly.js', 'communityActions.js', 'communityAdministration.js', 'communityDues.js', 'communityDuesAssociation.js', 'fictionalRaceService.js', 'fictionalRaceTransitions.js', 'membershipManualEvidence.js', 'membershipCancellationPolicy.json', 'membershipAuthority.js', 'requestValidation.js', 'profileRuntime.js', 'package.json', 'package-lock.json'];
 const check = (value) => { if (!value) throw new Error('staging_community_release_failed'); };
 const PHASES = new Set(['arguments', 'source', 'runtime_authority', 'owner_identity', 'mfa', 'inventory', 'bundle', 'source_upload', 'function_update', 'operation_poll', 'function_readback', 'source_provenance', 'invoker_policy', 'source_archive', 'final_inventory', 'report']);
 const failures = new WeakMap();

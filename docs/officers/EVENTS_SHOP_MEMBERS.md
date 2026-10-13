@@ -1,5 +1,7 @@
 # Events, Shop, Members, and Money
 
+**#732 race boundary — SOURCE / DEMO ONLY:** [read the short handoff](./STAGING_COMMUNITY.md#fictional-race-boundary--732-source-only) before any review. Backend source now includes exact fictional race actions and own-entry status, but no new deployed screen or genuine hosted proof. #731 must finish that release and cleanup. No real refund, payment, policy, runner directory or record-edit procedure is available. Earlier #727/#729 paragraphs are historical milestone limits.
+
 **#719 fictional linking — STAGING VERIFIED 2026-10-12:** the [supervised screen procedure](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) deliberately connects an immutable fictional receipt to one specialist-marked disposable pending account. Real screens verified activation, cancellation through the unchanged original term and inactive status after natural expiry. Old test fixtures are removed; ask the specialist for fresh private setup. No real policy/payment/claim/renewal/refund/production launch is supplied. Stop on an uncertain ID/revision or changed term and contact Dave privately.
 
 **Current status:** live commerce is **NOT AVAILABLE YET**.

@@ -2,13 +2,17 @@ const { EventEmitter } = require('node:events');
 jest.mock('firebase-admin/app', () => ({ getApp: () => ({ name: 'synthetic' }) }));
 jest.mock('firebase-admin/auth', () => ({ getAuth: () => ({ verifyIdToken: jest.fn().mockImplementation(async (token) => {
   if (token === 'synthetic-invalid-auth') throw new Error('synthetic denial');
+  if (token.startsWith('synthetic-race-')) return { uid: token === 'synthetic-race-other' ? 'stage_race_other' : 'stage_race_native',
+    email_verified: token !== 'synthetic-race-unverified', auth_time: Math.floor(Date.now() / 1000),
+    firebase: { sign_in_provider: token === 'synthetic-race-custom' ? 'custom' : 'password',
+      ...(token === 'synthetic-race-tenant' ? { tenant: 'other' } : {}) } };
   return { uid: 'synthetic-uid', email_verified: token !== 'synthetic-unverified-auth' };
 }) }) }));
 jest.mock('firebase-admin/app-check', () => ({ getAppCheck: () => ({ verifyToken: jest.fn().mockImplementation(async (token) => {
   if (token !== 'synthetic-valid-app-token') throw new Error('synthetic denial');
   return { appId: 'synthetic-app' };
 }) }) }));
-jest.mock('firebase-admin', () => ({ firestore: jest.fn() }));
+jest.mock('firebase-admin', () => ({ firestore: jest.fn(), app: jest.fn() }));
 jest.mock('firebase-functions/logger', () => ({ debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 const admin = require('firebase-admin');
 const { communityActions } = require('./communityActions');
@@ -78,5 +82,35 @@ describe('native authenticated boundary and context binding', () => {
     expect((await request({ ...app, authorization: 'Bearer synthetic-unverified-auth' }, link)).status).toBe(403);
     expect((await request({ ...app, authorization: 'Bearer synthetic-auth' }, { ...link, role: 'admin' })).status).toBe(400);
     expect(admin.firestore).not.toHaveBeenCalled();
+  });
+  test('fictional race native HTTP wrapper verifies mocked Auth/App Check and binds platform UID before SDK work', async () => {
+    // SDK verifier doubles prove wrapper wiring only, not genuine hosted tokens.
+    const data = { action: 'race_status', accountUid: 'stage_race_native', incomingEntryId: null };
+    const authenticated = { authorization: 'Bearer synthetic-race-password' };
+    expect((await request(authenticated, data)).status).toBe(401);
+    expect((await request({ ...authenticated, 'x-firebase-appcheck': 'synthetic-invalid-app-token' }, data)).status).toBe(401);
+    expect((await request(app, data)).status).toBe(401);
+    for (const token of ['synthetic-invalid-auth', 'synthetic-race-other', 'synthetic-race-unverified', 'synthetic-race-custom', 'synthetic-race-tenant']) {
+      expect((await request({ ...app, authorization: `Bearer ${token}` }, data)).status).toBe(token === 'synthetic-invalid-auth' ? 401 : 403);
+    }
+    expect((await request({ ...app, ...authenticated }, { ...data, accountUid: 'stage_race_other' })).status).toBe(403);
+    expect((await request({ ...app, ...authenticated }, { ...data, role: 'admin' })).status).toBe(400);
+    expect(admin.app).not.toHaveBeenCalled(); expect(admin.firestore).not.toHaveBeenCalled();
+  });
+  test('qualified native HTTP context enters bounded status with live authority and no write', async () => {
+    const { memoryDb } = require('./testSupport/communityMemoryDb');
+    const f = require('./testSupport/fictionalRaceFixtures');
+    const { POLICY } = require('./fictionalRaceTransitions');
+    const { db, docs } = memoryDb(); const uid = 'stage_race_native'; const now = Date.now();
+    docs.set('communityConfig/fictionalRaces', { schemaVersion: 1, simulationOnly: true, policyVersion: POLICY, eventIds: [] });
+    docs.set(`communityRaceTargets/${uid}`, f.marker(uid, now)); docs.set(`communityRacePermissions/${uid}`, f.permission(uid, now));
+    const metadata = { getUser: jest.fn(async target => ({ uid: target, emailVerified: true, disabled: false })) };
+    admin.app.mockReturnValue({ options: { projectId: process.env.GCLOUD_PROJECT }, firestore: () => db, auth: () => metadata });
+    const before = JSON.stringify([...docs]);
+    const response = await request({ ...app, authorization: 'Bearer synthetic-race-password' }, { action: 'race_status', accountUid: uid, incomingEntryId: null });
+    expect(response.status).toBe(200); expect(response.body.result).toMatchObject({ simulationOnly: true, events: [], incoming: null });
+    expect(metadata.getUser.mock.calls).toEqual([[uid]]); expect(JSON.stringify([...docs])).toBe(before);
+    docs.get(`communityRacePermissions/${uid}`).enabled = false;
+    expect((await request({ ...app, authorization: 'Bearer synthetic-race-password' }, { action: 'race_status', accountUid: uid, incomingEntryId: null })).status).toBe(403);
   });
 });

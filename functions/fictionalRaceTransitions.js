@@ -1,8 +1,8 @@
 'use strict';
 
-// Inert pure foundation. Not imported by any callable, client or release bundle.
+// Pure fictional transition helpers for the isolated staging service.
 // This models fictional credits, never payment/refund/provider evidence.
-// A future trusted boundary must supply native identity/time, disposable markers,
+// The trusted service supplies native identity/time, disposable markers,
 // capabilities and atomic record + immutable command-receipt persistence.
 const { parseStrictObject } = require('./requestValidation');
 const { createHash } = require('node:crypto');
@@ -22,10 +22,31 @@ function waiver(value, uid, now) {
   return parsed;
 }
 
+function readFictionalEvent(input) {
+  const event = strict(input, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventId',
+    'revision', 'startAtMs', 'status', 'capacity', 'confirmedCount']);
+  check(event.schemaVersion === 1 && event.simulationOnly === true && event.policyVersion === POLICY
+    && id(event.eventId) && integer(event.revision, 999999) && event.revision > 0
+    && time(event.startAtMs) && ['open', 'cancelled'].includes(event.status)
+    && integer(event.capacity, 10000) && event.capacity > 0 && integer(event.confirmedCount, event.capacity));
+  return event;
+}
+
+function readFictionalPolicy(input, event) {
+  const policy = strict(input, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventId',
+    'revision', 'fictionalAmountCents', 'currency', 'waiverVersion', 'opensAtMs', 'closesAtMs']);
+  check(policy.schemaVersion === 1 && policy.simulationOnly === true && policy.policyVersion === POLICY
+    && policy.eventId === event.eventId && integer(policy.revision, 999999) && policy.revision > 0
+    && integer(policy.fictionalAmountCents, 10000) && policy.fictionalAmountCents > 0
+    && policy.currency === 'USD' && policy.waiverVersion === WAIVER
+    && time(policy.opensAtMs) && time(policy.closesAtMs) && policy.opensAtMs < policy.closesAtMs
+    && policy.closesAtMs - policy.opensAtMs <= 86400000 && policy.closesAtMs <= event.startAtMs);
+  return policy;
+}
+
 function records(eventInput, entryInput, now) {
   check(time(now));
-  const event = strict(eventInput, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventId',
-    'revision', 'startAtMs', 'status', 'capacity', 'confirmedCount']);
+  const event = readFictionalEvent(eventInput);
   const entry = strict(entryInput, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventId',
     'entryId', 'revision', 'bibId', 'runnerUid', 'creditOwnerUid', 'fictionalAmountCents',
     'fictionalReturnedCents', 'currency', 'status', 'transferCount', 'originalWaiver', 'recipientWaiver', 'offer']);
@@ -124,15 +145,9 @@ function raceEnrollmentId(eventId, uid) {
 
 function createFictionalEntry(eventInput, policyInput, uid, waiverVersion, now) {
   try {
-    const policy = strict(policyInput, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventId',
-      'revision', 'fictionalAmountCents', 'currency', 'waiverVersion', 'opensAtMs', 'closesAtMs']);
-    check(policy.schemaVersion === 1 && policy.simulationOnly === true && policy.policyVersion === POLICY
-      && id(policy.eventId) && id(uid) && integer(policy.revision, 999999) && policy.revision > 0
-      && integer(policy.fictionalAmountCents, 10000) && policy.fictionalAmountCents > 0
-      && policy.currency === 'USD' && policy.waiverVersion === WAIVER && waiverVersion === WAIVER
-      && time(now) && time(policy.opensAtMs) && time(policy.closesAtMs)
-      && policy.opensAtMs < policy.closesAtMs && policy.closesAtMs - policy.opensAtMs <= 86400000
-      && policy.opensAtMs <= now && now < policy.closesAtMs);
+    const configuredEvent = readFictionalEvent(eventInput);
+    const policy = readFictionalPolicy(policyInput, configuredEvent);
+    check(id(uid) && waiverVersion === WAIVER && time(now) && policy.opensAtMs <= now && now < policy.closesAtMs);
     const entryId = raceEnrollmentId(policy.eventId, uid);
     const entry = { schemaVersion: 1, simulationOnly: true, policyVersion: POLICY, eventId: policy.eventId,
       entryId, revision: 1, bibId: `stage_race_${createHash('sha256').update(`bib:${entryId}`).digest('hex')}`,
@@ -146,4 +161,5 @@ function createFictionalEntry(eventInput, policyInput, uid, waiverVersion, now) 
   } catch { throw new Error(MESSAGE); }
 }
 
-module.exports = { POLICY, WAIVER, reduceFictionalRace, readFictionalRaceRecords, raceEnrollmentId, createFictionalEntry };
+module.exports = { POLICY, WAIVER, reduceFictionalRace, readFictionalRaceRecords, readFictionalEvent,
+  readFictionalPolicy, raceEnrollmentId, createFictionalEntry };

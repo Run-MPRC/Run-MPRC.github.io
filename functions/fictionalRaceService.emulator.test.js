@@ -1,11 +1,11 @@
 const admin = require('firebase-admin');
 const { createFictionalRaceService, raceEnvironment } = require('./fictionalRaceService');
-const { raceEnrollmentId } = require('./fictionalRaceTransitions');
+const { POLICY, raceEnrollmentId } = require('./fictionalRaceTransitions');
 const f = require('./testSupport/fictionalRaceFixtures');
 
 const describeDemo = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 describeDemo('fictional race native Auth metadata and Firestore transactions — demo only, no callable/attestation proof', () => {
-  let app; let db; let auth; let now; let service; let sequence = 0;
+  let app; let db; let auth; let now; let service; let sequence = 0; let manifestOwned = false;
   const ownedUids = new Set();
   const assertDemo = () => expect(['demo-mprc-local', 'demo-functions-test']).toContain(raceEnvironment(process.env));
   beforeAll(() => {
@@ -15,6 +15,10 @@ describeDemo('fictional race native Auth metadata and Firestore transactions —
   });
   async function clean() {
     assertDemo();
+    if (manifestOwned) {
+      await db.doc('communityConfig/fictionalRaces').delete();
+      expect((await db.doc('communityConfig/fictionalRaces').get()).exists).toBe(false); manifestOwned = false;
+    }
     for (const root of f.ROOTS) await db.recursiveDelete(db.collection(root));
     for (const uid of ownedUids) {
       expect((await db.collection(`communityRaceCommands/${uid}/requests`).get()).empty).toBe(true);
@@ -27,6 +31,8 @@ describeDemo('fictional race native Auth metadata and Firestore transactions —
     await clean(); now = Date.now(); service = createFictionalRaceService(app, () => now);
     await db.doc(`communityRaceEvents/${f.eventId}`).create(f.event(now));
     await db.doc(`communityRacePolicies/${f.eventId}`).create(f.policy(now));
+    await db.doc('communityConfig/fictionalRaces').create({ schemaVersion: 1, simulationOnly: true, policyVersion: POLICY, eventIds: [f.eventId] });
+    manifestOwned = true;
   }, 45000);
   afterAll(async () => { if (db) await clean(); if (app) await app.delete(); }, 45000);
   async function member() {
@@ -48,6 +54,10 @@ describeDemo('fictional race native Auth metadata and Firestore transactions —
   });
   async function snapshots() {
     const result = [];
+    if (manifestOwned) {
+      const doc = await db.doc('communityConfig/fictionalRaces').get();
+      result.push([doc.ref.path, [doc.updateTime.seconds, doc.updateTime.nanoseconds], doc.data()]);
+    }
     for (const root of f.ROOTS) {
       const docs = await db.collection(root).get();
       for (const doc of docs.docs) result.push([doc.ref.path, [doc.updateTime.seconds, doc.updateTime.nanoseconds], doc.data()]);
@@ -58,6 +68,45 @@ describeDemo('fictional race native Auth metadata and Firestore transactions —
     }
     return result.sort(([a], [b]) => a.localeCompare(b));
   }
+
+  const read = (uid, incomingEntryId = null) => service.status(uid, f.token(now), { action: 'race_status', accountUid: uid, incomingEntryId });
+  test('native read-only status isolates own enrollment and exact named offer; transferred cancellation keeps original credit', async () => {
+    const owner = await member(); const recipient = await member(); const other = await member();
+    const { entryId } = await joined(owner);
+    await run(owner, change(owner, entryId, 'offer_transfer', 1, { recipientUid: recipient }));
+    const before = await snapshots();
+    expect((await read(owner)).events[0]).toMatchObject({ canJoin: false, entry: { canCancel: false, canRevoke: true } });
+    expect((await read(other)).events[0]).toMatchObject({ enrollment: null, entry: null });
+    expect((await read(recipient)).incoming).toBeNull();
+    const offer = await read(recipient, entryId);
+    expect(offer.incoming).toMatchObject({ entryId, canAccept: true, isCurrentRunner: false, isOriginalCreditOwner: false });
+    expect(JSON.stringify(offer)).not.toContain(owner); expect(JSON.stringify(offer)).not.toContain(recipient);
+    await expect(read(other, entryId)).rejects.toHaveProperty('code', 'permission-denied');
+    await expect(read(other, 'stage_race_missing')).rejects.toHaveProperty('code', 'permission-denied');
+    expect(await snapshots()).toEqual(before); // Exact native nanoseconds + all content, not merely milliseconds.
+    await run(recipient, change(recipient, entryId, 'accept_transfer', 2));
+    expect((await read(owner)).events[0]).toMatchObject({ canJoin: false, enrollment: { status: 'transferred' }, entry: { canCancel: false } });
+    expect((await read(recipient)).events[0].entry).toMatchObject({ canCancel: true, canOffer: false, isOriginalCreditOwner: false });
+    await run(recipient, change(recipient, entryId, 'simulate_refund', 3));
+    expect((await read(owner)).events[0].entry).toMatchObject({ fictionalReturnedCents: 1000, isOriginalCreditOwner: true, canCancel: false });
+  }, 45000);
+  test('native disabled/expired/revoked status denies unchanged while lost-recipient owner recovery stays available', async () => {
+    const owner = await member(); const recipient = await member(); const { entryId } = await joined(owner);
+    await run(owner, change(owner, entryId, 'offer_transfer', 1, { recipientUid: recipient }));
+    await auth.updateUser(recipient, { disabled: true });
+    const before = await snapshots(); await expect(read(recipient, entryId)).rejects.toHaveProperty('code', 'permission-denied');
+    expect((await read(owner)).events[0].entry.canRevoke).toBe(true); expect(await snapshots()).toEqual(before);
+    await run(owner, change(owner, entryId, 'revoke_transfer', 2));
+    expect((await read(owner)).events[0].entry.canCancel).toBe(true);
+    const permission = db.doc(`communityRacePermissions/${owner}`);
+    for (const invalid of [{ enabled: false }, { expiresAtMs: now }]) {
+      await permission.set({ ...f.permission(owner, now), ...invalid }); const denied = await snapshots();
+      await expect(read(owner)).rejects.toHaveProperty('code', 'permission-denied'); expect(await snapshots()).toEqual(denied);
+    }
+    await permission.set(f.permission(owner, now));
+    await auth.updateUser(owner, { emailVerified: false });
+    const last = await snapshots(); await expect(read(owner)).rejects.toHaveProperty('code', 'permission-denied'); expect(await snapshots()).toEqual(last);
+  }, 45000);
 
   test('twenty native final-seat attempts admit one; five duplicate cancellations release exactly once', async () => {
     const members = []; for (let n = 0; n < 20; n++) members.push(await member());

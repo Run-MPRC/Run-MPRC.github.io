@@ -8,10 +8,13 @@ const { deriveMembershipEntitlement } = require('./membershipAuthority');
 const policy = require('./membershipCancellationPolicy.json');
 const limits = require('./profileRuntime');
 const { parseAdminRequest, assertOfficerToken, createAdministrationService } = require('./communityAdministration');
+const { createFictionalRaceService, parseRaceCommand, parseRaceStatus, assertRaceActor } = require('./fictionalRaceService');
 
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const COMMAND = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const ACTIONS = new Set(['membership_join', 'membership_cancel', 'event_join', 'event_cancel']);
+const RACE_ACTIONS = Object.freeze({ race_join: 'join_simulation', race_cancel: 'simulate_refund',
+  race_offer: 'offer_transfer', race_accept: 'accept_transfer', race_revoke: 'revoke_transfer' });
 const error = (code) => new functions.https.HttpsError(code, {
   'invalid-argument': 'Request is invalid.',
   'permission-denied': 'Verify your account before making this request.',
@@ -23,6 +26,18 @@ const error = (code) => new functions.https.HttpsError(code, {
 }[code]);
 const check = (value, code = 'unavailable') => { if (!value) throw error(code); };
 const integer = (value, max = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(value) && value >= 0 && value <= max;
+
+function communityEnvelope(input) {
+  try {
+    // Clone before inspecting any discriminant; getters/proxies never run.
+    return parseStrictObject(input, { requiredKeys: ['action', 'accountUid'], optionalKeys: [
+      'requestId', 'expectedRevision', 'eventId', 'waiverVersion', 'waiverAccepted', 'targetUid', 'event',
+      'capacity', 'reason', 'cursor', 'duesCursor', 'confirmationId', 'externalConfirmed', 'policyRevision',
+      'membershipId', 'associationConfirmed', 'entryId', 'expectedEventRevision', 'expectedEntryRevision',
+      'recipientUid', 'incomingEntryId',
+    ] });
+  } catch { throw error('invalid-argument'); }
+}
 
 function assertCommunityEnvironment(env = process.env) {
   const project = env.GCLOUD_PROJECT;
@@ -201,8 +216,23 @@ exports.communityActions = functions.runWith({ ...limits, enforceAppCheck: true 
   assertCommunityEnvironment();
   check(context.app, 'permission-denied');
   check(context.auth?.uid && typeof context.auth.uid === 'string' && ID.test(context.auth.uid), 'unauthenticated');
-  const administrative = typeof data?.action === 'string' && data.action.startsWith('admin_');
-  const request = administrative ? parseAdminRequest(data) : parseRequest(data);
+  const envelope = communityEnvelope(data);
+  check(typeof envelope.action === 'string', 'invalid-argument');
+  if (envelope.action === 'race_status' || Object.hasOwn(RACE_ACTIONS, envelope.action)) {
+    // UID and claims come exclusively from Firebase's verified callable context.
+    // A browser admin role cannot replace the live own-entry permission/marker.
+    const status = envelope.action === 'race_status';
+    const request = status ? parseRaceStatus(envelope, context.auth.uid)
+      : parseRaceCommand({ ...envelope, action: RACE_ACTIONS[envelope.action] }, context.auth.uid);
+    assertRaceActor(context.auth.token, Date.now());
+    let app;
+    try { app = admin.app(); } catch { throw error('unavailable'); }
+    const service = createFictionalRaceService(app);
+    return status ? service.status(context.auth.uid, context.auth.token, request)
+      : service.execute(context.auth.uid, context.auth.token, request);
+  }
+  const administrative = typeof envelope.action === 'string' && envelope.action.startsWith('admin_');
+  const request = administrative ? parseAdminRequest(envelope) : parseRequest(envelope);
   check(request.accountUid === context.auth.uid, 'permission-denied');
   if (request.action !== 'status') check(context.auth.token.email_verified === true, 'permission-denied');
   if (administrative) assertOfficerToken(context.auth.token, Date.now());
@@ -223,3 +253,4 @@ exports.assertCommunityEnvironment = assertCommunityEnvironment;
 exports.parseRequest = parseRequest;
 exports.memberView = memberView;
 exports.eventView = eventView;
+exports.communityEnvelope = communityEnvelope;
