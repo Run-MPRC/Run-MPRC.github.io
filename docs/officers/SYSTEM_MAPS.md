@@ -9,7 +9,7 @@ These diagrams show where pages, information, and deployments go. Each diagram i
 ```mermaid
 flowchart LR
     Account["Same verified disposable staging session"] --> Screen["Private race screen; no runner directory"]
-    Screen --> Read["Strict bounded status or exact saved command"]
+    Screen --> Read["Strict status for selected ID or exact saved command"]
     Read --> Server["Existing native Auth/App Check and server authority"]
     Server --> Fresh["Fresh own status; acceptance consumes incoming offer"]
     Fresh --> Screen
