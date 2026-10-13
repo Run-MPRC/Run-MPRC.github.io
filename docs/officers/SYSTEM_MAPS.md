@@ -2,6 +2,21 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Uncertain staging release review — #722
+
+```mermaid
+flowchart LR
+    Officer["Request a read-only review; no credentials"] --> Specialist["Dave/platform specialist; exact green main"]
+    Specialist --> Verify["Fixed staging verification; no deployment"]
+    Verify --> Native["Resource, source archive, access and unchanged profiles"]
+    Specialist --> Marker["Separate public staging website marker check"]
+    Native --> Proof["Dated issue evidence; failure phase means stop"]
+    Marker --> Proof
+    Verify -. "No writes" .-> Mutations["Build, IAM/Auth/Hosting, member data, production/payments"]
+```
+
+Text alternative: an officer asks the specialist for a current read-only staging source/resource/access check and a separate website-marker check, with dated issue proof or a safe stop phase, without another deployment or any account, record or production/payment mutation.
+
 ## Fictional account linking — #719, staging verified 2026-10-12
 
 ```mermaid
