@@ -52,6 +52,20 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     now = paid.authority.term.endsAtMs;
     expect((await service.status(uid)).membership.entitlement).toBe('not_entitled');
   });
+  test('cancelled-event availability is a read-only projection and preserves own confirmed signup evidence', async () => {
+    const uid = 'fixture-status-member';
+    await service.mutate(uid, join());
+    const event = db.doc('communityEvents/fixture-event');
+    const registration = event.collection('registrations').doc(uid);
+    await event.update({ status: 'cancelled' });
+    const before = await db.getAll(event, registration);
+    const view = await service.status(uid);
+    expect(view.events[0]).toMatchObject({ status: 'cancelled', signupStatus: 'cancelled', confirmedCount: 1, registration: { status: 'confirmed', revision: 1 } });
+    expect((await service.status('fixture-other')).events[0].registration.status).toBe('none');
+    const after = await db.getAll(event, registration);
+    expect(after.map(doc => doc.data())).toEqual(before.map(doc => doc.data()));
+    expect(after.map(doc => doc.updateTime.toMillis())).toEqual(before.map(doc => doc.updateTime.toMillis()));
+  });
   test('officer approval/withdrawal, capacity/closure concurrency and live revocation use real transactions', async () => {
     const uid = 'fixture-officer'; const runner = 'fixture-member';
     const caps = { schemaVersion: 1, enabled: true, revision: 1, expiresAtMs: now + 3600000, membershipApproval: true, freeEventManagement: true };

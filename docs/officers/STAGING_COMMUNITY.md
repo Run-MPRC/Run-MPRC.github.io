@@ -62,6 +62,23 @@
 
 ## Existing membership and free-event actions
 
+### Current member status — #724 source prepared, NOT AVAILABLE YET
+
+**Purpose:** distinguish the event's current signup availability from the member's stored signup, and stop displaying old status after an uncertain read. **Approver/escalation:** Dave, sole staging owner. **Prerequisites:** the specialist supplies the verified #724 staging release, disposable account and made-up events. New behavior is not hosted proof until #724 records exact deployment, actual UI and cleanup.
+
+1. Open the supplied staging `/community` link and confirm **Staging test only**.
+2. Sign in with the supplied disposable account.
+3. Read the event's signup message before choosing an action.
+4. Stop a new signup if it is cancelled, closed, full, not open yet, ended or unknown.
+5. Keep **Event cancelled** separate from **Your signup** history. An event cancellation does not itself rewrite your stored signup or issue a refund.
+6. If the specialist asks, cancel your own confirmed fictional signup using the existing button.
+7. Select **Refresh status** after an event change or term expiry.
+8. If the refresh fails, expect old membership/event status and new-action controls to disappear.
+9. Use **Retry request** only for an uncertain saved action, or **Refresh status** for a new read.
+10. Confirm only a successful fresh read restores current controls, then sign out and request owned-fixture cleanup.
+
+**Expected result/proof:** the server projects existing event window/capacity/status constraints using its clock after reads; the browser cannot turn a display value into authorization. Counts, registration/waiver evidence and paid-term cancellation policy are unchanged. A confirmed stored signup on a cancelled event is history, not proof that the event will take place. Existing transactional join checks still decide the result if availability changes after the read. Missing/unknown projection fails closed. No polling or extra service is added. **Stop:** production, real data/payment, unclear availability/count/history, stale status surviving failure or request for secrets/record edits. **Undo:** sign out; Dave/specialist uses the reviewed staging rollback if required. Account/fixture supply, deployment/readback/cleanup and rollback remain specialist-only; no officer uses a terminal or edits records. Real refunds, bib transfers and production remain unavailable.
+
 - Request membership: records a pending request. It does not prove dues or grant membership.
 - Withdraw membership request: withdraws a pending application.
 - Cancel membership: records a cancellation request for an already-approved synthetic membership. Access lasts through its original paid term. No refund occurs.

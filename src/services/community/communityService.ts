@@ -10,6 +10,7 @@ export interface CommunityStatus {
   };
   events: Array<{
     id: string; title: string; location: string; startAtMs: number; status: string;
+    signupStatus?: 'open' | 'not_open_yet' | 'closed' | 'ended' | 'full' | 'cancelled';
     opensAtMs: number; closesAtMs: number; capacity: number; confirmedCount: number;
     waiverText: string; waiverVersion: string;
     registration: { revision: number; status: string };

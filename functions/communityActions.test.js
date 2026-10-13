@@ -127,6 +127,48 @@ describe('transactional membership and free-event lifecycle', () => {
     await service.mutate('runner-a', joining());
     expect((await service.status('runner-b')).events[0].registration.status).toBe('none');
   });
+  test.each([
+    [{}, 'open'],
+    [{ opensAtMs: 1_800_000_000_001 }, 'not_open_yet'],
+    [{ opensAtMs: 1_800_000_000_000 }, 'open'],
+    [{ closesAtMs: 1_800_000_000_000 }, 'ended'],
+    [{ status: 'closed' }, 'closed'],
+    [{ confirmedCount: 1 }, 'full'],
+    [{ status: 'cancelled', confirmedCount: 1 }, 'cancelled'],
+  ])('status projects existing signup constraints without writes %#', async (extra, expected) => {
+    docs.set('communityEvents/one-seat', freeEvent(now, extra));
+    const before = JSON.stringify([...docs]);
+    expect((await service.status('runner-a')).events[0].signupStatus).toBe(expected);
+    expect(JSON.stringify([...docs])).toBe(before);
+  });
+  test('cancelled event status retains confirmed signup history and another UID sees none', async () => {
+    await service.mutate('runner-a', joining());
+    docs.get('communityEvents/one-seat').status = 'cancelled';
+    const before = JSON.stringify([...docs]);
+    expect((await service.status('runner-a')).events[0]).toMatchObject({
+      status: 'cancelled', signupStatus: 'cancelled', confirmedCount: 1,
+      registration: { status: 'confirmed', revision: 1 },
+    });
+    expect((await service.status('runner-b')).events[0].registration.status).toBe('none');
+    expect(JSON.stringify([...docs])).toBe(before);
+  });
+  test('server status samples time after reads so a term/window ending during I/O is not shown active/open', async () => {
+    const memory = memoryDb(); const began = now; let current = began;
+    memory.docs.set('communityMemberships/runner-a', approvedMember('runner-a', began));
+    memory.docs.set('communityConfig/events', { schemaVersion: 1, eventIds: ['one-seat'] });
+    memory.docs.set('communityEvents/one-seat', freeEvent(began, { closesAtMs: began + 60000 }));
+    const original = memory.db.getAll;
+    memory.db.getAll = async (...refs) => { const value = await original(...refs); current = began + 60000; return value; };
+    const read = createCommunityService(memory.db, () => current);
+    const before = JSON.stringify([...memory.docs]);
+    const result = await read.status('runner-a');
+    expect(result.membership.entitlement).toBe('not_entitled');
+    expect(result.events[0].signupStatus).toBe('ended');
+    expect(JSON.stringify([...memory.docs])).toBe(before);
+  });
+  test('display availability cannot be injected into a signup request', () => {
+    expect(() => parseRequest({ ...joining(), signupStatus: 'open' })).toThrow('Request is invalid.');
+  });
   test('write failure rolls back all effects and a retry remains safe', async () => {
     const memory = memoryDb(); const command = request('membership_join');
     const original = memory.db.runTransaction;

@@ -25,6 +25,22 @@ const state = (applicationStatus = 'none', revision = 0) => ({
 },
 events: [],
 });
+const testEvent = (extra = {}) => ({
+  id: 'fixture-event',
+  title: 'Synthetic event',
+  location: 'Synthetic place',
+  startAtMs: 1800003600000,
+  opensAtMs: 1799999999000,
+  closesAtMs: 1800001800000,
+  status: 'open',
+  signupStatus: 'open',
+  capacity: 1,
+  confirmedCount: 0,
+  waiverText: 'Synthetic waiver only',
+  waiverVersion: 'synthetic-v1',
+  registration: { revision: 0, status: 'none' },
+  ...extra,
+});
 const show = () => (
   <HelmetProvider>
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -77,7 +93,7 @@ test('an uncertain request retries exactly once with the original ID, then rerea
   fireEvent.click(screen.getByRole('button', { name: 'Request membership' }));
   await screen.findByRole('button', { name: 'Retry request' });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Retry request' })).toBeEnabled());
-  expect(screen.getByRole('button', { name: 'Request membership' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Request membership' })).not.toBeInTheDocument();
   const original = call.mock.calls[1][1];
   call.mockResolvedValueOnce({ membership: { revision: 1, applicationStatus: 'pending' } }).mockResolvedValueOnce(state('pending', 1));
   fireEvent.click(screen.getByRole('button', { name: 'Retry request' }));
@@ -145,6 +161,7 @@ location: 'Synthetic place',
 opensAtMs: 1,
 closesAtMs: 1800000000000,
     status: 'open',
+signupStatus: 'open',
 capacity: 1,
 confirmedCount: 0,
     waiverText: 'Synthetic waiver only',
@@ -170,4 +187,70 @@ waiverVersion: 'synthetic-v1',
   await screen.findByText(/Your signup: cancelled/);
   expect(call.mock.calls[3][1]).toMatchObject({ action: 'event_cancel', expectedRevision: 1 });
   expect(screen.getByRole('checkbox')).not.toBeChecked();
+});
+
+test.each([
+  ['not_open_yet', 'Signup has not opened yet.'],
+  ['closed', 'Signup is closed.'],
+  ['ended', 'The signup window has ended.'],
+  ['full', 'No places are available for new signups.'],
+  [undefined, 'Signup availability could not be confirmed. Refresh status.'],
+  ['forged', 'Signup availability could not be confirmed. Refresh status.'],
+])('unavailable or unknown server signup state %s cannot prepare a new signup', async (signupStatus, text) => {
+  call.mockResolvedValue({ ...state(), events: [testEvent({ signupStatus })] });
+  render(show()); await screen.findByText(text);
+  expect(screen.getByRole('checkbox')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Sign up for Synthetic event' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Sign up for Synthetic event' }));
+  expect(call).toHaveBeenCalledTimes(1);
+});
+
+test('cancelled event is explicit while stored signup and own cancellation remain separate', async () => {
+  const event = testEvent({
+    status: 'cancelled',
+    signupStatus: 'cancelled',
+    confirmedCount: 1,
+    registration: { revision: 1, status: 'confirmed' },
+  });
+  call.mockResolvedValue({ ...state(), events: [event] });
+  render(show()); await screen.findByText('Event cancelled.');
+  expect(screen.getByText(/Your signup: confirmed/)).toBeInTheDocument();
+  const cancel = screen.getByRole('button', { name: 'Cancel signup for Synthetic event' });
+  expect(cancel).toBeEnabled();
+  call.mockResolvedValueOnce({ registration: { revision: 2, status: 'cancelled' } });
+  call.mockResolvedValueOnce({ ...state(), events: [{ ...event, confirmedCount: 0, registration: { revision: 2, status: 'cancelled' } }] });
+  fireEvent.click(cancel); await screen.findByText(/Your signup: cancelled/);
+  expect(screen.getByText('Event cancelled.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Sign up for Synthetic event' })).toBeDisabled();
+});
+
+test('failed refresh hides old active membership/events and only a successful reread restores controls', async () => {
+  const active = { ...state('approved', 2), membership: { ...state('approved', 2).membership, entitlement: 'current_member', accessThroughMs: 1800000060000 }, events: [testEvent()] };
+  call.mockResolvedValue(active); render(show()); await screen.findByText('Test membership active.');
+  call.mockRejectedValueOnce(new Error('synthetic offline'));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  await screen.findByText('Status could not be loaded. Try Refresh status.');
+  expect(screen.queryByText('Test membership active.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Cancel membership' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Sign up for Synthetic event' })).not.toBeInTheDocument();
+  call.mockResolvedValueOnce({ ...state('approved', 2), events: [testEvent({ signupStatus: 'ended' })] });
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  await screen.findByText('The signup window has ended.');
+  expect(screen.getByText('Test membership is not active.')).toBeInTheDocument();
+});
+
+test('successful action followed by failed status read hides stale state but retains exact saved retry', async () => {
+  render(show()); await screen.findByRole('button', { name: 'Request membership' });
+  call.mockResolvedValueOnce({ membership: { revision: 1, applicationStatus: 'pending' } });
+  call.mockRejectedValueOnce(new Error('synthetic read failure'));
+  fireEvent.click(screen.getByRole('button', { name: 'Request membership' }));
+  await screen.findByRole('button', { name: 'Retry request' });
+  expect(screen.queryByRole('button', { name: 'Request membership' })).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Retry request' })).toBeEnabled());
+  const command = call.mock.calls[1][1];
+  call.mockResolvedValueOnce({ membership: { revision: 1, applicationStatus: 'pending' } });
+  call.mockResolvedValueOnce(state('pending', 1));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry request' }));
+  await screen.findByText('Request status: pending.');
+  expect(call.mock.calls[3][1]).toEqual(command);
 });
