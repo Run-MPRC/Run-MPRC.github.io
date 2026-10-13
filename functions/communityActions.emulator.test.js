@@ -17,6 +17,7 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     now = Date.now(); service = createCommunityService(db, () => now);
   });
   beforeEach(async () => {
+    now = Date.now();
     for (const root of roots) await db.recursiveDelete(db.collection(root));
     await db.doc('communityConfig/events').create({ schemaVersion: 1, eventIds: ['fixture-event'] });
     await db.doc('communityEvents/fixture-event').create(freeEvent(now));
@@ -51,7 +52,7 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     expect((await service.status(uid)).membership.entitlement).toBe('current_member');
     now = paid.authority.term.endsAtMs;
     expect((await service.status(uid)).membership.entitlement).toBe('not_entitled');
-  });
+  }, 45000); // Concurrent native transactions may outlast Jest's five-second unit default.
   test('cancelled-event availability is a read-only projection and preserves own confirmed signup evidence', async () => {
     const uid = 'fixture-status-member';
     await service.mutate(uid, join());
