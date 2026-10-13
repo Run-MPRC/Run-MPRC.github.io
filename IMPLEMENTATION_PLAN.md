@@ -1,5 +1,7 @@
 # MPRC Secure Commerce Implementation Plan
 
+**#727 fictional race foundation — SOURCE ONLY:** first test a closed pure transition model without provider calls or deployed integration. Then implement native Auth/App Check/disposable-target/permission admission and atomic event/entry/command receipts; test actual concurrency and immutable retries. Only afterward add minimal staging screens and perform exact backend-first Function/Hosting deployment, genuine disposable UI/security/lifecycle checks and owned cleanup. No real rules/payments/production authority is implied; #724 core stays unchanged.
+
 **#719 focused continuation — STAGING VERIFIED 2026-10-12:** verified #716 dependency is followed by deliberate fictional receipt linking/unchanged term activation in the same staging service/UI. Separate capability/marker, authoritative Auth, pending revision, atomic uniqueness, permission-first retry and cancellation-through-term guards passed local full checks and 44 hosted cases, including real screens/offline/races/natural expiry. PR720/b6a8fd5 exact PR/main CI passed; Function v4/archive and staging Hosting match; six users/47 documents cleaned. Close only the scoped child after final native handoff; #115/#81, real rules/payments and production launch remain separate.
 
 **Status:** Approved technical sequence and assessment snapshot; GitHub issues are the live execution/status source
