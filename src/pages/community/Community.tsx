@@ -123,6 +123,8 @@ export default function Community() {
         <Link to="/events">Events</Link>
         {' · '}
         <Link to="/community/admin">Officer tools (staging)</Link>
+        {' · '}
+        <Link to="/community/races">Fictional races (staging)</Link>
       </p>
       <button type="button" disabled={busy} onClick={() => perform(undefined, true)}>Refresh status</button>
       {' '}

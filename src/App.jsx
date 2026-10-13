@@ -31,6 +31,7 @@ import Terms from './pages/legal/Terms';
 import Privacy from './pages/legal/Privacy';
 import Community from './pages/community/Community';
 import CommunityAdmin from './pages/community/CommunityAdmin';
+import FictionalRaces from './pages/community/FictionalRaces';
 import { COMMUNITY_ENABLED } from './services/community/communityService';
 
 // Admin pages are lazy-loaded so public visitors don't download the admin JS bundle.
@@ -90,6 +91,7 @@ function App() {
                 <Route path="account" element={<Account />} />
                 {COMMUNITY_ENABLED && <Route path="community" element={<Community />} />}
                 {COMMUNITY_ENABLED && <Route path="community/admin" element={<CommunityAdmin />} />}
+                {COMMUNITY_ENABLED && <Route path="community/races" element={<FictionalRaces />} />}
                 <Route path="account/strava/callback" element={<StravaCallback />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="suggestions" element={<Suggestions />} />

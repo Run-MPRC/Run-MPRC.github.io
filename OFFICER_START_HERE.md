@@ -1,5 +1,7 @@
 # MPRC Website: Officer Start Here
 
+**#731 fictional race screen — SOURCE PREPARED, NOT AVAILABLE YET:** the [planned review](./docs/officers/STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) covers signup, fictional credit return and private recipient-accepted bib transfer. Local screen tests are not hosted proof. Dave/platform specialist must verify staging release, security, real screens and cleanup first; production and real payments remain untouched.
+
 **Fictional race boundary — #732, SOURCE / DEMO ONLY:** safe backend routing and private test status are prepared, but there is no new deployed race screen yet. Use the [source review](./docs/officers/STAGING_COMMUNITY.md#fictional-race-boundary--732-source-only) to ask for proof. #731 still needs actual staging release, disposable screens and cleanup. Do not use legacy refund/substitute controls or real member/payment details.
 
 **Member status — #724, STAGING VERIFIED 2026-10-13:** the member page separates event availability from stored signup history and hides old status after a failed read. Actual screens, exact retry, natural test-term expiry and disposable cleanup passed. Use the [screen-only review](./docs/officers/STAGING_COMMUNITY.md#current-member-status--724-staging-verified) with fresh specialist-supplied fictional fixtures. Production and real payments remain unavailable.
