@@ -90,6 +90,8 @@ export default function FictionalRaces() {
         // The accepted offer is consumed. Reread own entry, never that old offer.
         if (command.action === 'race_accept') readFocus = null;
       }
+      // Preserve the caller's selected lookup even if this read fails.
+      focus.current = readFocus;
       const began = clock();
       const value = await readFictionalStatus(functions, auth, session.user.uid, readFocus);
       if (!stillCurrent()) return;

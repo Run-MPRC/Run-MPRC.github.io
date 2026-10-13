@@ -1,5 +1,7 @@
 # MPRC Website: Officer Start Here
 
+**#731 latest checkpoint — STAGING DEPLOYED 2026-10-13, TESTS STILL OPEN:** the [current handoff](./docs/officers/STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) separates verified deployment from unfinished signed-in race/cleanup tests. The planned officer flow is NOT AVAILABLE YET; ask Dave/platform specialist for the later acceptance receipt and fresh private fixtures. Older source-only/not-deployed notes below are historical. No real payments or production changes.
+
 **#731 fictional race screen — SOURCE PREPARED, NOT AVAILABLE YET:** the [planned review](./docs/officers/STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) covers signup, fictional credit return and private recipient-accepted bib transfer. Local screen tests are not hosted proof. Dave/platform specialist must verify staging release, security, real screens and cleanup first; production and real payments remain untouched.
 
 **Fictional race boundary — #732, SOURCE / DEMO ONLY:** safe backend routing and private test status are prepared, but there is no new deployed race screen yet. Use the [source review](./docs/officers/STAGING_COMMUNITY.md#fictional-race-boundary--732-source-only) to ask for proof. #731 still needs actual staging release, disposable screens and cleanup. Do not use legacy refund/substitute controls or real member/payment details.

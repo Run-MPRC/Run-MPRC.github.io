@@ -391,6 +391,37 @@ test('failed incoming lookup clears old controls, preserves typed focus and allo
   await screen.findByText(/Your enrollment: confirmed/);
   expect(screen.getByLabelText('Private incoming test entry ID')).toHaveValue('');
 });
+test('refresh after a failed new offer lookup keeps the selected ID, never the previous offer', async () => {
+  mockUser = { uid: recipient };
+  mockSession.uid = recipient;
+  await ready();
+  fireEvent.change(screen.getByLabelText('Private incoming test entry ID'), {
+    target: { value: entryId }
+  });
+  read.mockResolvedValue(state('incoming'));
+  fireEvent.click(screen.getByRole('button', { name: 'Check named offer' }));
+  await screen.findByRole('button', { name: 'Accept fictional bib transfer' });
+  const selected = 'stage_race_other_incoming';
+  fireEvent.change(screen.getByLabelText('Private incoming test entry ID'), {
+    target: { value: selected }
+  });
+  read.mockRejectedValueOnce(Error('synthetic new offer unavailable'));
+  fireEvent.click(screen.getByRole('button', { name: 'Check named offer' }));
+  await screen.findByText(/Fictional race status is unavailable/);
+  expect(screen.getByLabelText('Private incoming test entry ID')).toHaveValue(selected);
+  const fresh = state('incoming');
+  fresh.incoming!.entryId = selected;
+  read.mockResolvedValue(fresh);
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh test status' }));
+  await screen.findByRole('button', { name: 'Accept fictional bib transfer' });
+  expect(read).toHaveBeenLastCalledWith(
+    mockServices.firebaseResources.functions,
+    mockServices.firebaseResources.auth,
+    recipient,
+    selected
+  );
+  expect(send).not.toHaveBeenCalled();
+});
 test('native same-UID token/session renewal fences late action and never schedules an old-context reread', async () => {
   await ready('confirmed');
   let resolve!: (value: unknown) => void;
