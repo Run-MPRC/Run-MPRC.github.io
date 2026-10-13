@@ -4,6 +4,8 @@
 
 **Current status:** live commerce is **NOT AVAILABLE YET**.
 
+**#729 fictional transactions — SOURCE / DEMO ONLY:** server-controlled fake signup, credit return and recipient-accepted bib transfer have local transaction/retry/race proof. There is still no usable staging screen or deployed callable from this child. Ask Dave/platform specialist for the next dated native release/UI proof before trying it; do not use legacy controls, enter real details or edit a record. Real refunds still need finance permission/MFA, verified provider state and approved policy. See [the unavailable staging handoff](./STAGING_COMMUNITY.md#fictional-race-refunds-and-bib-transfers--727-source-foundation-not-available-yet).
+
 **Fictional race follow-on, #727:** Dave approved fictional refund and bib-transfer rules for staging tests, not real club policy. The [source-only handoff](./STAGING_COMMUNITY.md#fictional-race-refunds-and-bib-transfers--727-source-foundation-not-available-yet) models credit return and recipient-accepted transfer with made-up records. No usable screen, native authorization, transaction/retry proof, provider refund or deployment is supplied by that foundation. Do not use legacy refund/substitute controls or edit a real entry as a workaround.
 **Use this guide when:** a request touches registrations, members-only access, products, payments, refunds, waivers, or private data.
 

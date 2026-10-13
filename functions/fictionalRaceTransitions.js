@@ -5,6 +5,7 @@
 // A future trusted boundary must supply native identity/time, disposable markers,
 // capabilities and atomic record + immutable command-receipt persistence.
 const { parseStrictObject } = require('./requestValidation');
+const { createHash } = require('node:crypto');
 const POLICY = 'fictional-race-v1-not-money';
 const WAIVER = 'fictional-race-waiver-v1';
 const ID = /^stage_race_[A-Za-z0-9_-]{1,64}$/;
@@ -112,4 +113,37 @@ function reduceFictionalRace(eventInput, entryInput, commandInput, callerUid, no
   } catch { throw new Error(MESSAGE); }
 }
 
-module.exports = { POLICY, WAIVER, reduceFictionalRace };
+function readFictionalRaceRecords(event, entry, now) {
+  try { return records(event, entry, now); } catch { throw new Error(MESSAGE); }
+}
+
+function raceEnrollmentId(eventId, uid) {
+  check(id(eventId) && id(uid));
+  return `stage_race_${createHash('sha256').update(JSON.stringify([eventId, uid])).digest('hex')}`;
+}
+
+function createFictionalEntry(eventInput, policyInput, uid, waiverVersion, now) {
+  try {
+    const policy = strict(policyInput, ['schemaVersion', 'simulationOnly', 'policyVersion', 'eventId',
+      'revision', 'fictionalAmountCents', 'currency', 'waiverVersion', 'opensAtMs', 'closesAtMs']);
+    check(policy.schemaVersion === 1 && policy.simulationOnly === true && policy.policyVersion === POLICY
+      && id(policy.eventId) && id(uid) && integer(policy.revision, 999999) && policy.revision > 0
+      && integer(policy.fictionalAmountCents, 10000) && policy.fictionalAmountCents > 0
+      && policy.currency === 'USD' && policy.waiverVersion === WAIVER && waiverVersion === WAIVER
+      && time(now) && time(policy.opensAtMs) && time(policy.closesAtMs)
+      && policy.opensAtMs < policy.closesAtMs && policy.closesAtMs - policy.opensAtMs <= 86400000
+      && policy.opensAtMs <= now && now < policy.closesAtMs);
+    const entryId = raceEnrollmentId(policy.eventId, uid);
+    const entry = { schemaVersion: 1, simulationOnly: true, policyVersion: POLICY, eventId: policy.eventId,
+      entryId, revision: 1, bibId: `stage_race_${createHash('sha256').update(`bib:${entryId}`).digest('hex')}`,
+      runnerUid: uid, creditOwnerUid: uid, fictionalAmountCents: policy.fictionalAmountCents,
+      fictionalReturnedCents: 0, currency: policy.currency, status: 'confirmed', transferCount: 0,
+      originalWaiver: { uid, version: WAIVER, acceptedAtMs: now }, recipientWaiver: null, offer: null };
+    const { event } = records(eventInput, entry, now);
+    check(event.status === 'open' && event.confirmedCount < event.capacity && policy.closesAtMs <= event.startAtMs);
+    const nextEvent = { ...event, revision: event.revision + 1, confirmedCount: event.confirmedCount + 1 };
+    return Object.freeze({ simulationOnly: true, ...readFictionalRaceRecords(nextEvent, entry, now) });
+  } catch { throw new Error(MESSAGE); }
+}
+
+module.exports = { POLICY, WAIVER, reduceFictionalRace, readFictionalRaceRecords, raceEnrollmentId, createFictionalEntry };
