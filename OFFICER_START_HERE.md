@@ -1,5 +1,7 @@
 # MPRC Website: Officer Start Here
 
+**Member status — #724, STAGING VERIFIED 2026-10-13:** the member page separates event availability from stored signup history and hides old status after a failed read. Actual screens, exact retry, natural test-term expiry and disposable cleanup passed. Use the [screen-only review](./docs/officers/STAGING_COMMUNITY.md#current-member-status--724-staging-verified) with fresh specialist-supplied fictional fixtures. Production and real payments remain unavailable.
+
 **Fictional account linking — #719, STAGING VERIFIED 2026-10-12:** a separate staging permission links one fictional receipt to a specialist-marked disposable pending account. Test access ends at the original receipt term, including after cancellation; no Auth role or money changes. Use the [screen-only guide](./docs/officers/STAGING_COMMUNITY.md#link-a-fictional-receipt--719) only with fresh specialist-supplied private fixtures. Native Function/Hosting, actual screens/offline/retry/race/cancel/expiry/revocation and exact cleanup passed. Old accounts/records are removed; production and real club rules remain unavailable.
 
 **Use this page if Dave or the usual code owner is unavailable.** You do not need to know how to code.
