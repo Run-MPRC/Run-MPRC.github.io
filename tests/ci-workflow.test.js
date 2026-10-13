@@ -43,7 +43,7 @@ const CLEAN_COMMANDS = Object.freeze([
   'test -z "$frontend_git_status"',
 ]);
 const LINT_SCRIPT = 'node .github/scripts/check-frontend-lint.cjs';
-const EXPECTED_LINT_FILES = 126;
+const EXPECTED_LINT_FILES = 131;
 const EXPECTED_LINT_ERRORS = 113;
 const EXPECTED_LINT_WARNINGS = 6;
 const YAML_TO_JSON = [
@@ -576,6 +576,20 @@ test('frontend lint covers every source extension without mutating or swallowing
   assert.equal(verified.scannedFileCount, EXPECTED_LINT_FILES);
   assert.equal(verified.errorCount, EXPECTED_LINT_ERRORS);
   assert.equal(verified.warningCount, EXPECTED_LINT_WARNINGS);
+});
+
+test('fictional race client and test additions have no baseline lint debt', () => {
+  const added = [
+    'src/pages/community/FictionalRaces.test.tsx',
+    'src/pages/community/FictionalRaces.tsx',
+    'src/services/community/fictionalRaceService.test.ts',
+    'src/services/community/fictionalRaceService.ts',
+    'src/services/community/testSupport/fictionalRaceFixtures.ts',
+  ];
+  for (const file of added) {
+    assert.ok(lintBaseline.scannedFiles.includes(file));
+    assert.equal(lintBaseline.findings.filter(finding => finding.file === file).length, 0);
+  }
 });
 
 test('frontend lint workflow guard rejects unsafe wiring mutations', () => {
