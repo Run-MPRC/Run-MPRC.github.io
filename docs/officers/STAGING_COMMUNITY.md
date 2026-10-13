@@ -27,6 +27,19 @@
 
 ## What the actions mean
 
+## Fictional race refunds and bib transfers — #727 source foundation, NOT AVAILABLE YET
+
+**Purpose:** prepare a safe demonstration without moving money. **Approver/escalation:** Dave, sole staging owner; no backup is appointed. **Prerequisites:** the later reviewed server transaction, verified disposable accounts/markers, narrow permissions, genuine Auth/App Check and actual staging screen/deployment/cleanup proof. None is supplied by this source foundation. There is no usable race refund or transfer button from #727.
+
+Dave approved fictional test rules, not real club rules. The source models a full return of fictional credit before race start, releasing a seat once. A transfer keeps the same bib and booked count, requires the named recipient's fictional-waiver acceptance before a short deadline, and preserves the original fictional credit owner and waiver. An outstanding offer must be revoked before cancellation. Only one transfer is permitted in this test model. After transfer, only the current runner may cancel; simulated credit returns to its original owner. No card, bank, Stripe object, real refund or paid membership is involved.
+
+1. Ask Dave for the next issue's dated staging demonstration evidence.
+2. Until the server and screen are verified, treat these actions as **NOT AVAILABLE YET**.
+3. Do not use an existing legacy refund or substitute screen as a shortcut.
+4. Stop on a real account, payment detail, production URL or request to edit a record.
+
+**Expected result/proof:** #727 supplies pure synthetic transition tests only. Fake identifiers do not prove native identity, permission, disposable ownership, atomic capacity or retry safety. Those must be independently checked in the follow-on server/UI work; a simulated credit is not provider-confirmed money. **Undo:** no provider or account state changes in this foundation; stop the review and request a small reviewed source revert if needed. **Specialist-only work:** integration, fixtures, provider readback, exact owned cleanup and rollback. Officers need no terminal, secret, payment detail or record edit.
+
 ## Link a fictional receipt — #719
 
 **Status:** STAGING VERIFIED on 2026-10-12 under #719. This supplements #716 recording without changing its immutable receipt or approving real club policy. All old disposable fixtures are removed; fresh specialist-supplied private setup is required. Production, ordinary officer access and real dues remain **NOT AVAILABLE YET**.

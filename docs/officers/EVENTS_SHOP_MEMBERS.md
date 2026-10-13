@@ -3,6 +3,8 @@
 **#719 fictional linking — STAGING VERIFIED 2026-10-12:** the [supervised screen procedure](./STAGING_COMMUNITY.md#link-a-fictional-receipt--719) deliberately connects an immutable fictional receipt to one specialist-marked disposable pending account. Real screens verified activation, cancellation through the unchanged original term and inactive status after natural expiry. Old test fixtures are removed; ask the specialist for fresh private setup. No real policy/payment/claim/renewal/refund/production launch is supplied. Stop on an uncertain ID/revision or changed term and contact Dave privately.
 
 **Current status:** live commerce is **NOT AVAILABLE YET**.
+
+**Fictional race follow-on, #727:** Dave approved fictional refund and bib-transfer rules for staging tests, not real club policy. The [source-only handoff](./STAGING_COMMUNITY.md#fictional-race-refunds-and-bib-transfers--727-source-foundation-not-available-yet) models credit return and recipient-accepted transfer with made-up records. No usable screen, native authorization, transaction/retry proof, provider refund or deployment is supplied by that foundation. Do not use legacy refund/substitute controls or edit a real entry as a workaround.
 **Use this guide when:** a request touches registrations, members-only access, products, payments, refunds, waivers, or private data.
 
 **Prerequisites:** a claimed issue, named business owner and backup, approved policy/value, isolated test data, and a platform specialist.

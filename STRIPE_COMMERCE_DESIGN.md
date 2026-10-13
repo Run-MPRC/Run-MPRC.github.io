@@ -1,5 +1,7 @@
 # Stripe, Race Registration, and Merchandise Design
 
+**#727 fictional race foundation — SOURCE ONLY:** a separate unconnected pure model uses explicit fictional cents/returned-credit fields and closed simulation markers. It neither reads nor creates a Checkout, PaymentIntent, Refund, provider object, webhook or real payment status. Test-only full credit return/recipient-accepted bib transfer rules do not approve actual club policy or close PAY-004/PAY-005/RACE-001. Real refunds still require verified provider state, finance permission/recent MFA, durable idempotent operations and reconciliation below. No runtime/client/release-bundle import or deployment.
+
 **#719 fictional activation — STAGING VERIFIED 2026-10-12:** separately authorized disposable accounts may receive only an unchanged fictional receipt term. This is not payment verification, Stripe reconciliation, a real dues decision, renewal, refund or Auth-role grant. Receipt evidence stays immutable; association is separate and server-only. Native Function v4/Hosting b6a8fd5 and actual cancellation/expiry tests passed; six users/47 documents were cleaned. Production and real payments remain untouched and unavailable.
 
 **Status:** Required production design; current code is a test-mode prototype
