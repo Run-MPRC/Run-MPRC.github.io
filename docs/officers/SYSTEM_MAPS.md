@@ -2,6 +2,20 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
+## Member status freshness — #724 source only
+
+```mermaid
+flowchart LR
+    Member["Disposable staging member"] --> Read["Current status read; no polling"]
+    Read --> Server["Validated event/capacity; clock sampled after reads"]
+    Server --> Display["Signup availability and separate stored signup"]
+    Read -- "Failure or uncertain action" --> Hide["Hide old status/new actions; keep exact saved retry"]
+    Hide --> Read
+    Display --> Mutation["Existing transactional join/cancel checks decide again"]
+```
+
+Text alternative: the staging member page displays server-derived availability separately from stored signup history, hides old status on uncertainty and restores it only after a fresh read, while existing transactions—not the display—continue deciding joins and cancellations; hosted proof remains pending #724.
+
 ## Uncertain staging release review — #722
 
 ```mermaid

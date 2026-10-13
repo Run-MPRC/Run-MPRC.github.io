@@ -17,6 +17,7 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     now = Date.now(); service = createCommunityService(db, () => now);
   });
   beforeEach(async () => {
+    now = Date.now();
     for (const root of roots) await db.recursiveDelete(db.collection(root));
     await db.doc('communityConfig/events').create({ schemaVersion: 1, eventIds: ['fixture-event'] });
     await db.doc('communityEvents/fixture-event').create(freeEvent(now));
@@ -51,6 +52,20 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     expect((await service.status(uid)).membership.entitlement).toBe('current_member');
     now = paid.authority.term.endsAtMs;
     expect((await service.status(uid)).membership.entitlement).toBe('not_entitled');
+  }, 45000); // Concurrent native transactions may outlast Jest's five-second unit default.
+  test('cancelled-event availability is a read-only projection and preserves own confirmed signup evidence', async () => {
+    const uid = 'fixture-status-member';
+    await service.mutate(uid, join());
+    const event = db.doc('communityEvents/fixture-event');
+    const registration = event.collection('registrations').doc(uid);
+    await event.update({ status: 'cancelled' });
+    const before = await db.getAll(event, registration);
+    const view = await service.status(uid);
+    expect(view.events[0]).toMatchObject({ status: 'cancelled', signupStatus: 'cancelled', confirmedCount: 1, registration: { status: 'confirmed', revision: 1 } });
+    expect((await service.status('fixture-other')).events[0].registration.status).toBe('none');
+    const after = await db.getAll(event, registration);
+    expect(after.map(doc => doc.data())).toEqual(before.map(doc => doc.data()));
+    expect(after.map(doc => doc.updateTime.toMillis())).toEqual(before.map(doc => doc.updateTime.toMillis()));
   });
   test('officer approval/withdrawal, capacity/closure concurrency and live revocation use real transactions', async () => {
     const uid = 'fixture-officer'; const runner = 'fixture-member';

@@ -1,5 +1,7 @@
 # MPRC Platform Operations Runbook
 
+**#724 current-status correction — SOURCE ONLY:** same scoped staging service/runtime, response-only availability and no migration. Deploy only exact reviewed communityActions after green main, verify its native archive/settings/IAM and unchanged profiles, then publish exact staging Hosting. Supply only owned disposable member/event fixtures. Check all six availability states, stored confirmed history after event cancellation, own cancellation/count preservation, failed refresh clearing and exact saved retry; sample term/window boundaries after reads. Follow the [no-terminal review](./docs/officers/STAGING_COMMUNITY.md#current-member-status--724-source-prepared-not-available-yet). Remove only owned fixtures with identity/update-time fences and sign out; no extra service/polling, new permissions, real policy/payment or production action. Fresh native acceptance is pending #724.
+
 ## Read-only community release verification — #722
 
 The former success output used an undefined `digest` identifier; a provider-free regression reproduces `ReferenceError` and verifies serialization of `bundle.digest`. Historical generic failures remain their original reported status; this does not prove which exception every old run caught. New failures expose only a closed phase enum, never exception text, provider responses, tokens or signed URLs.

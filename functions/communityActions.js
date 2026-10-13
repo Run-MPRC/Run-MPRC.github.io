@@ -99,13 +99,23 @@ function createCommunityService(db, clock = Date.now) {
   const memberRef = (uid) => db.doc(`communityMemberships/${uid}`);
   const emptyMember = { schemaVersion: 1, revision: 0, applicationStatus: 'none', authority: null };
   async function status(uid) {
-    const now = clock();
     const [member, manifest] = await db.getAll(memberRef(uid), db.doc('communityConfig/events'));
     const ids = manifest.exists ? manifest.data().eventIds : [];
     check(Array.isArray(ids) && ids.length <= 20 && new Set(ids).size === ids.length && ids.every((id) => typeof id === 'string' && ID.test(id)));
     const refs = ids.flatMap((id) => [db.doc(`communityEvents/${id}`), db.doc(`communityEvents/${id}/registrations/${uid}`)]);
     const docs = refs.length ? await db.getAll(...refs) : [];
-    const events = ids.map((id, index) => ({ ...eventView(docs[index * 2].data(), id), registration: registrationView(docs[index * 2 + 1].data()) }));
+    // Read completion, not request start, determines time-based presentation.
+    // Mutations still independently enforce their transactional constraints.
+    const now = clock(); check(integer(now, 8_640_000_000_000_000));
+    const events = ids.map((id, index) => {
+      const event = eventView(docs[index * 2].data(), id);
+      const signupStatus = event.status === 'cancelled' ? 'cancelled'
+        : event.status === 'closed' ? 'closed'
+          : now < event.opensAtMs ? 'not_open_yet'
+            : now >= event.closesAtMs ? 'ended'
+              : event.confirmedCount >= event.capacity ? 'full' : 'open';
+      return { ...event, signupStatus, registration: registrationView(docs[index * 2 + 1].data()) };
+    });
     return { membership: memberView(member.exists ? member.data() : emptyMember, uid, now), events };
   }
 

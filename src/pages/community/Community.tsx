@@ -8,6 +8,20 @@ import {
 import SEO from '../../components/SEO';
 import './Community.css';
 
+function signupMessage(event: CommunityStatus['events'][number]) {
+  if (event.status === 'cancelled') return 'Event cancelled.';
+  if (event.status === 'closed') return 'Signup is closed.';
+  switch (event.signupStatus) {
+    case 'open': return 'Signup is open. Availability is checked again when you submit.';
+    case 'not_open_yet': return 'Signup has not opened yet.';
+    case 'closed': return 'Signup is closed.';
+    case 'ended': return 'The signup window has ended.';
+    case 'full': return 'No places are available for new signups.';
+    case 'cancelled': return 'Event cancelled.';
+    default: return 'Signup availability could not be confirmed. Refresh status.';
+  }
+}
+
 export default function Community() {
   const { services } = useServiceLocator();
   const { user, isLoading } = useAuth();
@@ -50,6 +64,8 @@ export default function Community() {
     generation.current += 1;
     const {current} = generation;
     inFlight.current = true; setBusy(true); setMessage('');
+    // Hide old status and new actions while current state is uncertain.
+    setSnapshot(null); setWaivers({});
     let command = statusOnly ? null : pending.current;
     if (!statusOnly && request) {
       command = { ...request, accountUid: uid, requestId: crypto.randomUUID() };
@@ -66,7 +82,7 @@ export default function Community() {
         setMessage(command ? 'Request confirmed. Your status is shown below.' : 'Status refreshed.');
       }
     } catch {
-      if (generation.current === current) { setMessage(command
+      if (generation.current === current) { setSnapshot(null); setWaivers({}); setMessage(command
         ? 'We could not confirm this request. Use Retry request; it will not create a second signup.'
         : 'Status could not be loaded. Try Refresh status.'); }
     } finally {
@@ -159,6 +175,7 @@ export default function Community() {
                 {' '}
                 {event.location}
               </p>
+              <p>{signupMessage(event)}</p>
               <p>
                 {event.confirmedCount}
                 {' '}
@@ -175,14 +192,14 @@ export default function Community() {
               <>
                 <p>{event.waiverText}</p>
                 <label htmlFor={`waiver-${event.id}`}>
-                  <input id={`waiver-${event.id}`} type="checkbox" checked={waivers[event.id] || false} disabled={blocked} onChange={(e) => setWaivers({ ...waivers, [event.id]: e.target.checked })} />
+                  <input id={`waiver-${event.id}`} type="checkbox" checked={waivers[event.id] || false} disabled={blocked || event.status !== 'open' || event.signupStatus !== 'open'} onChange={(e) => setWaivers({ ...waivers, [event.id]: e.target.checked })} />
                   {' '}
                   I accept the displayed test waiver.
                 </label>
                 <br />
                 <button
                   type="button"
-                  disabled={blocked || !waivers[event.id] || event.status !== 'open'}
+                  disabled={blocked || !waivers[event.id] || event.status !== 'open' || event.signupStatus !== 'open'}
                   onClick={() => perform({
  action: 'event_join', eventId: event.id, expectedRevision: event.registration.revision, waiverVersion: event.waiverVersion, waiverAccepted: true
 })}
