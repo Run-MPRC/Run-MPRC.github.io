@@ -2,9 +2,9 @@
 
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
-## Fictional race member screen — #731 staging deployed, acceptance pending
+## Fictional race member screen — #731 native staging tests verified
 
-**2026-10-13 checkpoint:** native v6/archive/resources/unchanged profiles and dependent Hosting/public assets `669e2fb` are verified. Anonymous screen/phone-width proof only; signed-in security/lifecycle and cleanup remain open. Older source-only/not-deployed maps below are historical milestones.
+**2026-10-14 checkpoint:** native v6/archive/resources/unchanged profiles and Hosting `e21be35` are verified separately. Actual lifecycle/privacy/expiry/mobile and genuine token-boundary/committed lost-response retry/recipient-loss checks passed. Use requires a complete dated acceptance/cleanup receipt and fresh fake fixtures; #731 stays open until final handoff gates are recorded. Production and real payments remain unavailable. Older #731/#732 source/anonymous-only maps below are historical milestones.
 
 ```mermaid
 flowchart LR
@@ -15,10 +15,10 @@ flowchart LR
     Fresh --> Screen
     Change["Account/session change, failed read or known deadline"] --> Hide["Clear old controls; never reuse another context's action"]
     Hide --> Screen
-    Gate["Signed-in hosted UI/security and cleanup still required"] -.-> Screen
+    Gate["Specialist supplies final acceptance/cleanup receipt and fresh fake fixtures"] -.-> Screen
 ```
 
-Text alternative: deployed staging source submits bounded private reads and exact saved commands through the existing server boundary, rereads own status after acceptance, and clears old controls on uncertainty or context changes; deployment is verified, while signed-in hosted behavior and cleanup remain unqualified.
+Text alternative: verified staging screens submit bounded private reads and exact saved commands through native server authority and clear stale controls, while supervised use remains gated on the specialist's complete acceptance/cleanup receipt and fresh fake fixtures; production and real payments remain excluded.
 
 ## Fictional race boundary — #732 source and demo only
 
