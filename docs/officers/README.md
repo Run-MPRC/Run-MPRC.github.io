@@ -1,6 +1,6 @@
 # Officer Website Handbook
 
-**#731 latest checkpoint — 2026-10-13:** deployment/archive/public assets are verified in staging, but signed-in race security/screens and disposable cleanup remain open. Use the [current handoff](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared); its planned procedure is NOT AVAILABLE YET. Older source-only/not-deployed notes are historical. Production and real payments stay untouched.
+**#731 latest checkpoint — NATIVE STAGING TESTS VERIFIED 2026-10-14:** [supervised fictional race review](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) has actual lifecycle/privacy/expiry/mobile and genuine security/committed-retry proof. A complete dated acceptance/cleanup receipt and fresh specialist-supplied fake fixtures are required before use. #731 stays open until the final handoff gates are recorded; production and real payments remain **NOT AVAILABLE YET**. Older #731/#732 source/anonymous-only notes below are historical.
 
 [#731's fictional race screen](./STAGING_COMMUNITY.md#fictional-race-member-screen--731-source-prepared) is source prepared, **NOT AVAILABLE YET**. A separate dated native release/security/screen/cleanup receipt is required before the planned review. No real payment, policy or production change is supplied.
 
