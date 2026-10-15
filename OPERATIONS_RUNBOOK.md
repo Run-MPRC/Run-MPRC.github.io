@@ -745,6 +745,8 @@ CI/staging must eventually include:
 
 ## 7. Change and release process
 
+**#737 source-only member admission change:** new free-event entries read membership with event/registration in one transaction and evaluate current entitlement after reads. Keep cancellation available after expiry/suspension and preserve exact command replay. No schema migration, new dependency/service/IAM/cost setting or production guard change. Run the new unit/UI and existing demo emulator transaction suite before a later exact-source release; record Function archive and Hosting publication separately. The requested [privacy/waiver drafts](./docs/legal/MEMBER_LAUNCH_DRAFTS.md) must not become an accepted document until approved. #731 acceptance/cleanup remains closed and its deleted fixtures must not be reused.
+
 ### Before merge
 
 1. Link one issue from [GITHUB_ISSUES.md](./GITHUB_ISSUES.md) or the corresponding GitHub issue.

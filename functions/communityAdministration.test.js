@@ -110,14 +110,17 @@ test('changing same UUID nested event payload is a conflict', async () => {
   await expect(execute({ ...command, event: { ...draft, capacity: 2 } })).rejects.toHaveProperty('code', 'already-exists');
 });
 test('capacity changes preserve participant updates and cannot undercut bookings', async () => {
+  docs.set('communityMemberships/runner', approvedMember('runner', now));
   await members.mutate('runner', join());
   await expect(execute(request('admin_event_edit', { eventId: 'event', event: draft }))).rejects.toBeDefined();
   await execute(request('admin_event_capacity', { eventId: 'event', capacity: 2 }));
+  docs.set('communityMemberships/second', approvedMember('second', now));
   await members.mutate('second', join());
   await expect(execute(request('admin_event_capacity', { eventId: 'event', expectedRevision: 1, capacity: 1 }))).rejects.toBeDefined();
   expect(docs.get('communityEvents/event').confirmedCount).toBe(2);
 });
 test('close prevents entry but member cancellation remains possible after final event cancellation', async () => {
+  docs.set('communityMemberships/runner', approvedMember('runner', now));
   await members.mutate('runner', join());
   await execute(request('admin_event_cancel', { eventId: 'event' }));
   expect(docs.get('communityEvents/event').confirmedCount).toBe(1);

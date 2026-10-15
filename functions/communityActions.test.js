@@ -94,11 +94,13 @@ describe('transactional membership and free-event lifecycle', () => {
     await expect(service.mutate('runner-a', { ...command, action: 'membership_cancel' })).rejects.toHaveProperty('code', 'already-exists');
   });
   test('20 concurrent final-seat attempts confirm exactly one', async () => {
+    for (let n = 0; n < 20; n++) docs.set(`communityMemberships/runner-${n}`, approvedMember(`runner-${n}`, now));
     const results = await Promise.allSettled(Array.from({ length: 20 }, (_, n) => service.mutate(`runner-${n}`, joining())));
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(docs.get('communityEvents/one-seat').confirmedCount).toBe(1);
   });
   test('cancel releases once, even when closed, and cannot undo a later rejoin', async () => {
+    docs.set('communityMemberships/runner-a', approvedMember('runner-a', now));
     await service.mutate('runner-a', joining());
     const cancel = request('event_cancel', 1, { eventId: 'one-seat' });
     docs.get('communityEvents/one-seat').status = 'closed';
@@ -113,17 +115,20 @@ describe('transactional membership and free-event lifecycle', () => {
     await expect(service.mutate('runner-a', request('event_cancel', 1, { eventId: 'one-seat' }))).rejects.toHaveProperty('code', 'failed-precondition');
   });
   test.each([{ amountCents: 1 }, { status: 'closed' }, { closesAtMs: 1_800_000_000_000 }, { waiverHash: 'forged' }, { confirmedCount: -1 }])('denies paid/closed/expired/corrupt events without writes %#', async (extra) => {
+    docs.set('communityMemberships/runner-a', approvedMember('runner-a', now));
     docs.set('communityEvents/one-seat', freeEvent(now, extra));
     await expect(service.mutate('runner-a', joining())).rejects.toBeDefined();
     expect(docs.has('communityEvents/one-seat/registrations/runner-a')).toBe(false);
     expect(docs.has('communityLimits/runner-a')).toBe(false);
   });
   test('requires exact server waiver version and never creates paid state', async () => {
+    docs.set('communityMemberships/runner-a', approvedMember('runner-a', now));
     await expect(service.mutate('runner-a', { ...joining(), waiverVersion: 'old-version' })).rejects.toHaveProperty('code', 'failed-precondition');
     await service.mutate('runner-a', joining());
     expect(docs.get('communityEvents/one-seat/registrations/runner-a')).toMatchObject({ paymentStatus: 'not_required', waiverVersion: 'synthetic-only-v1' });
   });
   test('status includes only the caller registration, not another runner', async () => {
+    docs.set('communityMemberships/runner-a', approvedMember('runner-a', now));
     await service.mutate('runner-a', joining());
     expect((await service.status('runner-b')).events[0].registration.status).toBe('none');
   });
@@ -142,6 +147,7 @@ describe('transactional membership and free-event lifecycle', () => {
     expect(JSON.stringify([...docs])).toBe(before);
   });
   test('cancelled event status retains confirmed signup history and another UID sees none', async () => {
+    docs.set('communityMemberships/runner-a', approvedMember('runner-a', now));
     await service.mutate('runner-a', joining());
     docs.get('communityEvents/one-seat').status = 'cancelled';
     const before = JSON.stringify([...docs]);

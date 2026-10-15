@@ -168,13 +168,14 @@ confirmedCount: 0,
 waiverVersion: 'synthetic-v1',
     registration: { revision: 0, status: 'none' },
   };
-  call.mockResolvedValueOnce({ ...state(), events: [event] });
+  const active = { ...state('approved', 2), membership: { ...state('approved', 2).membership, entitlement: 'current_member', accessThroughMs: 1800000060000 } };
+  call.mockResolvedValueOnce({ ...active, events: [event] });
   render(show());
   await screen.findByRole('button', { name: 'Sign up for Synthetic event' });
   expect(screen.getByRole('button', { name: 'Sign up for Synthetic event' })).toBeDisabled();
   fireEvent.click(screen.getByRole('checkbox'));
   call.mockResolvedValueOnce({ registration: { status: 'confirmed', revision: 1 } });
-  call.mockResolvedValueOnce({ ...state(), events: [{ ...event, confirmedCount: 1, registration: { status: 'confirmed', revision: 1 } }] });
+  call.mockResolvedValueOnce({ ...active, events: [{ ...event, confirmedCount: 1, registration: { status: 'confirmed', revision: 1 } }] });
   fireEvent.click(screen.getByRole('button', { name: 'Sign up for Synthetic event' }));
   await screen.findByRole('button', { name: 'Cancel signup for Synthetic event' });
   expect(call.mock.calls[1][1]).toMatchObject({
@@ -182,7 +183,7 @@ waiverVersion: 'synthetic-v1',
 });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel signup for Synthetic event' })).toBeEnabled());
   call.mockResolvedValueOnce({ registration: { status: 'cancelled', revision: 2 } });
-  call.mockResolvedValueOnce({ ...state(), events: [{ ...event, registration: { status: 'cancelled', revision: 2 } }] });
+  call.mockResolvedValueOnce({ ...active, events: [{ ...event, registration: { status: 'cancelled', revision: 2 } }] });
   fireEvent.click(screen.getByRole('button', { name: 'Cancel signup for Synthetic event' }));
   await screen.findByText(/Your signup: cancelled/);
   expect(call.mock.calls[3][1]).toMatchObject({ action: 'event_cancel', expectedRevision: 1 });
@@ -253,4 +254,15 @@ test('successful action followed by failed status read hides stale state but ret
   fireEvent.click(screen.getByRole('button', { name: 'Retry request' }));
   await screen.findByText('Request status: pending.');
   expect(call.mock.calls[3][1]).toEqual(command);
+});
+test.each(['not_entitled', 'decision_pending', 'forged'])('noncurrent membership %s cannot prepare signup even for an open event', async (entitlement) => {
+  call.mockResolvedValue({
+    ...state(), membership: { ...state().membership, entitlement }, events: [testEvent()]
+  });
+  render(show());
+  await screen.findByText('Current membership is required for a new free-event signup. You can still cancel an existing signup.');
+  expect(screen.getByRole('checkbox')).toBeDisabled();
+  const signup = screen.getByRole('button', { name: 'Sign up for Synthetic event' });
+  expect(signup).toBeDisabled(); fireEvent.click(signup);
+  expect(call).toHaveBeenCalledTimes(1);
 });

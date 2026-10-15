@@ -27,6 +27,7 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     if (app) await app.delete();
   });
   test('twenty concurrent final-seat requests confirm one; parallel cancellation releases once', async () => {
+    await Promise.all(Array.from({ length: 20 }, (_, n) => db.doc(`communityMemberships/fixture-${n}`).create(approvedMember(`fixture-${n}`, now))));
     const result = await Promise.allSettled(Array.from({ length: 20 }, (_, n) => service.mutate(`fixture-${n}`, join())));
     const winners = result.flatMap((entry, index) => entry.status === 'fulfilled' ? [index] : []);
     expect(winners).toHaveLength(1);
@@ -55,6 +56,7 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
   }, 45000); // Concurrent native transactions may outlast Jest's five-second unit default.
   test('cancelled-event availability is a read-only projection and preserves own confirmed signup evidence', async () => {
     const uid = 'fixture-status-member';
+    await db.doc(`communityMemberships/${uid}`).create(approvedMember(uid, now));
     await service.mutate(uid, join());
     const event = db.doc('communityEvents/fixture-event');
     const registration = event.collection('registrations').doc(uid);
@@ -67,6 +69,41 @@ describeLocal('community lifecycle real Firestore transactions (emulator only)',
     expect(after.map(doc => doc.data())).toEqual(before.map(doc => doc.data()));
     expect(after.map(doc => doc.updateTime.toMillis())).toEqual(before.map(doc => doc.updateTime.toMillis()));
   });
+  test('current membership gates admission; expiry preserves retry and cancellation without new writes', async () => {
+    const uid = 'fixture-membership-required';
+    const event = db.doc('communityEvents/fixture-event');
+    const membership = db.doc(`communityMemberships/${uid}`);
+    await expect(service.mutate(uid, join())).rejects.toBeDefined();
+    expect((await event.collection('registrations').get()).empty).toBe(true);
+    expect((await db.doc(`communityLimits/${uid}`).get()).exists).toBe(false);
+    await membership.create(approvedMember(uid, now));
+    const saved = join(); const success = await service.mutate(uid, saved);
+    now += 60000;
+    const before = await db.getAll(event, event.collection('registrations').doc(uid));
+    await expect(service.mutate(uid, saved)).resolves.toEqual(success);
+    await expect(service.mutate(uid, join(1))).rejects.toBeDefined();
+    const after = await db.getAll(event, event.collection('registrations').doc(uid));
+    expect(after.map(doc => doc.updateTime.toMillis())).toEqual(before.map(doc => doc.updateTime.toMillis()));
+    await service.mutate(uid, command('event_cancel', 1, { eventId: 'fixture-event' }));
+    expect((await event.get()).data().confirmedCount).toBe(0);
+  }, 45000);
+  test('concurrent suspension and signup serialize; no new signup survives a committed suspension', async () => {
+    const uid = 'fixture-suspension-race';
+    const membership = db.doc(`communityMemberships/${uid}`);
+    const record = approvedMember(uid, now);
+    await membership.create(record);
+    const outcomes = await Promise.allSettled([
+      service.mutate(uid, join()),
+      membership.update({ 'authority.term.state': 'suspended' }),
+    ]);
+    expect(outcomes[1].status).toBe('fulfilled');
+    const registered = outcomes[0].status === 'fulfilled';
+    const event = db.doc('communityEvents/fixture-event');
+    expect((await event.get()).data().confirmedCount).toBe(registered ? 1 : 0);
+    await expect(service.mutate(uid, join(registered ? 1 : 0))).rejects.toBeDefined();
+    if (registered) await service.mutate(uid, command('event_cancel', 1, { eventId: 'fixture-event' }));
+    expect((await event.get()).data().confirmedCount).toBe(0);
+  }, 45000);
   test('officer approval/withdrawal, capacity/closure concurrency and live revocation use real transactions', async () => {
     const uid = 'fixture-officer'; const runner = 'fixture-member';
     const caps = { schemaVersion: 1, enabled: true, revision: 1, expiresAtMs: now + 3600000, membershipApproval: true, freeEventManagement: true };
