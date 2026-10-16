@@ -27,6 +27,28 @@
 
 ## What the actions mean
 
+## Current membership for free events — #737 source only
+
+**Status:** source changed; **NOT AVAILABLE YET** on the deployed staging website or in production. Earlier #707/#711/#724/#731 receipts describe their dated releases, not this change. #731's final native acceptance and cleanup are [complete](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/731#issuecomment-6186640177); do not reopen that test or reuse its deleted fixtures.
+
+**Purpose:** require current membership for a new free-event signup while allowing cancellation after membership ends. **Approver and escalation:** Dave, sole release/recovery owner. **Prerequisites:** a later exact reviewed release and fresh specialist-supplied fictional accounts, current/expired terms and a synthetic waiver/event. No real data or payment is used.
+
+1. Ask the specialist for the exact source, test, Function and website proof.
+2. Open the supplied staging link and confirm the test-only notice.
+3. Sign in with the supplied verified nonmember account.
+4. Confirm the new-signup control and waiver checkbox are unavailable.
+5. Use the supplied current test member and accept the displayed test waiver.
+6. Sign up and confirm one place is booked without another officer approval.
+7. After the test term ends, refresh status and confirm a new signup is unavailable.
+8. Cancel an existing signup and confirm its place is released once.
+9. Sign out and ask the specialist for owned-fixture cleanup proof.
+
+**Expected result and success proof:** the server reads membership in the seat transaction and checks the time after reads. Pending, missing, future, expired, suspended, wrong-account or malformed authority cannot create a signup. Voluntary cancellation preserves eligibility through the original term. Saved success can be replayed without another booking; a fresh command needs current entitlement. Membership expiry does not remove the existing cancellation control. Unit/screen tests and local emulator or CI transaction tests are separate from hosted proof.
+
+**Stop conditions:** a nonmember can book, a former member cannot cancel, counts change on a saved retry, a real record/payment appears, or deployed-source proof is absent. **Undo:** hold publication; Dave/specialist uses a compatible reviewed correction or rollback after any later release. No officer changes records or permissions. Production/legal-policy activation remains separate.
+
+The [requested privacy/waiver drafts](../legal/MEMBER_LAUNCH_DRAFTS.md) are for club review only. Dave supplied $25 individual/$30 family calendar-year dues and current-member free-event eligibility. Those values are not loaded into this synthetic service; online dues and separate family accounts sharing one paid Family ID are selected for launch, while final privacy/waiver/retention and guardian handling still require decisions. Public payment instructions are not added.
+
 ## Fictional race member screen — #731 source prepared
 
 **Status:** NATIVE STAGING TESTS VERIFIED 2026-10-14. The heading is retained for existing links. This is a supervised fictional test, not club launch. Use it only after Dave/platform specialist supplies the complete dated acceptance and cleanup receipt plus fresh fake fixtures. #731 remains open until its final handoff gates are recorded; production and real payments are **NOT AVAILABLE YET**.

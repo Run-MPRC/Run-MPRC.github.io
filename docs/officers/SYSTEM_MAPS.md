@@ -113,6 +113,20 @@ Text alternative: a recent authenticated officer with a separate expiring dues p
 
 ## Staging community lifecycle — #707, first hosted release verified 2026-10-11
 
+### New free-event eligibility — #737 source only
+
+```mermaid
+flowchart LR
+    Account["Verified own account + native App Check"] --> Request["New signup + current displayed waiver"]
+    Request --> Transaction["One transaction: current membership + event + own signup"]
+    Transaction --> Gate{"Current term after reads; event open; place available?"}
+    Gate -- Yes --> Seat["Book once; save waiver and retry receipt"]
+    Gate -- No --> Deny["No signup, capacity or command writes"]
+    Former["Existing signup; membership expired or suspended"] --> Cancel["Cancel once; release place; preserve waiver evidence"]
+```
+
+Text alternative: the new source requires current server membership and waiver acceptance in the same transaction as event capacity; denied signup writes nothing, while expiry or suspension still allows cancelling an existing place. This #737 source is not deployed proof; production remains disabled.
+
 Core hosted staging checks for the #711 officer extension below passed on 2026-10-11. Function version 2 and Hosting source `57261ae` are recorded in the [staging guide](./STAGING_COMMUNITY.md#officer-review--711-staging-verified). Expired-session recovery and the no-terminal handoff passed on 2026-10-12; ordinary officer access, lost-authenticator recovery and production are **NOT AVAILABLE YET**.
 
 ```mermaid

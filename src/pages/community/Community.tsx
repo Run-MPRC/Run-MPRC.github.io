@@ -107,6 +107,7 @@ export default function Community() {
   ); }
   const verified = services?.firebaseResources.auth.currentUser?.emailVerified === true;
   const blocked = busy || pending.current !== null || !verified;
+  const currentMember = status?.membership.entitlement === 'current_member';
   return (
     <div className="community-staging">
       <SEO title="Membership and Free Events — Staging" noindex />
@@ -166,6 +167,13 @@ export default function Community() {
         </section>
         <section aria-labelledby="free-events-title">
           <h2 id="free-events-title">Free events</h2>
+          {!currentMember && (
+          <p>
+            Current membership is required for a new free-event signup.
+            {' '}
+            You can still cancel an existing signup.
+          </p>
+)}
           {status.events.length === 0 && <p>No free events are available.</p>}
           {status.events.map((event) => (
             <article key={event.id} style={{ marginTop: 24 }}>
@@ -194,14 +202,14 @@ export default function Community() {
               <>
                 <p>{event.waiverText}</p>
                 <label htmlFor={`waiver-${event.id}`}>
-                  <input id={`waiver-${event.id}`} type="checkbox" checked={waivers[event.id] || false} disabled={blocked || event.status !== 'open' || event.signupStatus !== 'open'} onChange={(e) => setWaivers({ ...waivers, [event.id]: e.target.checked })} />
+                  <input id={`waiver-${event.id}`} type="checkbox" checked={waivers[event.id] || false} disabled={blocked || !currentMember || event.status !== 'open' || event.signupStatus !== 'open'} onChange={(e) => setWaivers({ ...waivers, [event.id]: e.target.checked })} />
                   {' '}
                   I accept the displayed test waiver.
                 </label>
                 <br />
                 <button
                   type="button"
-                  disabled={blocked || !waivers[event.id] || event.status !== 'open' || event.signupStatus !== 'open'}
+                  disabled={blocked || !currentMember || !waivers[event.id] || event.status !== 'open' || event.signupStatus !== 'open'}
                   onClick={() => perform({
  action: 'event_join', eventId: event.id, expectedRevision: event.registration.revision, waiverVersion: event.waiverVersion, waiverAccepted: true
 })}

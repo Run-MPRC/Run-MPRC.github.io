@@ -175,25 +175,29 @@ function createCommunityService(db, clock = Date.now) {
       } else {
         const ref = db.doc(`communityEvents/${request.eventId}`);
         const regRef = ref.collection('registrations').doc(uid);
-        const [eventSnap, regSnap] = await tx.getAll(ref, regRef);
+        const joining = request.action === 'event_join';
+        const [eventSnap, regSnap, membershipSnap] = await tx.getAll(ref, regRef, ...(joining ? [memberRef(uid)] : []));
+        const decisionNow = clock(); check(integer(decisionNow, 8_640_000_000_000_000));
         const event = eventView(eventSnap.data(), request.eventId);
         const record = regSnap.exists ? regSnap.data() : null;
         const registration = registrationView(record);
         check(registration.revision === request.expectedRevision, 'failed-precondition');
-        const joining = request.action === 'event_join';
+        // Membership and capacity share one transaction. Expired/suspended
+        // members may still cancel; a saved success never books a second place.
+        if (joining) check(memberView(membershipSnap.exists ? membershipSnap.data() : emptyMember, uid, decisionNow).entitlement === 'current_member', 'failed-precondition');
         const target = joining ? 'confirmed' : 'cancelled';
         check(joining || registration.status !== 'none', 'failed-precondition');
         if (registration.status !== target) {
           check(registration.revision < 1_000_000);
           if (joining) {
-            check(event.status === 'open' && now >= event.opensAtMs && now < event.closesAtMs
+            check(event.status === 'open' && decisionNow >= event.opensAtMs && decisionNow < event.closesAtMs
               && request.waiverVersion === event.waiverVersion, 'failed-precondition');
             check(event.confirmedCount < event.capacity, 'resource-exhausted');
           } else check(event.confirmedCount > 0);
           const next = {
             schemaVersion: 1, revision: registration.revision + 1, status: target,
-            paymentStatus: 'not_required', updatedAtMs: now,
-            ...(joining ? { waiverVersion: event.waiverVersion, waiverHash: event.waiverHash, waiverAcceptedAtMs: now } : {
+            paymentStatus: 'not_required', updatedAtMs: decisionNow,
+            ...(joining ? { waiverVersion: event.waiverVersion, waiverHash: event.waiverHash, waiverAcceptedAtMs: decisionNow } : {
               waiverVersion: record.waiverVersion, waiverHash: record.waiverHash, waiverAcceptedAtMs: record.waiverAcceptedAtMs,
             }),
           };
