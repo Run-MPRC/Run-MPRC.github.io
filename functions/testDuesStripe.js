@@ -16,7 +16,7 @@ function checkoutParameters(o) {
   };
 }
 function createTestStripe({ key, webhookSecret, account }) {
-  check(typeof key === 'string' && key.startsWith('sk_test_') && typeof webhookSecret === 'string' && webhookSecret.startsWith('whsec_') && ref(account, 'acct'));
+  check(typeof key === 'string' && (key.startsWith('rk_test_') || key.startsWith('sk_test_')) && typeof webhookSecret === 'string' && webhookSecret.startsWith('whsec_') && ref(account, 'acct'));
   const stripe = new Stripe(key, { apiVersion: '2023-10-16', timeout: 5000, maxNetworkRetries: 0 });
   async function own() { const a = await stripe.accounts.retrieve(); check(a.id === account); }
   async function project(s, includeUrl = false) {

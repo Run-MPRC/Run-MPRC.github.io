@@ -1,6 +1,6 @@
 # Review annual dues in test mode
 
-**October 16, 2026: source preparation only; NOT AVAILABLE YET.** #742 adds a separate, disabled test-only checkout and payer activation flow. The club's Stripe sandbox has not been identified or connected. No dues Function, webhook, secret access or dues screen is deployed by this change. The existing member/free-event staging release remains qualified by [#739](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/739).
+**October 17, 2026: source and release preparation only; NOT AVAILABLE YET.** #742 adds a separate, disabled test-only checkout and payer activation flow. The club's Stripe sandbox has not been identified or connected; club sign-in is waiting for the owner. The [specialist release handoff](../TEST_DUES_RELEASE.md) now describes isolated packaging, minimum access, private key entry and hosted acceptance. This is preparation, not a working review link. No dues Function, webhook, secret access or dues screen is deployed by this change. The existing member/free-event staging release remains qualified by [#739](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/739).
 
 **Purpose:** confirm that one fictional purchase activates the payer automatically and allows free-event signup, without a second officer membership approval.
 

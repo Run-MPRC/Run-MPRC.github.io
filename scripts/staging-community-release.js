@@ -10,6 +10,7 @@ const { createHash } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { jsonRequest: providerRequest, waitForOperation } = require('./staging-profile-release');
 const { verifyCurrentSource } = require('./staging-profile-authority');
+const { TARGETS: DUES_TARGETS, validateKnownDues } = require('./staging-test-dues-contract');
 const PROJECT = 'run-mprc-staging';
 const TARGET = 'communityActions';
 const REGION = 'us-central1';
@@ -30,13 +31,14 @@ function failureMessage(error) {
   return `staging_community_release_failed phase=${failures.get(error) || 'unknown'}`;
 }
 function validateInventory(inventory) {
-  check(Array.isArray(inventory?.functions) && inventory.functions.length >= 2 && inventory.functions.length <= 3
+  check(Array.isArray(inventory?.functions) && inventory.functions.length >= 2 && inventory.functions.length <= 5
     && !inventory.nextPageToken && !inventory.unreachable?.length);
   const names = inventory.functions.map((fn) => fn.entryPoint);
   check(new Set(names).size === names.length && names.includes('createMemberOnSignUp') && names.includes('ensureMemberProfile'));
-  check(inventory.functions.every((fn) => ['createMemberOnSignUp', 'ensureMemberProfile', TARGET].includes(fn.entryPoint)
+  check(inventory.functions.every((fn) => ['createMemberOnSignUp', 'ensureMemberProfile', TARGET, ...DUES_TARGETS].includes(fn.entryPoint)
     && fn.name === `projects/${PROJECT}/locations/${REGION}/functions/${fn.entryPoint}`
     && typeof fn.versionId === 'string' && /^[1-9][0-9]*$/.test(fn.versionId)));
+  inventory.functions.filter(fn => DUES_TARGETS.includes(fn.entryPoint)).forEach(validateKnownDues);
 }
 
 // Owner tokens do not inherit the CLI's --project as their API quota project.
@@ -161,13 +163,14 @@ async function verifyDeployment({ token, digest, sourceSha, inventory, verifyPro
     check(bytes > 0 && hash.digest('hex') === digest);
     phase = 'final_inventory';
     const final = await request(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, token);
-    validateInventory(final); check(final.functions.length === 3);
+    validateInventory(final); check(final.functions.length === 3 + inventory.functions.filter(fn => DUES_TARGETS.includes(fn.entryPoint)).length);
     const finalNative = final.functions.find((fn) => fn.entryPoint === TARGET);
     validateHostedFunction(finalNative, expected);
     check(finalNative.versionId === native.versionId);
     for (const original of inventory.functions.filter((fn) => fn.entryPoint !== TARGET)) {
       const unchanged = final.functions.find((fn) => fn.name === original.name);
       check(unchanged.versionId === original.versionId && isDeepStrictEqual(unchanged.labels, original.labels));
+      if (DUES_TARGETS.includes(original.entryPoint)) check(isDeepStrictEqual(unchanged, original));
     }
     return { sourceSha: native.labels['source-sha'], digest, bytes, version: native.versionId };
   } catch (error) { throw phaseFailure(phase, error); }

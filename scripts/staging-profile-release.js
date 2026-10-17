@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { createHash } = require('node:crypto');
+const { isDeepStrictEqual } = require('node:util');
+const { TARGETS: DUES_TARGETS, validateKnownDues } = require('./staging-test-dues-contract');
 const { execFileSync } = require('node:child_process');
 const { validateContext, verifyCurrentSource, verifyCloudAuthority } = require('./staging-profile-authority');
 
@@ -163,11 +165,13 @@ async function release(env) {
   const inventory = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, env.GCP_ACCESS_TOKEN);
   check(!inventory.nextPageToken && !inventory.unreachable?.length);
   const existing = inventory.functions || [];
-  check(Array.isArray(existing) && existing.length <= 3);
+  check(Array.isArray(existing) && existing.length <= 5 && new Set(existing.map(fn => fn.name)).size === existing.length);
+  const dues = existing.filter(fn => DUES_TARGETS.includes(fn.entryPoint));
+  dues.forEach(validateKnownDues);
   const community = existing.filter((fn) => fn.entryPoint === 'communityActions');
   check(community.length <= 1);
   community.forEach(validateKnownCommunity);
-  for (const fn of existing.filter((item) => item.entryPoint !== 'communityActions')) {
+  for (const fn of existing.filter((item) => item.entryPoint !== 'communityActions' && !DUES_TARGETS.includes(item.entryPoint))) {
     const target = fn.name?.split('/').at(-1);
     validateHostedFunction(fn, functionSpec(target, env.GITHUB_SHA, bundle.digest, 'https://storage.googleapis.com/synthetic'), { ready: false, previousInitialRelease: true });
   }
@@ -192,7 +196,8 @@ async function release(env) {
     process.stdout.write(`staging_profile_${target}_deployed_verified\n`);
   }
   const final = await jsonRequest(`https://cloudfunctions.googleapis.com/v1/projects/${PROJECT}/locations/-/functions`, env.GCP_ACCESS_TOKEN);
-  check(final.functions?.length === 2 + community.length && !final.nextPageToken && !final.unreachable?.length);
+  check(final.functions?.length === 2 + community.length + dues.length && !final.nextPageToken && !final.unreachable?.length);
+  for (const original of dues) check(isDeepStrictEqual(final.functions.find(fn => fn.name === original.name), original));
   if (community.length) {
     const unchanged = final.functions.find((fn) => fn.name === community[0].name);
     validateKnownCommunity(unchanged);
