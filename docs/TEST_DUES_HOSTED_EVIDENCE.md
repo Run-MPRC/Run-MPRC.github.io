@@ -1,6 +1,6 @@
 # Test dues hosted evidence — October 17, 2026
 
-The club sandbox is connected and the core hosted dues flow works in staging. This is not a real-member or real-payment launch. #742 remains open for the native failure-path checks listed below.
+The club sandbox is connected and the core hosted dues flow works in staging. This is not a real-member or real-payment launch. A separate [native failure and recovery follow-up](./TEST_DUES_NATIVE_RECOVERY.md) records the later bounded checks and qualification limits.
 
 Officer impact: verified fictional payers can use $25 individual or $30 family test Checkout and activate automatically, then sign up for free events with separate event consent. No officer membership approval follows these checks.
 
@@ -34,11 +34,11 @@ Deployment evidence: staging website, Firebase and the club sandbox were verifie
 
 Only Stripe's documented test card details and fictional `example.test` identities were entered. Link saving and Chrome's card-storage prompts were declined. No verification email, live payment, refund, dispute or production data operation was performed.
 
-## Remaining native qualification — #742 stays open
+## Native follow-up and qualification limits
 
-The exact source CI supplies unit and emulator coverage for account/realm/cents/currency mismatch, default tenant/caller mismatch, current Auth loss, concurrent preparation, unknown creation/binding outcomes, lost responses, missed-callback reconciliation, delayed old-year payment, async success/failure and reversal holds. This core hosted run does **not** claim independent native provider/browser execution of those cases. In particular, cancel/resume is not proof of a committed lost response, and a successful automatic webhook is not a simulated missed callback. Use fresh uniquely owned fixtures for those remaining scenarios; never recreate this run's deleted accounts or sealed #731 fixtures.
+This original core run did not execute independent failure-path tests. The later [fresh native failure and recovery batch](./TEST_DUES_NATIVE_RECOVERY.md) did; it distinguishes actual Stripe Events/payments, signed synthetic callbacks, explicit fault/backdate injection and the remaining source/emulator-only claims. Never recreate either completed run or sealed #731 fixtures.
 
-Card-only Checkout was used. Other asynchronous payment-method UI and restricted-key permission coverage were not qualified. Final waiver/privacy/retention/guardian decisions, family invitation enrollment and live-money/production release remain separate club decisions.
+Card-only Checkout was used. Issued foreign-tenant credentials, actual asynchronous payment-method UI, full dispute lifecycle and restricted-key permissions were not qualified. Final waiver/privacy/retention/guardian decisions, family enrollment and live-money/production release remain separate club decisions.
 
 ## Cleanup and recovery
 

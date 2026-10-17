@@ -1,6 +1,6 @@
 # Officer Website Handbook
 
-[Test annual dues](./TEST_DUES.md) has a connected staging screen and verified core hosted flow as of October 17. Fresh specialist-provided fictional accounts are required; the completed run's accounts were removed. Read the [dated evidence and remaining qualification](../TEST_DUES_HOSTED_EVIDENCE.md). Real payments and production remain separate.
+[Test annual dues](./TEST_DUES.md) has a connected staging screen and verified core hosted flow and [bounded native recovery checks](../TEST_DUES_NATIVE_RECOVERY.md) as of October 17. Fresh specialist-provided fictional accounts are required; the completed run's accounts were removed. Read the [dated evidence and remaining qualification](../TEST_DUES_HOSTED_EVIDENCE.md). Real payments and production remain separate.
 
 **October 16 member-screen preparation:** [Review membership and free events](./MEMBER_SCREEN.md). Native staging behavior, final navigation correction and cleanup passed at Hosting `d08a6a3`. No production or payment release.
 

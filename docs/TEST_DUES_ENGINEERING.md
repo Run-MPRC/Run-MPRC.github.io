@@ -1,6 +1,6 @@
 # Test-only annual dues runtime — #742
 
-This bounded staging integration consumes `membershipDuesCheckout`, `membershipDuesPayment` and `membershipAuthority`. It is isolated in `duesTestOnly.js`; neither legacy `index.js` nor `communityOnly.js` imports it. The [October 17 specialist release](./TEST_DUES_RELEASE.md) connected the club sandbox and deployed both isolated Functions plus matching Hosting. The [dated native evidence](./TEST_DUES_HOSTED_EVIDENCE.md) separates verified core behavior from remaining native failure-path qualification. Existing member/event records remain compatible; no migration or roster import.
+This bounded staging integration consumes `membershipDuesCheckout`, `membershipDuesPayment` and `membershipAuthority`. It is isolated in `duesTestOnly.js`; neither legacy `index.js` nor `communityOnly.js` imports it. The [October 17 specialist release](./TEST_DUES_RELEASE.md) connected the club sandbox and deployed both isolated Functions plus matching Hosting. The [dated native evidence](./TEST_DUES_HOSTED_EVIDENCE.md) and [native failure/recovery follow-up](./TEST_DUES_NATIVE_RECOVERY.md) separate core proof, actual provider failures, injected cases and remaining qualification limits. Existing member/event records remain compatible; no migration or roster import.
 
 ## Trust and transitions
 
