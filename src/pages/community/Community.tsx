@@ -173,7 +173,7 @@ export default function Community() {
         Staging test only. Use made-up accounts.
         No real membership, race entry or payment is created.
       </p>
-      <nav className="member-community__nav" aria-label="Member pages">
+      <div className="member-community__nav" role="navigation" aria-label="Member pages">
         <Link to="/account">My Account</Link>
         {' '}
         ·
@@ -183,7 +183,7 @@ export default function Community() {
         <Link to="/community/admin">Officer tools (staging)</Link>
         {' · '}
         <Link to="/community/races">Fictional races (staging)</Link>
-      </nav>
+      </div>
       <button type="button" disabled={busy} onClick={() => perform(undefined, true)}>Refresh status</button>
       {' '}
       {saved && <button type="button" disabled={busy} onClick={() => perform()}>Retry request</button>}
