@@ -1,6 +1,6 @@
 # Review annual dues in test mode
 
-**October 17, 2026: source and release preparation only; NOT AVAILABLE YET.** #742 adds a separate, disabled test-only checkout and payer activation flow. The club's Stripe sandbox has not been identified or connected; club sign-in is waiting for the owner. The [specialist release handoff](../TEST_DUES_RELEASE.md) now describes isolated packaging, minimum access, private key entry and hosted acceptance. This is preparation, not a working review link. No dues Function, webhook, secret access or dues screen is deployed by this change. The existing member/free-event staging release remains qualified by [#739](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/739).
+**October 17, 2026: core hosted flow verified in staging.** The [test dues screen](https://run-mprc-staging.web.app/community/dues) is connected to the club sandbox. Actual individual and family test payments activated each payer automatically. One payer then booked and cancelled a free test event. Read the [dated evidence and remaining qualification](../TEST_DUES_HOSTED_EVIDENCE.md). All four disposable accounts and the test event were removed. Ask Dave for fresh supervised test access; do not reuse old fixtures. Production and real payments remain **NOT AVAILABLE YET**.
 
 **Purpose:** confirm that one fictional purchase activates the payer automatically and allows free-event signup, without a second officer membership approval.
 
@@ -8,9 +8,9 @@
 
 **Prerequisites:** the specialist supplies the exact staging release receipt, a club-owned Stripe sandbox, its matching test webhook, a fresh owner-marked fictional verified account and ordinary App Check. Every test account needs a current private test-participant marker. The specialist verifies all deployed surfaces before supplying a review link. Do not use the sealed #731 fixtures or real information.
 
-## Planned screen review — NOT AVAILABLE YET
+## Supervised staging screen review
 
-1. Ask the specialist to connect and qualify the sandbox through the club's private provider setup.
+1. Ask Dave for the current release receipt and fresh fictional test access.
 2. Open the supplied staging dues link and confirm the test-only notice.
 3. Sign in with the supplied fictional account.
 4. Read the two server offers: $25 individual or $30 family in test USD.
@@ -18,13 +18,13 @@
 6. Read the synthetic waiver and deliberately accept it.
 7. Continue to the selected Stripe test checkout.
 8. Use only the specialist's provider-approved test instructions.
-9. Return to the dues page and choose Check payment status.
-10. Wait for verified active test membership.
+9. Return to the dues page and read the verified status.
+10. If the saved purchase is still open, choose Check payment status. Do not start another purchase.
 11. Open Membership and free events and accept the separate event test waiver.
 12. Sign up for the named free event and confirm your place.
-13. Ask the specialist to demonstrate a lost response, a duplicate request, unpaid checkout, expired term and revoked test access.
+13. Ask the specialist which failure checks are covered by the supplied native receipt. Unpaid cancel/resume, duplicate webhook delivery, failed-read recovery and revoked test access passed in the October 17 core run; the evidence page lists remaining native checks.
 14. Refresh status or resume the saved checkout after an interrupted session.
-15. Sign out and ask the specialist to remove the exact new fixtures.
+15. Sign out and ask the specialist to remove the exact disposable accounts and event. Keep test payment evidence for reconciliation.
 
 **Expected result:** one saved purchase belongs to the payer. A return URL proves nothing. Only verified test payment for the exact account, amount, currency, order and term can activate the canonical membership used by free events. Original term and consent evidence are retained. The current screen expires within 60 seconds or sooner at a known deadline; it never polls. A family purchase creates one private Family ID and the payer's membership. Invitations and other family-account enrollment are **NOT AVAILABLE YET**; an ID alone grants nothing.
 

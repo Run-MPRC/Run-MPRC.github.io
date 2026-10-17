@@ -430,23 +430,23 @@ flowchart TD
 
 In words: stop and escalate anything involving privacy, access, money, or secrets; otherwise use one reviewed rollback and check every affected service.
 
-## Test annual dues — #742 source only, NOT AVAILABLE YET
+## Test annual dues — core staging flow verified October 17
 
 ```mermaid
 flowchart LR
     A[Verified fictional account and current private marker] --> B[Native Auth and App Check test dues boundary]
     B --> C[Saved order and one account purchase lock]
-    C --> D[Club Stripe sandbox - not connected]
+    C --> D[Connected club Stripe sandbox - test only]
     D --> E[Signed receipt and verified current test payment]
     E --> F[Atomic term receipt and payer membership]
     F --> G[Existing current-member free-event gate]
     F --> H[Private family root - invitations unavailable]
 ```
 
-Text alternative: a marked fictional account prepares one saved test purchase; only verified sandbox payment can atomically activate the payer for free events, and family invitations remain separate. Source and emulator proof do not prove provider configuration or deployment.
+Text alternative: a marked fictional account prepares one saved test purchase; only verified sandbox payment can atomically activate the payer for free events, and family invitations remain separate. The October 17 native run verified this core flow; the [dated evidence](../TEST_DUES_HOSTED_EVIDENCE.md) lists remaining qualification.
 
 
-### Planned isolated test-dues release — October 17, NOT DEPLOYED
+### Isolated test-dues release — deployed October 17
 
 ```mermaid
 flowchart LR

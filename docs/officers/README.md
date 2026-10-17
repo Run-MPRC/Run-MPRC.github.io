@@ -1,6 +1,6 @@
 # Officer Website Handbook
 
-[Test annual dues](./TEST_DUES.md) is source prepared and **NOT AVAILABLE YET**. The club-owned sandbox and isolated dues release are still required; real payments remain separate. October 17 release checks are source prepared; club Stripe sign-in, private setup and hosted checkout proof are still pending.
+[Test annual dues](./TEST_DUES.md) has a connected staging screen and verified core hosted flow as of October 17. Fresh specialist-provided fictional accounts are required; the completed run's accounts were removed. Read the [dated evidence and remaining qualification](../TEST_DUES_HOSTED_EVIDENCE.md). Real payments and production remain separate.
 
 **October 16 member-screen preparation:** [Review membership and free events](./MEMBER_SCREEN.md). Native staging behavior, final navigation correction and cleanup passed at Hosting `d08a6a3`. No production or payment release.
 
