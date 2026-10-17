@@ -9,6 +9,7 @@ import {
  callCommunity, COMMUNITY_ENABLED, CommunityRequest, CommunityStatus
 } from '../../services/community/communityService';
 import SEO from '../../components/SEO';
+import { TEST_DUES_ENABLED } from '../../services/community/testDuesService';
 import { communityFreshFor, parseCommunityResult, parseCommunityStatus } from '../../services/community/communityMemberStatus';
 import './Community.css';
 
@@ -174,6 +175,9 @@ export default function Community() {
         No real membership, race entry or payment is created.
       </p>
       <div className="member-community__nav" role="navigation" aria-label="Member pages">
+        {TEST_DUES_ENABLED && (
+          <Link to="/community/dues">Test annual dues</Link>
+        )}
         <Link to="/account">My Account</Link>
         {' '}
         ·

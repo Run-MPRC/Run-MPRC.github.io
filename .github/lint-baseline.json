@@ -10,12 +10,12 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 133,
+  "scannedFileCount": 137,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 50,
-    ".tsx": 36
+    ".ts": 52,
+    ".tsx": 38
   },
   "errorCount": 113,
   "warningCount": 6,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:f2e9add8612f9e8be9e77ae321ee247b21439f5f5999cbeca43dfe2a5cb46c31",
+  "fingerprint": "sha256:b4fdd4e8efba6c011d293d96f8453a4e2dccccddf7907e2ff9b67cf2b74ba81f",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -85,6 +85,8 @@
     "src/pages/community/CommunityAdmin.tsx",
     "src/pages/community/FictionalRaces.test.tsx",
     "src/pages/community/FictionalRaces.tsx",
+    "src/pages/community/TestDues.test.tsx",
+    "src/pages/community/TestDues.tsx",
     "src/pages/contact/Contact.jsx",
     "src/pages/events/EventCalendar.tsx",
     "src/pages/events/EventDetail.tsx",
@@ -134,6 +136,8 @@
     "src/services/community/communityService.ts",
     "src/services/community/fictionalRaceService.test.ts",
     "src/services/community/fictionalRaceService.ts",
+    "src/services/community/testDuesService.test.ts",
+    "src/services/community/testDuesService.ts",
     "src/services/community/testSupport/fictionalRaceFixtures.ts",
     "src/services/events/adminService.ts",
     "src/services/events/eventsService.ts",
@@ -254,7 +258,7 @@
       "endColumn": 25,
       "severity": 2,
       "ruleId": "react/jsx-no-useless-fragment",
-      "message": "Fragments should contain more than one child - otherwise, there’s no need for a Fragment at all.",
+      "message": "Fragments should contain more than one child - otherwise, there\u2019s no need for a Fragment at all.",
       "messageId": "NeedsMoreChildren",
       "nodeType": "JSXFragment",
       "fatal": false
@@ -1346,7 +1350,7 @@
       "endColumn": 9,
       "severity": 2,
       "ruleId": "react/jsx-one-expression-per-line",
-      "message": "` Seal Point Park → 3rd Ave Launch → Bridgeview Park → back        ` must be placed on a new line",
+      "message": "` Seal Point Park \u2192 3rd Ave Launch \u2192 Bridgeview Park \u2192 back        ` must be placed on a new line",
       "messageId": "moveToNewLine",
       "nodeType": "JSXText",
       "fatal": false
@@ -1463,7 +1467,7 @@
       "endColumn": 11,
       "severity": 2,
       "ruleId": "react/jsx-one-expression-per-line",
-      "message": "` — payment processing (subject to Stripe&apos;s Privacy Policy)          ` must be placed on a new line",
+      "message": "` \u2014 payment processing (subject to Stripe&apos;s Privacy Policy)          ` must be placed on a new line",
       "messageId": "moveToNewLine",
       "nodeType": "JSXText",
       "fatal": false
@@ -1476,7 +1480,7 @@
       "endColumn": 11,
       "severity": 2,
       "ruleId": "react/jsx-one-expression-per-line",
-      "message": "` — hosting, auth, database, email delivery          ` must be placed on a new line",
+      "message": "` \u2014 hosting, auth, database, email delivery          ` must be placed on a new line",
       "messageId": "moveToNewLine",
       "nodeType": "JSXText",
       "fatal": false
@@ -1489,7 +1493,7 @@
       "endColumn": 11,
       "severity": 2,
       "ruleId": "react/jsx-one-expression-per-line",
-      "message": "` — transactional email delivery          ` must be placed on a new line",
+      "message": "` \u2014 transactional email delivery          ` must be placed on a new line",
       "messageId": "moveToNewLine",
       "nodeType": "JSXText",
       "fatal": false
