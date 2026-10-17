@@ -444,3 +444,19 @@ flowchart LR
 ```
 
 Text alternative: a marked fictional account prepares one saved test purchase; only verified sandbox payment can atomically activate the payer for free events, and family invitations remain separate. Source and emulator proof do not prove provider configuration or deployment.
+
+
+### Planned isolated test-dues release — October 17, NOT DEPLOYED
+
+```mermaid
+flowchart LR
+    A["Owner selects club sandbox"] --> S["Two private pinned staging secrets"]
+    S --> R["Separate keyless dues runtime"]
+    C["Exact source, Opus approval and green CI"] --> R
+    R --> F["Two isolated test dues Functions"]
+    F --> V["Native settings, archives and sandbox proof"]
+    V --> H["Explicit test dues Hosting publication"]
+    H --> M["Fictional payer activation and free-event review"]
+```
+
+Text alternative: the owner connects only the club sandbox; the specialist verifies the isolated backend and test secrets before publishing the test screen. Existing profile/community services remain separate. Real payments are not included. [Officer procedure](./TEST_DUES.md); [specialist handoff](../TEST_DUES_RELEASE.md).

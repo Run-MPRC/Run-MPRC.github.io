@@ -41,6 +41,16 @@ test('wrong actual Stripe account and live secret rejected', async () => {
   sdk.accounts.retrieve.mockResolvedValue({ id: 'acct_foreign' }); await expect(adapter.retrieve('cs_test_synthetic')).rejects.toThrow();
   expect(() => createTestStripe({ key: 'sk_live_synthetic', webhookSecret: secret, account })).toThrow();
 });
+test('restricted sandbox key works with the same account and object fences', async () => {
+  const restricted = createTestStripe({ key: 'rk_test_synthetic', webhookSecret: secret, account });
+  expect(Stripe).toHaveBeenLastCalledWith('rk_test_synthetic', expect.objectContaining({ apiVersion: '2023-10-16' }));
+  expect(await restricted.retrieve('cs_test_synthetic')).toMatchObject({ paid: true, providerAccountRef: account, livemode: false });
+  sdk.accounts.retrieve.mockResolvedValue({ id: 'acct_foreign' });
+  await expect(restricted.retrieve('cs_test_synthetic')).rejects.toThrow();
+});
+test.each(['rk_live_synthetic', 'sk_live_synthetic', 'pk_test_synthetic', 'sk_org_synthetic', ''])('non-sandbox server credential rejected: %s', key => {
+  expect(() => createTestStripe({ key, webhookSecret: secret, account })).toThrow();
+});
 test('raw signed webhook verified; invalid, stale, live, wrong-account and oversized payloads reject', () => {
   const event = { id: 'evt_synthetic', type: 'checkout.session.completed', livemode: false, data: { object: session() } };
   const signed = e => { const raw = Buffer.from(JSON.stringify(e)); const signature = sdk.webhooks.generateTestHeaderString({ payload: raw.toString(), secret }); return [raw, signature]; };

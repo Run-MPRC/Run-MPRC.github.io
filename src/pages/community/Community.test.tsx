@@ -8,6 +8,7 @@ import Community from './Community';
 import { callCommunity } from '../../services/community/communityService';
 
 let mockUser: any = { uid: 'runner-a' };
+let mockDuesEnabled = false;
 const mockApp = { options: { projectId: 'run-mprc-staging' } };
 let mockFunctions: any = { app: mockApp };
 let mockAuth: any;
@@ -21,6 +22,7 @@ jest.mock('firebase/auth', () => ({
 jest.mock('../../services/hooks/useAuth', () => ({ useAuth: () => ({ user: mockUser, isLoading: false }) }));
 jest.mock('../../services/ServiceLocatorContext', () => ({ useServiceLocator: () => ({ services: mockServices }) }));
 jest.mock('../../services/community/communityService', () => ({ COMMUNITY_ENABLED: true, callCommunity: jest.fn() }));
+jest.mock('../../services/community/testDuesService', () => ({ get TEST_DUES_ENABLED() { return mockDuesEnabled; } }));
 const call = callCommunity as jest.Mock;
 const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
 afterAll(() => {
@@ -63,11 +65,23 @@ const show = () => (
 );
 beforeEach(() => {
   jest.clearAllMocks(); mockUser = { uid: 'runner-a' };
+  mockDuesEnabled = false;
   mockFunctions = { app: mockApp };
   mockAuth = { app: mockApp, tenantId: null, currentUser: { uid: 'runner-a', emailVerified: true } };
   mockServices = { firebaseResources: { functions: mockFunctions, auth: mockAuth } };
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { randomUUID: () => '123e4567-e89b-42d3-a456-426614174000' } });
   call.mockResolvedValue(state());
+});
+test.each([false, true])('membership card and dues link agree with the connected test flag: %s', async (enabled) => {
+  mockDuesEnabled = enabled;
+  render(show()); await screen.findByRole('button', { name: 'Request membership' });
+  if (enabled) {
+    expect(screen.getByRole('link', { name: /Test annual dues/ })).toBeInTheDocument();
+    expect(screen.getByText(/Verified test payment activates your test membership automatically/)).toBeInTheDocument();
+  } else {
+    expect(screen.queryByRole('link', { name: /Test annual dues/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Online dues and family invitations are not available here yet/)).toBeInTheDocument();
+  }
 });
 test('signed-out page makes no backend call', () => {
   mockUser = null; render(show());

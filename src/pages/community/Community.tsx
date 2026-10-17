@@ -207,7 +207,7 @@ export default function Community() {
             {status.membership.applicationStatus.replace(/_/g, ' ')}
             .
           </p>
-          <p className="member-community__muted">This test screen records a membership request only. Online dues and family invitations are not available here yet.</p>
+          <p className="member-community__muted">{TEST_DUES_ENABLED ? 'Use Test annual dues to pay in the Stripe sandbox. Verified test payment activates your test membership automatically. Family invitations are not available yet.' : 'This test screen records a membership request only. Online dues and family invitations are not available here yet.'}</p>
           <p className={`member-community__badge ${currentMember ? 'member-community__badge--active' : ''}`}>{status.membership.entitlement === 'current_member' ? 'Test membership active.' : 'Test membership is not active.'}</p>
           {status.membership.entitlement === 'current_member' && status.membership.accessThroughMs
             && (

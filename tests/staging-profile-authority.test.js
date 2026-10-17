@@ -1,6 +1,7 @@
 'use strict';
 
 require('./staging-community-release.test.js');
+require('./staging-test-dues-release.test.js');
 
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
