@@ -81,7 +81,8 @@ export default function TestDues() {
         if (action === 'prepare' && !retry) {
             try {
                 request = {
-                    ...request,
+                    action: 'prepare',
+                    accountUid: session.user.uid,
                     requestId: crypto.randomUUID(),
                     offerId,
                     waiverVersion: status?.waiver.version,
