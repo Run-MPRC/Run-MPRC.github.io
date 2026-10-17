@@ -30,6 +30,8 @@ import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
 import Terms from './pages/legal/Terms';
 import Privacy from './pages/legal/Privacy';
 import Community from './pages/community/Community';
+import TestDues from './pages/community/TestDues';
+import { TEST_DUES_ENABLED } from './services/community/testDuesService';
 import CommunityAdmin from './pages/community/CommunityAdmin';
 import FictionalRaces from './pages/community/FictionalRaces';
 import { COMMUNITY_ENABLED } from './services/community/communityService';
@@ -89,6 +91,7 @@ function App() {
                 <Route path="shop/purchase/success" element={<PurchaseSuccess />} />
                 <Route path="shop/:slug" element={<ProductDetail />} />
                 <Route path="account" element={<Account />} />
+                {TEST_DUES_ENABLED && <Route path="community/dues" element={<TestDues />} />}
                 {COMMUNITY_ENABLED && <Route path="community" element={<Community />} />}
                 {COMMUNITY_ENABLED && <Route path="community/admin" element={<CommunityAdmin />} />}
                 {COMMUNITY_ENABLED && <Route path="community/races" element={<FictionalRaces />} />}

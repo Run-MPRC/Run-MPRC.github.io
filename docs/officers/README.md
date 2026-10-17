@@ -1,6 +1,8 @@
 # Officer Website Handbook
 
-**October 16 member-screen preparation:** [Review membership and free events](./MEMBER_SCREEN.md). Native staging behavior and cleanup passed; the latest #739 receipt must also verify the navigation correction. No production or payment release.
+[Test annual dues](./TEST_DUES.md) is source prepared and **NOT AVAILABLE YET**. The club-owned sandbox and isolated dues release are still required; real payments remain separate.
+
+**October 16 member-screen preparation:** [Review membership and free events](./MEMBER_SCREEN.md). Native staging behavior, final navigation correction and cleanup passed at Hosting `d08a6a3`. No production or payment release.
 
 **Minimum member launch — October 15 decisions; #737 SOURCE ONLY:** Dave set $25 individual/$30 family calendar-year dues. New free-event signup requires verified email, accepted waiver and current paid membership; no additional discretionary member approval follows satisfied requirements. The new source checks membership in the booking transaction and preserves cancellation after expiry. This change is **NOT AVAILABLE YET** on the deployed website. Online dues are selected for first launch; separate family accounts share a paid Family ID. Final policy/guardian handling remains undecided. Review the [privacy/waiver drafts](../legal/MEMBER_LAUNCH_DRAFTS.md) and [source-only test procedure](./STAGING_COMMUNITY.md#current-membership-for-free-events--737-source-only). This source change adds no checkout or public external-payment instructions; paid-race commerce remains later. Earlier source checkpoints below are historical.
 

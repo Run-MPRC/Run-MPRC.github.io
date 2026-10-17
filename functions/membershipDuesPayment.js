@@ -2,7 +2,9 @@
 
 // MEMBERS-DUES-001B — pure verified-online-dues-payment → approved-term decision (pure contract).
 //
-// SOURCE ONLY, UNUSED: this module is imported by nothing (not by
+// Historical pure-contract scope below. #742 now consumes this module only in
+// the separate disabled test-dues runtime; production remains unavailable.
+// ORIGINAL SOURCE-ONLY SCOPE: not imported by
 // functions/index.js, no route, no Firestore Rules, no callable, no webhook, no
 // scheduled worker). It has zero runtime behavior. It is the money-critical
 // decision core for item 3 of parent #114 (MEMBERS-DUES-001) — "a verified payment
