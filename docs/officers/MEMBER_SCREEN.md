@@ -1,6 +1,8 @@
 # Review membership and free events
 
-**Status, October 16, 2026:** #739 is source preparation. The changed screen is **NOT AVAILABLE YET** on the hosted site. Local screenshots and tests use fictional accounts and a replacement test service. They do not prove Firebase, email delivery, Stripe or production behavior.
+**Status, October 16, 2026:** native member behavior is staging-verified from `799565e`: Function v7/archive/settings, all 62 Hosting files, genuine Auth/App Check and ten member/retry/expiry/cancellation checks passed. Fresh fictional fixtures were removed and their absence checked. A full-site visual check found member links inheriting the fixed site header styles. The correction needs its matching Hosting release; use [the latest #739 receipt](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/739) before reviewing the screen. Production and real payments are **NOT AVAILABLE YET**. Earlier local-only screenshots are historical.
+
+The specialist's native checks used ordinary browser attestation and separately supplied synthetic terms. They do not prove email delivery, online dues, officer MFA, Stripe or production behavior. All permissions and resource limits remain unchanged.
 
 **Purpose:** check that members understand their status and can safely sign up, cancel or recover after an uncertain request.
 
@@ -14,18 +16,19 @@
 2. Confirm the test-only notice is visible.
 3. Sign in with the supplied fictional account.
 4. Confirm the loading message gives way to a membership card and free-event cards.
-5. Check that event dates say Pacific time.
-6. Open the test waiver and deliberately tick its acceptance box.
-7. Choose the named free-event signup.
-8. Wait for the confirmed result and your current signup.
-9. Cancel that signup.
-10. Wait for the cancelled result before starting another action.
-11. Ask the specialist to demonstrate the unavailable and lost-response cases with fictional fixtures.
-12. Use Retry request for an uncertain action, or Refresh status to read current state without resending it.
-13. Wait for the supplied short term or signup window to end.
-14. Confirm old status and controls disappear with a refresh message.
-15. Refresh status and confirm cancellation of an existing signup remains possible after membership lapses.
-16. Sign out, then ask the specialist to remove the new disposable fixtures.
+5. Confirm member links sit below the page introduction and the main club navigation remains usable.
+6. Check that event dates say Pacific time.
+7. Open the test waiver and deliberately tick its acceptance box.
+8. Choose the named free-event signup.
+9. Wait for the confirmed result and your current signup.
+10. Cancel that signup.
+11. Wait for the cancelled result before starting another action.
+12. Ask the specialist to demonstrate the unavailable and lost-response cases with fictional fixtures.
+13. Use Retry request for an uncertain action, or Refresh status to read current state without resending it.
+14. Wait for the supplied short term or signup window to end.
+15. Confirm old status and controls disappear with a refresh message.
+16. Refresh status and confirm cancellation of an existing signup remains possible after membership lapses.
+17. Sign out, then ask the specialist to remove the new disposable fixtures.
 
 **Expected result:** only the current account's validated status appears. Account/session changes discard old requests and consent. A status display lasts at most 60 seconds from read start, often less at a known deadline; refresh is manual and does not reserve a place. A cancellation keeps the approved paid membership term and issues no refund. This screen still offers only a test membership request; online dues and family invitations are unavailable.
 

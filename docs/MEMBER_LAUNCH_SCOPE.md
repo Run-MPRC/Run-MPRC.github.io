@@ -64,3 +64,7 @@ The current staging-only membership/free-event screen gains native-session fenci
 The lint inventory adds the two new clean TypeScript files only. Existing reviewed findings remain byte-for-byte unchanged: 113 errors and six warnings elsewhere. No lint rule or allowance is weakened.
 
 Online annual dues, private family enrollment, account-recovery/provider qualification, approved policy and the final protected production release remain incomplete. The prototype request screen explicitly says online dues and family invitations are unavailable; it does not imply that a manual approval queue is the approved final membership flow.
+
+### Native member-screen checkpoint
+
+On October16, Functionv7/archive and Hosting source799565e were verified independently; all62 artifact files/deep routes matched. Ten genuine browser Auth/AppCheck/member/retry/expiry/cancellation checks passed with newly owned fictional fixtures, followed by exact cleanup. Headless sign-in was rejected; normal headed Chrome sign-in and attestation passed without relaxing any guard. Full-site screenshots then caught a global fixed-header CSS collision; the member navigation now uses an equivalent ARIA landmark without matching the site-wide `nav` selector. Its separate Hosting receipt is required. Function bytes and permissions are unchanged by this correction. These checks do not qualify Stripe, real dues, email delivery, family enrollment or production.

@@ -392,3 +392,14 @@ test('returning from a suspended tab invalidates status before another action', 
     expect(call).toHaveBeenCalledTimes(1);
   } finally { jest.useRealTimers(); }
 });
+
+test('member navigation stays in the page when the site header styles target nav elements', async () => {
+  const siteHeaderStyles = document.createElement('style');
+  siteHeaderStyles.textContent = 'nav { position: fixed; top: 0; width: 100%; }';
+  document.head.appendChild(siteHeaderStyles);
+  try {
+    render(show()); await screen.findByRole('button', { name: 'Request membership' });
+    const navigation = screen.getByRole('navigation', { name: 'Member pages' });
+    expect(getComputedStyle(navigation).position).not.toBe('fixed');
+  } finally { siteHeaderStyles.remove(); }
+});
