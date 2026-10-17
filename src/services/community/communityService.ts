@@ -1,9 +1,11 @@
 import { httpsCallable, Functions } from 'firebase/functions';
+import { Auth } from 'firebase/auth';
 
 export const COMMUNITY_ENABLED = process.env.REACT_APP_FIREBASE_ENVIRONMENT === 'staging'
   && process.env.REACT_APP_COMMUNITY_STAGING === 'true';
 
 export interface CommunityStatus {
+  schemaVersion: 1; observedAtMs: number;
   membership: {
     revision: number; applicationStatus: string;
     entitlement: string; accessThroughMs: number | null;
@@ -25,11 +27,22 @@ export interface CommunityRequest {
   waiverVersion?: string;
   waiverAccepted?: boolean;
 }
-export async function callCommunity(functions: Functions, request: CommunityRequest) {
-  if (!COMMUNITY_ENABLED || functions.app.options.projectId !== 'run-mprc-staging') {
+export async function callCommunity(
+  functions: Functions,
+  request: CommunityRequest,
+  auth: Auth,
+): Promise<unknown> {
+  const identity = auth?.currentUser;
+  const bound = () => identity && auth.currentUser === identity
+    && auth.app === functions.app && auth.tenantId === null
+    && identity.uid === request.accountUid
+    && (request.action === 'status' || identity.emailVerified);
+  if (!COMMUNITY_ENABLED || functions.app.options.projectId !== 'run-mprc-staging' || !bound()) {
     throw new Error('Community staging is unavailable.');
   }
-  return (await httpsCallable<CommunityRequest, CommunityStatus>(functions, 'communityActions')(request)).data;
+  const result = await httpsCallable<CommunityRequest, unknown>(functions, 'communityActions')(request);
+  if (!bound()) throw new Error('Community staging is unavailable.');
+  return result.data;
 }
 
 export interface FreeEventDraft {

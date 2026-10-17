@@ -168,6 +168,7 @@ describe('transactional membership and free-event lifecycle', () => {
     const read = createCommunityService(memory.db, () => current);
     const before = JSON.stringify([...memory.docs]);
     const result = await read.status('runner-a');
+    expect(result).toMatchObject({ schemaVersion: 1, observedAtMs: current });
     expect(result.membership.entitlement).toBe('not_entitled');
     expect(result.events[0].signupStatus).toBe('ended');
     expect(JSON.stringify([...memory.docs])).toBe(before);

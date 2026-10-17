@@ -1,5 +1,7 @@
 # Officer Website Handbook
 
+**October 16 member-screen preparation:** [Review membership and free events](./MEMBER_SCREEN.md). Source only; no hosted release or payments yet.
+
 **Minimum member launch — October 15 decisions; #737 SOURCE ONLY:** Dave set $25 individual/$30 family calendar-year dues. New free-event signup requires verified email, accepted waiver and current paid membership; no additional discretionary member approval follows satisfied requirements. The new source checks membership in the booking transaction and preserves cancellation after expiry. This change is **NOT AVAILABLE YET** on the deployed website. Online dues are selected for first launch; separate family accounts share a paid Family ID. Final policy/guardian handling remains undecided. Review the [privacy/waiver drafts](../legal/MEMBER_LAUNCH_DRAFTS.md) and [source-only test procedure](./STAGING_COMMUNITY.md#current-membership-for-free-events--737-source-only). This source change adds no checkout or public external-payment instructions; paid-race commerce remains later. Earlier source checkpoints below are historical.
 
 **#731 final checkpoint — CLOSED October 15:** [native acceptance and cleanup](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/731#issuecomment-6186640177) are complete, including the human-confirmed local-access Block and final tab/kernel cleanup. No deleted fixture or resolved permission question is reopened. Production and real payments remain **NOT AVAILABLE YET**.

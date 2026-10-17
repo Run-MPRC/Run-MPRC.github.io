@@ -8,10 +8,18 @@ import Community from './Community';
 import { callCommunity } from '../../services/community/communityService';
 
 let mockUser: any = { uid: 'runner-a' };
-const mockFunctions = { app: { options: { projectId: 'run-mprc-staging' } } };
-const mockAuth = { currentUser: { emailVerified: true } };
+const mockApp = { options: { projectId: 'run-mprc-staging' } };
+let mockFunctions: any = { app: mockApp };
+let mockAuth: any;
+let mockServices: any;
+let mockSessionCallback: (user: any) => void;
+jest.mock('firebase/auth', () => ({
+ onIdTokenChanged: (auth: any, callback: (user: any) => void) => {
+  mockSessionCallback = callback; callback(auth.currentUser); return jest.fn();
+}
+}));
 jest.mock('../../services/hooks/useAuth', () => ({ useAuth: () => ({ user: mockUser, isLoading: false }) }));
-jest.mock('../../services/ServiceLocatorContext', () => ({ useServiceLocator: () => ({ services: { firebaseResources: { functions: mockFunctions, auth: mockAuth } } }) }));
+jest.mock('../../services/ServiceLocatorContext', () => ({ useServiceLocator: () => ({ services: mockServices }) }));
 jest.mock('../../services/community/communityService', () => ({ COMMUNITY_ENABLED: true, callCommunity: jest.fn() }));
 const call = callCommunity as jest.Mock;
 const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
@@ -20,6 +28,8 @@ afterAll(() => {
   else Reflect.deleteProperty(globalThis, 'crypto');
 });
 const state = (applicationStatus = 'none', revision = 0) => ({
+  schemaVersion: 1,
+observedAtMs: 1800000000000,
   membership: {
  applicationStatus, revision, entitlement: 'not_entitled', accessThroughMs: null
 },
@@ -27,6 +37,9 @@ events: [],
 });
 const testEvent = (extra = {}) => ({
   id: 'fixture-event',
+schemaVersion: 1,
+amountCents: 0,
+waiverHash: 'a'.repeat(64),
   title: 'Synthetic event',
   location: 'Synthetic place',
   startAtMs: 1800003600000,
@@ -49,7 +62,10 @@ const show = () => (
   </HelmetProvider>
 );
 beforeEach(() => {
-  jest.clearAllMocks(); mockUser = { uid: 'runner-a' }; mockAuth.currentUser.emailVerified = true;
+  jest.clearAllMocks(); mockUser = { uid: 'runner-a' };
+  mockFunctions = { app: mockApp };
+  mockAuth = { app: mockApp, tenantId: null, currentUser: { uid: 'runner-a', emailVerified: true } };
+  mockServices = { firebaseResources: { functions: mockFunctions, auth: mockAuth } };
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { randomUUID: () => '123e4567-e89b-42d3-a456-426614174000' } });
   call.mockResolvedValue(state());
 });
@@ -84,8 +100,8 @@ test('pending membership request uses the signed-in account and rereads status',
   await screen.findByText('Request status: pending.');
   expect(call).toHaveBeenNthCalledWith(2, mockFunctions, {
  action: 'membership_join', accountUid: 'runner-a', expectedRevision: 0, requestId: '123e4567-e89b-42d3-a456-426614174000'
-});
-  expect(call).toHaveBeenNthCalledWith(3, mockFunctions, { action: 'status', accountUid: 'runner-a' });
+}, mockAuth);
+  expect(call).toHaveBeenNthCalledWith(3, mockFunctions, { action: 'status', accountUid: 'runner-a' }, mockAuth);
 });
 test('an uncertain request retries exactly once with the original ID, then rereads', async () => {
   render(show()); await screen.findByRole('button', { name: 'Request membership' });
@@ -120,6 +136,8 @@ test('unverified accounts cannot start a mutation', async () => {
 test('linked test access is visible, cancellation preserves the term and refreshed expiry removes active state', async () => {
   const termEnd = 1800000060000;
   const active = {
+ schemaVersion: 1,
+observedAtMs: 1800000000000,
  membership: {
  applicationStatus: 'approved', revision: 2, entitlement: 'current_member', accessThroughMs: termEnd
 },
@@ -147,19 +165,23 @@ test('an obsolete account status completion is ignored', async () => {
   let finish!: (value: unknown) => void;
   call.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   const view = render(show());
-  mockUser = { uid: 'runner-b' }; view.rerender(show());
-  await waitFor(() => expect(call).toHaveBeenCalledWith(mockFunctions, { action: 'status', accountUid: 'runner-b' }));
+  mockUser = { uid: 'runner-b' }; mockAuth.currentUser = { uid: 'runner-b', emailVerified: true };
+  act(() => mockSessionCallback(mockAuth.currentUser)); view.rerender(show());
+  await waitFor(() => expect(call).toHaveBeenCalledWith(mockFunctions, { action: 'status', accountUid: 'runner-b' }, mockAuth));
   await act(async () => { finish(state('pending', 99)); });
   expect(screen.queryByText('Request status: pending.')).not.toBeInTheDocument();
 });
 test('free-event signup and cancellation use server versions and refresh counts', async () => {
   const event = {
     id: 'fixture-event',
+schemaVersion: 1,
+amountCents: 0,
+waiverHash: 'a'.repeat(64),
 title: 'Synthetic event',
 location: 'Synthetic place',
-    startAtMs: 1800000000000,
+    startAtMs: 1800003600000,
 opensAtMs: 1,
-closesAtMs: 1800000000000,
+closesAtMs: 1800001800000,
     status: 'open',
 signupStatus: 'open',
 capacity: 1,
@@ -175,7 +197,12 @@ waiverVersion: 'synthetic-v1',
   expect(screen.getByRole('button', { name: 'Sign up for Synthetic event' })).toBeDisabled();
   fireEvent.click(screen.getByRole('checkbox'));
   call.mockResolvedValueOnce({ registration: { status: 'confirmed', revision: 1 } });
-  call.mockResolvedValueOnce({ ...active, events: [{ ...event, confirmedCount: 1, registration: { status: 'confirmed', revision: 1 } }] });
+  call.mockResolvedValueOnce({
+ ...active,
+events: [{
+ ...event, confirmedCount: 1, signupStatus: 'full', registration: { status: 'confirmed', revision: 1 }
+}]
+});
   fireEvent.click(screen.getByRole('button', { name: 'Sign up for Synthetic event' }));
   await screen.findByRole('button', { name: 'Cancel signup for Synthetic event' });
   expect(call.mock.calls[1][1]).toMatchObject({
@@ -195,10 +222,13 @@ test.each([
   ['closed', 'Signup is closed.'],
   ['ended', 'The signup window has ended.'],
   ['full', 'No places are available for new signups.'],
-  [undefined, 'Signup availability could not be confirmed. Refresh status.'],
-  ['forged', 'Signup availability could not be confirmed. Refresh status.'],
 ])('unavailable or unknown server signup state %s cannot prepare a new signup', async (signupStatus, text) => {
-  call.mockResolvedValue({ ...state(), events: [testEvent({ signupStatus })] });
+  const extra: any = { signupStatus };
+  if (signupStatus === 'not_open_yet') extra.opensAtMs = 1800000010000;
+  if (signupStatus === 'closed') extra.status = 'closed';
+  if (signupStatus === 'ended') extra.closesAtMs = 1800000000000;
+  if (signupStatus === 'full') extra.confirmedCount = 1;
+  call.mockResolvedValue({ ...state(), events: [testEvent(extra)] });
   render(show()); await screen.findByText(text);
   expect(screen.getByRole('checkbox')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Sign up for Synthetic event' })).toBeDisabled();
@@ -234,7 +264,7 @@ test('failed refresh hides old active membership/events and only a successful re
   expect(screen.queryByText('Test membership active.')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Cancel membership' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Sign up for Synthetic event' })).not.toBeInTheDocument();
-  call.mockResolvedValueOnce({ ...state('approved', 2), events: [testEvent({ signupStatus: 'ended' })] });
+  call.mockResolvedValueOnce({ ...state('approved', 2), events: [testEvent({ signupStatus: 'ended', closesAtMs: 1800000000000 })] });
   fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
   await screen.findByText('The signup window has ended.');
   expect(screen.getByText('Test membership is not active.')).toBeInTheDocument();
@@ -255,7 +285,7 @@ test('successful action followed by failed status read hides stale state but ret
   await screen.findByText('Request status: pending.');
   expect(call.mock.calls[3][1]).toEqual(command);
 });
-test.each(['not_entitled', 'decision_pending', 'forged'])('noncurrent membership %s cannot prepare signup even for an open event', async (entitlement) => {
+test.each(['not_entitled', 'decision_pending'])('noncurrent membership %s cannot prepare signup even for an open event', async (entitlement) => {
   call.mockResolvedValue({
     ...state(), membership: { ...state().membership, entitlement }, events: [testEvent()]
   });
@@ -265,4 +295,100 @@ test.each(['not_entitled', 'decision_pending', 'forged'])('noncurrent membership
   const signup = screen.getByRole('button', { name: 'Sign up for Synthetic event' });
   expect(signup).toBeDisabled(); fireEvent.click(signup);
   expect(call).toHaveBeenCalledTimes(1);
+});
+
+test('unknown status hides all actionable state', async () => {
+  call.mockResolvedValue({ ...state(), events: [testEvent({ signupStatus: 'forged' })] });
+  render(show()); await screen.findByText('Status could not be loaded. Try Refresh status.');
+  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+});
+test('same-UID credential renewal discards a saved request and its late reply', async () => {
+  render(show()); await screen.findByRole('button', { name: 'Request membership' });
+  let finish!: (value: unknown) => void;
+  call.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  fireEvent.click(screen.getByRole('button', { name: 'Request membership' }));
+  call.mockResolvedValueOnce(state());
+  act(() => mockSessionCallback(mockAuth.currentUser));
+  await screen.findByRole('button', { name: 'Request membership' });
+  await act(async () => { finish({ membership: { revision: 1, applicationStatus: 'pending' } }); });
+  expect(screen.queryByRole('button', { name: 'Retry request' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Request status: pending.')).not.toBeInTheDocument();
+  expect(call.mock.calls.filter(([, request]) => request.action === 'membership_join')).toHaveLength(1);
+});
+test('provider replacement cannot display a late old status', async () => {
+  let finish!: (value: unknown) => void;
+  call.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const view = render(show());
+  mockFunctions = { app: mockApp };
+  mockServices = { firebaseResources: { functions: mockFunctions, auth: mockAuth } };
+  view.rerender(show());
+  await screen.findByText('Request status: none.');
+  await act(async () => { finish(state('pending', 99)); });
+  expect(screen.queryByText('Request status: pending.')).not.toBeInTheDocument();
+});
+test('expiry hides active membership and consent without a backend poll', async () => {
+  jest.useFakeTimers();
+  try {
+    const active = { ...state('approved', 2), membership: { ...state('approved', 2).membership, entitlement: 'current_member', accessThroughMs: 1800000001000 }, events: [testEvent()] };
+    call.mockResolvedValue(active); render(show());
+    await screen.findByText('Test membership active.');
+    fireEvent.click(screen.getByRole('checkbox')); const calls = call.mock.calls.length;
+    act(() => jest.advanceTimersByTime(1001));
+    expect(screen.queryByText('Test membership active.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByText('Status needs refreshing. Refresh status before continuing.')).toBeInTheDocument();
+    expect(call).toHaveBeenCalledTimes(calls);
+  } finally { jest.useRealTimers(); }
+});
+test('slow status read cannot publish membership beyond its deadline', async () => {
+  jest.useFakeTimers();
+  try {
+    let finish!: (value: unknown) => void;
+    call.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    render(show()); act(() => jest.advanceTimersByTime(2000));
+    await act(async () => { finish({ ...state('approved', 2), membership: { ...state('approved', 2).membership, entitlement: 'current_member', accessThroughMs: 1800000001000 } }); });
+    expect(screen.queryByText('Test membership active.')).not.toBeInTheDocument();
+    expect(screen.getByText('Status could not be loaded. Try Refresh status.')).toBeInTheDocument();
+  } finally { jest.useRealTimers(); }
+});
+test('opening and closing deadlines hide controls until an explicit reread', async () => {
+  jest.useFakeTimers();
+  try {
+    call.mockResolvedValue({ ...state(), events: [testEvent({ closesAtMs: 1800000001000 })] });
+    render(show()); await screen.findByRole('button', { name: 'Sign up for Synthetic event' });
+    act(() => jest.advanceTimersByTime(1001));
+    expect(screen.queryByRole('button', { name: 'Sign up for Synthetic event' })).not.toBeInTheDocument();
+    expect(call).toHaveBeenCalledTimes(1);
+  } finally { jest.useRealTimers(); }
+});
+test('malformed mutation acknowledgement keeps an exact saved retry and does not read status', async () => {
+  render(show()); await screen.findByRole('button', { name: 'Request membership' });
+  call.mockResolvedValueOnce({ membership: { revision: 99, applicationStatus: 'approved' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Request membership' }));
+  await screen.findByRole('button', { name: 'Retry request' });
+  expect(call).toHaveBeenCalledTimes(2);
+});
+
+test('freshness expires without polling, even if the wall clock moves backwards', async () => {
+  jest.useFakeTimers();
+  try {
+    call.mockResolvedValue(state()); render(show());
+    await screen.findByRole('button', { name: 'Request membership' });
+    jest.setSystemTime(Date.now() - 3600000);
+    act(() => jest.advanceTimersByTime(60001));
+    expect(screen.queryByRole('button', { name: 'Request membership' })).not.toBeInTheDocument();
+    expect(screen.getByText('Status needs refreshing. Refresh status before continuing.')).toBeInTheDocument();
+    expect(call).toHaveBeenCalledTimes(1);
+  } finally { jest.useRealTimers(); }
+});
+test('returning from a suspended tab invalidates status before another action', async () => {
+  jest.useFakeTimers();
+  try {
+    call.mockResolvedValue(state()); render(show());
+    await screen.findByRole('button', { name: 'Request membership' });
+    jest.setSystemTime(Date.now() + 60001);
+    act(() => window.dispatchEvent(new Event('focus')));
+    expect(screen.queryByRole('button', { name: 'Request membership' })).not.toBeInTheDocument();
+    expect(call).toHaveBeenCalledTimes(1);
+  } finally { jest.useRealTimers(); }
 });
