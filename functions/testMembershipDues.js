@@ -155,7 +155,12 @@ function createTestDuesService({ db, auth, provider, account, clock = Date.now }
   }
   async function resume(uid) { await actor(uid); return open(uid, await latest(uid)); }
   async function reconcile(uid) {
-    await actor(uid); await rate(uid); const o = await latest(uid); check(o.checkoutRef);
+    await actor(uid);
+    await db.runTransaction(async tx => {
+      const p = await tx.get(participantRef(uid));
+      check(marked(p.data(), clock()), 'permission-denied');
+    });
+    await rate(uid); const o = await latest(uid); check(o.checkoutRef);
     return { order: await observe(await provider.retrieve(o.checkoutRef)) };
   }
   async function webhook(event) {

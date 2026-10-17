@@ -124,3 +124,12 @@ test('revoked marker/current disabled account blocks resume and no extra provide
   f.docs.delete(`membershipTestParticipants/${UID}`); await expect(f.service.resume(UID)).rejects.toThrow(); expect(f.provider.create).toHaveBeenCalledTimes(1);
   f.disable(); await expect(f.service.status(UID)).rejects.toThrow();
 });
+
+test('revoked synthetic participant cannot reconcile or consume provider/rate resources', async () => {
+  const f = fixture(); await f.service.prepare(UID, f.request());
+  f.docs.delete(`membershipTestParticipants/${UID}`);
+  const before = JSON.stringify([...f.docs]);
+  await expect(f.service.reconcile(UID)).rejects.toThrow();
+  expect(f.provider.retrieve).not.toHaveBeenCalled();
+  expect(JSON.stringify([...f.docs])).toBe(before);
+});

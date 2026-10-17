@@ -3,8 +3,8 @@
 const Stripe = require('stripe');
 const { check, RETURN_URL } = require('./testDuesPolicy');
 const ref = (s, prefix) => typeof s === 'string' && new RegExp(`^${prefix}_[A-Za-z0-9]{1,120}$`).test(s);
-function checkoutUrl(url) {
-  try { const u = new URL(url); check(u.protocol === 'https:' && u.hostname === 'checkout.stripe.com' && !u.username && !u.password && !u.port && u.pathname.startsWith('/c/pay/cs_test_')); return url; } catch { check(false); }
+function checkoutUrl(url, sessionId) {
+  try { const u = new URL(url); check(u.protocol === 'https:' && u.hostname === 'checkout.stripe.com' && !u.username && !u.password && !u.port && u.pathname.startsWith('/c/pay/cs_test_') && (!sessionId || u.pathname === `/c/pay/${sessionId}`)); return url; } catch { check(false); }
 }
 function checkoutParameters(o) {
   return { mode: 'payment', payment_method_types: ['card'], client_reference_id: o.id,
@@ -34,7 +34,7 @@ function createTestStripe({ key, webhookSecret, account }) {
       const c = pi.latest_charge;
       if (c) {
         check(typeof c === 'object' && ref(c.id, 'ch') && c.livemode === false && c.payment_intent === pi.id
-          && c.amount === s.amount_total && c.currency === s.currency && typeof c.disputed === 'boolean' && Number.isSafeInteger(c.amount_refunded));
+          && c.amount === s.amount_total && c.currency === s.currency && typeof c.disputed === 'boolean' && Number.isSafeInteger(c.amount_refunded) && c.amount_refunded >= 0 && c.amount_refunded <= c.amount);
         reversal = c.disputed || c.amount_refunded > 0;
       }
       paid = s.status === 'complete' && s.payment_status === 'paid' && pi.status === 'succeeded'
@@ -44,7 +44,7 @@ function createTestStripe({ key, webhookSecret, account }) {
     return { checkoutRef: s.id, orderId: s.metadata.order, nonce: s.metadata.nonce, providerAccountRef: account,
       livemode: false, amountMinor: s.amount_total, currency: s.currency, paymentRef, paid, reversal,
       expired: s.status === 'expired' && s.payment_status === 'unpaid' && !s.payment_intent,
-      ...(includeUrl && s.status === 'open' && s.url ? { url: checkoutUrl(s.url) } : {}),
+      ...(includeUrl && s.status === 'open' && s.url ? { url: checkoutUrl(s.url, s.id) } : {}),
     };
   }
   return {

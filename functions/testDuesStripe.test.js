@@ -60,3 +60,13 @@ test('only ephemeral test Checkout URL can be returned', () => {
   expect(checkoutUrl('https://checkout.stripe.com/c/pay/cs_test_synthetic')).toContain('cs_test_');
   for (const url of ['https://checkout.stripe.com.evil/c/pay/cs_test_x', 'https://checkout.stripe.com/c/pay/cs_live_x', 'http://checkout.stripe.com/c/pay/cs_test_x', 'https://user@checkout.stripe.com/c/pay/cs_test_x']) expect(() => checkoutUrl(url)).toThrow();
 });
+
+test.each([-1, 1.5, 2501])('malformed refunded amount rejects without activation: %s', async amount => {
+  const pi = intent(); pi.latest_charge.amount_refunded = amount;
+  sdk.paymentIntents.retrieve.mockResolvedValue(pi);
+  await expect(adapter.retrieve('cs_test_synthetic')).rejects.toThrow();
+});
+test('Checkout URL must point at the verified exact Session', async () => {
+  sdk.checkout.sessions.retrieve.mockResolvedValue({ ...session(), status: 'open', payment_status: 'unpaid', payment_intent: null, url: 'https://checkout.stripe.com/c/pay/cs_test_foreign' });
+  await expect(adapter.retrieve('cs_test_synthetic', true)).rejects.toThrow();
+});
