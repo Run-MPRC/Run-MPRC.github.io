@@ -131,7 +131,8 @@ function createCommunityService(db, clock = Date.now) {
               : event.confirmedCount >= event.capacity ? 'full' : 'open';
       return { ...event, signupStatus, registration: registrationView(docs[index * 2 + 1].data()) };
     });
-    return { membership: memberView(member.exists ? member.data() : emptyMember, uid, now), events };
+    return { schemaVersion: 1, observedAtMs: now,
+      membership: memberView(member.exists ? member.data() : emptyMember, uid, now), events };
   }
 
   async function mutate(uid, request) {

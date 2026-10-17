@@ -1,5 +1,22 @@
 # Simple System Maps
 
+## Member/free-event screen — #739 source preparation
+
+```mermaid
+flowchart LR
+    A["Observed native account and session"] --> B["Read bounded server status"]
+    B --> C{"Valid status and known deadline still current?"}
+    C -- Yes --> D["Show membership and free-event actions"]
+    C -- No --> E["Hide old state; ask for refresh"]
+    D --> F["Server rechecks membership, waiver and capacity"]
+    F --> G["Validate result then reread current status"]
+    F -- Uncertain --> H["Save exact request in this session only"]
+    H --> F
+    A -- Account or session changes --> E
+```
+
+Text alternative: the current native account reads bounded server status; only a valid status inside its known display lifetime shows controls. Every action still uses server checks. Uncertain requests retain one exact retry within that observed session. Account/session changes or deadlines remove old state. This is source-only; deployment and provider proof remain separate.
+
 These diagrams show where pages, information, and deployments go. Each diagram includes a one-sentence text version.
 
 ## Fictional race member screen — #731 native staging tests verified

@@ -10,11 +10,11 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 131,
+  "scannedFileCount": 133,
   "scannedFilesByExtension": {
     ".js": 12,
     ".jsx": 35,
-    ".ts": 48,
+    ".ts": 50,
     ".tsx": 36
   },
   "errorCount": 113,
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:5ba90c83db63c37a2a3cf738e5d923ba77d172937d79153896e5a2eea3133878",
+  "fingerprint": "sha256:f2e9add8612f9e8be9e77ae321ee247b21439f5f5999cbeca43dfe2a5cb46c31",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -128,6 +128,8 @@
     "src/services/accountEmail/accountEmailSender.ts",
     "src/services/analytics/analytics.test.ts",
     "src/services/analytics/analytics.ts",
+    "src/services/community/communityMemberStatus.test.ts",
+    "src/services/community/communityMemberStatus.ts",
     "src/services/community/communityService.test.ts",
     "src/services/community/communityService.ts",
     "src/services/community/fictionalRaceService.test.ts",

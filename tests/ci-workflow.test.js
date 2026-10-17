@@ -43,7 +43,7 @@ const CLEAN_COMMANDS = Object.freeze([
   'test -z "$frontend_git_status"',
 ]);
 const LINT_SCRIPT = 'node .github/scripts/check-frontend-lint.cjs';
-const EXPECTED_LINT_FILES = 131;
+const EXPECTED_LINT_FILES = 133;
 const EXPECTED_LINT_ERRORS = 113;
 const EXPECTED_LINT_WARNINGS = 6;
 const YAML_TO_JSON = [
@@ -587,6 +587,21 @@ test('fictional race client and test additions have no baseline lint debt', () =
     'src/services/community/testSupport/fictionalRaceFixtures.ts',
   ];
   for (const file of added) {
+    assert.ok(lintBaseline.scannedFiles.includes(file));
+    assert.equal(lintBaseline.findings.filter(finding => finding.file === file).length, 0);
+  }
+});
+
+test('member screen and parser additions have no baseline lint debt', () => {
+  const clean = [
+    'src/pages/community/Community.tsx',
+    'src/pages/community/Community.test.tsx',
+    'src/services/community/communityService.ts',
+    'src/services/community/communityService.test.ts',
+    'src/services/community/communityMemberStatus.ts',
+    'src/services/community/communityMemberStatus.test.ts',
+  ];
+  for (const file of clean) {
     assert.ok(lintBaseline.scannedFiles.includes(file));
     assert.equal(lintBaseline.findings.filter(finding => finding.file === file).length, 0);
   }

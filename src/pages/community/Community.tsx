@@ -1,4 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+ useEffect, useMemo, useRef, useState
+} from 'react';
+import { onIdTokenChanged, User } from 'firebase/auth';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../services/hooks/useAuth';
 import { useServiceLocator } from '../../services/ServiceLocatorContext';
@@ -6,6 +9,7 @@ import {
  callCommunity, COMMUNITY_ENABLED, CommunityRequest, CommunityStatus
 } from '../../services/community/communityService';
 import SEO from '../../components/SEO';
+import { communityFreshFor, parseCommunityResult, parseCommunityStatus } from '../../services/community/communityMemberStatus';
 import './Community.css';
 
 function signupMessage(event: CommunityStatus['events'][number]) {
@@ -22,101 +26,154 @@ function signupMessage(event: CommunityStatus['events'][number]) {
   }
 }
 
+const pacificDate = (value: number) => new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles', dateStyle: 'medium', timeStyle: 'short'
+}).format(value);
+type Snapshot = {
+  identity: symbol; value: CommunityStatus; began: number; wallBegan: number; budget: number;
+};
+const fresh = (value: Snapshot) => Math.max(
+  performance.now() - value.began,
+  Date.now() - value.wallBegan,
+) < value.budget;
+
 export default function Community() {
   const { services } = useServiceLocator();
   const { user, isLoading } = useAuth();
-  const uid = user?.uid;
+  const auth = services?.firebaseResources.auth;
   const functions = services?.firebaseResources.functions;
-  const [snapshot, setSnapshot] = useState<{
-    uid: string; functions: unknown; value: CommunityStatus;
-  } | null>(null);
-  const status = snapshot && snapshot.uid === uid && snapshot.functions === functions
-    ? snapshot.value : null;
+  const [session, setSession] = useState<{ user: User; epoch: symbol } | null>(null);
+  const enabled = COMMUNITY_ENABLED && functions?.app.options.projectId === 'run-mprc-staging'
+    && auth?.app === functions?.app && auth?.tenantId === null;
+  const identity = useMemo(() => Symbol('community-session'), [services, auth, functions, session, user?.uid, isLoading, enabled]);
+  const latestIdentity = useRef(identity); latestIdentity.current = identity;
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [waivers, setWaivers] = useState<Record<string, boolean>>({});
   const generation = useRef(0);
   const inFlight = useRef(false);
-  const pending = useRef<CommunityRequest | null>(null);
-  const enabled = COMMUNITY_ENABLED && functions?.app.options.projectId === 'run-mprc-staging';
-
-  useEffect(() => {
-    generation.current += 1;
-    const {current} = generation;
-    pending.current = null; inFlight.current = false;
-    setSnapshot(null); setBusy(false); setMessage(''); setWaivers({});
-    if (enabled && uid && functions) {
-      callCommunity(functions, { action: 'status', accountUid: uid }).then((value) => {
-        if (generation.current === current) setSnapshot({ uid, functions, value });
-      }).catch(() => {
-        if (generation.current === current) setMessage('Status could not be loaded. Try Refresh status.');
-      });
-    }
-    return () => { generation.current += 1; };
-  }, [enabled, uid, functions]);
+  const pending = useRef<{ identity: symbol; request: CommunityRequest } | null>(null);
+  const current = () => enabled && !isLoading && session && auth?.currentUser === session.user
+    && session.user.uid === user?.uid;
+  const status = snapshot?.identity === identity && current() && fresh(snapshot)
+    ? snapshot.value : null;
+  const saved = pending.current?.identity === identity ? pending.current.request : null;
+  const verified = current() && session?.user.emailVerified === true;
 
   async function perform(request?: Omit<CommunityRequest, 'accountUid' | 'requestId'>, statusOnly = false) {
-    if (!enabled || !uid || !functions || inFlight.current) return;
-    if (request && typeof globalThis.crypto?.randomUUID !== 'function') {
-      setMessage('This browser cannot prepare a safe request. Use an up-to-date browser.');
-      return;
+    if (!current() || !auth || !functions || !session
+      || inFlight.current || (request && !verified)) return;
+    // Recheck at click time too, including after a suspended background tab.
+    if (request && (!snapshot || snapshot.identity !== identity || !fresh(snapshot))) {
+      setSnapshot(null); setWaivers({}); setMessage('Status needs refreshing. Refresh status before continuing.'); return;
     }
+    const captured = identity;
     generation.current += 1;
-    const {current} = generation;
-    inFlight.current = true; setBusy(true); setMessage('');
-    // Hide old status and new actions while current state is uncertain.
-    setSnapshot(null); setWaivers({});
-    let command = statusOnly ? null : pending.current;
-    if (!statusOnly && request) {
-      command = { ...request, accountUid: uid, requestId: crypto.randomUUID() };
+    const serial = generation.current;
+    const stillCurrent = () => latestIdentity.current === captured
+      && generation.current === serial && current();
+    let command = statusOnly ? null : saved;
+    if (request) {
+      try {
+        command = { ...request, accountUid: session.user.uid, requestId: crypto.randomUUID() };
+      } catch { setMessage('This browser cannot prepare a safe request. Use an up-to-date browser.'); return; }
     }
-    if (command) pending.current = command;
+    if (command) pending.current = { identity, request: command };
+    inFlight.current = true; setBusy(true); setMessage('');
+    setSnapshot(null); setWaivers({});
     try {
-      if (command) await callCommunity(functions, command);
-      if (generation.current !== current) return;
-      // Always reread current status: a saved retry result may predate rejoining
-      // or term expiry. It must never overwrite authoritative current state.
-      const value = await callCommunity(functions, { action: 'status', accountUid: uid });
-      if (generation.current === current) {
-        setSnapshot({ uid, functions, value }); pending.current = null; setWaivers({});
-        setMessage(command ? 'Request confirmed. Your status is shown below.' : 'Status refreshed.');
+      if (command) {
+        parseCommunityResult(await callCommunity(functions, command, auth), command);
+        if (!stillCurrent()) return;
       }
+      const began = performance.now(); const wallBegan = Date.now();
+      const value = parseCommunityStatus(await callCommunity(functions, { action: 'status', accountUid: session.user.uid }, auth));
+      if (!stillCurrent()) return;
+      const next = {
+ identity, value, began, wallBegan, budget: communityFreshFor(value)
+};
+      if (!fresh(next)) throw new Error('Expired status');
+      setSnapshot(next); pending.current = null; setWaivers({});
+      setMessage(command ? 'Request confirmed. Your status is shown below.' : 'Status refreshed.');
     } catch {
-      if (generation.current === current) { setSnapshot(null); setWaivers({}); setMessage(command
+      if (stillCurrent()) { setSnapshot(null); setWaivers({}); setMessage(command
         ? 'We could not confirm this request. Use Retry request; it will not create a second signup.'
         : 'Status could not be loaded. Try Refresh status.'); }
     } finally {
-      if (generation.current === current) { inFlight.current = false; setBusy(false); }
+      if (stillCurrent()) { inFlight.current = false; setBusy(false); }
     }
   }
+  useEffect(() => {
+    if (!enabled || !auth) { setSession(null); return undefined; }
+    return onIdTokenChanged(auth, (next) => {
+      generation.current += 1; pending.current = null; inFlight.current = false;
+      setSnapshot(null); setWaivers({}); setBusy(false); setMessage('');
+      setSession(next ? { user: next, epoch: Symbol('native-community-session') } : null);
+    });
+  }, [enabled, auth]);
+  useEffect(() => {
+    generation.current += 1; pending.current = null; inFlight.current = false;
+    setSnapshot(null); setBusy(false); setMessage(''); setWaivers({});
+    if (current()) perform(undefined, true);
+    return () => { generation.current += 1; };
+    // The identity represents all observed account, provider and session changes.
+  }, [identity]);
+  useEffect(() => {
+    if (!snapshot || snapshot.identity !== identity) return undefined;
+    let timer: number;
+    function invalidate() {
+      window.clearTimeout(timer);
+      if (snapshot && !fresh(snapshot)) {
+        setSnapshot(null); setWaivers({});
+        setMessage('Status needs refreshing. Refresh status before continuing.');
+      } else if (snapshot) {
+        const elapsed = Math.max(
+          performance.now() - snapshot.began,
+          Date.now() - snapshot.wallBegan,
+        );
+        timer = window.setTimeout(invalidate, Math.max(1, Math.ceil(snapshot.budget - elapsed)));
+      }
+    }
+    invalidate();
+    document.addEventListener('visibilitychange', invalidate);
+    window.addEventListener('focus', invalidate);
+    return () => {
+      window.clearTimeout(timer); document.removeEventListener('visibilitychange', invalidate);
+      window.removeEventListener('focus', invalidate);
+    };
+  }, [snapshot, identity]);
 
   if (!enabled) { return (
-    <div className="community-staging">
+    <div className="community-staging member-community">
       <h1>Community signup is not available here</h1>
       <Link to="/account">My Account</Link>
     </div>
   ); }
-  if (isLoading) return <div className="community-staging"><p>Loading account…</p></div>;
-  if (!uid) { return (
-    <div className="community-staging">
+  if (isLoading) return <div className="community-staging member-community"><p>Loading account…</p></div>;
+  if (!user?.uid) { return (
+    <div className="community-staging member-community">
       <SEO title="Membership and Free Events — Staging" noindex />
+      <p className="member-community__eyebrow">MID-PENINSULA RUNNING CLUB</p>
       <h1>Membership and free events</h1>
+      <p className="member-community__intro">Your membership, upcoming runs and signups in one place.</p>
       <p role="note">Staging test only. Use made-up accounts. No real membership, race entry or payment is created.</p>
       <Link to="/login" state={{ from: '/community' }}>Sign in to continue</Link>
     </div>
   ); }
-  const verified = services?.firebaseResources.auth.currentUser?.emailVerified === true;
-  const blocked = busy || pending.current !== null || !verified;
+  const blocked = busy || saved !== null || !verified;
   const currentMember = status?.membership.entitlement === 'current_member';
   return (
-    <div className="community-staging">
+    <div className="community-staging member-community">
       <SEO title="Membership and Free Events — Staging" noindex />
+      <p className="member-community__eyebrow">MID-PENINSULA RUNNING CLUB</p>
       <h1>Membership and free events</h1>
+      <p className="member-community__intro">Your membership, upcoming runs and signups in one place.</p>
       <p role="note">
         Staging test only. Use made-up accounts.
         No real membership, race entry or payment is created.
       </p>
-      <p>
+      <nav className="member-community__nav" aria-label="Member pages">
         <Link to="/account">My Account</Link>
         {' '}
         ·
@@ -126,17 +183,19 @@ export default function Community() {
         <Link to="/community/admin">Officer tools (staging)</Link>
         {' · '}
         <Link to="/community/races">Fictional races (staging)</Link>
-      </p>
+      </nav>
       <button type="button" disabled={busy} onClick={() => perform(undefined, true)}>Refresh status</button>
       {' '}
-      {pending.current && <button type="button" disabled={busy} onClick={() => perform()}>Retry request</button>}
-      {!verified && (
+      {saved && <button type="button" disabled={busy} onClick={() => perform()}>Retry request</button>}
+      {busy && <p role="status">Loading your current status…</p>}
+      {!current() && !isLoading && <p role="status">Confirming your signed-in account. If this continues, return to My Account and sign in again.</p>}
+      {current() && !verified && (
         <p>Verify your email in My Account before requesting membership or signing up.</p>
       )}
       {message && <p role="status" aria-live="polite">{message}</p>}
       {status && (
-      <>
-        <section aria-labelledby="membership-title">
+      <div className="member-community__content">
+        <section className="member-community__membership" aria-labelledby="membership-title">
           <h2 id="membership-title">Club membership</h2>
           <p>
             Request status:
@@ -144,16 +203,15 @@ export default function Community() {
             {status.membership.applicationStatus.replace(/_/g, ' ')}
             .
           </p>
-          <p>
-            Signup requests await officer confirmation of dues. They do not grant paid membership.
-          </p>
-          <p>{status.membership.entitlement === 'current_member' ? 'Test membership active.' : 'Test membership is not active.'}</p>
+          <p className="member-community__muted">This test screen records a membership request only. Online dues and family invitations are not available here yet.</p>
+          <p className={`member-community__badge ${currentMember ? 'member-community__badge--active' : ''}`}>{status.membership.entitlement === 'current_member' ? 'Test membership active.' : 'Test membership is not active.'}</p>
           {status.membership.entitlement === 'current_member' && status.membership.accessThroughMs
             && (
             <p>
               Access continues through the paid term ending
               {' '}
-              {new Date(status.membership.accessThroughMs).toLocaleString()}
+              {pacificDate(status.membership.accessThroughMs)}
+              {' Pacific time'}
               .
             </p>
 )}
@@ -174,12 +232,17 @@ export default function Community() {
             You can still cancel an existing signup.
           </p>
 )}
-          {status.events.length === 0 && <p>No free events are available.</p>}
+          <p className="member-community__muted">Event times are shown in Pacific time. A place is confirmed only after the server accepts your signup.</p>
+          {status.events.length === 0 && <p className="member-community__empty">No free events are available. Check back for the next club run.</p>}
           {status.events.map((event) => (
-            <article key={event.id} style={{ marginTop: 24 }}>
+            <article key={event.id} className="member-community__event">
               <h3>{event.title}</h3>
               <p>
-                {new Date(event.startAtMs).toLocaleString()}
+                <time dateTime={new Date(event.startAtMs).toISOString()}>
+                  {pacificDate(event.startAtMs)}
+                  {' '}
+                  Pacific time
+                </time>
                 {' '}
                 ·
                 {' '}
@@ -200,7 +263,10 @@ export default function Community() {
               </p>
               {event.registration.status !== 'confirmed' && (
               <>
-                <p>{event.waiverText}</p>
+                <details className="member-community__waiver" open>
+                  <summary>Read the test event waiver</summary>
+                  <p>{event.waiverText}</p>
+                </details>
                 <label htmlFor={`waiver-${event.id}`}>
                   <input id={`waiver-${event.id}`} type="checkbox" checked={waivers[event.id] || false} disabled={blocked || !currentMember || event.status !== 'open' || event.signupStatus !== 'open'} onChange={(e) => setWaivers({ ...waivers, [event.id]: e.target.checked })} />
                   {' '}
@@ -230,7 +296,7 @@ export default function Community() {
             </article>
 ))}
         </section>
-      </>
+      </div>
 )}
     </div>
   );

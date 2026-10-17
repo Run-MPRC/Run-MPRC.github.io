@@ -56,3 +56,11 @@ Check current Firebase trial/usage and the club's actual Stripe pricing privatel
 Next, complete the real account-recovery qualification and one coherent test-mode membership purchase/activation/family-enrollment workflow. Keep generic commerce/race/shop work out unless it is an actual dependency. Qualify current Rules/App Check, narrow runtime identities, exact backend-first publication, compatible rollback/isolated restoration and an officer screen-only walkthrough for the selected release.
 
 The [privacy, retention and waiver drafts](./legal/MEMBER_LAUNCH_DRAFTS.md) remain for club review. Source changed, tests passed, merge, staging deployment, production deployment, provider configuration and real behavior must be evidenced separately. #731's accepted fictional race evidence remains closed; no deleted fixture or sealed harness is reused.
+
+## Screen preparation — October 16, #739
+
+The current staging-only membership/free-event screen gains native-session fencing, closed response parsing, a bounded display lifetime and responsive layout. Backend status adds `schemaVersion: 1` and server `observedAtMs`; no persisted record changes. Release the compatible backend before its frontend. An old backend or malformed response displays an unavailable state instead of retaining old membership/signup controls. The client freshness timer never extends membership, chooses capacity or contacts a provider. Automatic token-session observation can trigger one status reread; freshness expiry itself requires explicit Refresh status and does not poll.
+
+The lint inventory adds the two new clean TypeScript files only. Existing reviewed findings remain byte-for-byte unchanged: 113 errors and six warnings elsewhere. No lint rule or allowance is weakened.
+
+Online annual dues, private family enrollment, account-recovery/provider qualification, approved policy and the final protected production release remain incomplete. The prototype request screen explicitly says online dues and family invitations are unavailable; it does not imply that a manual approval queue is the approved final membership flow.

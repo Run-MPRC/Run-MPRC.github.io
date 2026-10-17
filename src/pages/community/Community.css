@@ -56,3 +56,34 @@
   .community-staging section { padding: 1rem; }
   .community-staging button { width: 100%; margin-inline: 0; }
 }
+
+/* Member/free-event layout. Officer and fictional-race screens retain their layout. */
+.member-community { max-width: 1080px; padding-block: clamp(1.5rem, 5vw, 3.5rem); color: #f3f3fa; }
+.member-community h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.15; letter-spacing: -0.025em; }
+.member-community__eyebrow { color: #ffca63; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; }
+.member-community__intro { max-width: 44rem; color: #dedde9; font-size: 1.1rem; }
+.member-community [role="note"] { margin-block: 1.5rem; border-radius: 0.5rem; background: #282743; color: #f3f3fa; }
+.member-community__nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-block: 1rem; }
+.member-community a { color: #d5e1ff; text-underline-offset: 0.2em; }
+.member-community__nav a { display: inline-flex; min-height: 44px; align-items: center; }
+.member-community__content { display: grid; grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.4fr); gap: 1.5rem; align-items: start; }
+.member-community section { background: #201f38; border-color: #5e5b7c; padding: clamp(1rem, 2vw, 1.5rem); }
+.member-community section h2 { font-size: 1.4rem; }
+.member-community__muted { color: #d0cedf; }
+.member-community__badge { display: inline-block; border: 1px solid #b9a5e2; border-radius: 2rem; padding: 0.35rem 0.75rem; color: #e3d5ff; font-weight: 600; }
+.member-community__badge--active { border-color: #77d5ac; background: #163e32; color: #bdffe3; }
+.member-community__event { border-top: 1px solid #5e5b7c; padding-top: 1.25rem; margin-top: 1.5rem; }
+.member-community__event h3 { font-size: 1.15rem; line-height: 1.5; }
+.member-community__empty { padding: 1rem; background: #2c2a47; border-radius: 0.5rem; }
+.member-community__waiver { padding: 0.75rem; margin-block: 1rem; border: 1px solid #5e5b7c; border-radius: 0.5rem; }
+.member-community__waiver summary { cursor: pointer; min-height: 32px; }
+.member-community [role="status"] { margin-block: 1rem; padding: 0.75rem; background: #2c2a47; border-radius: 0.5rem; }
+.member-community button:not(:disabled):hover { background: #1d56d2; }
+.member-community :is(a, button, input, summary):focus-visible { outline: 3px solid #ffca63; outline-offset: 4px; }
+.member-community input[type="checkbox"] { accent-color: #1d56d2; }
+@media (max-width: 760px) {
+  .member-community__content { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .member-community * { scroll-behavior: auto; transition: none; }
+}
