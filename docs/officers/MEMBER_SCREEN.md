@@ -2,7 +2,7 @@
 
 **Status, October 16, 2026:** native member behavior is staging-verified from `799565e`: Function v7/archive/settings, all 62 Hosting files, genuine Auth/App Check and ten member/retry/expiry/cancellation checks passed. Fresh fictional fixtures were removed and their absence checked. A full-site visual check found member links inheriting the fixed site header styles. The correction is published at `d08a6a3`; all 62 final file hashes, four deep routes, genuine sign-in, desktop/390px navigation/focus and fresh cleanup passed. Use [the final #739 receipt](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/739) before reviewing the screen. Production and real payments are **NOT AVAILABLE YET**. Earlier local-only screenshots are historical.
 
-The specialist's native checks used ordinary browser attestation and separately supplied synthetic terms. They do not prove email delivery, online dues, officer MFA, Stripe or production behavior. All permissions and resource limits remain unchanged.
+The earlier #739 checks used ordinary browser attestation and separately supplied synthetic terms. The separate [October 17 dues checkpoint](../TEST_DUES_HOSTED_EVIDENCE.md) now proves actual sandbox Checkout, automatic payer activation and free-event admission at Hosting source `71f59e2`; community Function v7 remains unchanged. Email delivery, officer MFA and production behavior are not established by that checkpoint.
 
 **Purpose:** check that members understand their status and can safely sign up, cancel or recover after an uncertain request.
 
