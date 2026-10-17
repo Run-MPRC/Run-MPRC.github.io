@@ -36,7 +36,7 @@ Create a small **nonsecret**, task-owned plan file outside Git with exactly:
 {"stripeAccount":"acct_REPLACE_WITH_VERIFIED_SANDBOX","keyVersion":"1","webhookVersion":"1"}
 ```
 
-Replace all three values with observed account and enabled numeric secret-version identifiers. `latest`, extra keys and foreign projects fail closed. The plan never contains a credential. The fixed native project identity, exact runtime role/project bindings, zero user-managed keys, per-secret access, labels and pinned enabled versions are checked before release and again after verification.
+Replace all three values with observed account and enabled numeric secret-version identifiers. `latest`, extra keys and foreign projects fail closed. The plan never contains a credential. The fixed native project identity, exact runtime role/project bindings, zero user-managed keys, per-secret access, labels and pinned enabled versions are checked before release and again after verification. Explicit project-wide Secret Manager accessor/admin grants also stop the release, including grants to other accounts. Existing owner/platform authority remains; these checks are not a complete organization-wide IAM audit.
 
 ## Reviewed release and verification — specialist only
 
@@ -48,7 +48,7 @@ node scripts/staging-test-dues-release.js verify /absolute/path/to/nonsecret-pla
 node scripts/staging-community-hosting.js test-dues /absolute/path/to/nonsecret-plan.json
 ```
 
-The deploy path uploads one deterministic, bounded source archive per target, validates native settings and public transport IAM, and downloads both actual source archives to compare hashes. Public transport is necessary for Firebase callable Auth/App Check and the Stripe signature boundary; it grants no Firestore access. Every mutation rechecks current-main CI. Verification accepts ancestor source only with identical current reviewed archive bytes. Missing setup is a failure, not an automatic repair. A partial deployment leaves the screen disabled; inspect native inventory and resume only the same reviewed release.
+The deploy path uploads one deterministic, bounded source archive per target, validates native settings and public transport IAM, and downloads both actual source archives to compare hashes. Public transport is necessary for Firebase callable Auth/App Check and the Stripe signature boundary; it grants no Firestore access. Every mutation rechecks current-main CI. Verification accepts ancestor source only with identical current reviewed archive bytes. Missing setup is a failure, not an automatic repair. A partial deployment leaves the screen disabled. An existing ACTIVE target may be preserved while completing the same reviewed release. A failed or inactive target stops inventory validation: preserve the native receipts and prepare a separate reviewed specialist repair. Do not delete a Function or its evidence as an automatic recovery step.
 
 The Hosting command verifies both dues archives/settings/account/secret bindings and provenance before building, then rechecks before publication. Only this explicit mode sets the frontend dues flag. The ordinary Hosting command clears any inherited dues flag. The public release marker adds the dues bundle hash, not credentials or account details. Existing profile/community release paths can recognize and preserve these exact isolated dues Functions; they cannot deploy dues through their older targets.
 

@@ -56,6 +56,12 @@ test('secret metadata checks only pinned enabled versions and per-secret runtime
     for (const [s, v, p] of [[{ ...secret, name: 'projects/other/secrets/MPRC_TEST_STRIPE_KEY' }, version, policy], [secret, { ...version, state: 'DISABLED' }, policy], [secret, { ...version, name: `${secret.name}/versions/latest` }, policy], [secret, version, { bindings: [{ ...policy.bindings[0], members: ['allUsers'] }] }], [secret, version, { bindings: [...policy.bindings, policy.bindings[0]] }]]) assert.throws(() => c.validateSecretMetadata(s, v, p, c.SECRETS[0], '1'));
   }
 });
+test('project-wide secret access for other accounts is not accepted as minimum setup', () => {
+  for (const role of ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin']) {
+    const authority = { role: { name: c.ROLE, includedPermissions: [...c.PERMISSIONS] }, policy: { bindings: [{ role: c.ROLE, members: [`serviceAccount:${c.RUNTIME}`] }, { role, members: ['serviceAccount:other@run-mprc-staging.iam.gserviceaccount.com'] }] }, keys: [] };
+    assert.throws(() => c.validateRuntimeAuthority(authority));
+  }
+});
 test('transport blocks secret payloads, production, arbitrary fields and all verification writes before fetch', async () => {
   const calls = []; const request = r.requestFor(true, async (...args) => { calls.push(args); return { ok: true, json: async () => ({}) }; });
   for (const [url, method, body] of [

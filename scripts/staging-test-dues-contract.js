@@ -86,6 +86,10 @@ function validateRuntimeAuthority({ role, policy, keys }) {
   check(role.name === ROLE && !role.deleted && Array.isArray(role.includedPermissions)
     && isDeepStrictEqual([...role.includedPermissions].sort(), [...PERMISSIONS].sort()));
   check(Array.isArray(policy.bindings) && Array.isArray(keys) && keys.length === 0);
+  // Secret access belongs on the two individual resources, never a newly
+  // introduced project-wide accessor/admin grant. Existing owner/platform
+  // authority is retained; this is not an organization-wide IAM audit.
+  check(!policy.bindings.some(b => ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(b.role)));
   const grants = policy.bindings.filter(b => b.members?.includes(`serviceAccount:${RUNTIME}`));
   check(grants.length === 1 && grants[0].role === ROLE && !grants[0].condition);
 }
