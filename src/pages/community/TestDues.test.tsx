@@ -195,3 +195,26 @@ test('bad response hides all purchase controls', async () => {
     await screen.findByText(/We could not confirm/);
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
 });
+
+test('after a paid year ends the current-year offer is available without showing old access', async () => {
+  const now = 1798790400000;
+  const next = { ...state(), observedAtMs: now, order: { ...order, state: 'active', endsAtMs: now } };
+  next.offers = next.offers.map((p) => ({
+ ...p,
+planRef: p.planRef.replace('2026', '2027'),
+    termId: 'calendar-2027',
+startsAtMs: now,
+endsAtMs: 1830326400000
+}));
+  call.mockResolvedValue(next); render(show());
+  expect(await screen.findByRole('button', { name: 'Continue to individual test checkout' })).toBeDisabled();
+  expect(screen.getByText('Payment confirmed. That term has ended.')).toBeInTheDocument();
+  expect(screen.queryByText('Your test membership is active.')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox'));
+  expect(screen.getByRole('button', { name: 'Continue to individual test checkout' })).toBeEnabled();
+});
+test('an unbound prepared order offers resume rather than a doomed payment check', async () => {
+  call.mockResolvedValue({ ...state(), order: { ...order, state: 'prepared' } }); render(show());
+  expect(await screen.findByRole('button', { name: 'Resume saved checkout' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'Check payment status' })).not.toBeInTheDocument();
+});

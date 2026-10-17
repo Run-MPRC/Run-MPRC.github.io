@@ -196,7 +196,10 @@ export default function TestDues() {
             document.removeEventListener('visibilitychange', expire);
         };
     }, [snapshot]);
-    const canBuy = status && !status.active && (!status.order || status.order.state === 'expired');
+    const previousTermPaid = status?.order?.state === 'active'
+      && status.order.endsAtMs <= status.observedAtMs;
+    const canBuy = status && !status.active
+      && (!status.order || status.order.state === 'expired' || previousTermPaid);
     let accountMessage = '';
     if (!enabled) accountMessage = 'Test checkout is not connected here yet.';
     else if (isLoading) accountMessage = 'Loading account…';
@@ -230,7 +233,10 @@ export default function TestDues() {
           {status?.order && (
           <section className="member-community__card">
             <h2>Your saved purchase</h2>
-            <p>{`Status: ${status.order.state.replace(/_/g, ' ')}.`}</p>
+            <p>
+              {previousTermPaid ? 'Payment confirmed. That term has ended.'
+                  : `Status: ${status.order.state.replace(/_/g, ' ')}.`}
+            </p>
             <p>{`$${(status.order.amountMinor / 100).toFixed(2)} USD test dues.`}</p>
             <p>{`Calendar-year term ends ${date(status.order.endsAtMs)}, Pacific time.`}</p>
             {status.order.familyId && (
@@ -245,7 +251,7 @@ export default function TestDues() {
               Resume saved checkout
             </button>
 )}
-            {['open', 'prepared', 'paid_pending_activation'].includes(status.order.state) && (
+            {['open', 'paid_pending_activation'].includes(status.order.state) && (
             <button type="button" disabled={busy} onClick={() => perform('reconcile')}>
               Check payment status
             </button>

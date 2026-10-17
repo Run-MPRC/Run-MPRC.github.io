@@ -133,3 +133,19 @@ test('revoked synthetic participant cannot reconcile or consume provider/rate re
   expect(f.provider.retrieve).not.toHaveBeenCalled();
   expect(JSON.stringify([...f.docs])).toBe(before);
 });
+
+test('old-year reversal cannot suspend a later paid membership term', async () => {
+  const f = fixture(); await f.service.prepare(UID, f.request()); f.paid(); await f.service.reconcile(UID);
+  const old = f.getOrder();
+  f.setNow(yearStart(2027)); f.docs.set(`membershipTestParticipants/${UID}`, { schemaVersion: 1, synthetic: true, expiresAtMs: f.now() + 86400000 });
+  f.provider.create.mockImplementationOnce(async next => {
+    f.setObservation({ orderId: next.id, nonce: next.nonce, checkoutRef: 'cs_test_newyear', paymentRef: null, paid: false, reversal: false });
+    return f.provider.retrieve();
+  });
+  await f.service.prepare(UID, f.request());
+  f.setObservation({ paid: true, paymentRef: 'pi_newyear' }); await f.service.reconcile(UID);
+  const before = f.docs.get(`communityMemberships/${UID}`); expect(before.authority.term.termId).toBe('calendar-2027');
+  f.setObservation({ orderId: old.id, nonce: old.nonce, checkoutRef: 'cs_test_fictional', paymentRef: 'pi_fictional', paid: false, reversal: true });
+  await f.service.webhook(f.event('evt_oldyear_reversal'));
+  expect(f.docs.get(`communityMemberships/${UID}`)).toEqual(before); expect((await f.service.status(UID)).active).toBe(true);
+});
