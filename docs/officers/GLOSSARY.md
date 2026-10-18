@@ -33,6 +33,7 @@
 | Netlify | The service currently answering requests for `runmprc.com`. |
 | GitHub Pages | A GitHub-hosted website branch. It currently still claims `runmprc.com`, so it is not an independently reachable second copy; source removal and provider verification remain open. |
 | Stripe | The outside payment service. MPRC live commerce is not approved yet. |
+| Reconciliation | A specialist compares the saved purchase with Stripe's payment record and checks any difference before deciding the next step. Do not start another payment while this check is open. |
 | Secret | A password-like value, key, token, or recovery code that must not be put in source, issues, AI, email, or screenshots. |
 | Token | A password-like value that lets a person or service act. Treat it as a secret. |
 | Service account | A non-human account used by automation. Its key is a secret and must have limited access. |
