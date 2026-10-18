@@ -1,5 +1,7 @@
 # Test dues native failure and recovery evidence — October 17, 2026
 
+**October 18 follow-up:** the [saved-Checkout clarification and native cleanup](./TEST_DUES_RECOVERY_MESSAGE.md) passed at Hosting `30d5f27`; dues Functions remain v1 at `71f59e2`. Earlier dated results below remain historical. Real payments and production remain separate.
+
 The bounded failure and recovery batch passed in the club sandbox and `run-mprc-staging`. Real payments and production remain unavailable. Read this with the preceding [core hosted evidence](./TEST_DUES_HOSTED_EVIDENCE.md); neither receipt is a real-member launch approval.
 
 Officer impact: interrupted or late test payments retain their original purchase and evidence. Verified payment can recover after a missed callback or restored account. A refund holds membership; expired or failed payments cannot silently create another charge or extend a term.
@@ -54,6 +56,6 @@ For a future supervised run, Dave supplies new uniquely owned fixtures and a new
 
 This qualifies the tested card-only staging flow and the specifically labelled native failure boundaries. It does not qualify an issued foreign-tenant JWT, an actual asynchronous payment-method UI or full dispute lifecycle, restricted-key permissions, a real calendar rollover, real distributed outages or atomic Auth/Firestore revocation. The existing unit/emulator suites cover further withdrawal, suspension, revision-conflict and failed-write transitions; those are not claimed as new native tests here.
 
-The failed-card expiry screen still describes the saved purchase as open and cannot reopen its expired Session. This is a safe lock, not a complete self-service recovery experience. The officer guide requires stopping and escalating it. Do not describe it as automatic failed-payment recovery.
+At this October 17 checkpoint, the failed-card expiry screen described the saved purchase as open and could not reopen its expired Session. The [October 18 clarification](./TEST_DUES_RECOVERY_MESSAGE.md) now explicitly tells the member to stop and ask for reconciliation. The safe lock remains; this is not automatic failed-payment recovery.
 
 Family invitations/other-account enrollment, approved waiver/privacy/retention/guardian wording, live payment exception policies and production/live-money approval remain separate. The connected test flow is not the completed real-member launch.

@@ -1,5 +1,7 @@
 # Connect and qualify hosted test dues — #742
 
+**October 18 follow-up:** the [saved-Checkout clarification and native cleanup](./TEST_DUES_RECOVERY_MESSAGE.md) passed at Hosting `30d5f27`; dues Functions remain v1 at `71f59e2`. Earlier dated results below remain historical. Real payments and production remain separate.
+
 **October 17, 2026: connected and deployed in staging at `71f59e2`; core hosted flow and bounded failure/recovery checks verified.** Read the [native evidence, cleanup and remaining qualification](./TEST_DUES_HOSTED_EVIDENCE.md) before repeating any procedure. Read the [later native failure/recovery receipt and limits](./TEST_DUES_NATIVE_RECOVERY.md). This is a specialist runbook; completed fixtures must not be recreated. Real payments and production remain unavailable.
 
 ## Authority and scope

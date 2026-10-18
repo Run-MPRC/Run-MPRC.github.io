@@ -1,5 +1,7 @@
 # Test dues hosted evidence — October 17, 2026
 
+**October 18 follow-up:** the [saved-Checkout clarification and native cleanup](./TEST_DUES_RECOVERY_MESSAGE.md) passed at Hosting `30d5f27`; dues Functions remain v1 at `71f59e2`. Earlier dated results below remain historical. Real payments and production remain separate.
+
 The club sandbox is connected and the core hosted dues flow works in staging. This is not a real-member or real-payment launch. A separate [native failure and recovery follow-up](./TEST_DUES_NATIVE_RECOVERY.md) records the later bounded checks and qualification limits.
 
 Officer impact: verified fictional payers can use $25 individual or $30 family test Checkout and activate automatically, then sign up for free events with separate event consent. No officer membership approval follows these checks.
