@@ -1,5 +1,7 @@
 # Review annual dues in test mode
 
+**October 18, 2026: the saved-Checkout stop message is verified in staging.** A fresh fictional failed-card purchase stayed locked after expiry. Resume displayed the reconciliation message without another purchase. Both this account and the earlier held test account were removed; financial evidence was retained. Read the [dated message and cleanup receipt](../TEST_DUES_RECOVERY_MESSAGE.md). Real payments and production remain unavailable.
+
 **October 17, 2026: core hosted flow and bounded recovery checks verified in staging.** The [test dues screen](https://run-mprc-staging.web.app/community/dues) is connected to the club sandbox. Actual individual and family test payments activated each payer automatically. One payer then booked and cancelled a free test event. Read the [dated evidence and remaining qualification](../TEST_DUES_HOSTED_EVIDENCE.md). The four core accounts/event and eight later failure-test accounts were removed; payment evidence was retained. The [failure/recovery receipt](../TEST_DUES_NATIVE_RECOVERY.md) records the restored webhook, actual refund hold, late-payment guards and qualification limits. Ask Dave for fresh supervised test access; do not reuse old fixtures. Production and real payments remain **NOT AVAILABLE YET**.
 
 **Purpose:** confirm that one fictional purchase activates the payer automatically and allows free-event signup, without a second officer membership approval.
@@ -23,7 +25,7 @@
 11. Open Membership and free events and accept the separate event test waiver.
 12. Sign up for the named free event and confirm your place.
 13. Ask the specialist which failure checks are covered by the supplied native receipt. The dated receipts distinguish the core screens, later native failures and injected tests. They do not qualify every provider method or outage.
-14. Refresh status or resume the saved checkout after an interrupted session. If the screen says “Checkout could not be reopened,” keep the saved purchase, stop and ask Dave for reconciliation. Do not start another payment. This clarification is **NOT AVAILABLE YET** until the #747 staging release is verified.
+14. Refresh status or resume the saved checkout after an interrupted session. If the screen says “Checkout could not be reopened,” keep the saved purchase, stop and ask Dave for reconciliation. Do not start another payment. The [October 18 native check](../TEST_DUES_RECOVERY_MESSAGE.md) verified this message.
 15. Sign out and ask the specialist to remove the exact disposable accounts and event. Keep test payment evidence for reconciliation.
 
 **Expected result:** one saved purchase belongs to the payer. A return URL proves nothing. Only verified test payment for the exact account, amount, currency, order and term can activate the canonical membership used by free events. Original term and consent evidence are retained. The current screen expires within 60 seconds or sooner at a known deadline; it never polls. A family purchase creates one private Family ID and the payer's membership. Invitations and other family-account enrollment are **NOT AVAILABLE YET**; an ID alone grants nothing.
