@@ -23,7 +23,7 @@
 11. Open Membership and free events and accept the separate event test waiver.
 12. Sign up for the named free event and confirm your place.
 13. Ask the specialist which failure checks are covered by the supplied native receipt. The dated receipts distinguish the core screens, later native failures and injected tests. They do not qualify every provider method or outage.
-14. Refresh status or resume the saved checkout after an interrupted session. If it cannot reopen, stop and ask Dave for reconciliation; do not pay again.
+14. Refresh status or resume the saved checkout after an interrupted session. If the screen says “Checkout could not be reopened,” keep the saved purchase, stop and ask Dave for reconciliation. Do not start another payment. This clarification is **NOT AVAILABLE YET** until the #747 staging release is verified.
 15. Sign out and ask the specialist to remove the exact disposable accounts and event. Keep test payment evidence for reconciliation.
 
 **Expected result:** one saved purchase belongs to the payer. A return URL proves nothing. Only verified test payment for the exact account, amount, currency, order and term can activate the canonical membership used by free events. Original term and consent evidence are retained. The current screen expires within 60 seconds or sooner at a known deadline; it never polls. A family purchase creates one private Family ID and the payer's membership. Invitations and other family-account enrollment are **NOT AVAILABLE YET**; an ID alone grants nothing.
