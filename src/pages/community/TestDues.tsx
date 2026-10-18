@@ -102,6 +102,7 @@ export default function TestDues() {
         setAccepted(false);
         setMessage('');
         try {
+            let unopenedOrderId: string | undefined;
             if (request.action !== 'status') {
                 const result = parseDuesResult(await callTestDues(functions, auth, request));
                 if (!valid()) return;
@@ -109,6 +110,9 @@ export default function TestDues() {
                 if (result.checkoutUrl) {
                     openTestCheckout(result.checkoutUrl);
                     return;
+                }
+                if (request.action === 'resume' && result.order.state === 'open') {
+                    unopenedOrderId = result.order.id;
                 }
             }
             const began = performance.now();
@@ -127,7 +131,10 @@ export default function TestDues() {
             setSnapshot({
                 identity: capture, value, began, wall, budget
             });
-            setMessage('Current test status loaded.');
+            setMessage(unopenedOrderId === value.order?.id
+                && value.order?.state === 'open' && !value.active
+                ? 'Checkout could not be reopened. Keep this saved purchase and ask the test owner for reconciliation. Do not start another payment.'
+                : 'Current test status loaded.');
         }
         catch {
             if (valid()) {

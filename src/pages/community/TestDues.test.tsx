@@ -218,3 +218,62 @@ test('an unbound prepared order offers resume rather than a doomed payment check
   expect(await screen.findByRole('button', { name: 'Resume saved checkout' })).toBeEnabled();
   expect(screen.queryByRole('button', { name: 'Check payment status' })).not.toBeInTheDocument();
 });
+
+const recoveryMessage = 'Checkout could not be reopened. Keep this saved purchase and ask the test owner for reconciliation. Do not start another payment.';
+test('resume without a Checkout URL explains the retained open purchase without navigation or prepare', async () => {
+    call.mockResolvedValue({ ...state(), order });
+    render(show());
+    const resume = await screen.findByRole('button', { name: 'Resume saved checkout' });
+    call.mockResolvedValueOnce({ order });
+    fireEvent.click(resume);
+    expect(await screen.findByText(recoveryMessage)).toBeInTheDocument();
+    expect(screen.getByText('Status: open.')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(openTestCheckout).not.toHaveBeenCalled();
+    expect(call.mock.calls.map((c) => c[2])).toEqual([
+        { action: 'status', accountUid: 'fictional' },
+        { action: 'resume', accountUid: 'fictional' },
+        { action: 'status', accountUid: 'fictional' }
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+    await screen.findByText('Current test status loaded.');
+    expect(screen.queryByText(recoveryMessage)).not.toBeInTheDocument();
+});
+test.each(['active', 'held'])('fresh %s status supersedes an earlier open resume result', async (nextState) => {
+    call.mockResolvedValue({ ...state(), order });
+    render(show());
+    const resume = await screen.findByRole('button', { name: 'Resume saved checkout' });
+    call.mockResolvedValueOnce({ order }).mockResolvedValueOnce({
+        ...state(), order: { ...order, state: nextState },
+        active: nextState === 'active',
+        accessThroughMs: nextState === 'active' ? order.endsAtMs : null
+    });
+    fireEvent.click(resume);
+    await screen.findByText('Current test status loaded.');
+    expect(screen.queryByText(recoveryMessage)).not.toBeInTheDocument();
+    expect(screen.getByText(`Status: ${nextState}.`)).toBeInTheDocument();
+    expect(openTestCheckout).not.toHaveBeenCalled();
+});
+test.each(['session', 'account'])('%s changes discard a pending resume message and the displayed message', async (change) => {
+    call.mockResolvedValue({ ...state(), order });
+    const view = render(show());
+    const resume = await screen.findByRole('button', { name: 'Resume saved checkout' });
+    call.mockResolvedValueOnce({ order });
+    fireEvent.click(resume);
+    await screen.findByText(recoveryMessage);
+    let resolve: (v: any) => void = () => {};
+    call.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resume saved checkout' }));
+    call.mockResolvedValue(state());
+    await act(async () => {
+        if (change === 'account') mockUser = { uid: 'another-fictional' };
+        mockAuth.currentUser = { uid: mockUser.uid, emailVerified: true };
+        mockCallback(mockAuth.currentUser);
+        view.rerender(show());
+    });
+    await screen.findByRole('checkbox');
+    await act(async () => { resolve({ order }); });
+    expect(screen.queryByText(recoveryMessage)).not.toBeInTheDocument();
+    expect(screen.queryByText('Your saved purchase')).not.toBeInTheDocument();
+    expect(openTestCheckout).not.toHaveBeenCalled();
+});
