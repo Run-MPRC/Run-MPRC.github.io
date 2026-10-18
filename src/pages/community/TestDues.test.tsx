@@ -244,7 +244,8 @@ test.each(['active', 'held'])('fresh %s status supersedes an earlier open resume
     render(show());
     const resume = await screen.findByRole('button', { name: 'Resume saved checkout' });
     call.mockResolvedValueOnce({ order }).mockResolvedValueOnce({
-        ...state(), order: { ...order, state: nextState },
+        ...state(),
+        order: { ...order, state: nextState },
         active: nextState === 'active',
         accessThroughMs: nextState === 'active' ? order.endsAtMs : null
     });
