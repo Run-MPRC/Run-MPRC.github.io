@@ -27,7 +27,7 @@ function ZeffyMembershipForm() {
   }, []);
 
   return (
-    <section id="membership-signup" className="zeffy-membership" aria-label="MPRC membership signup">
+    <div id="membership-signup" className="zeffy-membership" role="region" aria-label="MPRC membership signup">
       {process.env.REACT_APP_FIREBASE_ENVIRONMENT === 'staging' && (
         <p className="zeffy-membership__notice">
           <strong>Staging preview:</strong>
@@ -56,7 +56,7 @@ function ZeffyMembershipForm() {
         </div>
       </div>
       <div ref={scriptRef} />
-    </section>
+    </div>
   );
 }
 
