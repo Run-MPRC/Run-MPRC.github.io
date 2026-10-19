@@ -10,10 +10,10 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 137,
+  "scannedFileCount": 140,
   "scannedFilesByExtension": {
     ".js": 12,
-    ".jsx": 35,
+    ".jsx": 38,
     ".ts": 52,
     ".tsx": 38
   },
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:b4fdd4e8efba6c011d293d96f8453a4e2dccccddf7907e2ff9b67cf2b74ba81f",
+  "fingerprint": "sha256:b35a20454e66177c3055a06768686a0f310d15cca2f45d633a4b74f497cafd21",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -56,6 +56,8 @@
     "src/components/Subheader.jsx",
     "src/components/UpcomingEventsPreview.tsx",
     "src/components/VideoCarousel.jsx",
+    "src/components/ZeffyMembershipForm.jsx",
+    "src/components/ZeffyMembershipForm.test.jsx",
     "src/components/index.ts",
     "src/data.jsx",
     "src/headerClearance.test.js",
@@ -97,6 +99,7 @@
     "src/pages/events/raceCheckoutRequest.ts",
     "src/pages/home/Home.jsx",
     "src/pages/joinUs/JoinUs.jsx",
+    "src/pages/joinUs/JoinUs.test.jsx",
     "src/pages/joinUs/JoinUsConditionalRoute.jsx",
     "src/pages/joinUs/Route.jsx",
     "src/pages/joinUs/Waiver.jsx",
@@ -1318,9 +1321,9 @@
     },
     {
       "file": "src/pages/joinUs/JoinUs.jsx",
-      "line": 130,
+      "line": 105,
       "column": 1,
-      "endLine": 130,
+      "endLine": 105,
       "endColumn": 104,
       "severity": 2,
       "ruleId": "max-len",
@@ -1331,9 +1334,9 @@
     },
     {
       "file": "src/pages/joinUs/JoinUs.jsx",
-      "line": 134,
+      "line": 109,
       "column": 17,
-      "endLine": 134,
+      "endLine": 109,
       "endColumn": 36,
       "severity": 2,
       "ruleId": "react/no-array-index-key",

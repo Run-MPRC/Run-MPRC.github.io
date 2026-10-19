@@ -1,16 +1,11 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import './joinUs.css';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faGoogle } from '@fortawesome/free-brands-svg-icons';
 import SEO from '../../components/SEO';
 import MetaText from '../../components/MetaText';
+import ZeffyMembershipForm from '../../components/ZeffyMembershipForm';
 import {
   ARM,
   BECOME_A_MEMBER,
-  GOOGLE_FORM,
-  JOIN_US_BUTTON_2,
-  JOIN_US_DESCRIPTION_4,
   JOIN_US_HEADING_DESC,
   LI_WHATSAPP_ACCESS,
   LI_FACEBOOK_STRAVA_ACCESS,
@@ -23,7 +18,6 @@ import {
   LI_TRAIL_RUNS_TRACK,
   LI_CLUB_GATHERINGS,
   LI_CLUB_SUPPORT_NETWORKING,
-  LI_AFFORDABLE_MEMBERSHIP_FEES,
   LI_EASY_ANNUAL_RENEWAL_PROCESS,
   LI_DISCOUNT_ON_SHOES,
   MEMBER_BENEFITS,
@@ -34,7 +28,6 @@ import {
 import Card from '../../components/Card';
 import {
   ARM_URI,
-  GOOGLE_FORM_LINK,
   GOOGLE_CALENDAR_ADD_LINK,
   GOOGLE_MAPS_LOCATION_LINK,
   WAIVER_FORM_LINK,
@@ -76,17 +69,8 @@ const sectionHeading = () => (
 const sectionBecomeMember = () => (
   <Card className="joinus__card">
     <h2 className="h2_joinus">{BECOME_A_MEMBER}</h2>
+    <ZeffyMembershipForm />
     <ul className="ul_joinus">
-      <li className="li_joinus">
-        {JOIN_US_DESCRIPTION_4}
-        <a className="hyperlink" href={GOOGLE_FORM_LINK} target="_blank" rel="noreferrer noopener">
-          {GOOGLE_FORM}
-          {' '}
-          <FontAwesomeIcon icon={faGoogle} />
-          .
-          {' '}
-        </a>
-      </li>
       <li className="li_joinus">
         {MEMBER_BENEFITS}
         <ul className="ul_joinus">
@@ -101,7 +85,6 @@ const sectionBecomeMember = () => (
           <li className="li_joinus">{LI_TRAIL_RUNS_TRACK}</li>
           <li className="li_joinus">{LI_CLUB_GATHERINGS}</li>
           <li className="li_joinus">{LI_CLUB_SUPPORT_NETWORKING}</li>
-          <li className="li_joinus">{LI_AFFORDABLE_MEMBERSHIP_FEES}</li>
           <li className="li_joinus">{LI_EASY_ANNUAL_RENEWAL_PROCESS}</li>
           <li className="li_joinus">
             {LI_DISCOUNT_ON_SHOES}
@@ -112,14 +95,6 @@ const sectionBecomeMember = () => (
         </ul>
       </li>
     </ul>
-    <Link
-      to={GOOGLE_FORM_LINK}
-      className="btn lg"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {JOIN_US_BUTTON_2}
-    </Link>
   </Card>
 );
 

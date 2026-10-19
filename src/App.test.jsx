@@ -921,9 +921,9 @@ test('keeps the real Join route structured data free of an unapproved membership
   expect(JSON.stringify(joinSchema)).not.toMatch(
     /"@type":"Offer"|"price":|"priceCurrency":|Annual membership fee for individuals \(2026\)/,
   );
-  expect(screen.getByText(
-    'Affordable membership fees: $25/individual or $30/household per calendar year',
-  )).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /open the membership form in a new tab/i }))
+    .toHaveAttribute('href', 'https://www.zeffy.com/en-US/ticketing/mid-peninsula-running-clubs-membership');
+  expect(screen.queryByText(/Affordable membership fees:/)).not.toBeInTheDocument();
 });
 
 test('keeps the shared Join schema helper price-neutral while retaining organization and run data', () => {
