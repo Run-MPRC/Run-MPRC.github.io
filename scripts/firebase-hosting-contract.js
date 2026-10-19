@@ -19,6 +19,10 @@ const PRODUCTION_CONFIGURATION = Object.freeze({
 const PRODUCTION_IDENTIFIERS = Object.freeze(
   Object.values(PRODUCTION_CONFIGURATION),
 );
+// The approved public Zeffy slug happens to contain the Firebase project name.
+// Exclude only these complete, quoted form literals from the artifact text scan.
+// Configuration validation and every other production-identity occurrence remain strict.
+const APPROVED_ZEFFY_FORM_LITERAL = /(["'`])(?:https:\/\/www\.zeffy\.com\/(?:en-US\/ticketing|embed\/ticketing)|\/embed\/ticketing)\/mid-peninsula-running-clubs-membership\1/gu;
 const STAGING_FIELDS = Object.freeze([
   'REACT_APP_FIREBASE_API_KEY',
   'REACT_APP_FIREBASE_AUTH_DOMAIN',
@@ -183,8 +187,9 @@ function verifyExecutableArtifact(directory, environment = process.env) {
     requiredIdentifiers.forEach((identity) => {
       if (contents.includes(identity)) foundIdentifiers.add(identity);
     });
+    const identityContents = contents.replace(APPROVED_ZEFFY_FORM_LITERAL, '"approved-zeffy-form"');
     if (selected.environment === 'staging'
-      && PRODUCTION_IDENTIFIERS.some((identity) => contents.includes(identity))) {
+      && PRODUCTION_IDENTIFIERS.some((identity) => identityContents.includes(identity))) {
       reject();
     }
   });

@@ -319,6 +319,39 @@ test('WEB-001A1 executable staging artifacts prove staging identity and reject p
   );
 });
 
+test('Zeffy public form literals do not masquerade as Firebase production identities', (t) => {
+  const contract = require('../scripts/firebase-hosting-contract');
+  const fixture = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'mprc-zeffy-hosting-'));
+  t.after(() => fs.rmSync(fixture, { force: true, recursive: true }));
+  const filename = path.join(fixture, 'main.js');
+  const config = `const config=${JSON.stringify(STAGING_BUILD_ENVIRONMENT)};\n`;
+  const paths = [
+    '/embed/ticketing/mid-peninsula-running-clubs-membership',
+    'https://www.zeffy.com/embed/ticketing/mid-peninsula-running-clubs-membership',
+    'https://www.zeffy.com/en-US/ticketing/mid-peninsula-running-clubs-membership',
+  ];
+  for (const quote of ['"', "'", '`']) {
+    for (const approved of paths) {
+      fs.writeFileSync(filename, `${config}const form=${quote}${approved}${quote};\n`);
+      assert.equal(contract.verifyExecutableArtifact(fixture, STAGING_BUILD_ENVIRONMENT).environment, 'staging');
+    }
+  }
+  const approved = paths.map(value => JSON.stringify(value)).join(',');
+  for (const invalid of [
+    ...Object.values(PRODUCTION_BUILD_ENVIRONMENT).filter(value => value !== 'production'),
+    'https://us-central1-mid-peninsula-running-club.cloudfunctions.net/example',
+    'https://unapproved.example/embed/ticketing/mid-peninsula-running-clubs-membership',
+    `${paths[0]}-different-form`,
+    `${paths[1]}.firebaseapp.com`,
+  ]) {
+    fs.writeFileSync(filename, `${config}const forms=[${approved}];const forbidden=${JSON.stringify(invalid)};\n`);
+    assert.throws(() => contract.verifyExecutableArtifact(fixture, STAGING_BUILD_ENVIRONMENT), /firebase_hosting_contract_rejected/u);
+  }
+  fs.writeFileSync(filename, `${config}const forms=[${approved}];\n`);
+  fs.writeFileSync(path.join(fixture, 'other.js'), 'const project="mid-peninsula-running-club";\n');
+  assert.throws(() => contract.verifyExecutableArtifact(fixture, STAGING_BUILD_ENVIRONMENT), /firebase_hosting_contract_rejected/u);
+});
+
 test('CI-001D4 executable staging artifact contains the selected App Check key', (t) => {
   // eslint-disable-next-line global-require, import/no-unresolved
   const contract = require('../scripts/firebase-hosting-contract');

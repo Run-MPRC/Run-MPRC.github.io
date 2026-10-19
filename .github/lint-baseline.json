@@ -10,18 +10,18 @@
   "targets": [
     "src"
   ],
-  "scannedFileCount": 137,
+  "scannedFileCount": 141,
   "scannedFilesByExtension": {
     ".js": 12,
-    ".jsx": 35,
+    ".jsx": 39,
     ".ts": 52,
     ".tsx": 38
   },
-  "errorCount": 113,
+  "errorCount": 111,
   "warningCount": 6,
   "errorsByExtension": {
     ".js": 2,
-    ".jsx": 26,
+    ".jsx": 24,
     ".ts": 2,
     ".tsx": 83
   },
@@ -31,7 +31,7 @@
     ".ts": 0,
     ".tsx": 6
   },
-  "fingerprint": "sha256:b4fdd4e8efba6c011d293d96f8453a4e2dccccddf7907e2ff9b67cf2b74ba81f",
+  "fingerprint": "sha256:c39f2619673c2ce72d2473f683bbca5119858c510e6f158fadd2d46fcc6e8b4e",
   "scannedFiles": [
     "src/App.jsx",
     "src/App.test.jsx",
@@ -49,6 +49,7 @@
     "src/components/ObfuscatedEmail.jsx",
     "src/components/Officer.jsx",
     "src/components/Paragraph.jsx",
+    "src/components/PublicNavigation.test.jsx",
     "src/components/SEO.d.ts",
     "src/components/SEO.jsx",
     "src/components/ScrollToTop.jsx",
@@ -56,6 +57,8 @@
     "src/components/Subheader.jsx",
     "src/components/UpcomingEventsPreview.tsx",
     "src/components/VideoCarousel.jsx",
+    "src/components/ZeffyMembershipForm.jsx",
+    "src/components/ZeffyMembershipForm.test.jsx",
     "src/components/index.ts",
     "src/data.jsx",
     "src/headerClearance.test.js",
@@ -97,6 +100,7 @@
     "src/pages/events/raceCheckoutRequest.ts",
     "src/pages/home/Home.jsx",
     "src/pages/joinUs/JoinUs.jsx",
+    "src/pages/joinUs/JoinUs.test.jsx",
     "src/pages/joinUs/JoinUsConditionalRoute.jsx",
     "src/pages/joinUs/Route.jsx",
     "src/pages/joinUs/Waiver.jsx",
@@ -1314,32 +1318,6 @@
       "message": "Do not nest ternary expressions.",
       "messageId": "noNestedTernary",
       "nodeType": "ConditionalExpression",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/joinUs/JoinUs.jsx",
-      "line": 130,
-      "column": 1,
-      "endLine": 130,
-      "endColumn": 104,
-      "severity": 2,
-      "ruleId": "max-len",
-      "message": "This line has a length of 103. Maximum allowed is 100.",
-      "messageId": "max",
-      "nodeType": "Program",
-      "fatal": false
-    },
-    {
-      "file": "src/pages/joinUs/JoinUs.jsx",
-      "line": 134,
-      "column": 17,
-      "endLine": 134,
-      "endColumn": 36,
-      "severity": 2,
-      "ruleId": "react/no-array-index-key",
-      "message": "Do not use Array index in keys",
-      "messageId": "noArrayIndex",
-      "nodeType": "TemplateLiteral",
       "fatal": false
     },
     {

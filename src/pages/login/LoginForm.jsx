@@ -13,6 +13,8 @@ import './LoginForm.css';
 const RESET_COOLDOWN_SECONDS = 60;
 
 function LoginForm() {
+  const location = useLocation();
+  const officerAccess = location.pathname === '/officer-access';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -29,7 +31,6 @@ function LoginForm() {
   const resetInFlightRef = useRef(false);
   const resetRetryAtRef = useRef(0);
   const mountedRef = useRef(true);
-  const location = useLocation();
   const navigate = useNavigate();
   const resetIsRequesting = resetState === 'requesting';
   const resetIsCoolingDown = resetState === 'finished' && resetSecondsRemaining > 0;
@@ -37,6 +38,14 @@ function LoginForm() {
   let submitLabel = 'Sign in';
   if (isLoading) submitLabel = 'Working...';
   else if (isRegistering) submitLabel = 'Create account';
+  let seoTitle = isRegistering ? 'Register' : 'Member Login';
+  let headerTitle = isRegistering ? 'Register' : 'Login';
+  let formHeading = isRegistering ? 'Create your account' : 'Sign in';
+  if (officerAccess) {
+    seoTitle = 'Officer Access';
+    headerTitle = 'Officer Access';
+    formHeading = 'Officer sign in';
+  }
 
   let resetButtonLabel = 'Forgot password?';
   if (resetIsRequesting) resetButtonLabel = 'Requesting reset help...';
@@ -110,12 +119,14 @@ function LoginForm() {
 
     try {
       const { identityService } = services;
-      if (isRegistering) {
+      if (isRegistering && !officerAccess) {
         const result = await identityService.register(email, password);
         setRegistrationOutcome(result.verificationEmailRequest);
       } else {
         await identityService.signIn(email, password);
-        navigate(getSafeLoginReturnPath(location.state?.from), { replace: true });
+        navigate(getSafeLoginReturnPath(
+          location.state?.from ?? (officerAccess ? '/admin' : undefined),
+        ), { replace: true });
       }
     } catch {
       setError(isRegistering
@@ -169,16 +180,27 @@ function LoginForm() {
 
   return (
     <>
-      <SEO title={isRegistering ? 'Register' : 'Member Login'} noindex />
+      <SEO title={seoTitle} noindex />
       <Header
-        title={isRegistering ? 'Register' : 'Login'}
+        title={headerTitle}
         image={HeaderImage}
       />
       <div className="container mx-auto px-4 py-10 flex justify-center">
         <div className="w-full max-w-sm border rounded-lg p-6 bg-white shadow-sm">
           <h2 className="text-xl font-semibold mb-4 text-center">
-            {isRegistering ? 'Create your account' : 'Sign in'}
+            {formHeading}
           </h2>
+
+          {officerAccess && (
+            <p className="mb-4 text-sm">
+              For MPRC officers with existing website access.
+              {' '}
+              Joining the club? Use
+              {' '}
+              <Link to="/joinus#membership-signup" className="underline">membership signup on Zeffy</Link>
+              .
+            </p>
+          )}
 
           {registrationOutcome && (
             <div
@@ -322,14 +344,16 @@ function LoginForm() {
 
           {!registrationOutcome && (
             <div className="mt-4 flex justify-between items-center text-sm">
-              <button
-                type="button"
-                onClick={handleToggleMode}
-                disabled={authActionBusy}
-                className="text-blue-600 hover:underline"
-              >
-                {isRegistering ? 'Have an account? Sign in' : 'New here? Register'}
-              </button>
+              {!officerAccess && (
+                <button
+                  type="button"
+                  onClick={handleToggleMode}
+                  disabled={authActionBusy}
+                  className="text-blue-600 hover:underline"
+                >
+                  {isRegistering ? 'Have an account? Sign in' : 'New here? Register'}
+                </button>
+              )}
               {!isRegistering && (
                 <button
                   type="button"

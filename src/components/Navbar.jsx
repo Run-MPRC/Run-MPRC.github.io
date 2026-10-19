@@ -5,13 +5,11 @@ import { MdOutlineClose } from 'react-icons/md';
 import { links } from '../data';
 import './navbar.css';
 import Logo from '../assets/images/logo.svg';
-import { useAuth } from '../services/hooks/useAuth';
 
 const PRIMARY_NAVIGATION_ID = 'primary-navigation';
 
 function Navbar() {
   const [isNavShowing, setIsNavShowing] = useState(false);
-  const { isAuthenticated } = useAuth();
 
   const handleNavToggle = () => setIsNavShowing((prevValue) => !prevValue);
   const handleNavClose = () => setIsNavShowing(false);
@@ -47,16 +45,6 @@ function Navbar() {
               </NavLink>
             </li>
           ))}
-          <li style={animationDelay(links.length)}>
-            <NavLink
-              to={isAuthenticated ? '/account' : '/login'}
-              className={({ isActive }) => (isActive ? 'active-nav' : '')}
-              onClick={handleNavClose}
-            >
-              {isAuthenticated ? 'My Account' : 'Sign in'}
-            </NavLink>
-          </li>
-
         </ul>
         <button
           type="button"

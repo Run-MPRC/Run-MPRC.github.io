@@ -100,7 +100,8 @@ function App() {
                 <Route path="suggestions" element={<Suggestions />} />
                 <Route path="joinus" element={<JoinUsConditionalRoute />} />
                 <Route path="committee" element={<Committee />} />
-                <Route path="login" element={<LoginForm />} />
+                <Route path="login" element={<LoginForm key="legacy-login" />} />
+                <Route path="officer-access" element={<LoginForm key="officer-access" />} />
                 <Route path="auth/action" element={<VerifyEmailAction />} />
                 <Route path="terms" element={<Terms />} />
                 <Route path="privacy" element={<Privacy />} />
