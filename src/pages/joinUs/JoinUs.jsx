@@ -22,8 +22,6 @@ import {
   LI_DISCOUNT_ON_SHOES,
   MEMBER_BENEFITS,
   WAYS_TO_RUN,
-  WAIVER_TITLE,
-  WAIVER_TEXT,
 } from '../../text/JoinUs';
 import Card from '../../components/Card';
 import {
@@ -69,6 +67,12 @@ const sectionHeading = () => (
 const sectionBecomeMember = () => (
   <Card className="joinus__card">
     <h2 className="h2_joinus">{BECOME_A_MEMBER}</h2>
+    <p>
+      Just visiting a run?
+      {' '}
+      <a className="hyperlink" href="#guest-waiver">Use the guest waiver</a>
+      .
+    </p>
     <ZeffyMembershipForm />
     <ul className="ul_joinus">
       <li className="li_joinus">
@@ -98,19 +102,13 @@ const sectionBecomeMember = () => (
   </Card>
 );
 
-const sectionWaiver = () => (
-  <Card className="joinus__card waiver-card">
-    <h2 className="h2_joinus">{WAIVER_TITLE}</h2>
-    <p className="waiver-note">
-      <strong>All runners are required to sign the waiver form prior to running with the club.</strong>
+const sectionGuestWaiver = () => (
+  <Card className="joinus__card">
+    <h2 id="guest-waiver" className="h2_joinus">Guest waiver</h2>
+    <p>
+      Visiting a club run without joining as a member? Complete the guest waiver
+      before running with us. You do not need an MPRC account.
     </p>
-    <div className="waiver-text-container">
-      {WAIVER_TEXT.trim().split('\n\n').map((paragraph, index) => (
-        <p key={`waiver-p-${index}`} className="waiver-paragraph">
-          {paragraph}
-        </p>
-      ))}
-    </div>
     <div className="waiver-actions">
       <a
         href={WAIVER_FORM_LINK.replace('?embedded=true', '')}
@@ -118,7 +116,7 @@ const sectionWaiver = () => (
         target="_blank"
         rel="noopener noreferrer"
       >
-        Sign Waiver Form
+        Complete guest waiver
       </a>
     </div>
   </Card>
@@ -188,9 +186,9 @@ function JoinUs() {
       <section className="joinus">
         <div className="container joinus__container">
           <div className="joinus__wrapper">
-            {sectionWaiver()}
-            {sectionHeading()}
             {sectionBecomeMember()}
+            {sectionGuestWaiver()}
+            {sectionHeading()}
           </div>
         </div>
       </section>

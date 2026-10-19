@@ -1,5 +1,7 @@
 # Officer Website Handbook
 
+**Zeffy simplification, source prepared October 18:** members use Zeffy, guests keep the existing waiver form, and separate Officer access is in the footer. The top menu has no account link. Check the [dated staging review](./ZEFFY_MEMBERSHIP.md) before using the preview; source preparation is not a production release.
+
 [Review the Zeffy membership preview](./ZEFFY_MEMBERSHIP.md) on Join Us. The supplied form is real: view only during staging review. Provider submissions, payments, Firebase activation and production release remain separate.
 
 **October 18:** [Test annual dues](./TEST_DUES.md) now has a verified stop message when a saved Checkout cannot reopen. Keep the purchase and ask Dave for reconciliation. Read the [native evidence and exact test-account cleanup](../TEST_DUES_RECOVERY_MESSAGE.md); real payments and production remain separate.

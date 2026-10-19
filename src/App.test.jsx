@@ -895,6 +895,23 @@ describe('WEB-SUGGESTIONS-001A static Suggestions page', () => {
   });
 });
 
+test('keeps officer access separate and resets legacy registration when entering the officer page', async () => {
+  window.history.pushState({}, '', '/login');
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: 'New here? Register' }));
+  expect(screen.getByRole('heading', { name: 'Create your account' })).toBeVisible();
+  fireEvent.click(screen.getByRole('link', { name: 'Officer access' }));
+  expect(await screen.findByRole('heading', { name: 'Officer sign in' })).toBeVisible();
+  expect(window.location.pathname).toBe('/officer-access');
+  expect(screen.queryByRole('button', { name: 'New here? Register' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Create account' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeVisible();
+  expect(within(screen.getByRole('navigation')).queryByRole('link', { name: 'Sign in' }))
+    .not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('link', { name: 'membership signup on Zeffy' }));
+  expect(await screen.findByRole('region', { name: 'MPRC membership signup' })).toBeVisible();
+});
+
 test('keeps the real Join route structured data free of an unapproved membership Offer', async () => {
   window.history.pushState({}, '', '/joinus');
   render(<App />);

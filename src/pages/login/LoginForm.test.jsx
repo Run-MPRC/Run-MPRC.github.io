@@ -71,7 +71,15 @@ function renderLogin(initialEntry = '/login') {
             </>
           )}
         />
+        <Route
+          path="/officer-access"
+          element={<LoginForm key="officer-access" />}
+        />
         <Route path="/account" element={<LocationProbe label="Account destination" />} />
+        <Route
+          path="/admin"
+          element={<AdminGuard><LocationProbe label="Admin destination" /></AdminGuard>}
+        />
         <Route path="/discounts" element={<LocationProbe label="Discounts destination" />} />
         <Route
           path="/admin/events"
@@ -146,6 +154,30 @@ describe('LoginForm return navigation', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+  });
+
+  test('officer entry signs in an existing officer without registration and keeps admin authorization', async () => {
+    signIn.mockImplementation(async () => {
+      useAuth.mockReturnValue({ isLoading: false, isAuthenticated: true, isAdmin: true });
+    });
+    renderLogin('/officer-access');
+    expect(screen.getByRole('heading', { name: 'Officer sign in' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'New here? Register' })).not.toBeInTheDocument();
+    submitCredentials();
+    expect(await screen.findByText('Admin destination')).toBeVisible();
+    expect(register).not.toHaveBeenCalled();
+    expect(signIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('officer entry does not grant admin access to an ordinary authenticated account', async () => {
+    signIn.mockImplementation(async () => {
+      useAuth.mockReturnValue({ isLoading: false, isAuthenticated: true, isAdmin: false });
+    });
+    renderLogin('/officer-access');
+    submitCredentials();
+    expect(await screen.findByRole('heading', { name: 'Admins only' })).toBeVisible();
+    expect(screen.queryByText('Admin destination')).not.toBeInTheDocument();
+    expect(register).not.toHaveBeenCalled();
   });
 
   test('round trips query and hash through an actual protected-route redirect', async () => {

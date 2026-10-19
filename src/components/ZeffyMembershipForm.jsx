@@ -36,8 +36,8 @@ function ZeffyMembershipForm() {
         </p>
       )}
       <p>
-        Join or renew through Zeffy. Membership options, prices and opening dates
-        are shown in the form.
+        Join or renew through Zeffy. No MPRC account is needed.
+        Membership options, prices and opening dates are shown in the form.
       </p>
       <p>
         <a className="hyperlink" href={MEMBERSHIP_URL} target="_blank" rel="noopener noreferrer">

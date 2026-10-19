@@ -1,5 +1,7 @@
 # Review the Zeffy membership form
 
+**October 18 simplification — source prepared; staging update pending:** Dave selected Zeffy for members, removal of the duplicate member waiver and public account navigation, a guest waiver option, and separate officer access. The existing receipt below describes the earlier preview until a new dated release is recorded.
+
 **Status:** [issue #750](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/750), staging display verified October 18, 2026. [Open the view-only preview](https://run-mprc-staging--zeffy-750-nqx3741y.web.app/joinus#membership-signup). Production is **NOT AVAILABLE YET** for this change.
 
 **Purpose:** review the embedded membership form on the Join Us page without creating a membership or payment.
@@ -10,16 +12,19 @@
 
 ```mermaid
 flowchart LR
-    A["Staging Join Us page"] --> B["Zeffy embed loader"]
+    A["Staging Join Us page"] --> B["Members: Zeffy embed loader"]
     B --> C["Club membership form on Zeffy"]
     A --> D["Direct link if the embed is unavailable"]
     D --> C
     B -- "Loader fails" --> E["Embedded iframe fallback"]
     E --> C
+    A --> G["Guests: existing activity waiver form"]
+    A --> H["Footer: Officer access"]
+    H --> I["Existing officer sign-in and admin authorization"]
     C -. "No account activation or sync added" .-> F["Existing Firebase member system"]
 ```
 
-In words: the Join Us page displays the club's form from Zeffy and retains a separate direct link; a failed loader uses an iframe, and this change adds no Firebase membership synchronization.
+In words: members use Zeffy, guests retain the existing waiver form, and officers have a separate footer entry; the public menu has no account link, and this change adds no Firebase membership synchronization or access grant.
 
 ## Review without a terminal
 
@@ -33,11 +38,17 @@ In words: the Join Us page displays the club's form from Zeffy and retains a sep
 8. Return to Home and then Join Us.
 9. Confirm only one visible membership form appears.
 10. Repeat at phone and computer widths.
-11. Leave the separate **Sign Waiver Form** unchanged and unused.
+11. Select **Use the guest waiver** and confirm it reaches the **Guest waiver** section.
+12. Confirm **Complete guest waiver** points to the existing activity waiver form; do not submit it.
+13. Confirm the old **Club Activity Waiver** text block is absent.
+14. Confirm **Sign in** and **My Account** are absent from the top menu, including the phone menu.
+15. Select **Officer access** in the footer.
+16. Confirm the page says **Officer sign in**, offers password recovery and has no registration button.
+17. Select **membership signup on Zeffy** to return to Join Us.
 
-**Expected result:** the form is readable within Join Us. A direct link remains usable if the embed fails. There is no duplicate Google membership signup link. Prices and renewal terms are supplied by Zeffy; this change does not settle the conflicting provider description and options noted October 18.
+**Expected result after the staged update:** Zeffy is the member path, with no second MPRC account or repeated website waiver. Guests can reach the existing activity waiver. The footer officer entry uses existing authentication and admin authorization; it creates no account or privilege. The legacy `/login` route remains compatible with existing private-route redirects. Prices, renewal terms and the member waiver inside Zeffy remain provider configuration; this display change does not verify or alter them.
 
-**Stop conditions:** wrong club/form, missing real-form notice, clipped controls, duplicate forms, missing direct link, unexpected account activation, or any request to test a payment or submit real details.
+**Stop conditions:** wrong club/form, missing real-form notice, clipped controls, duplicate forms, missing guest/direct links, public account navigation, officer-page registration, unexpected account activation or permission, or any request to test a payment or submit real details.
 
 **Success proof:** exact source revision, staging URL and deployment ID, dated phone/computer screenshots, one-form navigation check, loader/fallback tests and served artifact hashes. Viewing a form proves display only. It does not prove payment, membership activation, provider configuration or production readiness.
 

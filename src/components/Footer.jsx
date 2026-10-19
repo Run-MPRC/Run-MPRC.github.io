@@ -42,6 +42,7 @@ function Footer() {
           <Link to="/suggestions">Suggestions</Link>
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
+          <Link to="/officer-access">Officer access</Link>
         </article>
       </div>
       <div className="footer__copyright">
