@@ -49,6 +49,7 @@ In words: the Join Us page displays the club's form from Zeffy and retains a sep
 
 - Source: local implementation; not merged.
 - Tests: 28 frontend suites / 1,531 tests pass under Node 20. The new files have no lint findings. The exact lint baseline retains the same 113 legacy errors and six legacy warnings; only two old Join Us findings move with the removed Google-link lines.
+- Hosting checks: all 16 pass. A test first reproduced the rejected Zeffy slug, then passed with the exact form-literal exception. All real production identifiers, endpoints, changed hosts and changed form suffixes still reject.
 - Staging website: pending.
 - `runmprc.com`: unchanged; no production release authorized.
 - Firebase Functions, Rules, Auth, IAM and data: unchanged.
