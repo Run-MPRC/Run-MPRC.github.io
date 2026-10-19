@@ -1,5 +1,7 @@
 # Minimum member launch
 
+**October 18, 2026 current public signup decision:** Dave selected Zeffy for now, without MPRC member accounts. The staging preview removes the duplicate member waiver and public Sign in link, retains the existing guest waiver form, and provides separate officer access. See the [verified staging review](./officers/ZEFFY_MEMBERSHIP.md). The October 15 Firebase account/dues/family plan below is historical and deferred for this public signup; it is not the current enrollment procedure. No provider policy, waiver text or production release is changed.
+
 **October 15, 2026 decisions.** Dave approved building and deploying the agreed release. Online membership dues are included; paid MPRC race checkout, race refunds and bib transfers follow a separate release. This document records scope and technical requirements, not deployed payment capability or legal-policy approval.
 
 ## Member experience

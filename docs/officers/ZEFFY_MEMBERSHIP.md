@@ -1,6 +1,6 @@
 # Review the Zeffy membership form
 
-**October 18 simplification — source prepared; staging update pending:** Dave selected Zeffy for members, removal of the duplicate member waiver and public account navigation, a guest waiver option, and separate officer access. The existing receipt below describes the earlier preview until a new dated release is recorded.
+**October 18 simplification — staging verified:** members use Zeffy without an MPRC account. The duplicate member waiver and public account navigation are removed. Guests retain the existing waiver form, and officers use a separate footer entry. The receipt below records the current preview.
 
 **Status:** [issue #750](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/750), staging display verified October 18, 2026. [Open the view-only preview](https://run-mprc-staging--zeffy-750-nqx3741y.web.app/joinus#membership-signup). Production is **NOT AVAILABLE YET** for this change.
 
@@ -46,7 +46,7 @@ In words: members use Zeffy, guests retain the existing waiver form, and officer
 16. Confirm the page says **Officer sign in**, offers password recovery and has no registration button.
 17. Select **membership signup on Zeffy** to return to Join Us.
 
-**Expected result after the staged update:** Zeffy is the member path, with no second MPRC account or repeated website waiver. Guests can reach the existing activity waiver. The footer officer entry uses existing authentication and admin authorization; it creates no account or privilege. The legacy `/login` route remains compatible with existing private-route redirects. Prices, renewal terms and the member waiver inside Zeffy remain provider configuration; this display change does not verify or alter them.
+**Expected result:** Zeffy is the member path, with no second MPRC account or repeated website waiver. Guests can reach the existing activity waiver. The footer officer entry uses existing authentication and admin authorization; it creates no account or privilege. The legacy `/login` route remains compatible with existing private-route redirects. Prices, renewal terms and the member waiver inside Zeffy remain provider configuration; this display change does not verify or alter them.
 
 **Stop conditions:** wrong club/form, missing real-form notice, clipped controls, duplicate forms, missing guest/direct links, public account navigation, officer-page registration, unexpected account activation or permission, or any request to test a payment or submit real details.
 
@@ -58,15 +58,15 @@ In words: members use Zeffy, guests retain the existing waiver form, and officer
 
 ## Deployment evidence
 
-- Source: deployed implementation `c750d7bac5905eb25f20b0e5726006e719b06c0b`; not merged. Later documentation-only evidence commits do not change its executable source.
-- Tests: 28 frontend suites / 1,531 tests pass under Node 20. The new files have no lint findings. The exact lint baseline retains the same 113 legacy errors and six legacy warnings; only two old Join Us findings move with the removed Google-link lines.
+- Source: deployed implementation `99ca1e328365cfd80a9b8a019d64083c9a47caf1`; not merged. Later documentation-only evidence commits do not change its executable source.
+- Tests: 29 frontend suites / 1,535 tests pass under Node 20. The exact lint gate passes with 111 legacy errors and six warnings, no new findings; removing the old waiver rendering removes two legacy findings. The subsequent CSS-only guest-button correction is verified in the hosted phone screen.
 - Hosting checks: all 16 pass. A test first reproduced the rejected Zeffy slug, then passed with the exact form-literal exception. All real production identifiers, endpoints, changed hosts and changed form suffixes still reject.
-- Staging website: project `run-mprc-staging`, preview channel `zeffy-750`, version `67290871d20f4d57`. All 61 served file hashes match the local artifact. Preview expires October 25, 2026 at 5:50 PM Pacific time.
-- Actual signed-out screens: 390×844 phone and 1280×720 desktop; form choices, real-form notice, direct-link target and zero page horizontal overflow verified. Home → Join Us reinitializes one visible form and one loader. A spacing correction avoids the site's outer-section margin. Dated screenshots are retained with this chat; no member or payment information was entered. Fallback behavior is covered by the local tests; no provider failure or checkout was induced.
+- Staging website: project `run-mprc-staging`, preview channel `zeffy-750`, version `298cdee311b65eaf`. All 61 served file hashes match the local artifact. Preview expires October 25, 2026 at 10:31 PM Pacific time.
+- Actual signed-out screens: 390×844 phone and 1280×720 desktop; form choices, real-form notice, direct-link target and zero page horizontal overflow verified. Home → Join Us reinitializes one visible form and one loader. The guest jump link reaches its heading below the fixed menu; its button wraps within one background on phones. The top menu has no account link. Footer Officer access opens the dedicated sign-in/recovery screen without registration; its member link returns to Zeffy. No sign-in or recovery request was submitted. Dated screenshots are retained with this chat; no member or payment information was entered. Fallback behavior is covered by the local tests; no provider failure or checkout was induced.
 - Existing shared staging: version `6619f96ac1a39406` unchanged. Preview deployment explicitly disabled Auth-domain synchronization and did not enable the community or test-dues feature flags. No CI workflow was manually dispatched.
 - `runmprc.com`: unchanged; no production release authorized.
 - Firebase Functions, Rules, Auth, IAM and data: unchanged.
 - Zeffy account/form configuration: unchanged; public form display only.
 - Payments and membership submissions: not performed.
 
-The first compiled artifact was refused because the approved Zeffy slug overlapped the production-project text scan. The narrow exception above was tested before retry. A later successful CLI publication omitted its version field; native channel readback and all-file verification qualified that release without another deployment. The final spacing revision was then published and all 61 files verified again. No deployment guard was skipped.
+The first compiled artifact was refused because the approved Zeffy slug overlapped the production-project text scan. The narrow exception above was tested before retry. A later successful CLI publication omitted its version field; native channel readback and all-file verification qualified that release without another deployment. The final simplified signup and responsive guest-button revision was published and all 61 files verified again. No deployment guard was skipped.
