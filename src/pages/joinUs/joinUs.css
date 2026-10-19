@@ -171,3 +171,8 @@
   text-align: center;
   margin-top: 1rem;
 }
+
+.waiver-actions .btn {
+  display: inline-block;
+  max-width: 100%;
+}
