@@ -25,6 +25,7 @@ import StravaCallback from './pages/account/StravaCallback';
 import ScrollToTop from './components/ScrollToTop';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import JoinUsConditionalRoute from './pages/joinUs/JoinUsConditionalRoute';
+import RunWithUs from './pages/joinUs/RunWithUs';
 import Terms from './pages/legal/Terms';
 import Privacy from './pages/legal/Privacy';
 
@@ -81,6 +82,7 @@ function App() {
                 <Route path="account/strava/callback" element={<StravaCallback />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="joinus" element={<JoinUsConditionalRoute />} />
+                <Route path="run-with-us" element={<RunWithUs />} />
                 <Route path="committee" element={<Committee />} />
                 <Route path="login" element={<LoginForm />} />
                 <Route path="terms" element={<Terms />} />

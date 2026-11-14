@@ -1,17 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './joinUs.css';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faGoogle } from '@fortawesome/free-brands-svg-icons';
 import SEO from '../../components/SEO';
-import MetaText from '../../components/MetaText';
 import {
   ARM,
   BECOME_A_MEMBER,
   GOOGLE_FORM,
   JOIN_US_BUTTON_2,
   JOIN_US_DESCRIPTION_4,
-  JOIN_US_HEADING_DESC,
   LI_WHATSAPP_ACCESS,
   LI_FACEBOOK_STRAVA_ACCESS,
   LI_STORE_DISCOUNTS,
@@ -27,51 +23,13 @@ import {
   LI_EASY_ANNUAL_RENEWAL_PROCESS,
   LI_DISCOUNT_ON_SHOES,
   MEMBER_BENEFITS,
-  WAYS_TO_RUN,
-  WAIVER_TITLE,
-  WAIVER_TEXT,
 } from '../../text/JoinUs';
 import Card from '../../components/Card';
 import {
   ARM_URI,
-  GOOGLE_FORM_LINK,
-  GOOGLE_CALENDAR_ADD_LINK,
-  GOOGLE_MAPS_LOCATION_LINK,
-  WAIVER_FORM_LINK,
+  MEMBERSHIP_FORM_LINK,
 } from '../../text/externalLinks';
-import Route from './Route';
 import Paragraph from '../../components/Paragraph';
-
-const sectionHeading = () => (
-  <>
-    <div className="head_desc">
-      <h2 className="h2_joinus">{WAYS_TO_RUN}</h2>
-      <Paragraph>{JOIN_US_HEADING_DESC}</Paragraph>
-      <div className="joinus-buttons">
-        <a
-          href={GOOGLE_MAPS_LOCATION_LINK}
-          className="btn directions-btn"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Get Directions To Our Meeting Location
-        </a>
-        <a
-          href={GOOGLE_CALENDAR_ADD_LINK}
-          className="btn calendar-btn"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Add to Google Calendar
-        </a>
-      </div>
-    </div>
-    <div className="route-map">
-      <MetaText>Saturday Morning Route</MetaText>
-      <Route />
-    </div>
-  </>
-);
 
 const sectionBecomeMember = () => (
   <Card className="joinus__card">
@@ -79,13 +37,10 @@ const sectionBecomeMember = () => (
     <ul className="ul_joinus">
       <li className="li_joinus">
         {JOIN_US_DESCRIPTION_4}
-        <a className="hyperlink" href={GOOGLE_FORM_LINK} target="_blank" rel="noreferrer noopener">
+        <a className="hyperlink" href={MEMBERSHIP_FORM_LINK} target="_blank" rel="noreferrer noopener">
           {GOOGLE_FORM}
-          {' '}
-          <FontAwesomeIcon icon={faGoogle} />
-          .
-          {' '}
         </a>
+        .
       </li>
       <li className="li_joinus">
         {MEMBER_BENEFITS}
@@ -112,40 +67,14 @@ const sectionBecomeMember = () => (
         </ul>
       </li>
     </ul>
-    <Link
-      to={GOOGLE_FORM_LINK}
+    <a
+      href={MEMBERSHIP_FORM_LINK}
       className="btn lg"
       target="_blank"
       rel="noopener noreferrer"
     >
       {JOIN_US_BUTTON_2}
-    </Link>
-  </Card>
-);
-
-const sectionWaiver = () => (
-  <Card className="joinus__card waiver-card">
-    <h2 className="h2_joinus">{WAIVER_TITLE}</h2>
-    <p className="waiver-note">
-      <strong>All runners are required to sign the waiver form prior to running with the club.</strong>
-    </p>
-    <div className="waiver-text-container">
-      {WAIVER_TEXT.trim().split('\n\n').map((paragraph, index) => (
-        <p key={`waiver-p-${index}`} className="waiver-paragraph">
-          {paragraph}
-        </p>
-      ))}
-    </div>
-    <div className="waiver-actions">
-      <a
-        href={WAIVER_FORM_LINK.replace('?embedded=true', '')}
-        className="btn lg"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Sign Waiver Form
-      </a>
-    </div>
+    </a>
   </Card>
 );
 
@@ -219,9 +148,14 @@ function JoinUs() {
       <section className="joinus">
         <div className="container joinus__container">
           <div className="joinus__wrapper">
-            {sectionWaiver()}
-            {sectionHeading()}
             {sectionBecomeMember()}
+            <Paragraph>
+              Not a member yet? Everyone is welcome to run with us. See
+              {' '}
+              <Link className="hyperlink" to="/run-with-us">Run With Us</Link>
+              {' '}
+              for where we meet and the club activity waiver.
+            </Paragraph>
           </div>
         </div>
       </section>

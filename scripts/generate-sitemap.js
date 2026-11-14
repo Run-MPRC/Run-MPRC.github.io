@@ -29,6 +29,7 @@ const STATIC_PAGES = [
   { loc: '/events', priority: '0.9', changefreq: 'daily' },
   { loc: '/committee', priority: '0.7', changefreq: 'monthly' },
   { loc: '/joinus', priority: '0.8', changefreq: 'monthly' },
+  { loc: '/run-with-us', priority: '0.8', changefreq: 'monthly' },
   { loc: '/contact', priority: '0.7', changefreq: 'monthly' },
   { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
   { loc: '/privacy', priority: '0.3', changefreq: 'yearly' },
