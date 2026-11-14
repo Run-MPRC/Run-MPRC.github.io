@@ -244,10 +244,10 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the active bounded #752 Join Us and Run With Us release', () => {
+test('Netlify manifest pins the inactive bounded #752 Join Us and Run With Us release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, true);
+  assert.equal(loaded.manifest.active, false);
   assert.equal(
     loaded.manifest.releaseId,
     'WEB-MEMBERSHIP-001-JOIN-RUN-SPLIT-2026-11-14',
@@ -291,11 +291,11 @@ test('Netlify manifest pins the active bounded #752 Join Us and Run With Us rele
 test('pending #752 records keep #685 live until exact publication', () => {
   assert.match(
     netlifyConfig,
-    /#752 control-branch preview verifies its exact pinned source/i,
+    /temporary #752 production authority is inactive again/i,
   );
   assert.match(
     netlifyConfig,
-    /Other[\s\S]{0,20}previews use their checked-out tree/i,
+    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
   pendingReleaseTruth.forEach((contents, relativePath) => {

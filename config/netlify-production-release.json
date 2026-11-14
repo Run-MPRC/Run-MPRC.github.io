@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-MEMBERSHIP-001-JOIN-RUN-SPLIT-2026-11-14",
   "issueNumber": 752,
   "previewBranch": "codex/issue-752-netlify-release",
