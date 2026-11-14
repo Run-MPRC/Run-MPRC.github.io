@@ -259,11 +259,11 @@ test('Netlify manifest pins the active bounded #752 Join Us and Run With Us rele
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    '76111c63088c116c2290e3e478b3aac21f314ea5',
+    '37d2198705fa66f9fd8b482b624df1c0fba7d327',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    'cea7a62f5768d9c755439c0b1b58919dbeaa7f14',
+    'c44ea4b149c3b26e050339cc79f796e7e1f8a56c',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
@@ -284,7 +284,7 @@ test('Netlify manifest pins the active bounded #752 Join Us and Run With Us rele
   assert.equal(loaded.manifest.expectedSiteFileCount, 62);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    '25b042b96062df0d819d12c8bf868ea5304cbc3c02c36d012c3fc219288318e1',
+    '965a6864515fd8f7234c7481365b0b6ab9a4b5efc1029ebc9a05deef1baea464',
   );
 });
 

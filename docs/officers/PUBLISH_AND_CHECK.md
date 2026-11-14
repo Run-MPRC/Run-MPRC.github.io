@@ -22,7 +22,7 @@
 
 **Approver:** Dave Liu as platform owner, who requested the change. Officers observe the public result only; they do not run commands, handle credentials, or reuse this exception.
 
-**Prerequisites:** issue [#752](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/752); frozen source `76111c63088c116c2290e3e478b3aac21f314ea5`; tree `cea7a62f5768d9c755439c0b1b58919dbeaa7f14`; 62-file digest `25b042b96062df0d819d12c8bf868ea5304cbc3c02c36d012c3fc219288318e1`; source ref `codex/netlify-source-752-membership-page`; exact expected first parent `ecf68f28ea67a7bb716a3ea01f2f98abc0970622`; current deploy `6aa8c5b3fddd040009eba99c`; rollback ref `codex/netlify-source-752-rollback`; all required checks; a signed-out pinned preview.
+**Prerequisites:** issue [#752](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/752); frozen source `37d2198705fa66f9fd8b482b624df1c0fba7d327`; tree `c44ea4b149c3b26e050339cc79f796e7e1f8a56c`; 62-file digest `965a6864515fd8f7234c7481365b0b6ab9a4b5efc1029ebc9a05deef1baea464`; source ref `codex/netlify-source-752-membership-page`; exact expected first parent `ecf68f28ea67a7bb716a3ea01f2f98abc0970622`; current deploy `6aa8c5b3fddd040009eba99c`; rollback ref `codex/netlify-source-752-rollback`; all required checks; a signed-out pinned preview.
 
 1. Stay signed out. Use no member, account, payment, or private information. Do not submit the Zeffy form or the waiver.
 2. Open the pinned Deploy Preview. Confirm its marker names issue 752, the frozen source/tree, 62 files, and the exact digest.
