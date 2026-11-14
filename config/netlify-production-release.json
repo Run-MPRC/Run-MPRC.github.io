@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "active": false,
-  "releaseId": "WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14",
-  "issueNumber": 685,
-  "previewBranch": "codex/issue-685-netlify-release",
-  "expectedProductionParent": "925a677cd807dad1f925b4a85e89fc317b7a38b7",
+  "active": true,
+  "releaseId": "WEB-MEMBERSHIP-001-JOIN-RUN-SPLIT-2026-11-14",
+  "issueNumber": 752,
+  "previewBranch": "codex/issue-752-netlify-release",
+  "expectedProductionParent": "ecf68f28ea67a7bb716a3ea01f2f98abc0970622",
   "sourceRepository": "https://github.com/Run-MPRC/Run-MPRC.github.io.git",
-  "sourceRef": "refs/heads/codex/netlify-source-685-september-locations",
-  "sourceCommit": "41a9ae4ebc719212df610ff5cdcf9ca4eab18e71",
-  "sourceTree": "7f75ebda7b9d295c5be26acc11b06b452dcc20c6",
-  "previousSourceCommit": "7496fe0881fb52908c4ff2f40f488df09c94c908",
-  "rollbackDeployId": "6a7ece87c5ca4d0007c1a3fc",
+  "sourceRef": "refs/heads/codex/netlify-source-752-membership-page",
+  "sourceCommit": "09fde99479d4223e42655b292ac19e8fe1c2ab93",
+  "sourceTree": "7f17e129d981c3caf6cfdb6759269c7265045905",
+  "previousSourceCommit": "41a9ae4ebc719212df610ff5cdcf9ca4eab18e71",
+  "rollbackDeployId": "6aa8c5b3fddd040009eba99c",
   "expectedSiteFileCount": 62,
-  "expectedSiteFilesSha256": "cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850"
+  "expectedSiteFilesSha256": "93b5320c9218c3c34355e7cf4e02c7828ee997d29a0139caa1dfab2a3950b08b"
 }
