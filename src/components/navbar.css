@@ -30,12 +30,14 @@ nav {
 
 .nav__links {
   display: flex;
-  gap: 3.5rem;
+  /* Nine links must fit on one row from 1025px up; widest screens keep 3.5rem. */
+  gap: clamp(1rem, calc(4vw - 1.6rem), 3.5rem);
   align-items: center;
 }
 
 .nav__links a {
   transition: var(--transition);
+  white-space: nowrap;
 }
 
 .nav__links a:hover {
