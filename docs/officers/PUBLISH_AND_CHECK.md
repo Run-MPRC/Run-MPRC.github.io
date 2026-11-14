@@ -16,6 +16,37 @@
 
 **Completed #659 exception:** WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) completed one exact-artifact accessibility release on 2026-08-14. The frozen source contains only reviewed #291 visible focus, #490 phone-menu disclosure/close behavior, and #657 client-side route focus. Deploy `6a7ece87c5ca4d0007c1a3fc` was production after that release and is now the immediate rollback for #685; #623 deploy `6a7e072f8f346b0008510d29` was its rollback target. This is not an officer-operated or reusable control. The no-terminal section below is retained as the historical audit record.
 
+## Temporary #752 Join Us / Run With Us release — UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** publish one frozen public change that keeps membership on the Join Us page and moves the meeting details and club activity waiver to a separate Run With Us page. Both membership links open the club's Zeffy new-member form.
+
+**Approver:** Dave Liu as platform owner, who requested the change. Officers observe the public result only; they do not run commands, handle credentials, or reuse this exception.
+
+**Prerequisites:** issue [#752](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/752); frozen source `37d2198705fa66f9fd8b482b624df1c0fba7d327`; tree `c44ea4b149c3b26e050339cc79f796e7e1f8a56c`; 62-file digest `965a6864515fd8f7234c7481365b0b6ab9a4b5efc1029ebc9a05deef1baea464`; source ref `codex/netlify-source-752-membership-page`; exact expected first parent `ecf68f28ea67a7bb716a3ea01f2f98abc0970622`; current deploy `6aa8c5b3fddd040009eba99c`; rollback ref `codex/netlify-source-752-rollback`; all required checks; a signed-out pinned preview.
+
+1. Stay signed out. Use no member, account, payment, or private information. Do not submit the Zeffy form or the waiver.
+2. Open the pinned Deploy Preview. Confirm its marker names issue 752, the frozen source/tree, 62 files, and the exact digest.
+3. At 390×844, open **Join Us**. Confirm it shows the membership benefits, no waiver section, and that **Membership Application Form** and **Membership Form** both point to `https://www.zeffy.com/en-US/ticketing/mid-peninsula-running-clubs-new-member-registration`.
+4. Open **Run With Us** from the menu and the footer. Confirm it shows the club activity waiver, the ways to run with the club, and the directions, with no membership form link.
+5. Confirm each page links to the other and nothing overflows sideways. Repeat steps 3–5 at 1280×900.
+6. Confirm production still reports deploy `6aa8c5b3fddd040009eba99c` and `main` still equals `ecf68f28ea67a7bb716a3ea01f2f98abc0970622`. A preview is not live proof.
+7. Merge with a merge commit only. Wait for the Netlify production attempt. Do not promote a preview, use a build hook, or deploy with a local CLI.
+8. Read `/.well-known/run-mprc-release.json`. Confirm every identity and artifact field matches the approved record, then repeat steps 3–5 on `runmprc.com`.
+9. Merge the prepared disable pull request immediately. Confirm its production attempt publishes nothing.
+10. Retire only the #752 hot source, control, and repause refs after readback. Retain the rollback ref. Record the evidence on the issue.
+
+**Expected result:** `runmprc.com/joinus` is the membership page and `runmprc.com/run-with-us` is the waiver and meeting page. Waiver wording, dues text, Firebase, accounts, payments, and permissions are unchanged. Ordinary production publication is inactive again.
+
+**Stop conditions:** stop if `main` advances; a required check fails; any source/tree/file-count/digest/parent/ref/deploy/marker value differs; a membership link opens anything other than the approved Zeffy form; the waiver is missing or reworded; layout clips; or unrelated source enters the artifact.
+
+**Success proof:** record the exact source/tree/digest, control head, pinned preview and marker, phone/computer results, exact two-parent merge, production deploy, public marker, repause merge and attempt, and retained rollback ref on the issue.
+
+**Undo:** before publication, reject the control PR. If a bad artifact becomes live, ask a Netlify team owner to restore deploy `6aa8c5b3fddd040009eba99c`; if that control is unavailable, use a newly reviewed exact-parent projection of rollback source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`. A manifest-disable commit alone is not rollback.
+
+**Escalation:** membership or communications owner for wording or the form link; platform owner for source, CI, Netlify, marker, or rollback; security owner for any unexpected account, data, or provider behavior.
+
+#752 is under review and is not published. Production stays on deploy `6aa8c5b3fddd040009eba99c` until every step above passes.
+
 ## Temporary #685 meeting-location release — WEBSITE COMPLETED 2026-09-14
 
 **Purpose:** publish one frozen public banner that tells prospective members where the 8:45 AM runs meet on Sept. 19 and Sept. 26, 2026. The Sept. 19 item disappears at midnight after that run. The whole banner disappears at midnight after Sept. 26. Both cutoffs use Pacific time.

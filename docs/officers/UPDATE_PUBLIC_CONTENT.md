@@ -92,6 +92,25 @@ are separate states. This procedure describes #618 source and preview behavior
 only. It is **NOT LIVE** until an approved exact website release is published
 and the same checks pass on `runmprc.com`.
 
+## Join Us and Run With Us pages — #752 UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** keep membership and the activity waiver on separate public pages so a new runner is not asked to read both at once.
+
+- **Join Us** (`/joinus`): member benefits and the membership form. Both membership links open the club's Zeffy new-member form: `https://www.zeffy.com/en-US/ticketing/mid-peninsula-running-clubs-new-member-registration`.
+- **Run With Us** (`/run-with-us`): where and when the club meets, directions, and the club activity waiver.
+
+**Approver:** membership lead for the form link; a club officer plus the approved legal owner for any waiver wording. This change moves the waiver without rewording it.
+
+1. To change the membership form, give AI the old and new public form links and ask it to update the one membership link setting. Check both Join Us links from the preview.
+2. Open each link in a private window to confirm it is the public form. Do not submit it.
+3. Check both pages signed out at 390×844 and 1280×900, and confirm each links to the other.
+
+**Stop conditions:** stop if the request changes waiver wording, dues, or refund terms; a link is an edit or owner link; or either page asks for sign-in.
+
+**Undo:** before publication, reject the pull request. After publication, ask the platform owner to restore the recorded previous deploy.
+
+[#752](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/752) is under review and is not published. Production stays on deploy `6aa8c5b3fddd040009eba99c` until the exact release and live checks pass.
+
 ## Temporary September 2026 meeting locations — #685 WEBSITE LIVE AND VERIFIED 2026-09-14
 
 **Purpose:** show prospective members the two temporary Saturday meeting points, then remove each notice automatically after it is no longer useful.

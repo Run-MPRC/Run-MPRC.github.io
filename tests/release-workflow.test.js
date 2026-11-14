@@ -50,6 +50,22 @@ const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
 const netlifyConfig = fs.readFileSync(NETLIFY_CONFIG_PATH, 'utf8');
 const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
+const PENDING_RELEASE_TRUTH_PATHS = [
+  'IMPLEMENTATION_PLAN.md',
+  'OFFICER_START_HERE.md',
+  'OPERATIONS_RUNBOOK.md',
+  'SECURITY.md',
+  'SYSTEM_DESIGN.md',
+  'docs/officers/PUBLISH_AND_CHECK.md',
+  'docs/officers/README.md',
+  'docs/officers/UPDATE_PUBLIC_CONTENT.md',
+];
+const pendingReleaseTruth = new Map(
+  PENDING_RELEASE_TRUTH_PATHS.map((relativePath) => [
+    relativePath,
+    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
+  ]),
+);
 const finalReleaseTruth = new Map(
   FINAL_RELEASE_TRUTH_PATHS.map((relativePath) => [
     relativePath,
@@ -228,60 +244,73 @@ test('Netlify production is an exact-artifact release while previews remain avai
   });
 });
 
-test('Netlify manifest pins the inactive bounded #685 meeting-location release', () => {
+test('Netlify manifest pins the active bounded #752 Join Us and Run With Us release', () => {
   const loaded = loadManifest(NETLIFY_MANIFEST_PATH);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.manifest.active, false);
+  assert.equal(loaded.manifest.active, true);
   assert.equal(
     loaded.manifest.releaseId,
-    'WEB-CONTENT-001-SEPTEMBER-LOCATIONS-2026-09-14',
+    'WEB-MEMBERSHIP-001-JOIN-RUN-SPLIT-2026-11-14',
   );
-  assert.equal(loaded.manifest.issueNumber, 685);
+  assert.equal(loaded.manifest.issueNumber, 752);
   assert.equal(
     loaded.manifest.expectedProductionParent,
-    '925a677cd807dad1f925b4a85e89fc317b7a38b7',
+    'ecf68f28ea67a7bb716a3ea01f2f98abc0970622',
   );
   assert.equal(
     loaded.manifest.sourceCommit,
-    '41a9ae4ebc719212df610ff5cdcf9ca4eab18e71',
+    '37d2198705fa66f9fd8b482b624df1c0fba7d327',
   );
   assert.equal(
     loaded.manifest.sourceTree,
-    '7f75ebda7b9d295c5be26acc11b06b452dcc20c6',
+    'c44ea4b149c3b26e050339cc79f796e7e1f8a56c',
   );
   assert.equal(
     loaded.manifest.previousSourceCommit,
-    '7496fe0881fb52908c4ff2f40f488df09c94c908',
+    '41a9ae4ebc719212df610ff5cdcf9ca4eab18e71',
   );
   assert.equal(
     loaded.manifest.rollbackDeployId,
-    '6a7ece87c5ca4d0007c1a3fc',
+    '6aa8c5b3fddd040009eba99c',
   );
   assert.equal(
     loaded.manifest.sourceRef,
-    'refs/heads/codex/netlify-source-685-september-locations',
+    'refs/heads/codex/netlify-source-752-membership-page',
   );
   assert.equal(
     loaded.manifest.previewBranch,
-    'codex/issue-685-netlify-release',
+    'codex/issue-752-netlify-release',
   );
   assert.equal(loaded.manifest.expectedSiteFileCount, 62);
   assert.equal(
     loaded.manifest.expectedSiteFilesSha256,
-    'cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850',
+    '965a6864515fd8f7234c7481365b0b6ab9a4b5efc1029ebc9a05deef1baea464',
   );
 });
 
-test('completed #685 records are current while #659 is immediate rollback', () => {
+test('pending #752 records keep #685 live until exact publication', () => {
   assert.match(
     netlifyConfig,
-    /temporary #685 production authority is inactive again/i,
+    /#752 control-branch preview verifies its exact pinned source/i,
   );
   assert.match(
     netlifyConfig,
-    /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
+    /Other[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
+  pendingReleaseTruth.forEach((contents, relativePath) => {
+    assert.match(contents, /#752/, relativePath);
+    assert.match(contents, /under review and is not published/i, relativePath);
+    assert.match(contents, /6aa8c5b3fddd040009eba99c/, relativePath);
+    assert.doesNotMatch(
+      contents,
+      /#752[^\n]{0,180}(?:completed|is live|published deploy)/i,
+      `${relativePath} must not call #752 published before the live checks`,
+    );
+  });
+});
+
+test('completed #685 records are current while #659 is immediate rollback', () => {
   finalReleaseTruth.forEach((contents, relativePath) => {
     assert.match(contents, /#685/);
     assert.match(contents, /6aa8c5b3fddd040009eba99c/);
