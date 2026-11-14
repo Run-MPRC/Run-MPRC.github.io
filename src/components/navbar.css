@@ -30,8 +30,8 @@ nav {
 
 .nav__links {
   display: flex;
-  /* Nine links must fit on one row from 1025px up; widest screens keep 3.5rem. */
-  gap: clamp(1rem, calc(4vw - 1.6rem), 3.5rem);
+  /* Nine links (the last may read "My Account") must fit on one row from 1025px up; widest screens keep 3.5rem. */
+  gap: clamp(0.6rem, calc(6vw - 3.2rem), 3.5rem);
   align-items: center;
 }
 
