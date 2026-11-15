@@ -50,22 +50,6 @@ const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
 const netlifyConfig = fs.readFileSync(NETLIFY_CONFIG_PATH, 'utf8');
 const netlifyBuild = fs.readFileSync(NETLIFY_BUILD_PATH, 'utf8');
 const gitignore = fs.readFileSync(GITIGNORE_PATH, 'utf8');
-const PENDING_RELEASE_TRUTH_PATHS = [
-  'IMPLEMENTATION_PLAN.md',
-  'OFFICER_START_HERE.md',
-  'OPERATIONS_RUNBOOK.md',
-  'SECURITY.md',
-  'SYSTEM_DESIGN.md',
-  'docs/officers/PUBLISH_AND_CHECK.md',
-  'docs/officers/README.md',
-  'docs/officers/UPDATE_PUBLIC_CONTENT.md',
-];
-const pendingReleaseTruth = new Map(
-  PENDING_RELEASE_TRUTH_PATHS.map((relativePath) => [
-    relativePath,
-    fs.readFileSync(path.join(ROOT, relativePath), 'utf8'),
-  ]),
-);
 const finalReleaseTruth = new Map(
   FINAL_RELEASE_TRUTH_PATHS.map((relativePath) => [
     relativePath,
@@ -288,7 +272,7 @@ test('Netlify manifest pins the inactive bounded #752 Join Us and Run With Us re
   );
 });
 
-test('pending #752 records keep #685 live until exact publication', () => {
+test('completed #752 records are current while #685 is immediate rollback', () => {
   assert.match(
     netlifyConfig,
     /temporary #752 production authority is inactive again/i,
@@ -298,20 +282,13 @@ test('pending #752 records keep #685 live until exact publication', () => {
     /Ordinary[\s\S]{0,20}previews use their checked-out tree/i,
   );
 
-  pendingReleaseTruth.forEach((contents, relativePath) => {
-    assert.match(contents, /#752/, relativePath);
-    assert.match(contents, /under review and is not published/i, relativePath);
-    assert.match(contents, /6aa8c5b3fddd040009eba99c/, relativePath);
-    assert.doesNotMatch(
-      contents,
-      /#752[^\n]{0,180}(?:completed|is live|published deploy)/i,
-      `${relativePath} must not call #752 published before the live checks`,
-    );
-  });
-});
-
-test('completed #685 records are current while #659 is immediate rollback', () => {
   finalReleaseTruth.forEach((contents, relativePath) => {
+    assert.match(contents, /#752/, `${relativePath} must name #752`);
+    assert.match(
+      contents,
+      /6af82c1d614632e2c4a9d1dc/,
+      `${relativePath} must name the live #752 deploy`,
+    );
     assert.match(contents, /#685/);
     assert.match(contents, /6aa8c5b3fddd040009eba99c/);
     assert.match(contents, /#659/);
@@ -339,13 +316,86 @@ test('completed #685 records are current while #659 is immediate rollback', () =
       /#685 LIVE CHECK UNDER REVIEW/i,
       /ONLY AFTER THE EXACT #685 MARKER IS LIVE/i,
       /production remains #623/i,
+      /WEB-MEMBERSHIP-001 pending/i,
+      /Temporary #752[^\n]*— (?:UNDER REVIEW|PENDING)/i,
+      /#752[^\n]*under review and is not published/i,
+      /#752 UNDER REVIEW/i,
+      /Production stays on deploy `6aa8c5b3fddd040009eba99c`/i,
+      /production remains #685/i,
+      /live #685 deploy/i,
+      /current #685 (?:deploy|production)/i,
+      /#685 is (?:live|current production)/i,
+      /#659 deploy `6a7ece87c5ca4d0007c1a3fc` is (?:the )?immediate rollback/i,
     ].forEach((staleClaim) => {
       assert.doesNotMatch(
         contents,
         staleClaim,
-        `${relativePath} must not retain stale #685, #659, or #473 release status`,
+        `${relativePath} must not retain stale #752, #685, #659, or #473 release status`,
       );
     });
+  });
+
+  const currentTruth = new Map([
+    [
+      'IMPLEMENTATION_PLAN.md',
+      /WEB-MEMBERSHIP-001 completed website release boundary:[^\n]*#752[^\n]*completed[^\n]*6af82c1d614632e2c4a9d1dc/i,
+    ],
+    [
+      'OFFICER_START_HERE.md',
+      /#752[^\n]*published[^\n]*deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'OPERATIONS_RUNBOOK.md',
+      /#752[^\n]*completed[^\n]*website publication[^\n]*6af82c1d614632e2c4a9d1dc/i,
+    ],
+    [
+      'README.md',
+      /#752[^\n]*completed one bounded public-page release[^\n]*published deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'SECURITY.md',
+      /WEB-MEMBERSHIP-001 completed exact-artifact containment[^\n]*#752[^\n]*completed[^\n]*published deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'SYSTEM_DESIGN.md',
+      /#752[^\n]*completed[^\n]*published deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'docs/officers/ACCESS_CONTINUITY.md',
+      /live #752 marker[^\n]*deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'docs/officers/EVENTS_SHOP_MEMBERS.md',
+      /live #752 deploy `6af82c1d614632e2c4a9d1dc`[^\n]*#685/i,
+    ],
+    [
+      'docs/officers/PUBLISH_AND_CHECK.md',
+      /Temporary #752 Join Us \/ Run With Us release — WEBSITE COMPLETED 2026-11-14/i,
+    ],
+    [
+      'docs/officers/README.md',
+      /#752[^\n]*completed[^\n]*deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'docs/officers/REQUEST_A_CHANGE.md',
+      /completed WEB-MEMBERSHIP-001[^\n]*#752[^\n]*published[^\n]*deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+    [
+      'docs/officers/SYSTEM_MAPS.md',
+      /completed #752 exception[^\n]*deploy `6af82c1d614632e2c4a9d1dc` remains live/i,
+    ],
+    [
+      'docs/officers/UPDATE_PUBLIC_CONTENT.md',
+      /#752's website work is complete[^\n]*production is deploy `6af82c1d614632e2c4a9d1dc`/i,
+    ],
+  ]);
+  currentTruth.forEach((expectedTruth, relativePath) => {
+    const record = finalReleaseTruth.get(relativePath);
+    assert.match(
+      record,
+      expectedTruth,
+      `${relativePath} must bind #752's completed website state to the live deploy`,
+    );
   });
 
   const completedTruth = new Map([
@@ -375,11 +425,11 @@ test('completed #685 records are current while #659 is immediate rollback', () =
     ],
     [
       'docs/officers/ACCESS_CONTINUITY.md',
-      /live #685 marker[^\n]*deploy `6aa8c5b3fddd040009eba99c`/i,
+      /completed #685 deploy `6aa8c5b3fddd040009eba99c` as immediate rollback/i,
     ],
     [
       'docs/officers/EVENTS_SHOP_MEMBERS.md',
-      /live #685 deploy `6aa8c5b3fddd040009eba99c`[^\n]*#659/i,
+      /#685 deploy `6aa8c5b3fddd040009eba99c` is immediate rollback/i,
     ],
     [
       'docs/officers/PUBLISH_AND_CHECK.md',
@@ -395,11 +445,11 @@ test('completed #685 records are current while #659 is immediate rollback', () =
     ],
     [
       'docs/officers/SYSTEM_MAPS.md',
-      /completed #685 exception[^\n]*deploy `6aa8c5b3fddd040009eba99c` remains live/i,
+      /#685 deploy `6aa8c5b3fddd040009eba99c`[^\n]*immediate rollback/i,
     ],
     [
       'docs/officers/UPDATE_PUBLIC_CONTENT.md',
-      /#685's website work is complete[^\n]*Production is deploy `6aa8c5b3fddd040009eba99c`/i,
+      /#685's website work is complete[^\n]*immediate rollback for #752/i,
     ],
   ]);
   completedTruth.forEach((expectedTruth, relativePath) => {
@@ -407,7 +457,7 @@ test('completed #685 records are current while #659 is immediate rollback', () =
     assert.match(
       record,
       expectedTruth,
-      `${relativePath} must bind #685's completed website state to the live deploy`,
+      `${relativePath} must keep #685's completed record as the immediate rollback`,
     );
   });
 
@@ -478,6 +528,52 @@ test('completed #685 records are current while #659 is immediate rollback', () =
       /WhatsApp[^\n]{0,160}(?:pending|awaits)[^\n]{0,120}action-time confirmation/i,
     );
     assert.match(record, /issue #685[^\n]{0,100}(?:remains|stays) open/i);
+  });
+
+  // Bind the complete #752 release and repause chain.
+  [
+    'WEB-MEMBERSHIP-001-JOIN-RUN-SPLIT-2026-11-14',
+    '6af82b71c5687311aff7687f',
+    '2e1573509393b55be80354e7b07e4e738f64ac86',
+    '43581302583',
+    '28bb09c84a23085fcd9736cc7e559f2fe1b1075d',
+    'ecf68f28ea67a7bb716a3ea01f2f98abc0970622',
+    'f3f5cb3a1c5139f2ad1c828669fdd2c0207f76ea',
+    '43581519852',
+    '6af82c1d614632e2c4a9d1dc',
+    '37d2198705fa66f9fd8b482b624df1c0fba7d327',
+    'c44ea4b149c3b26e050339cc79f796e7e1f8a56c',
+    '965a6864515fd8f7234c7481365b0b6ab9a4b5efc1029ebc9a05deef1baea464',
+    '6af82cd02eac5b14ddb41e8b',
+    '5bfa75ce66a07f9ad57cd5e3f3f27d90ede41443',
+    'd5b3014164c39a624463a3c4b106a9f063ad9e9b',
+    '43581750356',
+    '3c28115bf67f31346677f317a9c96f1b7fa96a5d',
+    '43581957963',
+    '6af82d700e2e18a09e474f8a',
+  ].forEach((identifier) => {
+    canonicalRecords.forEach((record) => {
+      assert.match(record, new RegExp(identifier));
+    });
+  });
+  canonicalRecords.forEach((record) => {
+    assert.match(record, /2026-11-14T09:38:37\.509Z/);
+    assert.match(
+      record,
+      /(?:6af82d700e2e18a09e474f8a[\s\S]{0,240}(?:unpublished|published nothing|publish nothing)|(?:unpublished|published nothing|publish nothing)[\s\S]{0,240}6af82d700e2e18a09e474f8a)/i,
+    );
+    assert.match(
+      record,
+      /(?:6af82c1d614632e2c4a9d1dc[\s\S]{0,300}(?:retained|remained|left|stayed)|(?:retained|remained|left|stayed)[\s\S]{0,300}6af82c1d614632e2c4a9d1dc)/i,
+    );
+    assert.match(
+      record,
+      /rollback ref `codex\/netlify-source-752-rollback`[^\n]{0,120}(?:remains|retained|pinned)/i,
+    );
+    assert.match(
+      record,
+      /`codex\/netlify-source-752-membership-page`[^\n]{0,120}(?:remains present|still present)/i,
+    );
   });
 
   // Preserve the complete historical #659 release and rollback chain.
@@ -579,12 +675,14 @@ test('completed #685 records are current while #659 is immediate rollback', () =
   assert.match(eventsAndShop, /event records remain unavailable/i);
 });
 
-test('officer live checks reject stale #659 production and ref-cleanup claims', () => {
+test('officer live checks reject stale #685 or #659 production and ref-cleanup claims', () => {
   const publishGuide = finalReleaseTruth.get(
     'docs/officers/PUBLISH_AND_CHECK.md',
   );
 
   [
+    /Production is deploy `6aa8c5b3fddd040009eba99c`/i,
+    /#685 remains live/i,
     /Production is deploy `6a7ece87c5ca4d0007c1a3fc`/i,
     /#659 completed one exact-artifact exception[^\n]{0,200}its marker matches/i,
     /host still identifies #623 or another revision/i,
@@ -594,17 +692,22 @@ test('officer live checks reject stale #659 production and ref-cleanup claims', 
     assert.doesNotMatch(
       publishGuide,
       staleClaim,
-      'repeatable officer checks must use #685 as current and preserve old hot-ref risk',
+      'repeatable officer checks must use #752 as current and preserve old hot-ref risk',
     );
   });
 
   assert.match(
     publishGuide,
-    /current host marker must identify #685 deploy `6aa8c5b3fddd040009eba99c`/i,
+    /current host marker must identify exact #752 source `37d2198705fa66f9fd8b482b624df1c0fba7d327`/i,
+  );
+  assert.doesNotMatch(
+    publishGuide,
+    /marker must identify #752 deploy/i,
+    'the public marker carries no deploy ID, so it cannot identify a deploy',
   );
   assert.match(
     publishGuide,
-    /current host identifies #659, #623, or any revision other than the exact #685 marker/i,
+    /current host identifies #685, #659, #623, or any revision other than the exact #752 marker/i,
   );
   assert.match(
     publishGuide,
