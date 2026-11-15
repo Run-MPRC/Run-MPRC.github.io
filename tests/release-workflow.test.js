@@ -703,7 +703,7 @@ test('officer live checks reject stale #685 or #659 production and ref-cleanup c
   assert.doesNotMatch(
     publishGuide,
     /marker must identify #752 deploy/i,
-    'the public marker carries no deploy ID, so it cannot identify a deploy',
+    'the public marker carries no ID for its own deploy, so it cannot identify that deploy',
   );
   assert.match(
     publishGuide,
