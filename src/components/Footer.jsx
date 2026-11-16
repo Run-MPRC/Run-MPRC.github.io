@@ -37,7 +37,7 @@ function Footer() {
           <Link to="/activities">Activities</Link>
           <Link to="/events">Events</Link>
           <Link to="/committee">Committee</Link>
-          <Link to="/joinus">Join Us</Link>
+          <Link to="/joinus">Join The Club</Link>
           <Link to="/run-with-us">Run With Us</Link>
           <Link to="/contact">Contact Us</Link>
           <Link to="/terms">Terms</Link>

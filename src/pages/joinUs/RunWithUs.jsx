@@ -14,6 +14,7 @@ import {
 } from '../../text/JoinUs';
 import Card from '../../components/Card';
 import {
+  APPLE_CALENDAR_ICS_LINK,
   GOOGLE_CALENDAR_ADD_LINK,
   GOOGLE_MAPS_LOCATION_LINK,
   WAIVER_FORM_LINK,
@@ -21,35 +22,39 @@ import {
 import Route from './Route';
 import Paragraph from '../../components/Paragraph';
 
-const sectionHeading = () => (
-  <>
-    <div className="head_desc">
-      <h2 className="h2_joinus">{WAYS_TO_RUN}</h2>
-      <Paragraph>{JOIN_US_HEADING_DESC}</Paragraph>
-      <div className="joinus-buttons">
-        <a
-          href={GOOGLE_MAPS_LOCATION_LINK}
-          className="btn directions-btn"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Get Directions To Our Meeting Location
-        </a>
-        <a
-          href={GOOGLE_CALENDAR_ADD_LINK}
-          className="btn calendar-btn"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Add to Google Calendar
-        </a>
-      </div>
+const sectionMeeting = () => (
+  <div className="head_desc">
+    <h2 className="h2_joinus">{WAYS_TO_RUN}</h2>
+    <Paragraph>{JOIN_US_HEADING_DESC}</Paragraph>
+    <div className="joinus-buttons">
+      <a
+        href={GOOGLE_MAPS_LOCATION_LINK}
+        className="btn directions-btn"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Get Directions To Our Meeting Location
+      </a>
+      <a
+        href={GOOGLE_CALENDAR_ADD_LINK}
+        className="btn calendar-btn"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Add to Google Calendar
+      </a>
+      <a href={APPLE_CALENDAR_ICS_LINK} className="btn calendar-btn">
+        Add to Apple Calendar
+      </a>
     </div>
-    <div className="route-map">
-      <MetaText>Saturday Morning Route</MetaText>
-      <Route />
-    </div>
-  </>
+  </div>
+);
+
+const sectionRouteMap = () => (
+  <div className="route-map">
+    <MetaText>Saturday Morning Route</MetaText>
+    <Route />
+  </div>
 );
 
 const sectionWaiver = () => (
@@ -92,12 +97,18 @@ function RunWithUs() {
       <section className="joinus">
         <div className="container joinus__container">
           <div className="joinus__wrapper">
-            {sectionWaiver()}
-            {sectionHeading()}
+            {sectionMeeting()}
+            <div className="waiver-section">
+              <p className="waiver-required-notice">
+                <strong>You must sign waiver below</strong>
+              </p>
+              {sectionWaiver()}
+            </div>
+            {sectionRouteMap()}
             <Paragraph>
               Want to become a member? See
               {' '}
-              <Link className="hyperlink" to="/joinus">Join Us</Link>
+              <Link className="hyperlink" to="/joinus">Join The Club</Link>
               {' '}
               for member benefits and the membership form.
             </Paragraph>

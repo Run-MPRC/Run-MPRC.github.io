@@ -161,7 +161,7 @@ function Activities() {
           book venues, pay for food, and buy supplies for our seasonal picnics and events.
           For more details, check out our
           {' '}
-          <Link className="hyperlink" to="/joinus">Join Us</Link>
+          <Link className="hyperlink" to="/joinus">Join The Club</Link>
           {' '}
           page.
         </Paragraph>

@@ -7,7 +7,7 @@ const SUGGESTIONS = [
   { to: '/', label: 'Home', desc: 'Club info, history, and what we do' },
   { to: '/events', label: 'Events', desc: 'Upcoming runs, races, socials' },
   { to: '/shop', label: 'Shop', desc: 'MPRC merch — hats, jackets' },
-  { to: '/joinus', label: 'Join Us', desc: 'Become a member' },
+  { to: '/joinus', label: 'Join The Club', desc: 'Become a member' },
   { to: '/run-with-us', label: 'Run With Us', desc: 'Where we meet and the waiver' },
   { to: '/contact', label: 'Contact', desc: 'Get in touch' },
 ];

@@ -265,7 +265,7 @@ describe('mobile navigation disclosure semantics', () => {
 
   test.each([
     ['MPRC logo', () => screen.getByRole('link', { name: 'MPRC Logo' })],
-    ['ordinary destination', () => screen.getByRole('link', { name: 'Join Us' })],
+    ['ordinary destination', () => screen.getByRole('link', { name: 'Join The Club' })],
     ['authentication destination', () => screen.getByRole('link', { name: 'Sign in' })],
   ])('selecting the %s always leaves the menu closed', (_label, getTarget) => {
     renderNavbar();

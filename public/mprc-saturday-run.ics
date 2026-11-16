@@ -1,0 +1,37 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Mid-Peninsula Running Club//runmprc.com//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VTIMEZONE
+TZID:America/Los_Angeles
+BEGIN:DAYLIGHT
+TZOFFSETFROM:-0800
+TZOFFSETTO:-0700
+TZNAME:PDT
+DTSTART:20070311T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:-0700
+TZOFFSETTO:-0800
+TZNAME:PST
+DTSTART:20071104T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:mprc-saturday-morning-run@runmprc.com
+DTSTAMP:20261115T000000Z
+DTSTART;TZID=America/Los_Angeles:20260131T084500
+DTEND;TZID=America/Los_Angeles:20260131T103000
+RRULE:FREQ=WEEKLY;BYDAY=SA
+SUMMARY:MPRC Saturday Morning Run
+LOCATION:Seal Point Park\, 1901 J Hart Clinton Dr\, San Mateo\, CA 94401
+DESCRIPTION:Join the Mid-Peninsula Running Club for our weekly Saturday mor
+ ning run! Rain or shine\, we run! Meet at 8:45 AM\, run starts at 9:00 AM.
+ \n\nLocation: Seal Point Park\, 1901 J Hart Clinton Dr\, San Mateo\, CA 94
+ 401\n\nMore info: https://runmprc.com/run-with-us
+URL:https://runmprc.com/run-with-us
+END:VEVENT
+END:VCALENDAR

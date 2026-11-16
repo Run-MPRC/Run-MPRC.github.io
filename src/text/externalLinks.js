@@ -14,3 +14,7 @@ export const GOOGLE_MAPS_LOCATION_LINK = 'https://maps.app.goo.gl/PHxsNmtYS5YWxp
 // Google Calendar - Add to Calendar link for Saturday runs
 // This creates a recurring event every Saturday 8:45 AM - 10:30 AM PT
 export const GOOGLE_CALENDAR_ADD_LINK = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=MPRC+Saturday+Morning+Run&details=Join+the+Mid-Peninsula+Running+Club+for+our+weekly+Saturday+morning+run!+Rain+or+shine,+we+run!+Meet+at+8:45+AM,+run+starts+at+9:00+AM.%0A%0ALocation:+Seal+Point+Park,+1901+J+Hart+Clinton+Dr,+San+Mateo,+CA+94401%0A%0AMore+info:+https://runmprc.com/run-with-us&location=Seal+Point+Park,+1901+J+Hart+Clinton+Dr,+San+Mateo,+CA+94401&dates=20260131T164500Z/20260131T183000Z&recur=RRULE:FREQ=WEEKLY;BYDAY=SA';
+
+// Apple Calendar - the same Saturday run as a calendar file (public/mprc-saturday-run.ics).
+// If the time or place changes, update the page text, the Google link above and that file together.
+export const APPLE_CALENDAR_ICS_LINK = '/mprc-saturday-run.ics';

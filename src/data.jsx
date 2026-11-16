@@ -5,7 +5,7 @@ export const links = [
     id: 'home',
   },
   {
-    name: 'Join Us',
+    name: 'Join The Club',
     path: '/joinus',
     id: 'joinus',
   },
