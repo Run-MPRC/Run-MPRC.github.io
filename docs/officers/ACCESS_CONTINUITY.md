@@ -196,12 +196,12 @@ For each system, record only:
 11. Confirm missing release authority becomes a red failure before backend installation, cloud authentication, deployment, or website publication. A public website artifact may be prepared without cloud authority.
 12. Confirm Firebase verification must finish before the GitHub Pages publication job can start.
 13. Confirm ordinary Netlify Git-triggered production builds remain paused.
-14. Confirm the live #685 marker names control `d25b0fe497e0179d62c060a2df3e3a7a9a2c68c6`, source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`, tree `7f75ebda7b9d295c5be26acc11b06b452dcc20c6`, previous source `7496fe0881fb52908c4ff2f40f488df09c94c908`, rollback deploy `6a7ece87c5ca4d0007c1a3fc`, 62 files, digest `cb4eba76c65c3501b37f9a0ad3cf00b6eefbc5a9c2e653f2b3c03607cfe64850`, and deploy `6aa8c5b3fddd040009eba99c`.
-15. Confirm release merge `d25b0fe497e0179d62c060a2df3e3a7a9a2c68c6` passed all five exact-main jobs in run `34927937346`.
-16. Confirm repause merge `609d7884e0242abce23449562e7e0da04794da1e` passed all five exact-main jobs in run `34928449093`.
-17. Confirm repause attempt `6aa8c78dd7b9d1000952eaa2` errored unpublished with `published_at` null and deploy `6aa8c5b3fddd040009eba99c` stayed live.
-18. Confirm the manifest is inactive, the temporary #685 source/control/repause refs are absent, and rollback ref `codex/netlify-source-685-rollback` remains pinned to source `7496fe0881fb52908c4ff2f40f488df09c94c908`.
-19. Record completed #659 deploy `6a7ece87c5ca4d0007c1a3fc` as immediate rollback, completed #623 deploy `6a7e072f8f346b0008510d29` as older history, and completed #473 deploy `6a6dc9ea588b0c0008036312` as oldest retained history.
+14. Confirm the live #752 marker names control `28bb09c84a23085fcd9736cc7e559f2fe1b1075d`, source `37d2198705fa66f9fd8b482b624df1c0fba7d327`, tree `c44ea4b149c3b26e050339cc79f796e7e1f8a56c`, previous source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`, rollback deploy `6aa8c5b3fddd040009eba99c`, 62 files, and digest `965a6864515fd8f7234c7481365b0b6ab9a4b5efc1029ebc9a05deef1baea464`, and that Netlify reports production deploy `6af82c1d614632e2c4a9d1dc`.
+15. Confirm release merge `28bb09c84a23085fcd9736cc7e559f2fe1b1075d` passed all six exact-main jobs in run `43581519852`.
+16. Confirm repause merge `3c28115bf67f31346677f317a9c96f1b7fa96a5d` passed all six exact-main jobs in run `43581957963`.
+17. Confirm repause attempt `6af82d700e2e18a09e474f8a` failed at initializing and published nothing, and deploy `6af82c1d614632e2c4a9d1dc` stayed live.
+18. Confirm the manifest is inactive, the #752 control and repause refs are absent, source ref `codex/netlify-source-752-membership-page` is still present, rollback ref `codex/netlify-source-752-rollback` remains pinned to source `41a9ae4ebc719212df610ff5cdcf9ca4eab18e71`, the temporary #685 source/control/repause refs are absent, and rollback ref `codex/netlify-source-685-rollback` remains pinned to source `7496fe0881fb52908c4ff2f40f488df09c94c908`.
+19. Record completed #685 deploy `6aa8c5b3fddd040009eba99c` as immediate rollback, completed #659 deploy `6a7ece87c5ca4d0007c1a3fc` and #623 deploy `6a7e072f8f346b0008510d29` as older history, and completed #473 deploy `6a6dc9ea588b0c0008036312` as oldest retained history.
 20. Record that the old #473, #623, and #659 hot refs remain a latent authorized-manual-rebuild path despite inactive manifests; do not claim that risk is resolved.
 21. Compare its executable delta with the current live artifact immediately before merge.
 22. Confirm reviewers reject release requests older than 24 hours and request the current `main` commit again.

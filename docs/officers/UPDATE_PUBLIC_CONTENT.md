@@ -92,7 +92,7 @@ are separate states. This procedure describes #618 source and preview behavior
 only. It is **NOT LIVE** until an approved exact website release is published
 and the same checks pass on `runmprc.com`.
 
-## Join Us and Run With Us pages — #752 UNDER REVIEW, NOT PUBLISHED
+## Join Us and Run With Us pages — #752 WEBSITE LIVE AND VERIFIED 2026-11-14
 
 **Purpose:** keep membership and the activity waiver on separate public pages so a new runner is not asked to read both at once.
 
@@ -109,7 +109,7 @@ and the same checks pass on `runmprc.com`.
 
 **Undo:** before publication, reject the pull request. After publication, ask the platform owner to restore the recorded previous deploy.
 
-[#752](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/752) is under review and is not published. Production stays on deploy `6aa8c5b3fddd040009eba99c` until the exact release and live checks pass.
+#752's website work is complete ([issue](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/752)), and production is deploy `6af82c1d614632e2c4a9d1dc`; #685 deploy `6aa8c5b3fddd040009eba99c` is the immediate rollback.
 
 ## Temporary September 2026 meeting locations — #685 WEBSITE LIVE AND VERIFIED 2026-09-14
 
@@ -153,7 +153,7 @@ In words: both notices show through the end of Sept. 19 Pacific time; only the S
 
 **Escalation:** communications owner for wording or meeting-place questions; platform owner for layout, expiry, release, marker, or rollback; security owner for any unexpected account, private-data, or provider behavior.
 
-#685's website work is complete. Production is deploy `6aa8c5b3fddd040009eba99c`; #659 deploy `6a7ece87c5ca4d0007c1a3fc` and source `7496fe0881fb52908c4ff2f40f488df09c94c908` are immediate rollback, while #623 and #473 are older history. Both notices show through Sept. 19, only Sept. 26 shows from Sept. 20 through Sept. 26, and the banner is absent from Sept. 27 Pacific time. Email was already sent Sept. 12. WhatsApp remains pending the user's action-time confirmation, so issue #685 remains open.
+#685's website work is complete. Deploy `6aa8c5b3fddd040009eba99c` was production after that release and is now the immediate rollback for #752; #659 deploy `6a7ece87c5ca4d0007c1a3fc` and source `7496fe0881fb52908c4ff2f40f488df09c94c908`, #623, and #473 are older history. Both notices show through Sept. 19, only Sept. 26 shows from Sept. 20 through Sept. 26, and the banner is absent from Sept. 27 Pacific time. Email was already sent Sept. 12. WhatsApp remains pending the user's action-time confirmation, so issue #685 remains open.
 
 Remote readback on 2026-09-14 also found the old #473, #623, and #659 hot source refs still present, superseding older absent/retired wording. Their inactive manifests keep ordinary merges paused, but the manual-rebuild residual still needs a separate approved cleanup after rollback refs are confirmed.
 
