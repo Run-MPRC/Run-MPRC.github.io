@@ -92,6 +92,26 @@ are separate states. This procedure describes #618 source and preview behavior
 only. It is **NOT LIVE** until an approved exact website release is published
 and the same checks pass on `runmprc.com`.
 
+## Join The Club label and Run With Us order — #758 UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** make the membership page's name clearer, and show a new runner where and when to meet before the waiver.
+
+- **Join The Club** (`/joinus`): the new menu, footer, and page-heading label for the membership page. The page address, its content, and the membership form link do not change.
+- **Run With Us** (`/run-with-us`): Ways To Run With Us comes first, with the directions, Google Calendar, and Apple Calendar links. A "You must sign waiver below" notice sits directly above the club activity waiver. The Saturday route follows.
+- **Apple Calendar link**: opens the public calendar file `/mprc-saturday-run.ics`. It holds one weekly Saturday event and names no organizer, attendee, or mailbox.
+
+**Approver:** membership or communications owner for the label and page order; a club officer plus the approved legal owner for any waiver wording. This change moves and announces the waiver without rewording it.
+
+1. To change the meeting time or place, give AI the old and new details and ask it to update the page text, the Google Calendar link, and the calendar file together. The three must always match.
+2. Open each calendar link from the preview in a private window to confirm it shows the Saturday run. Do not add the event.
+3. Check both pages signed out at 390×844 and 1280×900, and confirm each links to the other.
+
+**Stop conditions:** stop if the request changes waiver wording, dues, or refund terms; the calendar file would name a person or mailbox; a link is an edit or owner link; or either page asks for sign-in.
+
+**Undo:** before publication, reject the pull request. After publication, ask the platform owner to restore the recorded previous deploy.
+
+[#758](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/758) is under review and is not published. Production stays on deploy `6af82c1d614632e2c4a9d1dc` until the exact release and live checks pass.
+
 ## Join Us and Run With Us pages — #752 WEBSITE LIVE AND VERIFIED 2026-11-14
 
 **Purpose:** keep membership and the activity waiver on separate public pages so a new runner is not asked to read both at once.
