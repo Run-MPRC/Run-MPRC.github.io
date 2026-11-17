@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "active": true,
+  "active": false,
   "releaseId": "WEB-CONTENT-002-RUN-WITH-US-ORDER-2026-11-15",
   "issueNumber": 758,
   "previewBranch": "codex/issue-758-netlify-release",
