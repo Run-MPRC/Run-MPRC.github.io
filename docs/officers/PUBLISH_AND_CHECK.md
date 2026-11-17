@@ -16,6 +16,37 @@
 
 **Completed #659 exception:** WEB-002D [#659](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/659) completed one exact-artifact accessibility release on 2026-08-14. The frozen source contains only reviewed #291 visible focus, #490 phone-menu disclosure/close behavior, and #657 client-side route focus. Deploy `6a7ece87c5ca4d0007c1a3fc` was production after that release and was then the immediate rollback for #685; #623 deploy `6a7e072f8f346b0008510d29` was its rollback target. This is not an officer-operated or reusable control. The no-terminal section below is retained as the historical audit record.
 
+## Temporary #758 Join The Club / Run With Us release — UNDER REVIEW, NOT PUBLISHED
+
+**Purpose:** publish one frozen public change that renames the membership page label from Join Us to Join The Club, puts the meeting details first on the Run With Us page with a "You must sign waiver below" notice directly above the waiver, and adds an Apple Calendar link.
+
+**Approver:** Dave Liu as platform owner, who requested the change. Officers observe the public result only; they do not run commands, handle credentials, or reuse this exception.
+
+**Prerequisites:** issue [#758](https://github.com/Run-MPRC/Run-MPRC.github.io/issues/758); frozen source `d8354927fbb6d0111190430744d3a9c899b5f0c1`; tree `fd73cb9253abbd6c55de874ca3192401ea4e8013`; 63-file digest `ee0891ae8e22677a1fc65e4cd698bbe79f64edc92db5e22ad969ff1784422365` (the 63rd file is the public calendar file `mprc-saturday-run.ics`); source ref `codex/netlify-source-758-run-with-us-order`; exact expected first parent `8c62a3d4d9f7a7ba5f46fbd3286870e3dfcac4af`; current deploy `6af82c1d614632e2c4a9d1dc`; rollback ref `codex/netlify-source-758-rollback`; all required checks; a signed-out pinned preview.
+
+1. Stay signed out. Use no member, account, payment, or private information. Do not submit the Zeffy form or the waiver, and do not add the calendar event.
+2. Open the pinned Deploy Preview. Confirm its marker names issue 758, the frozen source/tree, 63 files, and the exact digest.
+3. At 390×844, open **Join The Club** from the menu and the footer. Confirm the page heading reads Join The Club and both membership links open the club's Zeffy new-member form.
+4. Open **Run With Us** from the menu and the footer. Confirm the order: Ways To Run With Us with the directions, Google Calendar, and Apple Calendar links; then "You must sign waiver below" directly above the Club Activity Waiver; then the Saturday route.
+5. Confirm `/mprc-saturday-run.ics` is served as a calendar file, each page links to the other, and nothing overflows sideways. Repeat steps 3–5 at 1280×900.
+6. Confirm production still reports deploy `6af82c1d614632e2c4a9d1dc` and `main` still equals `8c62a3d4d9f7a7ba5f46fbd3286870e3dfcac4af`. A preview is not live proof.
+7. Merge with a merge commit only. Wait for the Netlify production attempt. Do not promote a preview, use a build hook, or deploy with a local CLI.
+8. Read `/.well-known/run-mprc-release.json`. Confirm every identity and artifact field matches the approved record, then repeat steps 3–5 on `runmprc.com`.
+9. Merge the prepared disable pull request immediately. Confirm its production attempt publishes nothing.
+10. Retire only the #758 hot source, control, and repause refs after readback. Retain the rollback ref. Record the evidence on the issue.
+
+**Expected result:** the menu, footer, and membership page heading read Join The Club. Run With Us leads with the meeting details and the three links, then the waiver notice and the waiver, then the route. Waiver wording, dues text, the membership form link, Firebase, accounts, payments, and permissions are unchanged. Ordinary production publication is inactive again.
+
+**Stop conditions:** stop if `main` advances; a required check fails; any source/tree/file-count/digest/parent/ref/deploy/marker value differs; a membership link opens anything other than the approved Zeffy form; the waiver is missing or reworded; the calendar file names an organizer, attendee, or mailbox; layout clips; or unrelated source enters the artifact.
+
+**Success proof:** record the exact source/tree/digest, control head, pinned preview and marker, phone/computer results, exact two-parent merge, production deploy, public marker, repause merge and attempt, and retained rollback ref on the issue.
+
+**Undo:** before publication, reject the control PR. If a bad artifact becomes live, ask a Netlify team owner to restore deploy `6af82c1d614632e2c4a9d1dc`; if that control is unavailable, use a newly reviewed exact-parent projection of rollback source `37d2198705fa66f9fd8b482b624df1c0fba7d327`. A manifest-disable commit alone is not rollback.
+
+**Escalation:** membership or communications owner for wording; platform owner for source, CI, Netlify, marker, the calendar file, or rollback; security owner for any unexpected account, data, or provider behavior.
+
+#758 is under review and is not published. Production stays on deploy `6af82c1d614632e2c4a9d1dc` until every step above passes.
+
 ## Temporary #752 Join Us / Run With Us release — WEBSITE COMPLETED 2026-11-14
 
 **Purpose:** publish one frozen public change that keeps membership on the Join Us page and moves the meeting details and club activity waiver to a separate Run With Us page. Both membership links open the club's Zeffy new-member form.
